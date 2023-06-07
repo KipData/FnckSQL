@@ -1,10 +1,3 @@
-#![feature(type_ascription)]
-#![feature(fs_try_exists)]
-#![feature(cursor_remaining)]
-#![feature(result_flattening)]
-#![feature(buf_read_has_data_left)]
-#![feature(slice_pattern)]
-#![feature(bound_map)]
 #![deny(
 // The following are allowed by default lints according to
 // https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html
@@ -98,8 +91,6 @@ clippy::multiple_crate_versions, // caused by the dependency, can't be fixed
 pub mod parser;
 
 extern crate core;
-
-
 
 pub const DEFAULT_PORT: u16 = 6334;
 

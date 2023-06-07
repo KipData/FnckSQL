@@ -1,11 +1,9 @@
+use crate::parser::SQLParser;
 use sqlparser::ast::Statement;
 use sqlparser::dialect::Dialect;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::{Parser, ParserError};
 use sqlparser::tokenizer::Tokenizer;
-use crate::parser::SQLParser;
-
-
 
 impl SQLParser for RSParser<'_> {
     fn parse_sql(sql: &str) -> Result<Vec<Statement>, ParserError> {
@@ -13,7 +11,6 @@ impl SQLParser for RSParser<'_> {
         Parser::parse_sql(dialect, sql)
     }
 }
-
 
 /// SQL Parser based on [`sqlparser`]
 ///
@@ -44,11 +41,10 @@ impl<'a> RSParser<'a> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use sqlparser::ast::{Ident, ObjectName};
     use super::*;
+    use sqlparser::ast::{Ident, ObjectName};
 
     fn expect_parse_ok(sql: &str, expected: Statement) -> Result<(), ParserError> {
         let statements = RSParser::parse_sql(sql)?;
@@ -65,9 +61,7 @@ mod tests {
     fn expect_parse_error(sql: &str, expected_error: &str) {
         match RSParser::parse_sql(sql) {
             Ok(statements) => {
-                panic!(
-                    "Expected parse error for '{sql}', but was successful: {statements:?}"
-                );
+                panic!("Expected parse error for '{sql}', but was successful: {statements:?}");
             }
             Err(e) => {
                 let error_message = e.to_string();
@@ -145,10 +139,7 @@ mod tests {
         ; SELECT column_name(s) FROM table_name1 RIGHT JOIN table_name2 ON table_name1.column_name=table_name2.column_name";
         let ast = RSParser::parse_sql(sql);
 
-        assert_eq!(
-            ast.unwrap_or_default().len(),
-            2
-        );
+        assert_eq!(ast.unwrap_or_default().len(), 2);
     }
 
     #[test]
@@ -160,8 +151,7 @@ mod tests {
         assert_eq!(
             ast,
             Err(ParserError::ParserError(
-                "Expected end of statement, found: SELECT"
-                    .to_string()
+                "Expected end of statement, found: SELECT".to_string()
             ))
         );
     }
