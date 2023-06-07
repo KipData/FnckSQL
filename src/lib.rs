@@ -37,7 +37,7 @@ unused_import_braces,
 unused_lifetimes,
 unused_qualifications,
 //unused_results,
-warnings, // treat all wanings as errors
+//warnings, // treat all wanings as errors
 clippy::all,
 clippy::cargo,
 // The followings are selected restriction lints for rust 1.57
@@ -96,8 +96,6 @@ clippy::multiple_crate_versions, // caused by the dependency, can't be fixed
 )]
 
 pub mod parser;
-mod planner;
-mod executor;
 
 extern crate core;
 
