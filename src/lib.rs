@@ -88,7 +88,9 @@ clippy::panic, // allow debug_assert, panic in production code
 clippy::multiple_crate_versions, // caused by the dependency, can't be fixed
 )]
 
+mod catalog;
 pub mod parser;
+mod types;
 
 extern crate core;
 
