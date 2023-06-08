@@ -1,10 +1,11 @@
-use crate::types::{DataType, DataTypeEnum, DataTypeRef};
+use crate::types::{DataType, DataTypeEnum};
 use std::any::Any;
 use std::sync::Arc;
 
 /// BoolType is a boolean type
 pub(crate) struct BoolType {
-    nullable: bool,
+    /// TODO: pub(crate) or pub?
+    pub(crate) nullable: bool,
 }
 
 impl DataType for BoolType {
@@ -25,12 +26,6 @@ impl DataType for BoolType {
     }
 }
 
-impl BoolType {
-    pub(crate) fn new(nullable: bool) -> DataTypeRef {
-        Arc::new(Self { nullable })
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -38,8 +33,8 @@ mod tests {
 
     #[test]
     fn test_int32() {
-        let int32_type = BoolType::new(false);
-        assert_eq!(int32_type.as_ref().is_nullable(), false);
-        assert_eq!(int32_type.as_ref().get_data_len(), 1);
+        let int32_type = BoolType { nullable: false };
+        assert_eq!(int32_type.is_nullable(), false);
+        assert_eq!(int32_type.get_data_len(), 1);
     }
 }

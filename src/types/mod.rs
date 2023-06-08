@@ -1,6 +1,14 @@
 use std::any::Any;
 use std::sync::Arc;
 
+/// Export all data types
+pub(crate) use bool_type::*;
+pub(crate) use numeric_types::*;
+
+/// Import all data types
+mod bool_type;
+mod numeric_types;
+
 /// PostgresSQL DataType
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub(crate) enum PgSQLDataTypeEnum {
@@ -29,7 +37,7 @@ pub(crate) enum DataTypeEnum {
 }
 
 /// Trait for all data types
-pub(crate) trait DataType {
+pub(crate) trait DataType: 'static {
     fn is_nullable(&self) -> bool;
     fn get_type(&self) -> DataTypeEnum;
     fn get_data_len(&self) -> u32;
@@ -42,10 +50,3 @@ pub(crate) type DatabaseIdT = u32;
 pub(crate) type SchemaIdT = u32;
 pub(crate) type TableIdT = u32;
 pub(crate) type ColumnIdT = u32;
-
-/// Import all data types
-mod bool_type;
-mod numeric_types;
-/// Export all data types
-pub(crate) use bool_type::*;
-pub(crate) use numeric_types::*;

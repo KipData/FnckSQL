@@ -1,4 +1,5 @@
-use crate::types::{ColumnIdT, DataTypeRef, Int32Type};
+use crate::types::{ColumnIdT, DataType, DataTypeRef};
+use std::sync::Arc;
 
 /// Column description for column
 pub(crate) struct ColumnDesc {
@@ -7,9 +8,9 @@ pub(crate) struct ColumnDesc {
 }
 
 impl ColumnDesc {
-    pub(crate) fn new(column_datatype: DataTypeRef, is_primary: bool) -> ColumnDesc {
+    pub(crate) fn new(column_datatype: impl DataType, is_primary: bool) -> ColumnDesc {
         ColumnDesc {
-            column_datatype,
+            column_datatype: Arc::new(column_datatype),
             is_primary,
         }
     }
@@ -28,10 +29,6 @@ impl ColumnDesc {
 
     pub(crate) fn get_datatype(&self) -> DataTypeRef {
         self.column_datatype.clone()
-    }
-
-    pub(crate) fn get_data_len(&self) -> u32 {
-        self.column_datatype.get_data_len()
     }
 }
 
@@ -59,33 +56,38 @@ impl ColumnCatalog {
         self.column_id
     }
 
-    pub(crate) fn get_column_name(&self) -> String {
-        self.column_name.clone()
+    pub(crate) fn get_column_name(&self) -> &str {
+        &self.column_name
     }
 
-    pub(crate) fn get_column_datatype(&self) -> DataTypeRef {
-        self.column_desc.column_datatype.clone()
+    pub(crate) fn get_column_datatype(&self) -> &DataTypeRef {
+        &self.column_desc.column_datatype
     }
 
     pub(crate) fn set_primary(&mut self, is_primary: bool) {
-        self.column_desc.is_primary = is_primary;
+        self.column_desc.set_primary(is_primary)
     }
 
     pub(crate) fn is_primary(&self) -> bool {
-        self.column_desc.is_primary
+        self.column_desc.is_primary()
+    }
+
+    pub(crate) fn is_nullable(&self) -> bool {
+        self.column_desc.is_nullable()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Int32Type;
 
     #[test]
     fn test_column_catalog() {
         let mut col_catalog = ColumnCatalog::new(
             0,
             String::from("test"),
-            ColumnDesc::new(Int32Type::new(false), false),
+            ColumnDesc::new(Int32Type { nullable: false }, false),
         );
         assert_eq!(col_catalog.get_column_id(), 0);
         assert_eq!(col_catalog.is_primary(), false);
@@ -93,5 +95,9 @@ mod tests {
         assert_eq!(col_catalog.get_column_name(), String::from("test"));
         col_catalog.set_primary(true);
         assert_eq!(col_catalog.is_primary(), true);
+        assert_eq!(
+            col_catalog.get_column_datatype().as_ref().is_nullable(),
+            false
+        );
     }
 }
