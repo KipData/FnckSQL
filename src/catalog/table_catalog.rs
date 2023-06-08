@@ -1,5 +1,4 @@
-use crate::catalog::column_catalog::{ColumnCatalog, ColumnDesc};
-use crate::catalog::ColumnCatalogRef;
+use crate::catalog::{ColumnCatalog, ColumnCatalogRef, ColumnDesc};
 use crate::types::{ColumnIdT, TableIdT};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -64,7 +63,7 @@ impl TableCatalog {
     }
 
     /// Check if the table catalog contains a column with the given name.
-    pub(crate) fn contains_column(&self, name: &String) -> bool {
+    pub(crate) fn contains_column(&self, name: &str) -> bool {
         self.column_idxs.contains_key(name)
     }
 
@@ -74,19 +73,13 @@ impl TableCatalog {
     }
 
     /// Get the column id of the column with the given name.
-    pub(crate) fn get_column_id_by_name(&self, name: &String) -> Option<ColumnIdT> {
-        match self.column_idxs.get(name) {
-            Some(v) => Some(*v),
-            None => None,
-        }
+    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnIdT> {
+        self.column_idxs.get(name).cloned()
     }
 
     /// Get the column catalog of the column with the given id.
     pub(crate) fn get_column_by_id(&self, column_id: ColumnIdT) -> Option<ColumnCatalogRef> {
-        match self.columns.get(&column_id) {
-            Some(v) => Some(v.clone()),
-            None => None,
-        }
+        self.columns.get(&column_id).cloned()
     }
 
     /// Get the column catalog of the column with the given name.
@@ -103,7 +96,7 @@ impl TableCatalog {
     }
 
     /// Get the table name of the table.
-    pub(crate) fn get_table_name(&self) -> &String {
+    pub(crate) fn get_table_name(&self) -> &str {
         &self.table_name
     }
 }
@@ -117,43 +110,32 @@ mod tests {
     // |-----------|----------|
     // | 1         | true     |
     // | 2         | false    |
-
     fn test_table_catalog() {
         let column_names = vec!["a".to_string(), "b".to_string()];
         let columns = vec![
-            ColumnDesc::new(Int32Type::new(false), true),
-            ColumnDesc::new(BoolType::new(false), false),
+            ColumnDesc::new(Int32Type { nullable: false }, true),
+            ColumnDesc::new(BoolType { nullable: false }, false),
         ];
         let table_catalog = TableCatalog::new(0, "test".to_string(), column_names, columns, false);
 
-        assert_eq!(table_catalog.contains_column(&"a".to_string()), true);
-        assert_eq!(table_catalog.contains_column(&"b".to_string()), true);
-        assert_eq!(table_catalog.contains_column(&"c".to_string()), false);
+        assert_eq!(table_catalog.contains_column("a"), true);
+        assert_eq!(table_catalog.contains_column("b"), true);
+        assert_eq!(table_catalog.contains_column("c"), false);
 
-        assert_eq!(
-            table_catalog
-                .get_column_id_by_name(&String::from("a"))
-                .unwrap(),
-            0
-        );
-        assert_eq!(
-            table_catalog
-                .get_column_id_by_name(&String::from("b"))
-                .unwrap(),
-            1
-        );
+        assert_eq!(table_catalog.get_column_id_by_name("a"), Some(0));
+        assert_eq!(table_catalog.get_column_id_by_name("b"), Some(1));
 
         let column_catalog = table_catalog.get_column_by_id(0).unwrap();
-        assert_eq!(column_catalog.get_column_name(), "a".to_string());
+        assert_eq!(column_catalog.get_column_name(), "a");
         assert_eq!(
-            column_catalog.get_column_datatype().as_ref().get_type(),
+            column_catalog.get_column_datatype().get_type(),
             DataTypeEnum::Int32
         );
 
         let column_catalog = table_catalog.get_column_by_id(1).unwrap();
-        assert_eq!(column_catalog.get_column_name(), "b".to_string());
+        assert_eq!(column_catalog.get_column_name(), "b");
         assert_eq!(
-            column_catalog.get_column_datatype().as_ref().get_type(),
+            column_catalog.get_column_datatype().get_type(),
             DataTypeEnum::Bool
         );
     }
