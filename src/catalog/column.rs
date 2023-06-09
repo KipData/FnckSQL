@@ -52,15 +52,15 @@ impl ColumnCatalog {
         }
     }
 
-    pub(crate) fn get_column_id(&self) -> ColumnIdT {
+    pub(crate) fn column_id(&self) -> ColumnIdT {
         self.column_id
     }
 
-    pub(crate) fn get_column_name(&self) -> &str {
+    pub(crate) fn column_name(&self) -> &str {
         &self.column_name
     }
 
-    pub(crate) fn get_column_datatype(&self) -> &DataTypeRef {
+    pub(crate) fn column_datatype(&self) -> &DataTypeRef {
         &self.column_desc.column_datatype
     }
 
@@ -89,15 +89,12 @@ mod tests {
             String::from("test"),
             ColumnDesc::new(Int32Type { nullable: false }, false),
         );
-        assert_eq!(col_catalog.get_column_id(), 0);
+        assert_eq!(col_catalog.column_id(), 0);
         assert_eq!(col_catalog.is_primary(), false);
-        assert_eq!(col_catalog.get_column_datatype().as_ref().get_data_len(), 4);
-        assert_eq!(col_catalog.get_column_name(), String::from("test"));
+        assert_eq!(col_catalog.column_datatype().as_ref().get_data_len(), 4);
+        assert_eq!(col_catalog.column_name(), String::from("test"));
         col_catalog.set_primary(true);
         assert_eq!(col_catalog.is_primary(), true);
-        assert_eq!(
-            col_catalog.get_column_datatype().as_ref().is_nullable(),
-            false
-        );
+        assert_eq!(col_catalog.column_datatype().as_ref().is_nullable(), false);
     }
 }

@@ -126,16 +126,16 @@ mod tests {
         assert_eq!(table_catalog.get_column_id_by_name("b"), Some(1));
 
         let column_catalog = table_catalog.get_column_by_id(0).unwrap();
-        assert_eq!(column_catalog.get_column_name(), "a");
+        assert_eq!(column_catalog.column_name(), "a");
         assert_eq!(
-            column_catalog.get_column_datatype().get_type(),
+            column_catalog.column_datatype().get_type(),
             DataTypeEnum::Int32
         );
 
         let column_catalog = table_catalog.get_column_by_id(1).unwrap();
-        assert_eq!(column_catalog.get_column_name(), "b");
+        assert_eq!(column_catalog.column_name(), "b");
         assert_eq!(
-            column_catalog.get_column_datatype().get_type(),
+            column_catalog.column_datatype().get_type(),
             DataTypeEnum::Bool
         );
     }
