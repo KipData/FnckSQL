@@ -1,19 +1,25 @@
-use crate::catalog::{ColumnCatalog, ColumnCatalogRef, ColumnDesc};
+use crate::catalog::{CatalogError, ColumnCatalog};
 use crate::types::{ColumnIdT, TableIdT};
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::sync::Mutex;
 
 pub(crate) struct TableCatalog {
     table_id: TableIdT,
-    table_name: String,
+    inner: Mutex<Inner>,
+}
+
+struct Inner {
+    name: String,
     /// Mapping from column names to column ids
     column_idxs: HashMap<String, ColumnIdT>,
     /// Mapping from column ids to column catalogs
-    columns: BTreeMap<ColumnIdT, ColumnCatalogRef>,
+    columns: BTreeMap<ColumnIdT, ColumnCatalog>,
+
+    #[allow(dead_code)]
     /// The next column id to be assigned
-    next_column_id: ColumnIdT,
-    /// Whether the table is a materialized view
     is_materialized_view: bool,
+    /// Whether the table is a materialized view
+    next_column_id: ColumnIdT,
 }
 
 impl TableCatalog {
@@ -21,89 +27,91 @@ impl TableCatalog {
     pub(crate) fn new(
         table_id: TableIdT,
         table_name: String,
-        column_names: Vec<String>,
-        columns: Vec<ColumnDesc>,
+        columns: Vec<ColumnCatalog>,
         is_materialized_view: bool,
     ) -> TableCatalog {
-        let mut table_catalog = TableCatalog {
+        let table_catalog = TableCatalog {
             table_id,
-            table_name,
-            column_idxs: HashMap::new(),
-            columns: BTreeMap::new(),
-            next_column_id: 0,
-            is_materialized_view,
+            inner: Mutex::new(Inner {
+                name: table_name.clone(),
+                column_idxs: HashMap::new(),
+                columns: BTreeMap::new(),
+                is_materialized_view,
+                next_column_id: 0,
+            }),
         };
-        for (name, desc) in column_names.into_iter().zip(columns.into_iter()) {
-            table_catalog.add_column(name, desc).unwrap_or_default();
+        for col_catalog in columns.into_iter() {
+            table_catalog.add_column(col_catalog).unwrap();
         }
         table_catalog
     }
 
     /// Add a column to the table catalog.
-    pub(crate) fn add_column(
-        &mut self,
-        column_name: String,
-        column_desc: ColumnDesc,
-    ) -> Result<ColumnIdT, String> {
-        if self.column_idxs.contains_key(&column_name) {
-            Err(String::from("Duplicated column names!"))
-        } else {
-            let column_id = self.next_column_id;
-            self.next_column_id += 1;
+    pub(crate) fn add_column(&self, col_catalog: ColumnCatalog) -> Result<ColumnIdT, CatalogError> {
+        let mut inner = self.inner.lock().unwrap();
 
-            let column_catalog = Arc::new(ColumnCatalog::new(
-                column_id,
-                column_name.clone(),
-                column_desc,
+        if inner.column_idxs.contains_key(col_catalog.name()) {
+            return Err(CatalogError::Duplicated(
+                "column",
+                col_catalog.name().into(),
             ));
-            self.column_idxs.insert(column_name, column_id);
-            self.columns.insert(column_id, column_catalog);
-            Ok(column_id)
         }
+        inner.next_column_id += 1;
+        let id = col_catalog.id();
+
+        inner
+            .column_idxs
+            .insert(col_catalog.name().to_string(), col_catalog.id());
+        inner.columns.insert(id, col_catalog);
+        Ok(id)
     }
 
     /// Check if the table catalog contains a column with the given name.
     pub(crate) fn contains_column(&self, name: &str) -> bool {
-        self.column_idxs.contains_key(name)
+        let inner = self.inner.lock().unwrap();
+        inner.column_idxs.contains_key(name)
     }
 
     /// Get all columns in the table catalog.
-    pub(crate) fn get_all_columns(&self) -> &BTreeMap<ColumnIdT, ColumnCatalogRef> {
-        &self.columns
+    pub(crate) fn get_all_columns(&self) -> BTreeMap<ColumnIdT, ColumnCatalog> {
+        let inner = self.inner.lock().unwrap();
+        inner.columns.clone()
     }
 
     /// Get the column id of the column with the given name.
     pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnIdT> {
-        self.column_idxs.get(name).cloned()
+        let inner = self.inner.lock().unwrap();
+        inner.column_idxs.get(name).cloned()
     }
 
     /// Get the column catalog of the column with the given id.
-    pub(crate) fn get_column_by_id(&self, column_id: ColumnIdT) -> Option<ColumnCatalogRef> {
-        self.columns.get(&column_id).cloned()
+    pub(crate) fn get_column_by_id(&self, column_id: ColumnIdT) -> Option<ColumnCatalog> {
+        let inner = self.inner.lock().unwrap();
+        inner.columns.get(&column_id).cloned()
     }
 
     /// Get the column catalog of the column with the given name.
-    pub(crate) fn get_column_by_name(&self, name: &String) -> Option<ColumnCatalogRef> {
-        match self.get_column_id_by_name(name) {
-            Some(id) => self.get_column_by_id(id),
-            None => None,
-        }
+    pub(crate) fn get_column_by_name(&self, name: &String) -> Option<ColumnCatalog> {
+        let inner = self.inner.lock().unwrap();
+        let column_id = inner.column_idxs.get(name)?;
+        inner.columns.get(column_id).cloned()
     }
 
     /// Get the table id of the table.
-    pub(crate) fn get_table_id(&self) -> TableIdT {
+    pub(crate) fn id(&self) -> TableIdT {
         self.table_id
     }
 
     /// Get the table name of the table.
-    pub(crate) fn get_table_name(&self) -> &str {
-        &self.table_name
+    pub(crate) fn name(&self) -> String {
+        let inner = self.inner.lock().unwrap();
+        inner.name.clone()
     }
 }
 
 mod tests {
     use super::*;
-    use crate::types::{BoolType, DataTypeEnum, Int32Type};
+    use crate::types::{DataType, DataTypeExt, DataTypeKind};
 
     #[test]
     // | a (Int32) | b (Bool) |
@@ -111,12 +119,14 @@ mod tests {
     // | 1         | true     |
     // | 2         | false    |
     fn test_table_catalog() {
-        let column_names = vec!["a".to_string(), "b".to_string()];
-        let columns = vec![
-            ColumnDesc::new(Int32Type { nullable: false }, true),
-            ColumnDesc::new(BoolType { nullable: false }, false),
-        ];
-        let table_catalog = TableCatalog::new(0, "test".to_string(), column_names, columns, false);
+        let col0 = ColumnCatalog::new(
+            0,
+            "a".into(),
+            DataTypeKind::Int(None).not_null().to_column(),
+        );
+        let col1 = ColumnCatalog::new(1, "b".into(), DataTypeKind::Boolean.not_null().to_column());
+        let col_catalogs = vec![col0, col1];
+        let table_catalog = TableCatalog::new(0, "test".to_string(), col_catalogs, false);
 
         assert_eq!(table_catalog.contains_column("a"), true);
         assert_eq!(table_catalog.contains_column("b"), true);
@@ -126,17 +136,17 @@ mod tests {
         assert_eq!(table_catalog.get_column_id_by_name("b"), Some(1));
 
         let column_catalog = table_catalog.get_column_by_id(0).unwrap();
-        assert_eq!(column_catalog.column_name(), "a");
+        assert_eq!(column_catalog.name(), "a");
         assert_eq!(
-            column_catalog.column_datatype().get_type(),
-            DataTypeEnum::Int32
+            column_catalog.datatype(),
+            DataType::new(DataTypeKind::Int(None), false)
         );
 
         let column_catalog = table_catalog.get_column_by_id(1).unwrap();
-        assert_eq!(column_catalog.column_name(), "b");
+        assert_eq!(column_catalog.name(), "b");
         assert_eq!(
-            column_catalog.column_datatype().get_type(),
-            DataTypeEnum::Bool
+            column_catalog.datatype(),
+            DataType::new(DataTypeKind::Boolean, false)
         );
     }
 }

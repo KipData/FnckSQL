@@ -22,7 +22,7 @@ rust_2021_prelude_collisions,
 single_use_lifetimes,
 trivial_casts,
 trivial_numeric_casts,
-unreachable_pub,
+//unreachable_pub,
 unsafe_op_in_unsafe_fn,
 // unstable_features,
 // unused_crate_dependencies, the false positive case blocks us
@@ -88,9 +88,10 @@ clippy::panic, // allow debug_assert, panic in production code
 clippy::multiple_crate_versions, // caused by the dependency, can't be fixed
 )]
 
+mod binder;
 mod catalog;
 pub mod parser;
-mod types;
+pub mod types;
 
 extern crate core;
 

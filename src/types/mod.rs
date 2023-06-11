@@ -1,51 +1,40 @@
-use std::any::Any;
-use std::sync::Arc;
-
-/// Export all data types
-pub(crate) use bool_type::*;
-pub(crate) use numeric_types::*;
-
-/// Import all data types
-mod bool_type;
-mod numeric_types;
-
-/// PostgresSQL DataType
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-pub(crate) enum PgSQLDataTypeEnum {
-    Integer,
-    Boolean,
-    Double,
-    Char,
-}
-
-/// MySQL DataType
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-pub(crate) enum MySQLDataTypeEnum {
-    Integer,
-    Boolean,
-    Double,
-    Char,
-}
-
+pub use sqlparser::ast::DataType as DataTypeKind;
 /// Inner data type
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-pub(crate) enum DataTypeEnum {
-    Int32,
-    Bool,
-    Float64,
-    Char,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DataType {
+    kind: DataTypeKind,
+    nullable: bool,
 }
 
-/// Trait for all data types
-pub(crate) trait DataType: 'static {
-    fn is_nullable(&self) -> bool;
-    fn get_type(&self) -> DataTypeEnum;
-    fn get_data_len(&self) -> u32;
-    fn as_any(&self) -> &dyn Any;
+impl DataType {
+    pub const fn new(kind: DataTypeKind, nullable: bool) -> DataType {
+        DataType { kind, nullable }
+    }
+
+    pub fn is_nullable(&self) -> bool {
+        self.nullable
+    }
+
+    pub fn kind(&self) -> DataTypeKind {
+        self.kind.clone()
+    }
 }
 
-/// Type alias for DataTypeRef
-pub(crate) type DataTypeRef = Arc<dyn DataType>;
+pub trait DataTypeExt {
+    fn nullable(self) -> DataType;
+    fn not_null(self) -> DataType;
+}
+
+impl DataTypeExt for DataTypeKind {
+    fn nullable(self) -> DataType {
+        DataType::new(self, true)
+    }
+
+    fn not_null(self) -> DataType {
+        DataType::new(self, false)
+    }
+}
+
 pub(crate) type DatabaseIdT = u32;
 pub(crate) type SchemaIdT = u32;
 pub(crate) type TableIdT = u32;

@@ -12,7 +12,8 @@ edition = "2021"
 
 [dependencies]
 log = "^0.4"
-sqlparser = "0.34"
+sqlparser = "0.34.0"
+thiserror = "1"
 
 [dev-dependencies]
 ctor = "0.2.0"

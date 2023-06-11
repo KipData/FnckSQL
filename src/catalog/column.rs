@@ -1,16 +1,16 @@
-use crate::types::{ColumnIdT, DataType, DataTypeRef};
-use std::sync::Arc;
+use crate::types::{ColumnIdT, DataType};
 
-/// Column description for column
-pub(crate) struct ColumnDesc {
-    column_datatype: DataTypeRef,
+/// The descriptor of a column.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ColumnDesc {
+    column_datatype: DataType,
     is_primary: bool,
 }
 
 impl ColumnDesc {
-    pub(crate) fn new(column_datatype: impl DataType, is_primary: bool) -> ColumnDesc {
+    pub(crate) const fn new(column_datatype: DataType, is_primary: bool) -> ColumnDesc {
         ColumnDesc {
-            column_datatype: Arc::new(column_datatype),
+            column_datatype,
             is_primary,
         }
     }
@@ -27,16 +27,27 @@ impl ColumnDesc {
         self.column_datatype.is_nullable()
     }
 
-    pub(crate) fn get_datatype(&self) -> DataTypeRef {
+    pub(crate) fn get_datatype(&self) -> DataType {
         self.column_datatype.clone()
     }
 }
 
+impl DataType {
+    pub const fn to_column(self) -> ColumnDesc {
+        ColumnDesc::new(self, false)
+    }
+
+    pub const fn to_column_primary_key(self) -> ColumnDesc {
+        ColumnDesc::new(self, true)
+    }
+}
+
 /// Column catalog
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ColumnCatalog {
-    column_id: ColumnIdT,
-    column_name: String,
-    column_desc: ColumnDesc,
+    id: ColumnIdT,
+    name: String,
+    desc: ColumnDesc,
 }
 
 impl ColumnCatalog {
@@ -46,55 +57,62 @@ impl ColumnCatalog {
         column_desc: ColumnDesc,
     ) -> ColumnCatalog {
         ColumnCatalog {
-            column_id,
-            column_name,
-            column_desc,
+            id: column_id,
+            name: column_name,
+            desc: column_desc,
         }
     }
 
-    pub(crate) fn column_id(&self) -> ColumnIdT {
-        self.column_id
+    pub(crate) fn id(&self) -> ColumnIdT {
+        self.id
+    }
+    pub fn set_id(&mut self, column_id: ColumnIdT) {
+        self.id = column_id
     }
 
-    pub(crate) fn column_name(&self) -> &str {
-        &self.column_name
+    pub(crate) fn name(&self) -> &str {
+        &self.name
     }
 
-    pub(crate) fn column_datatype(&self) -> &DataTypeRef {
-        &self.column_desc.column_datatype
+    pub fn desc(&self) -> &ColumnDesc {
+        &self.desc
+    }
+
+    pub(crate) fn datatype(&self) -> DataType {
+        self.desc.column_datatype.clone()
     }
 
     pub(crate) fn set_primary(&mut self, is_primary: bool) {
-        self.column_desc.set_primary(is_primary)
+        self.desc.set_primary(is_primary)
     }
 
     pub(crate) fn is_primary(&self) -> bool {
-        self.column_desc.is_primary()
+        self.desc.is_primary()
     }
 
     pub(crate) fn is_nullable(&self) -> bool {
-        self.column_desc.is_nullable()
+        self.desc.is_nullable()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Int32Type;
+    use crate::types::{DataTypeExt, DataTypeKind};
 
     #[test]
     fn test_column_catalog() {
         let mut col_catalog = ColumnCatalog::new(
             0,
-            String::from("test"),
-            ColumnDesc::new(Int32Type { nullable: false }, false),
+            "test".to_string(),
+            DataTypeKind::Int(None).not_null().to_column(),
         );
-        assert_eq!(col_catalog.column_id(), 0);
+
+        assert_eq!(col_catalog.id(), 0);
         assert_eq!(col_catalog.is_primary(), false);
-        assert_eq!(col_catalog.column_datatype().as_ref().get_data_len(), 4);
-        assert_eq!(col_catalog.column_name(), String::from("test"));
+        assert_eq!(col_catalog.is_nullable(), false);
+        assert_eq!(col_catalog.name(), "test");
         col_catalog.set_primary(true);
         assert_eq!(col_catalog.is_primary(), true);
-        assert_eq!(col_catalog.column_datatype().as_ref().is_nullable(), false);
     }
 }
