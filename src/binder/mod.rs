@@ -56,16 +56,8 @@ impl Binder {
     }
 }
 
-/// Split an [ObjectName] into `(schema name, table name)`.
-fn split_name(name: &ObjectName) -> Result<(&str, &str), BindError> {
-    Ok(match name.0.as_slice() {
-        [table] => (DEFAULT_SCHEMA_NAME, &table.value),
-        [schema, table] => (&schema.value, &table.value),
-        _ => return Err(BindError::InvalidTableName(name.0.clone())),
-    })
-}
-
-fn split_tree_name(name: &ObjectName) -> Result<(&str, &str, &str), BindError> {
+/// Split an [ObjectName] into `(database name, schema name, table name)`.
+fn split_name(name: &ObjectName) -> Result<(&str, &str, &str), BindError> {
     Ok(match name.0.as_slice() {
         [table] => (DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, &table.value),
         [schema, table] => (DEFAULT_DATABASE_NAME, &schema.value, &table.value),

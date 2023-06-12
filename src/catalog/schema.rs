@@ -1,7 +1,8 @@
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog};
 use crate::types::{SchemaIdT, TableIdT};
+use parking_lot::Mutex;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub(crate) struct SchemaCatalog {
     schema_id: SchemaIdT,
@@ -34,7 +35,7 @@ impl SchemaCatalog {
         columns: Vec<ColumnCatalog>,
         is_materialized_view: bool,
     ) -> Result<TableIdT, CatalogError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         if inner.table_idxs.contains_key(&table_name) {
             return Err(CatalogError::Duplicated("column", table_name));
         }
@@ -52,7 +53,7 @@ impl SchemaCatalog {
     }
 
     pub(crate) fn delete_table(&mut self, table_name: &str) -> Result<(), CatalogError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
 
         let id = inner
             .table_idxs
@@ -63,22 +64,22 @@ impl SchemaCatalog {
     }
 
     pub(crate) fn get_all_tables(&self) -> BTreeMap<TableIdT, Arc<TableCatalog>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.tables.clone()
     }
 
     pub(crate) fn get_table_id_by_name(&self, name: &str) -> Option<TableIdT> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.table_idxs.get(name).cloned()
     }
 
     pub(crate) fn get_table_by_id(&self, table_id: TableIdT) -> Option<Arc<TableCatalog>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.tables.get(&table_id).cloned()
     }
 
     pub(crate) fn get_table_by_name(&self, name: &str) -> Option<Arc<TableCatalog>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner
             .table_idxs
             .get(name)
@@ -90,7 +91,7 @@ impl SchemaCatalog {
         self.schema_id
     }
     pub fn name(&self) -> String {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.schema_name.clone()
     }
 }

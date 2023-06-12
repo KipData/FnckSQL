@@ -1,4 +1,4 @@
-use crate::binder::{split_tree_name, BindError, Binder};
+use crate::binder::{split_name, BindError, Binder};
 use crate::catalog::ColumnDesc;
 use crate::parser::{ColumnDef, ColumnOption, Statement};
 use crate::types::{DataType, DatabaseIdT, SchemaIdT};
@@ -17,7 +17,7 @@ impl Binder {
     pub fn bind_create_table(&mut self, stmt: &Statement) -> Result<BoundCreateTable, BindError> {
         match stmt {
             Statement::CreateTable { name, columns, .. } => {
-                let (database_name, schema_name, table_name) = split_tree_name(name)?;
+                let (database_name, schema_name, table_name) = split_name(name)?;
 
                 let db = self
                     .catalog
@@ -55,10 +55,10 @@ impl Binder {
 }
 
 impl From<&ColumnDef> for ColumnDesc {
-    fn from(cdef: &ColumnDef) -> Self {
+    fn from(cdf: &ColumnDef) -> Self {
         let mut is_nullable = true;
         let mut is_primary = false;
-        for opt in cdef.options.iter() {
+        for opt in cdf.options.iter() {
             match opt.option {
                 ColumnOption::Null => is_nullable = true,
                 ColumnOption::NotNull => is_nullable = false,
@@ -67,7 +67,7 @@ impl From<&ColumnDef> for ColumnDesc {
             }
         }
         ColumnDesc::new(
-            DataType::new(cdef.data_type.clone(), is_nullable),
+            DataType::new(cdf.data_type.clone(), is_nullable),
             is_primary,
         )
     }

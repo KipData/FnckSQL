@@ -1,7 +1,8 @@
 use crate::catalog::{CatalogError, DatabaseCatalog, DatabaseCatalogRef, DEFAULT_DATABASE_NAME};
 use crate::types::DatabaseIdT;
+use parking_lot::Mutex;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub(crate) struct RootCatalog {
     inner: Mutex<Inner>,
@@ -27,14 +28,14 @@ impl RootCatalog {
         let root_catalog = RootCatalog {
             inner: Mutex::new(Inner::default()),
         };
-        root_catalog
+        let _ = root_catalog
             .add_database(DEFAULT_DATABASE_NAME.into())
-            .unwrap();
+            .is_ok();
         root_catalog
     }
 
     pub(crate) fn add_database(&self, database_name: String) -> Result<DatabaseIdT, CatalogError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         if inner.database_idxs.contains_key(&database_name) {
             return Err(CatalogError::Duplicated("database", database_name));
         }
@@ -47,7 +48,7 @@ impl RootCatalog {
     }
 
     pub(crate) fn delete_database(&mut self, database_name: &str) -> Result<(), CatalogError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         let id = inner
             .database_idxs
             .remove(database_name)
@@ -57,12 +58,12 @@ impl RootCatalog {
     }
 
     pub(crate) fn get_all_databases(&self) -> BTreeMap<DatabaseIdT, DatabaseCatalogRef> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.databases.clone()
     }
 
     pub(crate) fn get_database_id_by_name(&self, name: &str) -> Option<DatabaseIdT> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.database_idxs.get(name).cloned()
     }
 
@@ -70,12 +71,12 @@ impl RootCatalog {
         &self,
         database_id: DatabaseIdT,
     ) -> Option<Arc<DatabaseCatalog>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.databases.get(&database_id).cloned()
     }
 
     pub(crate) fn get_database_by_name(&self, name: &str) -> Option<Arc<DatabaseCatalog>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner
             .database_idxs
             .get(name)
@@ -103,10 +104,14 @@ mod tests {
 
         let col0 = ColumnCatalog::new(
             0,
-            "a".into(),
+            "a".to_string(),
             DataTypeKind::Int(None).not_null().to_column(),
         );
-        let col1 = ColumnCatalog::new(1, "b".into(), DataTypeKind::Boolean.not_null().to_column());
+        let col1 = ColumnCatalog::new(
+            1,
+            "b".to_string(),
+            DataTypeKind::Boolean.not_null().to_column(),
+        );
         let col_catalogs = vec![col0, col1];
 
         let table_id = schema_catalog
@@ -114,7 +119,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(table_id, 0);
-
         assert_eq!(database_catalog.name(), DEFAULT_DATABASE_NAME);
         assert_eq!(schema_catalog.name(), DEFAULT_SCHEMA_NAME);
     }

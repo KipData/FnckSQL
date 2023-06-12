@@ -33,10 +33,11 @@ impl ColumnDesc {
 }
 
 impl DataType {
+    #[inline]
     pub const fn to_column(self) -> ColumnDesc {
         ColumnDesc::new(self, false)
     }
-
+    #[inline]
     pub const fn to_column_primary_key(self) -> ColumnDesc {
         ColumnDesc::new(self, true)
     }

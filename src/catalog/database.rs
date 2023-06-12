@@ -1,7 +1,8 @@
 use crate::catalog::{CatalogError, SchemaCatalog, SchemaCatalogRef, DEFAULT_SCHEMA_NAME};
 use crate::types::{DatabaseIdT, SchemaIdT};
+use parking_lot::Mutex;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub(crate) struct DatabaseCatalog {
     database_id: DatabaseIdT,
@@ -28,12 +29,12 @@ impl DatabaseCatalog {
                 next_schema_id: 0,
             }),
         };
-        db_catalog.add_schema(DEFAULT_SCHEMA_NAME.into()).unwrap();
+        let _ = db_catalog.add_schema(DEFAULT_SCHEMA_NAME.into()).is_ok();
         db_catalog
     }
 
     pub(crate) fn add_schema(&self, schema_name: String) -> Result<SchemaIdT, CatalogError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         if inner.schema_idxs.contains_key(&schema_name) {
             return Err(CatalogError::Duplicated("schema", schema_name));
         }
@@ -46,7 +47,7 @@ impl DatabaseCatalog {
     }
 
     pub(crate) fn delete_schema(&self, schema_name: &str) -> Result<(), CatalogError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         let id = inner
             .schema_idxs
             .remove(schema_name)
@@ -56,22 +57,22 @@ impl DatabaseCatalog {
     }
 
     pub(crate) fn get_all_schemas(&self) -> BTreeMap<SchemaIdT, SchemaCatalogRef> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.schemas.clone()
     }
 
     pub(crate) fn get_schema_id_by_name(&self, name: &str) -> Option<SchemaIdT> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.schema_idxs.get(name).cloned()
     }
 
     pub(crate) fn get_schema_by_id(&self, schema_id: SchemaIdT) -> Option<Arc<SchemaCatalog>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.schemas.get(&schema_id).cloned()
     }
 
     pub(crate) fn get_schema_by_name(&self, name: &str) -> Option<Arc<SchemaCatalog>> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner
             .schema_idxs
             .get(name)
@@ -80,7 +81,7 @@ impl DatabaseCatalog {
     }
 
     pub(crate) fn name(&self) -> String {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.database_name.clone()
     }
 
@@ -98,10 +99,14 @@ mod test {
     fn test_database_catalog() {
         let col0 = ColumnCatalog::new(
             0,
-            "a".into(),
-            DataTypeKind::Int(None).not_null().to_column(),
+            "a".to_string(),
+            DataTypeKind::Int(Some(32)).not_null().to_column(),
         );
-        let col1 = ColumnCatalog::new(1, "b".into(), DataTypeKind::Boolean.not_null().to_column());
+        let col1 = ColumnCatalog::new(
+            1,
+            "b".to_string(),
+            DataTypeKind::Boolean.not_null().to_column(),
+        );
         let col_catalogs = vec![col0, col1];
         let mut _schema_catalog = SchemaCatalog::new(0, "test_scheme".to_string());
         let _table_catalog = TableCatalog::new(0, "test_table".to_string(), col_catalogs, false);

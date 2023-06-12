@@ -1,7 +1,7 @@
 use crate::catalog::{CatalogError, ColumnCatalog};
 use crate::types::{ColumnIdT, TableIdT};
+use parking_lot::Mutex;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Mutex;
 
 pub(crate) struct TableCatalog {
     table_id: TableIdT,
@@ -33,7 +33,7 @@ impl TableCatalog {
         let table_catalog = TableCatalog {
             table_id,
             inner: Mutex::new(Inner {
-                name: table_name.clone(),
+                name: table_name,
                 column_idxs: HashMap::new(),
                 columns: BTreeMap::new(),
                 is_materialized_view,
@@ -41,14 +41,14 @@ impl TableCatalog {
             }),
         };
         for col_catalog in columns.into_iter() {
-            table_catalog.add_column(col_catalog).unwrap();
+            let _ = table_catalog.add_column(col_catalog).is_ok();
         }
         table_catalog
     }
 
     /// Add a column to the table catalog.
     pub(crate) fn add_column(&self, col_catalog: ColumnCatalog) -> Result<ColumnIdT, CatalogError> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
 
         if inner.column_idxs.contains_key(col_catalog.name()) {
             return Err(CatalogError::Duplicated(
@@ -61,38 +61,38 @@ impl TableCatalog {
 
         inner
             .column_idxs
-            .insert(col_catalog.name().to_string(), col_catalog.id());
+            .insert(col_catalog.name().to_owned(), col_catalog.id());
         inner.columns.insert(id, col_catalog);
         Ok(id)
     }
 
     /// Check if the table catalog contains a column with the given name.
     pub(crate) fn contains_column(&self, name: &str) -> bool {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.column_idxs.contains_key(name)
     }
 
     /// Get all columns in the table catalog.
     pub(crate) fn get_all_columns(&self) -> BTreeMap<ColumnIdT, ColumnCatalog> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.columns.clone()
     }
 
     /// Get the column id of the column with the given name.
     pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnIdT> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.column_idxs.get(name).cloned()
     }
 
     /// Get the column catalog of the column with the given id.
     pub(crate) fn get_column_by_id(&self, column_id: ColumnIdT) -> Option<ColumnCatalog> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.columns.get(&column_id).cloned()
     }
 
     /// Get the column catalog of the column with the given name.
     pub(crate) fn get_column_by_name(&self, name: &String) -> Option<ColumnCatalog> {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         let column_id = inner.column_idxs.get(name)?;
         inner.columns.get(column_id).cloned()
     }
@@ -104,7 +104,7 @@ impl TableCatalog {
 
     /// Get the table name of the table.
     pub(crate) fn name(&self) -> String {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock();
         inner.name.clone()
     }
 }

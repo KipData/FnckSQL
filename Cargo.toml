@@ -14,6 +14,7 @@ edition = "2021"
 log = "^0.4"
 sqlparser = "0.34.0"
 thiserror = "1"
+parking_lot = "0.12.1"
 
 [dev-dependencies]
 ctor = "0.2.0"
