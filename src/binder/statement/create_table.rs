@@ -1,14 +1,14 @@
 use crate::binder::{split_name, BindError, Binder};
-use crate::catalog::ColumnDesc;
+use crate::catalog::{Catalog, ColumnDesc};
 use crate::parser::{ColumnDef, ColumnOption, Statement};
-use crate::types::{DataType, DatabaseIdT, SchemaIdT};
+use crate::types::{CatalogId, DataType};
 use std::collections::HashSet;
 
 /// A bound `CREATE TABLE` statement.
 #[derive(Debug, PartialEq, Clone)]
 pub struct BoundCreateTable {
-    pub database_id: DatabaseIdT,
-    pub schema_id: SchemaIdT,
+    pub database_id: CatalogId,
+    pub schema_id: CatalogId,
     pub table_name: String,
     pub columns: Vec<(String, ColumnDesc)>,
 }
@@ -21,13 +21,13 @@ impl Binder {
 
                 let db = self
                     .catalog
-                    .get_database_by_name(database_name)
+                    .get_by_name(database_name)
                     .ok_or_else(|| BindError::InvalidDatabase(database_name.into()))?;
 
                 let schema = db
-                    .get_schema_by_name(schema_name)
+                    .get_by_name(schema_name)
                     .ok_or_else(|| BindError::SchemaNotFound(schema_name.into()))?;
-                if schema.get_table_by_name(table_name).is_some() {
+                if schema.get_by_name(table_name).is_some() {
                     return Err(BindError::DuplicatedTable(table_name.into()));
                 }
 
@@ -77,20 +77,20 @@ impl From<&ColumnDef> for ColumnDesc {
 mod tests {
     use super::*;
     use crate::catalog::RootCatalog;
-    use crate::parser;
-    use crate::parser::SQLParser;
     use crate::types::{DataTypeExt, DataTypeKind};
     use std::sync::Arc;
+    use crate::parser::rs_parser::RSParser;
+    use crate::parser::SQLParser;
 
     #[test]
     fn bind_create_table() {
-        let catalog = Arc::new(RootCatalog::new());
+        let catalog = Arc::new(RootCatalog::new().unwrap());
         let mut binder = Binder::new(catalog.clone());
         let sql = "
             create table t1 (v1 int not null, v2 int);
             create table t2 (a int not null, a int not null);
             create table t3 (v1 int not null);";
-        let stmts = parser::RSParser::parse_sql(sql).unwrap();
+        let stmts = RSParser::parse_sql(sql).unwrap();
 
         assert_eq!(
             binder.bind_create_table(&stmts[0]),
@@ -110,9 +110,9 @@ mod tests {
             Err(BindError::DuplicatedColumn("a".into()))
         );
 
-        let database = catalog.get_database_by_id(0).unwrap();
-        let schema = database.get_schema_by_id(0).unwrap();
-        schema.add_table("t3".into(), vec![], false).unwrap();
+        let database = catalog.get_by_id(0).unwrap();
+        let schema = database.get_by_id(0).unwrap();
+        schema.add_table("t3".into(), vec![]).unwrap();
         assert_eq!(
             binder.bind_create_table(&stmts[2]),
             Err(BindError::DuplicatedTable("t3".into()))

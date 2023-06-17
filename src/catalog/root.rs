@@ -1,87 +1,61 @@
-use crate::catalog::{CatalogError, DatabaseCatalog, DatabaseCatalogRef, DEFAULT_DATABASE_NAME};
-use crate::types::DatabaseIdT;
-use parking_lot::Mutex;
-use std::collections::{BTreeMap, HashMap};
+use crate::catalog::{Catalog, CatalogError, CatalogTemp, DatabaseCatalog, DEFAULT_DATABASE_NAME};
 use std::sync::Arc;
+use crate::types::CatalogId;
 
 pub(crate) struct RootCatalog {
-    inner: Mutex<Inner>,
-}
-
-#[derive(Default)]
-struct Inner {
-    /// Database name to database id mapping
-    database_idxs: HashMap<String, DatabaseIdT>,
-    /// Database id to database catalog mapping
-    databases: BTreeMap<DatabaseIdT, Arc<DatabaseCatalog>>,
-    next_database_id: DatabaseIdT,
-}
-
-impl Default for RootCatalog {
-    fn default() -> Self {
-        Self::new()
-    }
+    inner: CatalogTemp<DatabaseCatalog>,
 }
 
 impl RootCatalog {
-    pub(crate) fn new() -> RootCatalog {
+    pub(crate) fn new() -> Result<RootCatalog, CatalogError> {
         let root_catalog = RootCatalog {
-            inner: Mutex::new(Inner::default()),
+            inner: CatalogTemp::new("".to_string(), "database"),
         };
-        let _ = root_catalog
-            .add_database(DEFAULT_DATABASE_NAME.into())
-            .is_ok();
-        root_catalog
+        root_catalog.add_database(DEFAULT_DATABASE_NAME.into())?;
+
+        Ok(root_catalog)
     }
 
-    pub(crate) fn add_database(&self, database_name: String) -> Result<DatabaseIdT, CatalogError> {
-        let mut inner = self.inner.lock();
-        if inner.database_idxs.contains_key(&database_name) {
-            return Err(CatalogError::Duplicated("database", database_name));
-        }
-        let database_id = inner.next_database_id;
-        inner.next_database_id += 1;
-        let database_catalog = Arc::new(DatabaseCatalog::new(database_id, database_name.clone()));
-        inner.database_idxs.insert(database_name, database_id);
-        inner.databases.insert(database_id, database_catalog);
-        Ok(database_id)
+    pub(crate) fn add_database(&self, database_name: String) -> Result<CatalogId, CatalogError> {
+        self.inner.add(database_name.clone(), DatabaseCatalog::new(database_name)?)
+    }
+}
+
+impl Catalog<DatabaseCatalog> for RootCatalog {
+    fn add(&self, name: String, item: DatabaseCatalog) -> Result<CatalogId, CatalogError> {
+        self.inner.add(name, item)
     }
 
-    pub(crate) fn delete_database(&mut self, database_name: &str) -> Result<(), CatalogError> {
-        let mut inner = self.inner.lock();
-        let id = inner
-            .database_idxs
-            .remove(database_name)
-            .ok_or_else(|| CatalogError::NotFound("database", database_name.into()))?;
-        inner.databases.remove(&id);
-        Ok(())
+    fn delete(&self, name: &str) -> Result<(), CatalogError> {
+        self.inner.delete(name)
     }
 
-    pub(crate) fn get_all_databases(&self) -> BTreeMap<DatabaseIdT, DatabaseCatalogRef> {
-        let inner = self.inner.lock();
-        inner.databases.clone()
+    fn all(&self) -> Vec<Arc<DatabaseCatalog>> {
+        self.inner.all()
     }
 
-    pub(crate) fn get_database_id_by_name(&self, name: &str) -> Option<DatabaseIdT> {
-        let inner = self.inner.lock();
-        inner.database_idxs.get(name).cloned()
+    fn get_id_by_name(&self, name: &str) -> Option<CatalogId> {
+        self.inner.get_id_by_name(name)
     }
 
-    pub(crate) fn get_database_by_id(
-        &self,
-        database_id: DatabaseIdT,
-    ) -> Option<Arc<DatabaseCatalog>> {
-        let inner = self.inner.lock();
-        inner.databases.get(&database_id).cloned()
+    fn get_by_id(&self, id: CatalogId) -> Option<Arc<DatabaseCatalog>> {
+        self.inner.get_by_id(id)
     }
 
-    pub(crate) fn get_database_by_name(&self, name: &str) -> Option<Arc<DatabaseCatalog>> {
-        let inner = self.inner.lock();
-        inner
-            .database_idxs
-            .get(name)
-            .and_then(|id| inner.databases.get(id))
-            .cloned()
+    fn get_by_name(&self, name: &str) -> Option<Arc<DatabaseCatalog>> {
+        self.inner.get_by_name(name)
+    }
+
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+
+    fn id(&self) -> CatalogId {
+        self.inner.id()
+    }
+
+    fn set_id(&mut self, id: CatalogId) {
+        self.inner.set_id(id)
     }
 }
 
@@ -93,13 +67,13 @@ mod tests {
 
     #[test]
     fn test_root_catalog() {
-        let root_catalog = RootCatalog::new();
+        let root_catalog = RootCatalog::new().unwrap();
         let database_id = root_catalog
-            .get_database_id_by_name(DEFAULT_DATABASE_NAME)
+            .get_id_by_name(DEFAULT_DATABASE_NAME)
             .unwrap();
-        let database_catalog = root_catalog.get_database_by_id(database_id).unwrap();
+        let database_catalog = root_catalog.get_by_id(database_id).unwrap();
         let schema_catalog = database_catalog
-            .get_schema_by_name(DEFAULT_SCHEMA_NAME)
+            .get_by_name(DEFAULT_SCHEMA_NAME)
             .unwrap();
 
         let col0 = ColumnCatalog::new(
@@ -115,7 +89,7 @@ mod tests {
         let col_catalogs = vec![col0, col1];
 
         let table_id = schema_catalog
-            .add_table("test_table".into(), col_catalogs, false)
+            .add_table("test_table".into(), col_catalogs)
             .unwrap();
 
         assert_eq!(table_id, 0);

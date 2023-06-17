@@ -37,7 +37,5 @@ impl DataTypeExt for DataTypeKind {
     }
 }
 
-pub(crate) type DatabaseIdT = u32;
-pub(crate) type SchemaIdT = u32;
-pub(crate) type TableIdT = u32;
-pub(crate) type ColumnIdT = u32;
+pub(crate) type CatalogId = i64;
+pub(crate) type ColumnId = i64;

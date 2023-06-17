@@ -1,98 +1,58 @@
-use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog};
-use crate::types::{SchemaIdT, TableIdT};
-use parking_lot::Mutex;
-use std::collections::{BTreeMap, HashMap};
+use crate::catalog::{Catalog, CatalogError, CatalogTemp, ColumnCatalog, TableCatalog};
 use std::sync::Arc;
+use crate::types::CatalogId;
 
 pub(crate) struct SchemaCatalog {
-    schema_id: SchemaIdT,
-    inner: Mutex<Inner>,
-}
-
-struct Inner {
-    schema_name: String,
-    table_idxs: HashMap<String, TableIdT>,
-    tables: BTreeMap<TableIdT, Arc<TableCatalog>>,
-    next_table_id: TableIdT,
+    inner: CatalogTemp<TableCatalog>
 }
 
 impl SchemaCatalog {
-    pub(crate) fn new(schema_id: SchemaIdT, schema_name: String) -> SchemaCatalog {
+    pub(crate) fn new(schema_name: String) -> SchemaCatalog {
         SchemaCatalog {
-            schema_id,
-            inner: Mutex::new(Inner {
-                schema_name,
-                table_idxs: HashMap::new(),
-                tables: BTreeMap::new(),
-                next_table_id: 0,
-            }),
+            inner: CatalogTemp::new(schema_name, "table"),
         }
     }
 
-    pub(crate) fn add_table(
-        &self,
-        table_name: String,
-        columns: Vec<ColumnCatalog>,
-        is_materialized_view: bool,
-    ) -> Result<TableIdT, CatalogError> {
-        let mut inner = self.inner.lock();
-        if inner.table_idxs.contains_key(&table_name) {
-            return Err(CatalogError::Duplicated("column", table_name));
-        }
-        let table_id = inner.next_table_id;
-        inner.next_table_id += 1;
-        let table_catalog = Arc::new(TableCatalog::new(
-            table_id,
-            table_name.clone(),
-            columns,
-            is_materialized_view,
-        ));
-        inner.table_idxs.insert(table_name, table_id);
-        inner.tables.insert(table_id, table_catalog);
-        Ok(table_id)
+    pub(crate) fn add_table(&self, table_name: String, columns: Vec<ColumnCatalog>) -> Result<CatalogId, CatalogError> {
+        self.inner.add(table_name.clone(), TableCatalog::new(table_name, columns)?)
+    }
+}
+
+impl Catalog<TableCatalog> for SchemaCatalog {
+    fn add(&self, name: String, item: TableCatalog) -> Result<CatalogId, CatalogError> {
+        self.inner.add(name, item)
     }
 
-    pub(crate) fn delete_table(&mut self, table_name: &str) -> Result<(), CatalogError> {
-        let mut inner = self.inner.lock();
-
-        let id = inner
-            .table_idxs
-            .remove(table_name)
-            .ok_or_else(|| CatalogError::NotFound("table", table_name.into()))?;
-        inner.tables.remove(&id);
-        Ok(())
+    fn delete(&self, name: &str) -> Result<(), CatalogError> {
+        self.inner.delete(name)
     }
 
-    pub(crate) fn get_all_tables(&self) -> BTreeMap<TableIdT, Arc<TableCatalog>> {
-        let inner = self.inner.lock();
-        inner.tables.clone()
+    fn all(&self) -> Vec<Arc<TableCatalog>> {
+        self.inner.all()
     }
 
-    pub(crate) fn get_table_id_by_name(&self, name: &str) -> Option<TableIdT> {
-        let inner = self.inner.lock();
-        inner.table_idxs.get(name).cloned()
+    fn get_id_by_name(&self, name: &str) -> Option<CatalogId> {
+        self.inner.get_id_by_name(name)
     }
 
-    pub(crate) fn get_table_by_id(&self, table_id: TableIdT) -> Option<Arc<TableCatalog>> {
-        let inner = self.inner.lock();
-        inner.tables.get(&table_id).cloned()
+    fn get_by_id(&self, id: CatalogId) -> Option<Arc<TableCatalog>> {
+        self.inner.get_by_id(id)
     }
 
-    pub(crate) fn get_table_by_name(&self, name: &str) -> Option<Arc<TableCatalog>> {
-        let inner = self.inner.lock();
-        inner
-            .table_idxs
-            .get(name)
-            .and_then(|id| inner.tables.get(id))
-            .cloned()
+    fn get_by_name(&self, name: &str) -> Option<Arc<TableCatalog>> {
+        self.inner.get_by_name(name)
     }
 
-    pub(crate) fn id(&self) -> SchemaIdT {
-        self.schema_id
+    fn name(&self) -> &str {
+        self.inner.name()
     }
-    pub fn name(&self) -> String {
-        let inner = self.inner.lock();
-        inner.schema_name.clone()
+
+    fn id(&self) -> CatalogId {
+        self.inner.id()
+    }
+
+    fn set_id(&mut self, id: CatalogId) {
+        self.inner.set_id(id)
     }
 }
 
@@ -111,26 +71,26 @@ mod tests {
         );
         let col1 = ColumnCatalog::new(1, "b".into(), DataTypeKind::Boolean.not_null().to_column());
         let col_catalogs = vec![col0, col1];
-        let mut schema_catalog = SchemaCatalog::new(0, "test_scheme".to_string());
+        let mut schema_catalog = SchemaCatalog::new("test_scheme".to_string());
         let table_id = schema_catalog
-            .add_table("test_table".to_string(), col_catalogs, false)
+            .add_table("test_table".to_string(), col_catalogs)
             .unwrap();
         assert_eq!(table_id, 0);
 
-        let table_catalog = schema_catalog.get_table_by_id(table_id).unwrap();
+        let table_catalog = schema_catalog.get_by_id(table_id).unwrap();
         assert_eq!(table_catalog.name(), "test_table");
 
         let table_catalog = schema_catalog
-            .get_table_by_name(&String::from("test_table"))
+            .get_by_name(&String::from("test_table"))
             .unwrap();
         assert_eq!(table_catalog.name(), "test_table");
 
         let table_catalog = schema_catalog
-            .delete_table(&String::from("test_table"))
+            .delete("test_table")
             .unwrap();
         assert_eq!(table_catalog, ());
 
-        let table_catalog = schema_catalog.delete_table(&String::from("test_table"));
+        let table_catalog = schema_catalog.delete("test_table");
         assert_eq!(
             table_catalog,
             Err(CatalogError::NotFound("table", "test_table".into()))

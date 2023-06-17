@@ -1,4 +1,4 @@
-use crate::types::{ColumnIdT, DataType};
+use crate::types::{ColumnId, DataType};
 
 /// The descriptor of a column.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,10 +17,6 @@ impl ColumnDesc {
 
     pub(crate) fn is_primary(&self) -> bool {
         self.is_primary
-    }
-
-    pub(crate) fn set_primary(&mut self, is_primary: bool) {
-        self.is_primary = is_primary;
     }
 
     pub(crate) fn is_nullable(&self) -> bool {
@@ -46,14 +42,14 @@ impl DataType {
 /// Column catalog
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ColumnCatalog {
-    id: ColumnIdT,
+    id: ColumnId,
     name: String,
     desc: ColumnDesc,
 }
 
 impl ColumnCatalog {
     pub(crate) fn new(
-        column_id: ColumnIdT,
+        column_id: ColumnId,
         column_name: String,
         column_desc: ColumnDesc,
     ) -> ColumnCatalog {
@@ -64,11 +60,8 @@ impl ColumnCatalog {
         }
     }
 
-    pub(crate) fn id(&self) -> ColumnIdT {
+    pub(crate) fn id(&self) -> ColumnId {
         self.id
-    }
-    pub fn set_id(&mut self, column_id: ColumnIdT) {
-        self.id = column_id
     }
 
     pub(crate) fn name(&self) -> &str {
@@ -81,10 +74,6 @@ impl ColumnCatalog {
 
     pub(crate) fn datatype(&self) -> DataType {
         self.desc.column_datatype.clone()
-    }
-
-    pub(crate) fn set_primary(&mut self, is_primary: bool) {
-        self.desc.set_primary(is_primary)
     }
 
     pub(crate) fn is_primary(&self) -> bool {
@@ -113,7 +102,5 @@ mod tests {
         assert_eq!(col_catalog.is_primary(), false);
         assert_eq!(col_catalog.is_nullable(), false);
         assert_eq!(col_catalog.name(), "test");
-        col_catalog.set_primary(true);
-        assert_eq!(col_catalog.is_primary(), true);
     }
 }

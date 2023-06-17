@@ -1,5 +1,4 @@
-mod rs_parser;
-pub(crate) use self::rs_parser::*;
+pub mod rs_parser;
 pub use sqlparser::ast::*;
 pub use sqlparser::parser::ParserError;
 
