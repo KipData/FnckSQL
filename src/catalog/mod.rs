@@ -6,7 +6,7 @@ pub(crate) use self::root::*;
 pub(crate) use self::schema::*;
 pub(crate) use self::table::*;
 
-use crate::types::{CatalogId, ColumnId};
+use crate::types::{ColumnId, SchemaId, TableId};
 use std::sync::Arc;
 use parking_lot::Mutex;
 
@@ -25,12 +25,12 @@ mod table;
 /// The reference ID of a table.
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct TableRefId {
-    pub schema_id: CatalogId,
-    pub table_id: CatalogId,
+    pub schema_id: SchemaId,
+    pub table_id: TableId,
 }
 
 impl TableRefId {
-    pub const fn new(schema_id: CatalogId, table_id: CatalogId) -> Self {
+    pub const fn new(schema_id: SchemaId, table_id: TableId) -> Self {
         TableRefId {
             schema_id,
             table_id,
@@ -41,8 +41,8 @@ impl TableRefId {
 /// The reference ID of a column.
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct ColumnRefId {
-    pub schema_id: CatalogId,
-    pub table_id: CatalogId,
+    pub schema_id: SchemaId,
+    pub table_id: TableId,
     pub column_id: ColumnId,
 }
 
@@ -55,7 +55,7 @@ impl ColumnRefId {
         }
     }
 
-    pub const fn new(schema_id: CatalogId, table_id: CatalogId, column_id: ColumnId) -> Self {
+    pub const fn new(schema_id: SchemaId, table_id: TableId, column_id: ColumnId) -> Self {
         ColumnRefId {
             schema_id,
             table_id,

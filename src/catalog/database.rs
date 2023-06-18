@@ -1,6 +1,6 @@
 use crate::catalog::{CatalogError, SchemaCatalog, DEFAULT_SCHEMA_NAME, CatalogTemp, Catalog};
-use crate::types::CatalogId;
 use std::sync::Arc;
+use crate::types::SchemaId;
 
 pub(crate) struct DatabaseCatalog {
     inner: CatalogTemp<SchemaCatalog>,
@@ -16,13 +16,13 @@ impl DatabaseCatalog {
         Ok(db_catalog)
     }
 
-    pub(crate) fn add_schema(&self, schema_name: String) -> Result<CatalogId, CatalogError> {
+    pub(crate) fn add_schema(&self, schema_name: String) -> Result<SchemaId, CatalogError> {
         self.add(schema_name.clone(), SchemaCatalog::new(schema_name))
     }
 }
 
 impl Catalog<SchemaCatalog> for DatabaseCatalog {
-    fn add(&self, name: String, item: SchemaCatalog) -> Result<CatalogId, CatalogError> {
+    fn add(&self, name: String, item: SchemaCatalog) -> Result<SchemaId, CatalogError> {
         self.inner.add(name, item)
     }
 
@@ -34,11 +34,11 @@ impl Catalog<SchemaCatalog> for DatabaseCatalog {
         self.inner.all()
     }
 
-    fn get_id_by_name(&self, name: &str) -> Option<CatalogId> {
+    fn get_id_by_name(&self, name: &str) -> Option<i64> {
         self.inner.get_id_by_name(name)
     }
 
-    fn get_by_id(&self, id: CatalogId) -> Option<Arc<SchemaCatalog>> {
+    fn get_by_id(&self, id: i64) -> Option<Arc<SchemaCatalog>> {
         self.inner.get_by_id(id)
     }
 
@@ -50,11 +50,11 @@ impl Catalog<SchemaCatalog> for DatabaseCatalog {
         self.inner.name()
     }
 
-    fn id(&self) -> CatalogId {
+    fn id(&self) -> i64 {
         self.inner.id()
     }
 
-    fn set_id(&mut self, id: CatalogId) {
+    fn set_id(&mut self, id: i64) {
         self.inner.set_id(id)
     }
 }

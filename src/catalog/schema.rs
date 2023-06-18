@@ -1,6 +1,6 @@
 use crate::catalog::{Catalog, CatalogError, CatalogTemp, ColumnCatalog, TableCatalog};
 use std::sync::Arc;
-use crate::types::CatalogId;
+use crate::types::TableId;
 
 pub(crate) struct SchemaCatalog {
     inner: CatalogTemp<TableCatalog>
@@ -13,13 +13,13 @@ impl SchemaCatalog {
         }
     }
 
-    pub(crate) fn add_table(&self, table_name: String, columns: Vec<ColumnCatalog>) -> Result<CatalogId, CatalogError> {
+    pub(crate) fn add_table(&self, table_name: String, columns: Vec<ColumnCatalog>) -> Result<TableId, CatalogError> {
         self.inner.add(table_name.clone(), TableCatalog::new(table_name, columns)?)
     }
 }
 
 impl Catalog<TableCatalog> for SchemaCatalog {
-    fn add(&self, name: String, item: TableCatalog) -> Result<CatalogId, CatalogError> {
+    fn add(&self, name: String, item: TableCatalog) -> Result<TableId, CatalogError> {
         self.inner.add(name, item)
     }
 
@@ -31,11 +31,11 @@ impl Catalog<TableCatalog> for SchemaCatalog {
         self.inner.all()
     }
 
-    fn get_id_by_name(&self, name: &str) -> Option<CatalogId> {
+    fn get_id_by_name(&self, name: &str) -> Option<TableId> {
         self.inner.get_id_by_name(name)
     }
 
-    fn get_by_id(&self, id: CatalogId) -> Option<Arc<TableCatalog>> {
+    fn get_by_id(&self, id: TableId) -> Option<Arc<TableCatalog>> {
         self.inner.get_by_id(id)
     }
 
@@ -47,11 +47,11 @@ impl Catalog<TableCatalog> for SchemaCatalog {
         self.inner.name()
     }
 
-    fn id(&self) -> CatalogId {
+    fn id(&self) -> TableId {
         self.inner.id()
     }
 
-    fn set_id(&mut self, id: CatalogId) {
+    fn set_id(&mut self, id: TableId) {
         self.inner.set_id(id)
     }
 }

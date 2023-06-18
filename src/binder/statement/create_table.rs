@@ -1,14 +1,14 @@
 use crate::binder::{split_name, BindError, Binder};
 use crate::catalog::{Catalog, ColumnDesc};
 use crate::parser::{ColumnDef, ColumnOption, Statement};
-use crate::types::{CatalogId, DataType};
+use crate::types::{DatabaseId, DataType, SchemaId};
 use std::collections::HashSet;
 
 /// A bound `CREATE TABLE` statement.
 #[derive(Debug, PartialEq, Clone)]
 pub struct BoundCreateTable {
-    pub database_id: CatalogId,
-    pub schema_id: CatalogId,
+    pub database_id: DatabaseId,
+    pub schema_id: SchemaId,
     pub table_name: String,
     pub columns: Vec<(String, ColumnDesc)>,
 }

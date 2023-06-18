@@ -1,6 +1,6 @@
 use crate::catalog::{Catalog, CatalogError, CatalogTemp, DatabaseCatalog, DEFAULT_DATABASE_NAME};
 use std::sync::Arc;
-use crate::types::CatalogId;
+use crate::types::DatabaseId;
 
 pub(crate) struct RootCatalog {
     inner: CatalogTemp<DatabaseCatalog>,
@@ -16,13 +16,13 @@ impl RootCatalog {
         Ok(root_catalog)
     }
 
-    pub(crate) fn add_database(&self, database_name: String) -> Result<CatalogId, CatalogError> {
+    pub(crate) fn add_database(&self, database_name: String) -> Result<DatabaseId, CatalogError> {
         self.inner.add(database_name.clone(), DatabaseCatalog::new(database_name)?)
     }
 }
 
 impl Catalog<DatabaseCatalog> for RootCatalog {
-    fn add(&self, name: String, item: DatabaseCatalog) -> Result<CatalogId, CatalogError> {
+    fn add(&self, name: String, item: DatabaseCatalog) -> Result<DatabaseId, CatalogError> {
         self.inner.add(name, item)
     }
 
@@ -34,11 +34,11 @@ impl Catalog<DatabaseCatalog> for RootCatalog {
         self.inner.all()
     }
 
-    fn get_id_by_name(&self, name: &str) -> Option<CatalogId> {
+    fn get_id_by_name(&self, name: &str) -> Option<DatabaseId> {
         self.inner.get_id_by_name(name)
     }
 
-    fn get_by_id(&self, id: CatalogId) -> Option<Arc<DatabaseCatalog>> {
+    fn get_by_id(&self, id: DatabaseId) -> Option<Arc<DatabaseCatalog>> {
         self.inner.get_by_id(id)
     }
 
@@ -50,11 +50,11 @@ impl Catalog<DatabaseCatalog> for RootCatalog {
         self.inner.name()
     }
 
-    fn id(&self) -> CatalogId {
+    fn id(&self) -> DatabaseId {
         self.inner.id()
     }
 
-    fn set_id(&mut self, id: CatalogId) {
+    fn set_id(&mut self, id: DatabaseId) {
         self.inner.set_id(id)
     }
 }
