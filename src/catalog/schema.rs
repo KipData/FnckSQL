@@ -1,6 +1,6 @@
 use crate::catalog::{Catalog, CatalogError, CatalogTemp, ColumnCatalog, TableCatalog};
 use std::sync::Arc;
-use crate::types::TableId;
+use crate::types::{SchemaId, TableId};
 
 pub(crate) struct SchemaCatalog {
     inner: CatalogTemp<TableCatalog>
@@ -47,11 +47,11 @@ impl Catalog<TableCatalog> for SchemaCatalog {
         self.inner.name()
     }
 
-    fn id(&self) -> TableId {
+    fn id(&self) -> SchemaId {
         self.inner.id()
     }
 
-    fn set_id(&mut self, id: TableId) {
+    fn set_id(&mut self, id: SchemaId) {
         self.inner.set_id(id)
     }
 }

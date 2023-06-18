@@ -9,7 +9,7 @@ pub(crate) struct TableCatalog {
 impl TableCatalog {
     pub(crate) fn new(name: String, columns: Vec<ColumnCatalog>) -> Result<Self, CatalogError> {
         let catalog = TableCatalog {
-            inner: CatalogTemp::new(name, "column"),
+            inner: CatalogTemp::new(name, "table"),
         };
         for column in columns {
             catalog.add_column(column)?;
