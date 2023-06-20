@@ -1,9 +1,6 @@
-use std::{io, sync::Arc};
+use std::io;
 
-use kip_sql::{
-    optimizer::Optimizer,
-    planner::{display::display_plan, logical_plan_builder::PlanBuilder},
-};
+use kip_sql::planner::{display::display_plan, logical_plan_builder::PlanBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,9 +24,9 @@ fn handle_query(sql: String) -> String {
     tracing::info!("logical plan {}", logical_graph);
 
     // todo optimize.
-    let mut optimize = Optimizer::new();
-    let _optmized_plan = optimize.optimize(&plan).unwrap();
+    // let mut optimize = Optimizer::new();
+    // let _optmized_plan = optimize.optimize(&plan).unwrap();
 
-    // todo executing.
+    // todo executor.
     logical_graph
 }
