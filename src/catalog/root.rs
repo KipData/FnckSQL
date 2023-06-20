@@ -1,19 +1,21 @@
-use crate::catalog::{CatalogError, DatabaseCatalog, DatabaseCatalogRef, DEFAULT_DATABASE_NAME};
+use crate::catalog::{CatalogError, Database, DatabaseCatalogRef, DEFAULT_DATABASE_NAME};
 use crate::types::DatabaseIdT;
 use parking_lot::Mutex;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-pub(crate) struct RootCatalog {
+use super::{Table, TableRefId};
+
+pub struct RootCatalog {
     inner: Mutex<Inner>,
 }
 
 #[derive(Default)]
-struct Inner {
+pub struct Inner {
     /// Database name to database id mapping
     database_idxs: HashMap<String, DatabaseIdT>,
     /// Database id to database catalog mapping
-    databases: BTreeMap<DatabaseIdT, Arc<DatabaseCatalog>>,
+    databases: BTreeMap<DatabaseIdT, Arc<Database>>,
     next_database_id: DatabaseIdT,
 }
 
@@ -41,7 +43,7 @@ impl RootCatalog {
         }
         let database_id = inner.next_database_id;
         inner.next_database_id += 1;
-        let database_catalog = Arc::new(DatabaseCatalog::new(database_id, database_name.clone()));
+        let database_catalog = Arc::new(Database::new(database_id, database_name.clone()));
         inner.database_idxs.insert(database_name, database_id);
         inner.databases.insert(database_id, database_catalog);
         Ok(database_id)
@@ -62,20 +64,17 @@ impl RootCatalog {
         inner.databases.clone()
     }
 
-    pub(crate) fn get_database_id_by_name(&self, name: &str) -> Option<DatabaseIdT> {
+    pub fn get_database_id_by_name(&self, name: &str) -> Option<DatabaseIdT> {
         let inner = self.inner.lock();
         inner.database_idxs.get(name).cloned()
     }
 
-    pub(crate) fn get_database_by_id(
-        &self,
-        database_id: DatabaseIdT,
-    ) -> Option<Arc<DatabaseCatalog>> {
+    pub(crate) fn get_database_by_id(&self, database_id: DatabaseIdT) -> Option<Arc<Database>> {
         let inner = self.inner.lock();
         inner.databases.get(&database_id).cloned()
     }
 
-    pub(crate) fn get_database_by_name(&self, name: &str) -> Option<Arc<DatabaseCatalog>> {
+    pub(crate) fn get_database_by_name(&self, name: &str) -> Option<Arc<Database>> {
         let inner = self.inner.lock();
         inner
             .database_idxs
@@ -83,12 +82,35 @@ impl RootCatalog {
             .and_then(|id| inner.databases.get(id))
             .cloned()
     }
+
+    pub fn get_table(&self, table_ref_id: &TableRefId) -> Option<Arc<Table>> {
+        let db = self.get_database_by_id(table_ref_id.database_id)?;
+        let schema = db.get_schema_by_id(table_ref_id.schema_id)?;
+        schema.get_table_by_id(table_ref_id.table_id)
+    }
+
+    pub fn get_table_id_by_name(
+        &self,
+        database_name: &str,
+        schema_name: &str,
+        table_name: &str,
+    ) -> Option<TableRefId> {
+        let db = self.get_database_by_name(database_name)?;
+        let schema = db.get_schema_by_name(schema_name)?;
+        let table = schema.get_table_by_name(table_name)?;
+
+        Some(TableRefId {
+            schema_id: schema.id(),
+            table_id: table.id(),
+            database_id: db.id(),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog::{ColumnCatalog, DEFAULT_SCHEMA_NAME};
+    use crate::catalog::{Column, DEFAULT_SCHEMA_NAME};
     use crate::types::{DataTypeExt, DataTypeKind};
 
     #[test]
@@ -102,12 +124,12 @@ mod tests {
             .get_schema_by_name(DEFAULT_SCHEMA_NAME)
             .unwrap();
 
-        let col0 = ColumnCatalog::new(
+        let col0 = Column::new(
             0,
             "a".to_string(),
             DataTypeKind::Int(None).not_null().to_column(),
         );
-        let col1 = ColumnCatalog::new(
+        let col1 = Column::new(
             1,
             "b".to_string(),
             DataTypeKind::Boolean.not_null().to_column(),

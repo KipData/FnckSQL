@@ -1,10 +1,10 @@
-use crate::catalog::{CatalogError, SchemaCatalog, SchemaCatalogRef, DEFAULT_SCHEMA_NAME};
+use crate::catalog::{CatalogError, Schema, SchemaCatalogRef, DEFAULT_SCHEMA_NAME};
 use crate::types::{DatabaseIdT, SchemaIdT};
 use parking_lot::Mutex;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-pub(crate) struct DatabaseCatalog {
+pub(crate) struct Database {
     database_id: DatabaseIdT,
     inner: Mutex<Inner>,
 }
@@ -14,13 +14,13 @@ struct Inner {
     /// schema_name -> schema_id
     schema_idxs: HashMap<String, SchemaIdT>,
     /// schema_id -> schema_catalog
-    schemas: BTreeMap<SchemaIdT, Arc<SchemaCatalog>>,
+    schemas: BTreeMap<SchemaIdT, Arc<Schema>>,
     next_schema_id: SchemaIdT,
 }
 
-impl DatabaseCatalog {
+impl Database {
     pub(crate) fn new(database_id: DatabaseIdT, database_name: String) -> Self {
-        let db_catalog = DatabaseCatalog {
+        let db_catalog = Database {
             database_id,
             inner: Mutex::new(Inner {
                 database_name,
@@ -40,7 +40,7 @@ impl DatabaseCatalog {
         }
         let schema_id = inner.next_schema_id;
         inner.next_schema_id += 1;
-        let schema_catalog = Arc::new(SchemaCatalog::new(schema_id, schema_name.clone()));
+        let schema_catalog = Arc::new(Schema::new(schema_id, schema_name.clone()));
         inner.schema_idxs.insert(schema_name, schema_id);
         inner.schemas.insert(schema_id, schema_catalog);
         Ok(schema_id)
@@ -66,12 +66,12 @@ impl DatabaseCatalog {
         inner.schema_idxs.get(name).cloned()
     }
 
-    pub(crate) fn get_schema_by_id(&self, schema_id: SchemaIdT) -> Option<Arc<SchemaCatalog>> {
+    pub(crate) fn get_schema_by_id(&self, schema_id: SchemaIdT) -> Option<Arc<Schema>> {
         let inner = self.inner.lock();
         inner.schemas.get(&schema_id).cloned()
     }
 
-    pub(crate) fn get_schema_by_name(&self, name: &str) -> Option<Arc<SchemaCatalog>> {
+    pub(crate) fn get_schema_by_name(&self, name: &str) -> Option<Arc<Schema>> {
         let inner = self.inner.lock();
         inner
             .schema_idxs
@@ -92,26 +92,26 @@ impl DatabaseCatalog {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, DatabaseCatalog, SchemaCatalog, TableCatalog};
+    use crate::catalog::{Column, Database, Schema, Table};
     use crate::types::{DataTypeExt, DataTypeKind};
 
     #[test]
     fn test_database_catalog() {
-        let col0 = ColumnCatalog::new(
+        let col0 = Column::new(
             0,
             "a".to_string(),
             DataTypeKind::Int(Some(32)).not_null().to_column(),
         );
-        let col1 = ColumnCatalog::new(
+        let col1 = Column::new(
             1,
             "b".to_string(),
             DataTypeKind::Boolean.not_null().to_column(),
         );
         let col_catalogs = vec![col0, col1];
-        let mut _schema_catalog = SchemaCatalog::new(0, "test_scheme".to_string());
-        let _table_catalog = TableCatalog::new(0, "test_table".to_string(), col_catalogs, false);
+        let mut _schema_catalog = Schema::new(0, "test_scheme".to_string());
+        let _table_catalog = Table::new(0, "test_table".to_string(), col_catalogs, false);
 
-        let database_catalog = DatabaseCatalog::new(0, "test_database".to_string());
+        let database_catalog = Database::new(0, "test_database".to_string());
         let schema_id = database_catalog.add_schema("test_schema".into()).unwrap();
         assert_eq!(schema_id, 1);
 

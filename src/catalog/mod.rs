@@ -5,19 +5,20 @@ pub(crate) use self::root::*;
 pub(crate) use self::schema::*;
 pub(crate) use self::table::*;
 
+use crate::types::DatabaseIdT;
 use crate::types::{ColumnIdT, SchemaIdT, TableIdT};
 use std::sync::Arc;
 
-pub(crate) type ColumnCatalogRef = Arc<ColumnCatalog>;
-pub(crate) type TableCatalogRef = Arc<TableCatalog>;
-pub(crate) type SchemaCatalogRef = Arc<SchemaCatalog>;
-pub(crate) type DatabaseCatalogRef = Arc<DatabaseCatalog>;
+pub(crate) type ColumnCatalogRef = Arc<Column>;
+pub(crate) type TableCatalogRef = Arc<Table>;
+pub(crate) type SchemaCatalogRef = Arc<Schema>;
+pub(crate) type DatabaseCatalogRef = Arc<Database>;
 pub(crate) type RootCatalogRef = Arc<RootCatalog>;
 /// The type of catalog reference.
-pub(crate) type CatalogRef = Arc<RootCatalog>;
+pub type CatalogRef = Arc<RootCatalog>;
 
-pub(crate) static DEFAULT_DATABASE_NAME: &str = "postgres";
-pub(crate) static DEFAULT_SCHEMA_NAME: &str = "postgres";
+pub(crate) static DEFAULT_DATABASE_NAME: &str = "kipsql";
+pub(crate) static DEFAULT_SCHEMA_NAME: &str = "kipsql";
 
 mod column;
 mod database;
@@ -28,15 +29,17 @@ mod table;
 /// The reference ID of a table.
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct TableRefId {
+    pub database_id: DatabaseIdT,
     pub schema_id: SchemaIdT,
     pub table_id: TableIdT,
 }
 
 impl TableRefId {
-    pub const fn new(schema_id: SchemaIdT, table_id: TableIdT) -> Self {
+    pub const fn new(database_id: DatabaseIdT, schema_id: SchemaIdT, table_id: TableIdT) -> Self {
         TableRefId {
             schema_id,
             table_id,
+            database_id,
         }
     }
 }
