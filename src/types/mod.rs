@@ -1,5 +1,6 @@
 pub mod value;
 
+use snowflake::ProcessUniqueId;
 pub use sqlparser::ast::DataType as DataTypeKind;
 /// Inner data type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -39,7 +40,7 @@ impl DataTypeExt for DataTypeKind {
     }
 }
 
-pub type DatabaseIdT = u32;
-pub type SchemaIdT = u32;
-pub type TableIdT = u32;
-pub type ColumnIdT = u32;
+// The ID generated using the snowflake algorithm is used to ensure the sequence
+// and avoid the ID being regenerated from 0 after the restart, resulting in duplication
+pub type TableId = ProcessUniqueId;
+pub type ColumnId = ProcessUniqueId;

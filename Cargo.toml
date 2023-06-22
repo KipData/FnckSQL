@@ -33,6 +33,7 @@ tokio-process = "0.2.5"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 async-trait = "0.1.68"
+snowflake = "1.3.0"
 
 [dev-dependencies]
 ctor = "0.2.0"

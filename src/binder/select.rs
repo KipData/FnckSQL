@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, sync::Arc};
 
 use crate::{
-    catalog::{ColumnRefId, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME},
+    catalog::ColumnRefId,
     expression::ScalarExpression,
     planner::{
         logical_select_plan::LogicalSelectPlan,
@@ -22,6 +22,7 @@ use sqlparser::ast::{
     Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
+use crate::catalog::{DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME};
 
 impl Binder {
     pub(super) fn bind_query(&mut self, query: &Query) -> Result<LogicalSelectPlan> {
@@ -127,7 +128,7 @@ impl Binder {
                     .map(|ident| Ident::new(ident.value.to_lowercase()))
                     .collect_vec();
 
-                let (database, schema, mut table): (&str, &str, &str) = match obj_name.as_slice() {
+                let (_database, _schema, mut table): (&str, &str, &str) = match obj_name.as_slice() {
                     [table] => (DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, &table.value),
                     [schema, table] => (DEFAULT_DATABASE_NAME, &schema.value, &table.value),
                     [database, schema, table] => (&database.value, &schema.value, &table.value),
@@ -147,7 +148,7 @@ impl Binder {
                 let table_ref_id = self
                     .context
                     .catalog
-                    .get_table_id_by_name(database, schema, table)
+                    .get_table_id_by_name(table)
                     .ok_or_else(|| anyhow::Error::msg(format!("bind table {}", table)))?;
 
                 self.context.bind_table.insert(table.into(), table_ref_id);
@@ -198,7 +199,7 @@ impl Binder {
     fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>> {
         let mut exprs = vec![];
         for ref_id in self.context.bind_table.values().cloned().collect_vec() {
-            let table = self.context.catalog.get_table(&ref_id).unwrap();
+            let table = self.context.catalog.get_table(ref_id).unwrap();
             for (col_id, col) in &table.get_all_columns() {
                 let column_ref_id = ColumnRefId::from_table(ref_id, *col_id);
                 // self.record_regular_table_column(
@@ -209,8 +210,8 @@ impl Binder {
                 // );
                 let expr = ScalarExpression::ColumnRef {
                     column_ref_id,
-                    primary_key: col.is_primary(),
-                    desc: col.desc().clone(),
+                    primary_key: col.desc.is_primary(),
+                    desc: col.desc.clone(),
                 };
                 exprs.push(expr);
             }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     expression::ScalarExpression,
-    planner::{logical_select_plan::LogicalSelectPlan, LogicalPlan},
+    planner::{logical_select_plan::LogicalSelectPlan},
 };
 
 use super::Operator;
