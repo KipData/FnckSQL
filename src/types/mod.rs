@@ -40,7 +40,5 @@ impl DataTypeExt for DataTypeKind {
     }
 }
 
-// The ID generated using the snowflake algorithm is used to ensure the sequence
-// and avoid the ID being regenerated from 0 after the restart, resulting in duplication
 pub type TableId = ProcessUniqueId;
 pub type ColumnId = ProcessUniqueId;
