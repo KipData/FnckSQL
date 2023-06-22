@@ -45,19 +45,19 @@ impl DataType {
 
 /// Column catalog
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ColumnCatalog {
+pub struct Column {
     id: ColumnIdT,
     name: String,
     desc: ColumnDesc,
 }
 
-impl ColumnCatalog {
+impl Column {
     pub(crate) fn new(
         column_id: ColumnIdT,
         column_name: String,
         column_desc: ColumnDesc,
-    ) -> ColumnCatalog {
-        ColumnCatalog {
+    ) -> Column {
+        Column {
             id: column_id,
             name: column_name,
             desc: column_desc,
@@ -79,7 +79,7 @@ impl ColumnCatalog {
         &self.desc
     }
 
-    pub(crate) fn datatype(&self) -> DataType {
+    pub fn datatype(&self) -> DataType {
         self.desc.column_datatype.clone()
     }
 
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_column_catalog() {
-        let mut col_catalog = ColumnCatalog::new(
+        let mut col_catalog = Column::new(
             0,
             "test".to_string(),
             DataTypeKind::Int(None).not_null().to_column(),

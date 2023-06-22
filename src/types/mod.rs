@@ -1,3 +1,5 @@
+pub mod value;
+
 pub use sqlparser::ast::DataType as DataTypeKind;
 /// Inner data type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -37,7 +39,7 @@ impl DataTypeExt for DataTypeKind {
     }
 }
 
-pub(crate) type DatabaseIdT = u32;
-pub(crate) type SchemaIdT = u32;
-pub(crate) type TableIdT = u32;
-pub(crate) type ColumnIdT = u32;
+pub type DatabaseIdT = u32;
+pub type SchemaIdT = u32;
+pub type TableIdT = u32;
+pub type ColumnIdT = u32;

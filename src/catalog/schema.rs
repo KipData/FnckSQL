@@ -1,10 +1,10 @@
-use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog};
+use crate::catalog::{CatalogError, Column, Table};
 use crate::types::{SchemaIdT, TableIdT};
 use parking_lot::Mutex;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-pub(crate) struct SchemaCatalog {
+pub(crate) struct Schema {
     schema_id: SchemaIdT,
     inner: Mutex<Inner>,
 }
@@ -12,13 +12,13 @@ pub(crate) struct SchemaCatalog {
 struct Inner {
     schema_name: String,
     table_idxs: HashMap<String, TableIdT>,
-    tables: BTreeMap<TableIdT, Arc<TableCatalog>>,
+    tables: BTreeMap<TableIdT, Arc<Table>>,
     next_table_id: TableIdT,
 }
 
-impl SchemaCatalog {
-    pub(crate) fn new(schema_id: SchemaIdT, schema_name: String) -> SchemaCatalog {
-        SchemaCatalog {
+impl Schema {
+    pub(crate) fn new(schema_id: SchemaIdT, schema_name: String) -> Schema {
+        Schema {
             schema_id,
             inner: Mutex::new(Inner {
                 schema_name,
@@ -32,7 +32,7 @@ impl SchemaCatalog {
     pub(crate) fn add_table(
         &self,
         table_name: String,
-        columns: Vec<ColumnCatalog>,
+        columns: Vec<Column>,
         is_materialized_view: bool,
     ) -> Result<TableIdT, CatalogError> {
         let mut inner = self.inner.lock();
@@ -41,7 +41,7 @@ impl SchemaCatalog {
         }
         let table_id = inner.next_table_id;
         inner.next_table_id += 1;
-        let table_catalog = Arc::new(TableCatalog::new(
+        let table_catalog = Arc::new(Table::new(
             table_id,
             table_name.clone(),
             columns,
@@ -63,7 +63,7 @@ impl SchemaCatalog {
         Ok(())
     }
 
-    pub(crate) fn get_all_tables(&self) -> BTreeMap<TableIdT, Arc<TableCatalog>> {
+    pub(crate) fn get_all_tables(&self) -> BTreeMap<TableIdT, Arc<Table>> {
         let inner = self.inner.lock();
         inner.tables.clone()
     }
@@ -73,12 +73,12 @@ impl SchemaCatalog {
         inner.table_idxs.get(name).cloned()
     }
 
-    pub(crate) fn get_table_by_id(&self, table_id: TableIdT) -> Option<Arc<TableCatalog>> {
+    pub(crate) fn get_table_by_id(&self, table_id: TableIdT) -> Option<Arc<Table>> {
         let inner = self.inner.lock();
         inner.tables.get(&table_id).cloned()
     }
 
-    pub(crate) fn get_table_by_name(&self, name: &str) -> Option<Arc<TableCatalog>> {
+    pub(crate) fn get_table_by_name(&self, name: &str) -> Option<Arc<Table>> {
         let inner = self.inner.lock();
         inner
             .table_idxs
@@ -104,14 +104,14 @@ mod tests {
 
     #[test]
     fn test_schema_catalog() {
-        let col0 = ColumnCatalog::new(
+        let col0 = Column::new(
             0,
             "a".into(),
             DataTypeKind::Int(None).not_null().to_column(),
         );
-        let col1 = ColumnCatalog::new(1, "b".into(), DataTypeKind::Boolean.not_null().to_column());
+        let col1 = Column::new(1, "b".into(), DataTypeKind::Boolean.not_null().to_column());
         let col_catalogs = vec![col0, col1];
-        let mut schema_catalog = SchemaCatalog::new(0, "test_scheme".to_string());
+        let mut schema_catalog = Schema::new(0, "test_scheme".to_string());
         let table_id = schema_catalog
             .add_table("test_table".to_string(), col_catalogs, false)
             .unwrap();
