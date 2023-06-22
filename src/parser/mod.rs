@@ -1,8 +1,21 @@
-mod rs_parser;
+use sqlparser::{ast::Statement, dialect::PostgreSqlDialect, parser::Parser};
 
-use sqlparser::ast::Statement;
-use sqlparser::parser::ParserError;
+use anyhow::Result;
 
-trait SQLParser {
-    fn parse_sql(sql: &str) -> Result<Vec<Statement>, ParserError>;
+/// Parse a string to a collection of statements.
+///
+/// # Example
+/// ```rust
+/// use mineraldb::parser::parse;
+/// let sql = "SELECT a, b, 123, myfunc(b) \
+///            FROM table_1 \
+///            WHERE a > b AND b < 100 \
+///            ORDER BY a DESC, b";
+/// let ast = parse(sql).unwrap();
+/// println!("{:?}", ast);
+/// ```
+pub fn parse_sql(sql: &str) -> Result<Vec<Statement>> {
+    let dialect = PostgreSqlDialect {};
+    let statements = Parser::parse_sql(&dialect, sql)?;
+    Ok(statements)
 }
