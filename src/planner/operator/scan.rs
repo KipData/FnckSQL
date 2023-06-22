@@ -8,7 +8,7 @@ use crate::{
 
 use super::{sort::SortField, Operator};
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct ScanOperator {
     pub table_ref_id: TableRefId,
     pub columns: Vec<ColumnRefId>,
