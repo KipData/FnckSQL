@@ -15,7 +15,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2022-12-02-aarch64-apple-darwin
+          toolchain: nightly-2023-04-07
           components: rustfmt, clippy
       - name: Check code format
         uses: actions-rs/cargo@v1
@@ -31,7 +31,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2022-12-02-aarch64-apple-darwin
+          toolchain: nightly-2023-04-07
       - uses: actions/checkout@v2
       - name: Build
         uses: actions-rs/cargo@v1
@@ -45,7 +45,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2022-12-02-aarch64-apple-darwin
+          toolchain: nightly-2023-04-07
       - uses: actions/checkout@v2
       - name: Test
         uses: actions-rs/cargo@v1
