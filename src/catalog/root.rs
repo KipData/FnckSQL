@@ -55,10 +55,14 @@ mod tests {
         );
         let col_catalogs = vec![col0, col1];
 
-        let table_id = root_catalog
-            .add_table("test_table".into(), col_catalogs)
+        let table_id_1 = root_catalog
+            .add_table("test_table_1".into(), col_catalogs.clone())
             .unwrap();
 
-        assert_eq!(table_id, 0);
+        let table_id_2 = root_catalog
+            .add_table("test_table_2".into(), col_catalogs)
+            .unwrap();
+
+        assert_ne!(table_id_1, table_id_2);
     }
 }

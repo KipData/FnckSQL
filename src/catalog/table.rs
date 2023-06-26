@@ -1,8 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use itertools::Itertools;
-use snowflake::ProcessUniqueId;
 use crate::catalog::{CatalogError, Column};
-use crate::types::{ColumnId, TableId};
+use crate::types::{ColumnId, IdGenerator, TableId};
 
 pub struct Table {
     pub id: TableId,
@@ -13,6 +12,18 @@ pub struct Table {
 }
 
 impl Table {
+    pub(crate) fn get_column_by_id(&self, id: ColumnId) -> Option<&Column> {
+        self.columns.get(&id)
+    }
+
+    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnId> {
+        self.column_idxs.get(name).cloned()
+    }
+
+    pub(crate) fn contains_column(&self, name: &str) -> bool {
+        self.column_idxs.contains_key(name)
+    }
+
     pub(crate) fn get_all_columns(&self) -> Vec<(ColumnId, &Column)> {
         self.columns.iter()
             .map(|(col_id, col)| (*col_id, col))
@@ -38,7 +49,7 @@ impl Table {
 
     pub(crate) fn new(table_name: String, columns: Vec<Column>) -> Result<Table, CatalogError> {
         let mut table_catalog = Table {
-            id: ProcessUniqueId::new(),
+            id: IdGenerator::build(),
             name: table_name,
             column_idxs: HashMap::new(),
             columns: BTreeMap::new(),
@@ -75,7 +86,7 @@ mod tests {
         let table_catalog = Table::new(
             "test".to_string(),
             col_catalogs
-        );
+        ).unwrap();
 
         assert_eq!(table_catalog.contains_column("a"), true);
         assert_eq!(table_catalog.contains_column("b"), true);
@@ -85,17 +96,17 @@ mod tests {
         assert_eq!(table_catalog.get_column_id_by_name("b"), Some(1));
 
         let column_catalog = table_catalog.get_column_by_id(0).unwrap();
-        assert_eq!(column_catalog.name(), "a");
+        assert_eq!(column_catalog.name, "a");
         assert_eq!(
             column_catalog.datatype(),
-            DataType::new(DataTypeKind::Int(None), false)
+            &DataType::new(DataTypeKind::Int(None), false)
         );
 
         let column_catalog = table_catalog.get_column_by_id(1).unwrap();
-        assert_eq!(column_catalog.name(), "b");
+        assert_eq!(column_catalog.name, "b");
         assert_eq!(
             column_catalog.datatype(),
-            DataType::new(DataTypeKind::Boolean, false)
+            &DataType::new(DataTypeKind::Boolean, false)
         );
     }
 }

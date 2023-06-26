@@ -1,6 +1,6 @@
-use snowflake::ProcessUniqueId;
-use crate::types::{ColumnId, DataType};
+use crate::types::{ColumnId, DataType, IdGenerator};
 
+#[derive(Clone)]
 pub struct Column {
     pub id: ColumnId,
     pub name: String,
@@ -13,10 +13,14 @@ impl Column {
         column_desc: ColumnDesc,
     ) -> Column {
         Column {
-            id: ProcessUniqueId::new(),
+            id: IdGenerator::build(),
             name: column_name,
             desc: column_desc,
         }
+    }
+
+    pub(crate) fn datatype(&self) -> &DataType {
+        &self.desc.column_datatype
     }
 }
 
@@ -62,7 +66,7 @@ impl ColumnDesc {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{DataType, DataTypeExt, DataTypeKind};
+    use crate::types::{DataTypeExt, DataTypeKind};
 
     #[test]
     fn test_column_catalog() {
