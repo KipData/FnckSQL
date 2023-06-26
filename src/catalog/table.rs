@@ -92,17 +92,18 @@ mod tests {
         assert_eq!(table_catalog.contains_column("b"), true);
         assert_eq!(table_catalog.contains_column("c"), false);
 
-        assert_eq!(table_catalog.get_column_id_by_name("a"), Some(0));
-        assert_eq!(table_catalog.get_column_id_by_name("b"), Some(1));
+        let col_a_id = table_catalog.get_column_id_by_name("a").unwrap();
+        let col_b_id = table_catalog.get_column_id_by_name("b").unwrap();
+        assert!(col_a_id < col_b_id);
 
-        let column_catalog = table_catalog.get_column_by_id(0).unwrap();
+        let column_catalog = table_catalog.get_column_by_id(col_a_id).unwrap();
         assert_eq!(column_catalog.name, "a");
         assert_eq!(
             column_catalog.datatype(),
             &DataType::new(DataTypeKind::Int(None), false)
         );
 
-        let column_catalog = table_catalog.get_column_by_id(1).unwrap();
+        let column_catalog = table_catalog.get_column_by_id(col_b_id).unwrap();
         assert_eq!(column_catalog.name, "b");
         assert_eq!(
             column_catalog.datatype(),

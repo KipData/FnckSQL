@@ -76,7 +76,9 @@ mod test {
     use std::sync::atomic::Ordering::Release;
     use crate::types::{ID_BUF, IdGenerator};
 
+    /// Tips: 由于IdGenerator为static全局性质生成的id，因此需要单独测试避免其他测试方法干扰
     #[test]
+    #[ignore]
     fn test_id_generator() {
         assert_eq!(IdGenerator::build(), 0);
         assert_eq!(IdGenerator::build(), 1);
