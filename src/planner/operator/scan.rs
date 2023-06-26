@@ -1,16 +1,17 @@
 use std::sync::Arc;
 
 use crate::{
-    catalog::{ColumnRefId, TableRefId},
+    catalog::ColumnRefId,
     expression::ScalarExpression,
     planner::logical_select_plan::LogicalSelectPlan,
 };
+use crate::types::TableId;
 
 use super::{sort::SortField, Operator};
 
 #[derive(Debug, Clone)]
 pub struct ScanOperator {
-    pub table_ref_id: TableRefId,
+    pub table_ref_id: TableId,
     pub columns: Vec<ColumnRefId>,
     pub sort_fields: Vec<SortField>,
     // Support push down predicate.
@@ -20,7 +21,7 @@ pub struct ScanOperator {
     pub limit: Option<usize>,
 }
 impl ScanOperator {
-    pub fn new(table_ref_id: TableRefId) -> LogicalSelectPlan {
+    pub fn new(table_ref_id: TableId) -> LogicalSelectPlan {
         LogicalSelectPlan {
             operator: Arc::new(Operator::Scan(ScanOperator {
                 table_ref_id,

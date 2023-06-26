@@ -1,147 +1,68 @@
-use crate::catalog::{CatalogError, Database, DatabaseCatalogRef, DEFAULT_DATABASE_NAME};
-use crate::types::DatabaseIdT;
-use parking_lot::Mutex;
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use crate::catalog::{CatalogError, Column, Table};
+use crate::types::TableId;
+use std::collections::BTreeMap;
 
-use super::{Table, TableRefId};
-
-pub struct RootCatalog {
-    inner: Mutex<Inner>,
+pub struct Root {
+    table_idxs: BTreeMap<String, TableId>,
+    tables: BTreeMap<TableId, Table>,
 }
 
-#[derive(Default)]
-pub struct Inner {
-    /// Database name to database id mapping
-    database_idxs: HashMap<String, DatabaseIdT>,
-    /// Database id to database catalog mapping
-    databases: BTreeMap<DatabaseIdT, Arc<Database>>,
-    next_database_id: DatabaseIdT,
-}
-
-impl Default for RootCatalog {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl RootCatalog {
-    pub(crate) fn new() -> RootCatalog {
-        let root_catalog = RootCatalog {
-            inner: Mutex::new(Inner::default()),
-        };
-        let _ = root_catalog
-            .add_database(DEFAULT_DATABASE_NAME.into())
-            .is_ok();
-        root_catalog
+impl Root {
+    #[allow(dead_code)]
+    pub(crate) fn new() -> Self {
+        Root { table_idxs: Default::default(), tables: Default::default() }
     }
 
-    pub(crate) fn add_database(&self, database_name: String) -> Result<DatabaseIdT, CatalogError> {
-        let mut inner = self.inner.lock();
-        if inner.database_idxs.contains_key(&database_name) {
-            return Err(CatalogError::Duplicated("database", database_name));
+    pub(crate) fn get_table_id_by_name(&self, name: &str) -> Option<TableId> {
+        self.table_idxs.get(name).cloned()
+    }
+
+    pub(crate) fn get_table(&self, table_id: TableId) -> Option<&Table> {
+        self.tables.get(&table_id)
+    }
+
+    pub(crate) fn add_table(&mut self, table_name: String, columns: Vec<Column>) -> Result<TableId, CatalogError> {
+        if self.table_idxs.contains_key(&table_name) {
+            return Err(CatalogError::Duplicated("column", table_name));
         }
-        let database_id = inner.next_database_id;
-        inner.next_database_id += 1;
-        let database_catalog = Arc::new(Database::new(database_id, database_name.clone()));
-        inner.database_idxs.insert(database_name, database_id);
-        inner.databases.insert(database_id, database_catalog);
-        Ok(database_id)
-    }
+        let table = Table::new(table_name.to_owned(), columns)?;
+        let table_id = table.id;
 
-    pub(crate) fn delete_database(&mut self, database_name: &str) -> Result<(), CatalogError> {
-        let mut inner = self.inner.lock();
-        let id = inner
-            .database_idxs
-            .remove(database_name)
-            .ok_or_else(|| CatalogError::NotFound("database", database_name.into()))?;
-        inner.databases.remove(&id);
-        Ok(())
-    }
+        self.table_idxs.insert(table_name, table_id);
+        self.tables.insert(table_id, table);
 
-    pub(crate) fn get_all_databases(&self) -> BTreeMap<DatabaseIdT, DatabaseCatalogRef> {
-        let inner = self.inner.lock();
-        inner.databases.clone()
-    }
-
-    pub fn get_database_id_by_name(&self, name: &str) -> Option<DatabaseIdT> {
-        let inner = self.inner.lock();
-        inner.database_idxs.get(name).cloned()
-    }
-
-    pub(crate) fn get_database_by_id(&self, database_id: DatabaseIdT) -> Option<Arc<Database>> {
-        let inner = self.inner.lock();
-        inner.databases.get(&database_id).cloned()
-    }
-
-    pub(crate) fn get_database_by_name(&self, name: &str) -> Option<Arc<Database>> {
-        let inner = self.inner.lock();
-        inner
-            .database_idxs
-            .get(name)
-            .and_then(|id| inner.databases.get(id))
-            .cloned()
-    }
-
-    pub fn get_table(&self, table_ref_id: &TableRefId) -> Option<Arc<Table>> {
-        let db = self.get_database_by_id(table_ref_id.database_id)?;
-        let schema = db.get_schema_by_id(table_ref_id.schema_id)?;
-        schema.get_table_by_id(table_ref_id.table_id)
-    }
-
-    pub fn get_table_id_by_name(
-        &self,
-        database_name: &str,
-        schema_name: &str,
-        table_name: &str,
-    ) -> Option<TableRefId> {
-        let db = self.get_database_by_name(database_name)?;
-        let schema = db.get_schema_by_name(schema_name)?;
-        let table = schema.get_table_by_name(table_name)?;
-
-        Some(TableRefId {
-            schema_id: schema.id(),
-            table_id: table.id(),
-            database_id: db.id(),
-        })
+        Ok(table_id)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog::{Column, DEFAULT_SCHEMA_NAME};
+    use crate::catalog::Column;
     use crate::types::{DataTypeExt, DataTypeKind};
 
     #[test]
     fn test_root_catalog() {
-        let root_catalog = RootCatalog::new();
-        let database_id = root_catalog
-            .get_database_id_by_name(DEFAULT_DATABASE_NAME)
-            .unwrap();
-        let database_catalog = root_catalog.get_database_by_id(database_id).unwrap();
-        let schema_catalog = database_catalog
-            .get_schema_by_name(DEFAULT_SCHEMA_NAME)
-            .unwrap();
+        let mut root_catalog = Root::new();
 
         let col0 = Column::new(
-            0,
             "a".to_string(),
             DataTypeKind::Int(None).not_null().to_column(),
         );
         let col1 = Column::new(
-            1,
             "b".to_string(),
             DataTypeKind::Boolean.not_null().to_column(),
         );
         let col_catalogs = vec![col0, col1];
 
-        let table_id = schema_catalog
-            .add_table("test_table".into(), col_catalogs, false)
+        let table_id_1 = root_catalog
+            .add_table("test_table_1".into(), col_catalogs.clone())
             .unwrap();
 
-        assert_eq!(table_id, 0);
-        assert_eq!(database_catalog.name(), DEFAULT_DATABASE_NAME);
-        assert_eq!(schema_catalog.name(), DEFAULT_SCHEMA_NAME);
+        let table_id_2 = root_catalog
+            .add_table("test_table_2".into(), col_catalogs)
+            .unwrap();
+
+        assert_ne!(table_id_1, table_id_2);
     }
 }

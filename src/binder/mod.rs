@@ -6,17 +6,18 @@ mod select;
 use std::collections::HashMap;
 
 use crate::{
-    catalog::{CatalogRef, TableRefId},
+    catalog::CatalogRef,
     expression::ScalarExpression,
     planner::LogicalPlan,
 };
 
 use anyhow::Result;
 use sqlparser::ast::Statement;
+use crate::types::TableId;
 
 pub struct BinderContext {
     catalog: CatalogRef,
-    bind_table: HashMap<String, TableRefId>,
+    bind_table: HashMap<String, TableId>,
     aliases: HashMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
     agg_calls: Vec<ScalarExpression>,

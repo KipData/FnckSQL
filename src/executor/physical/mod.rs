@@ -5,8 +5,6 @@ pub mod physical_project;
 pub mod physical_scan;
 pub mod physical_sort;
 
-use serde::{Deserialize, Serialize};
-
 use self::{
     physical_filter::PhysicalFilter, physical_limit::PhysicalLimit,
     physical_project::PhysicalProject, physical_scan::PhysicalTableScan,
