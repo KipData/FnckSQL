@@ -24,6 +24,11 @@ impl Root {
         self.tables.get(&table_id)
     }
 
+    pub(crate) fn get_table_by_name(&self, name: &str) -> Option<&Table> {
+        let id = self.table_idxs.get(name)?;
+        self.tables.get(id)
+    }
+
     pub(crate) fn add_table(
         &mut self,
         table_name: String,
