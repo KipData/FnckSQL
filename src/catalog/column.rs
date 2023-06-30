@@ -8,10 +8,7 @@ pub struct Column {
 }
 
 impl Column {
-    pub(crate) fn new(
-        column_name: String,
-        column_desc: ColumnDesc,
-    ) -> Column {
+    pub(crate) fn new(column_name: String, column_desc: ColumnDesc) -> Column {
         Column {
             id: IdGenerator::build(),
             name: column_name,

@@ -5,15 +5,11 @@ mod select;
 
 use std::collections::HashMap;
 
-use crate::{
-    catalog::CatalogRef,
-    expression::ScalarExpression,
-    planner::LogicalPlan,
-};
+use crate::{catalog::CatalogRef, expression::ScalarExpression, planner::LogicalPlan};
 
+use crate::types::TableId;
 use anyhow::Result;
 use sqlparser::ast::Statement;
-use crate::types::TableId;
 
 pub struct BinderContext {
     catalog: CatalogRef,

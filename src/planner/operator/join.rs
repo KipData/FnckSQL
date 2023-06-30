@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    expression::ScalarExpression,
-    planner::{logical_select_plan::LogicalSelectPlan},
-};
+use crate::{expression::ScalarExpression, planner::logical_select_plan::LogicalSelectPlan};
 
 use super::Operator;
 

@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
-use itertools::Itertools;
 use crate::catalog::{CatalogError, Column};
 use crate::types::{ColumnId, IdGenerator, TableId};
+use itertools::Itertools;
+use std::collections::{BTreeMap, HashMap};
 
 pub struct Table {
     pub id: TableId,
@@ -25,7 +25,8 @@ impl Table {
     }
 
     pub(crate) fn get_all_columns(&self) -> Vec<(ColumnId, &Column)> {
-        self.columns.iter()
+        self.columns
+            .iter()
             .map(|(col_id, col)| (*col_id, col))
             .collect_vec()
     }
@@ -33,10 +34,7 @@ impl Table {
     /// Add a column to the table catalog.
     pub(crate) fn add_column(&mut self, col_catalog: Column) -> Result<ColumnId, CatalogError> {
         if self.column_idxs.contains_key(&col_catalog.name) {
-            return Err(CatalogError::Duplicated(
-                "column",
-                col_catalog.name.into(),
-            ));
+            return Err(CatalogError::Duplicated("column", col_catalog.name.into()));
         }
 
         let col_id = col_catalog.id;
@@ -74,19 +72,10 @@ mod tests {
     // | 1         | true     |
     // | 2         | false    |
     fn test_table_catalog() {
-        let col0 = Column::new(
-            "a".into(),
-            DataTypeKind::Int(None).not_null().to_column(),
-        );
-        let col1 = Column::new(
-            "b".into(),
-            DataTypeKind::Boolean.not_null().to_column()
-        );
+        let col0 = Column::new("a".into(), DataTypeKind::Int(None).not_null().to_column());
+        let col1 = Column::new("b".into(), DataTypeKind::Boolean.not_null().to_column());
         let col_catalogs = vec![col0, col1];
-        let table_catalog = Table::new(
-            "test".to_string(),
-            col_catalogs
-        ).unwrap();
+        let table_catalog = Table::new("test".to_string(), col_catalogs).unwrap();
 
         assert_eq!(table_catalog.contains_column("a"), true);
         assert_eq!(table_catalog.contains_column("b"), true);
