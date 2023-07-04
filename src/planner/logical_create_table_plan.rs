@@ -1,8 +1,8 @@
+use crate::catalog::ColumnDesc;
+
 pub struct LogicalCreateTablePlan {
-    //     pub database_id: DatabaseId,
-    //     pub schema_id: SchemaId,
-    //     pub table_name: String,
-    //     pub columns: Vec<(String, ColumnDesc)>,
+    pub table_name: String,
+    pub columns: Vec<(String, ColumnDesc)>,
 }
 
 // use sqlparser::ast::{ColumnDef, ColumnOption, Statement};

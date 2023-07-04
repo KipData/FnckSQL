@@ -1,9 +1,9 @@
 pub mod value;
 
-use std::sync::atomic::AtomicU32;
-use std::sync::atomic::Ordering::{Acquire, Release};
 use integer_encoding::FixedInt;
 pub use sqlparser::ast::DataType as DataTypeKind;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering::{Acquire, Release};
 
 static ID_BUF: AtomicU32 = AtomicU32::new(0);
 
@@ -45,13 +45,11 @@ impl DataTypeExt for DataTypeKind {
     }
 }
 
-pub(crate) struct IdGenerator { }
+pub(crate) struct IdGenerator {}
 
 impl IdGenerator {
     pub(crate) fn encode_to_raw() -> Vec<u8> {
-        ID_BUF
-            .load(Acquire)
-            .encode_fixed_vec()
+        ID_BUF.load(Acquire).encode_fixed_vec()
     }
 
     pub(crate) fn from_raw(buf: &[u8]) {
@@ -70,11 +68,10 @@ impl IdGenerator {
 pub type TableId = u32;
 pub type ColumnId = u32;
 
-
 #[cfg(test)]
 mod test {
+    use crate::types::{IdGenerator, ID_BUF};
     use std::sync::atomic::Ordering::Release;
-    use crate::types::{ID_BUF, IdGenerator};
 
     /// Tips: 由于IdGenerator为static全局性质生成的id，因此需要单独测试避免其他测试方法干扰
     #[test]

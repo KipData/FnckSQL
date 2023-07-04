@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
+use crate::types::TableId;
 use crate::{
-    catalog::ColumnRefId,
-    expression::ScalarExpression,
+    catalog::ColumnRefId, expression::ScalarExpression,
     planner::logical_select_plan::LogicalSelectPlan,
 };
-use crate::types::TableId;
 
 use super::{sort::SortField, Operator};
 

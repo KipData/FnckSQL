@@ -10,7 +10,10 @@ pub struct Root {
 impl Root {
     #[allow(dead_code)]
     pub(crate) fn new() -> Self {
-        Root { table_idxs: Default::default(), tables: Default::default() }
+        Root {
+            table_idxs: Default::default(),
+            tables: Default::default(),
+        }
     }
 
     pub(crate) fn get_table_id_by_name(&self, name: &str) -> Option<TableId> {
@@ -21,7 +24,16 @@ impl Root {
         self.tables.get(&table_id)
     }
 
-    pub(crate) fn add_table(&mut self, table_name: String, columns: Vec<Column>) -> Result<TableId, CatalogError> {
+    pub(crate) fn get_table_by_name(&self, name: &str) -> Option<&Table> {
+        let id = self.table_idxs.get(name)?;
+        self.tables.get(id)
+    }
+
+    pub(crate) fn add_table(
+        &mut self,
+        table_name: String,
+        columns: Vec<Column>,
+    ) -> Result<TableId, CatalogError> {
         if self.table_idxs.contains_key(&table_name) {
             return Err(CatalogError::Duplicated("column", table_name));
         }

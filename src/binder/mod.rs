@@ -5,15 +5,12 @@ mod select;
 
 use std::collections::HashMap;
 
-use crate::{
-    catalog::CatalogRef,
-    expression::ScalarExpression,
-    planner::LogicalPlan,
-};
+use crate::{catalog::CatalogRef, expression::ScalarExpression, planner::LogicalPlan};
 
-use anyhow::Result;
-use sqlparser::ast::Statement;
+use crate::catalog::DEFAULT_SCHEMA_NAME;
 use crate::types::TableId;
+use anyhow::Result;
+use sqlparser::ast::{Ident, ObjectName, Statement};
 
 pub struct BinderContext {
     catalog: CatalogRef,
@@ -66,8 +63,31 @@ impl Binder {
                 let plan = self.bind_query(query)?;
                 LogicalPlan::Select(plan)
             }
+            Statement::CreateTable { name, columns, .. } => {
+                let plan = self.bind_create_table(name.to_owned(), &columns)?;
+                LogicalPlan::CreateTable(plan)
+            }
             _ => unimplemented!(),
         };
         Ok(plan)
     }
+}
+
+/// Convert an object name into lower case
+fn lower_case_name(name: &ObjectName) -> ObjectName {
+    ObjectName(
+        name.0
+            .iter()
+            .map(|ident| Ident::new(ident.value.to_lowercase()))
+            .collect(),
+    )
+}
+
+/// Split an object name into `(schema name, table name)`.
+fn split_name(name: &ObjectName) -> Result<(&str, &str)> {
+    Ok(match name.0.as_slice() {
+        [table] => (DEFAULT_SCHEMA_NAME, &table.value),
+        [schema, table] => (&schema.value, &table.value),
+        _ => return Err(anyhow::anyhow!("Invalid table name: {:?}", name)),
+    })
 }

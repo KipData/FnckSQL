@@ -16,13 +16,13 @@ use crate::{
 
 use super::Binder;
 
+use crate::catalog::{DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME};
 use anyhow::Result;
 use itertools::Itertools;
 use sqlparser::ast::{
     Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
-use crate::catalog::{DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME};
 
 impl Binder {
     pub(super) fn bind_query(&mut self, query: &Query) -> Result<LogicalSelectPlan> {
@@ -128,7 +128,8 @@ impl Binder {
                     .map(|ident| Ident::new(ident.value.to_lowercase()))
                     .collect_vec();
 
-                let (_database, _schema, mut table): (&str, &str, &str) = match obj_name.as_slice() {
+                let (_database, _schema, mut table): (&str, &str, &str) = match obj_name.as_slice()
+                {
                     [table] => (DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, &table.value),
                     [schema, table] => (DEFAULT_DATABASE_NAME, &schema.value, &table.value),
                     [database, schema, table] => (&database.value, &schema.value, &table.value),
