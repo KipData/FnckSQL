@@ -40,10 +40,7 @@ impl Binder {
         let mut columns: Vec<Column> = columns
             .iter()
             .enumerate()
-            .map(|(idx, col)| {
-                let mut col = Column::from(col);
-                col
-            })
+            .map(|(_, col)| Column::from(col))
             .collect();
 
         let plan = LogicalCreateTablePlan {
