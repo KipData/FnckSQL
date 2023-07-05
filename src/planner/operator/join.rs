@@ -4,7 +4,7 @@ use crate::{expression::ScalarExpression, planner::logical_select_plan::LogicalS
 
 use super::Operator;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum JoinType {
     Inner,
     LeftOuter,
@@ -17,7 +17,7 @@ pub enum JoinType {
     RightAnti,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct JoinOperator {
     pub on: Option<ScalarExpression>,
     pub join_type: JoinType,

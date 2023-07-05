@@ -15,7 +15,7 @@ use self::{
 
 pub type OperatorRef = Arc<Operator>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Operator {
     Dummy,
     Aggregate(AggregateOperator),

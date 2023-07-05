@@ -9,7 +9,7 @@ pub struct Root {
 
 impl Root {
     #[allow(dead_code)]
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Root {
             table_idxs: Default::default(),
             tables: Default::default(),

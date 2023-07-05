@@ -7,7 +7,9 @@ pub mod operator;
 use self::{
     logical_create_table_plan::LogicalCreateTablePlan, logical_select_plan::LogicalSelectPlan,
 };
+use thiserror::__private::DisplayAsDisplay;
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum LogicalPlan {
     Select(LogicalSelectPlan),
     CreateTable(LogicalCreateTablePlan),

@@ -11,7 +11,7 @@ use crate::catalog::DEFAULT_SCHEMA_NAME;
 use crate::types::TableId;
 use anyhow::Result;
 use sqlparser::ast::{Ident, ObjectName, Statement};
-
+#[derive(Clone)]
 pub struct BinderContext {
     catalog: CatalogRef,
     bind_table: HashMap<String, TableId>,

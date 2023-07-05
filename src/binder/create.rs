@@ -9,7 +9,7 @@ use sqlparser::ast::{ColumnDef, ObjectName};
 use std::collections::HashSet;
 
 impl Binder {
-    pub(super) fn bind_create_table(
+    pub(crate) fn bind_create_table(
         &mut self,
         name: ObjectName,
         columns: &[ColumnDef],
@@ -17,14 +17,6 @@ impl Binder {
         let name = lower_case_name(&name);
 
         let (_, table_name) = split_name(&name)?;
-
-        let table = self
-            .context
-            .catalog
-            .get_table_by_name(table_name)
-            .ok_or_else(|| {
-                anyhow::Error::msg(format!("table {} not found", table_name.to_string()))
-            })?;
 
         // check duplicated column names
         let mut set = HashSet::new();
@@ -51,5 +43,45 @@ impl Binder {
                 .collect(),
         };
         Ok(plan)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::binder::BinderContext;
+    use crate::catalog::Root;
+    use crate::types::{DataTypeExt, DataTypeKind};
+    use sqlparser::ast::CharacterLength;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_create_bind() {
+        let sql = "create table t1 (id int , name varchar(10))";
+        let mut binder = Binder::new(BinderContext::new(Arc::new(Root::new())));
+        let stmt = crate::parser::parse_sql(sql).unwrap();
+        let plan1 = binder.bind(&stmt[0]).unwrap();
+
+        let character_length = CharacterLength {
+            length: 10,
+            unit: None,
+        };
+        let plan2 = LogicalPlan::CreateTable(LogicalCreateTablePlan {
+            table_name: "t1".to_string(),
+            columns: vec![
+                (
+                    "id".to_string(),
+                    DataTypeKind::Int(None).nullable().to_column(),
+                ),
+                (
+                    "name".to_string(),
+                    DataTypeKind::Varchar(Option::from(character_length))
+                        .nullable()
+                        .to_column(),
+                ),
+            ],
+        });
+
+        assert_eq!(plan1, plan2);
     }
 }

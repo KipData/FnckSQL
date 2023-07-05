@@ -1,5 +1,5 @@
 use crate::catalog::ColumnDesc;
-
+#[derive(Debug, PartialEq, Clone)]
 pub struct LogicalCreateTablePlan {
     pub table_name: String,
     pub columns: Vec<(String, ColumnDesc)>,

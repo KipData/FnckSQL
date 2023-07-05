@@ -4,7 +4,7 @@ use crate::planner::logical_select_plan::LogicalSelectPlan;
 
 use super::Operator;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LimitOperator {
     pub offset: usize,
     pub count: usize,

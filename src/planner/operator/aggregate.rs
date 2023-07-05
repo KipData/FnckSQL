@@ -5,7 +5,7 @@ use crate::{
     planner::{logical_select_plan::LogicalSelectPlan, operator::Operator},
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct AggregateOperator {
     pub groupby_exprs: Vec<ScalarExpression>,
 
