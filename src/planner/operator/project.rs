@@ -6,7 +6,7 @@ use crate::{expression::ScalarExpression, planner::logical_select_plan::LogicalS
 
 use super::Operator;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProjectOperator {
     pub columns: Vec<ScalarExpression>,
 }

@@ -4,7 +4,7 @@ use crate::{expression::ScalarExpression, planner::logical_select_plan::LogicalS
 
 use super::Operator;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FilterOperator {
     pub predicate: ScalarExpression,
     having: bool,

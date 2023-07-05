@@ -25,7 +25,7 @@ use sqlparser::ast::{
 };
 
 impl Binder {
-    pub(super) fn bind_query(&mut self, query: &Query) -> Result<LogicalSelectPlan> {
+    pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalSelectPlan> {
         if let Some(_with) = &query.with {
             // TODO support with clause.
         }

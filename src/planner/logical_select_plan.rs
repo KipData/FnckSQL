@@ -4,10 +4,9 @@ use super::operator::OperatorRef;
 use anyhow::Result;
 
 /// LogicalSelectPlan is a tree of operators that represent a logical query plan.
-
+#[derive(Debug, PartialEq, Clone)]
 pub struct LogicalSelectPlan {
     pub operator: OperatorRef,
-
     pub children: Vec<Arc<LogicalSelectPlan>>,
 }
 
