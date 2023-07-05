@@ -2,9 +2,16 @@ use crate::catalog::{CatalogError, Column, Table};
 use crate::types::TableId;
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone)]
 pub struct Root {
     table_idxs: BTreeMap<String, TableId>,
     tables: BTreeMap<TableId, Table>,
+}
+
+impl Default for Root {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Root {

@@ -2,7 +2,7 @@ use crate::catalog::{CatalogError, Column};
 use crate::types::{ColumnId, IdGenerator, TableId};
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
-
+#[derive(Debug, Clone)]
 pub struct Table {
     pub id: TableId,
     pub name: String,
