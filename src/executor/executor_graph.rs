@@ -53,8 +53,8 @@ impl ExecutorGraph {
         meta_pipeline: &mut MetaPipeline,
         graph: &mut StableGraph<Arc<PipelineEvent>, ()>,
     ) -> Result<()> {
-        // Get the remaining pipelines.
-        let pipelines = meta_pipeline.get_pipelines(false)?;
+        // Get the all pipelines.
+        let all_pipelines = meta_pipeline.get_pipelines(true)?;
 
         let to_schedue = meta_pipeline.get_meta_pipelines(true, true)?;
 
