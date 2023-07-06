@@ -1,12 +1,14 @@
-use crate::{
-    executor::physical::physical_project::PhysicalProject,
-    planner::{logical_select_plan::LogicalSelectPlan, operator::Operator, LogicalPlan},
-};
+use std::sync::Arc;
+
+use crate::planner::operator::scan::ScanOperator;
+use crate::planner::{logical_select_plan::LogicalSelectPlan, operator::Operator, LogicalPlan};
 
 use super::{
     physical_filter::PhysicalFilter, physical_limit::PhysicalLimit,
-    physical_scan::PhysicalTableScan, physical_sort::PhysicalSort, PhysicalPlan,
+    physical_projection::PhysicalProjection, physical_sort::PhysicalSort, PhysicalOperator,
 };
+
+use anyhow::anyhow;
 use anyhow::Result;
 
 pub struct PhysicalPlanBuilder {
@@ -24,59 +26,67 @@ impl PhysicalPlanBuilder {
         id
     }
 
-    // todo: all physical plan need add statistic.
-    // todo:
-    pub fn build_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalPlan> {
+    pub fn build_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalOperator> {
         match plan {
-            LogicalPlan::Select(select) => self.build_select(select),
+            LogicalPlan::Select(select) => self.build_select_logical_plan(select),
             LogicalPlan::CreateTable(_) => todo!(),
         }
     }
 
-    fn build_select(&mut self, select_plan: &LogicalSelectPlan) -> Result<PhysicalPlan> {
-        match select_plan.operator.as_ref() {
+    fn build_select_logical_plan(&mut self, plan: &LogicalSelectPlan) -> Result<PhysicalOperator> {
+        match plan.operator.as_ref() {
             Operator::Project(_) => {
-                let input = self.build_select(select_plan.child(0)?)?;
-                Ok(PhysicalPlan::Prjection(PhysicalProject {
+                let input = self.build_select_logical_plan(plan.child(0)?)?;
+                Ok(PhysicalOperator::Prjection(PhysicalProjection {
                     plan_id: self.next_plan_id(),
-                    input: Box::new(input),
+                    input: Arc::new(input),
                 }))
             }
-            Operator::Scan(scan) => Ok(PhysicalPlan::TableScan(PhysicalTableScan {
-                plan_id: self.next_plan_id(),
-                operator: scan.clone(),
-            })),
+            Operator::Scan(scan) => self.build_physical_scan(scan),
             Operator::Sort(sort) => {
-                let input = self.build_select(select_plan.child(0)?)?;
-                Ok(PhysicalPlan::Sort(PhysicalSort {
+                let input = self.build_select_logical_plan(plan.child(0)?)?;
+                Ok(PhysicalOperator::Sort(PhysicalSort {
                     plan_id: self.next_plan_id(),
-                    input: Box::new(input),
+                    input: Arc::new(input),
                     order_by: sort.sort_fields.clone(),
                     limit: sort.limit,
                 }))
             }
             Operator::Limit(limit) => {
-                let input = self.build_select(select_plan.child(0)?)?;
+                let input = self.build_select_logical_plan(plan.child(0)?)?;
 
-                Ok(PhysicalPlan::Limit(PhysicalLimit {
+                Ok(PhysicalOperator::Limit(PhysicalLimit {
                     plan_id: self.next_plan_id(),
-                    input: Box::new(input),
+                    input: Arc::new(input),
                     limit: limit.count,
                     offset: limit.offset,
                 }))
             }
             Operator::Filter(filter) => {
-                let input = self.build_select(select_plan.child(0)?)?;
-                Ok(PhysicalPlan::Filter(PhysicalFilter {
+                let input = self.build_select_logical_plan(plan.child(0)?)?;
+                Ok(PhysicalOperator::Filter(PhysicalFilter {
                     plan_id: self.next_plan_id(),
-                    input: Box::new(input),
+                    input: Arc::new(input),
                     predicates: filter.predicate.clone(),
                 }))
             }
-            _ => Err(anyhow::Error::msg(format!(
+            _ => Err(anyhow!(format!(
                 "Unsupported physical plan: {:?}",
-                select_plan.operator
+                plan.operator
             ))),
         }
+    }
+
+    fn build_physical_scan(&mut self, _scan: &ScanOperator) -> Result<PhysicalOperator> {
+        //    let ScanOperator {
+        //        table_ref_id,
+        //        columns,
+        //        sort_fields,
+        //        predicates,
+        //        limit,
+        //    } = scan;
+
+        // Get table impl use `table_ref_id`.
+        todo!()
     }
 }

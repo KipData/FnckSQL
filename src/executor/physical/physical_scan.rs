@@ -1,6 +1,8 @@
-use crate::planner::operator::scan::ScanOperator;
-
+#[derive(Debug)]
 pub struct PhysicalTableScan {
     pub plan_id: u32,
-    pub operator: ScanOperator,
+    // pub context: Arc<ExecutionContext>,
+    // pub operator: ScanOperator,
 }
+
+impl PhysicalTableScan {}
