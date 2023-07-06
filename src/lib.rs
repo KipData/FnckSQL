@@ -87,6 +87,7 @@
 // clippy::panic, // allow debug_assert, panic in production code
 // clippy::multiple_crate_versions, // caused by the dependency, can't be fixed
 // )]
+#![feature(result_flattening)]
 
 pub mod binder;
 pub mod catalog;
