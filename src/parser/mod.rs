@@ -6,12 +6,12 @@ use anyhow::Result;
 ///
 /// # Example
 /// ```rust
-/// use mineraldb::parser::parse;
+/// use kip_sql::parser::parse_sql;
 /// let sql = "SELECT a, b, 123, myfunc(b) \
 ///            FROM table_1 \
 ///            WHERE a > b AND b < 100 \
 ///            ORDER BY a DESC, b";
-/// let ast = parse(sql).unwrap();
+/// let ast = parse_sql(sql).unwrap();
 /// println!("{:?}", ast);
 /// ```
 pub fn parse_sql(sql: &str) -> Result<Vec<Statement>> {
