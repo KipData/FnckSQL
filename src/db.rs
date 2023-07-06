@@ -9,7 +9,6 @@ use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct Database {
-    pub catalog: Root,
     pub storage: InMemoryStorage,
 }
 
@@ -23,9 +22,7 @@ impl Database {
     /// Create a new Database instance.
     pub fn new() -> Self {
         let storage = InMemoryStorage::new();
-        let catalog = storage.catalog().clone();
-
-        Database { catalog, storage }
+        Database { storage }
     }
 
     /// Run SQL queries.
@@ -33,8 +30,8 @@ impl Database {
         // parse
         let stmts = parse_sql(sql)?;
         // bind
-
-        let mut binder = Binder::new(BinderContext::new(self.catalog.clone()));
+        let catalog = self.storage.catalog();
+        let mut binder = Binder::new(BinderContext::new(catalog.clone()));
 
         /// Build a logical plan.
         ///
@@ -47,23 +44,21 @@ impl Database {
 
         println!("{:?}", logical_plan);
 
-        //let logical_planner = LogicalPlaner::default();
         //let physical_planner = PhysicalPlaner::default();
         //let executor_builder = ExecutorBuilder::new(self.env.clone());
 
-        //let logical_plan = logical_planner.plan(stmt)?;
         //let physical_plan = physical_planner.plan(logical_plan)?;
         //let executor = executor_builder.build(physical_plan)?;
         //futures::executor::block_on(executor).unwrap();
 
+        /// THE FOLLOWING CODE IS FOR TESTING ONLY
+        /// THE FINAL CODE WILL BE IN executor MODULE
         if let LogicalPlan::CreateTable(plan) = logical_plan {
             let mut colums = Vec::new();
             plan.columns.iter().for_each(|c| {
                 colums.push(Column::new(c.0.clone(), c.1.clone()));
             });
             let mut table_name = plan.table_name.clone();
-            self.catalog
-                .add_table(table_name.to_string(), colums.clone())?;
             self.storage
                 .create_table(&table_name.to_string(), &colums.clone())?;
         }

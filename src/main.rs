@@ -7,7 +7,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut db = Database::new();
     loop {
-        println!("database catalog{:?}", db.catalog);
         println!("storage  catalog{:?}", db.storage.catalog);
         println!("> ");
         let mut input = String::new();
