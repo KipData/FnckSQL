@@ -200,17 +200,22 @@ impl ExecutorGraph {
             }
         }
 
-        // // Set up the dependencies across `MetaPipeline`.
-        // for pipe in all_pipelines.iter() {
-        //     for pipe_ix in pipe.get_dependencies().iter() {
-        //         let from = *pipeline_graph_mapping.get(pipe_ix).unwrap();
-        //         let to =
-        // *pipeline_graph_mapping.get(&pipe.get_pipeline_id()).unwrap();
-        //         if !graph.contains_edge(from, to) {
-        //             graph.add_edge(from, to, ());
-        //         }
-        //     }
-        // }
+        // Set up the dependencies across `MetaPipeline`.
+        for pipe in all_pipelines.iter() {
+            for pipe_ix in pipe.get_dependencies().iter() {
+                let from = pipeline_graph_mapping
+                    .get(pipe_ix)
+                    .unwrap()
+                    .pipeline_complete_event;
+                let to = pipeline_graph_mapping
+                    .get(&pipe.get_pipeline_id())
+                    .unwrap()
+                    .pipeline_event;
+                if !graph.contains_edge(from, to) {
+                    graph.add_edge(from, to, ());
+                }
+            }
+        }
         Ok(())
     }
 
