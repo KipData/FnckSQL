@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 
-use crate::executor::{
-    physical::{PhysicalOperator, PhysicalOperatorRef},
-    Executor,
-};
+use crate::execution::executor::Executor;
+use crate::execution::physical::{PhysicalOperator, PhysicalOperatorRef};
 
 use super::pipeline::Pipeline;
-use anyhow::anyhow;
 use anyhow::Result;
 
 pub type PipelineIx = usize;

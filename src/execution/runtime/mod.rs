@@ -1,6 +1,6 @@
-mod catch_unwind;
-mod thread;
-mod thread_pool;
+pub mod catch_unwind;
+pub mod thread;
+pub mod thread_pool;
 
 use anyhow::anyhow;
 use anyhow::Result;

@@ -1,11 +1,12 @@
-use std::{any::Any, sync::Arc};
+use std::sync::Arc;
 
-use super::{meta_pipeline::PipelineIx, pipeline_executor::PipelineExecuteResult};
-use crate::executor::{
-    executor_task::Task, parallel::pipeline_executor::PipelineExecutor,
+use super::{meta_pipeline::PipelineIx, pipeline_event::PipelineEvent};
+use crate::execution::{
+    executor_task::{Task, TaskExecutionMode, TaskExecutionResult},
     physical::PhysicalOperatorRef,
 };
 use anyhow::Result;
+use parking_lot::Mutex;
 
 /// Pipeline represent a chain of physical operators that are executed in
 /// sequence that include `source`, `operator` and `sink.
@@ -94,6 +95,8 @@ impl Pipeline {
 
     pub fn reset(&self) {}
 
+    pub fn reset_sink(&self) {}
+
     pub fn finalize(&self) {
         //     	if (executor.HasError()) {
         // 	return;
@@ -119,11 +122,86 @@ impl Pipeline {
         true
     }
 
-    pub fn schedule_sequential(&self) -> Vec<Arc<dyn Task>> {
-        vec![]
+    pub fn schedule(&self, event: Mutex<PipelineEvent>) -> Vec<Arc<dyn Task>> {
+        let mut tasks: Vec<Arc<dyn Task>> = vec![];
+
+        // Check if the sink, source and all intermediate operators support parallelism.
+        let threads_num = if self.schedule_parallel() { 4 } else { 1 };
+
+        tasks.push(Arc::new(PipelineRunningTask {
+            pipeline: Arc::new(self.clone()),
+            event,
+            threads_num,
+        }));
+        tasks
     }
 
-    pub fn schedule_parallel(&self) -> Vec<Arc<dyn Task>> {
-        vec![]
+    fn schedule_parallel(&self) -> bool {
+        if let Some(sink) = self.sink.as_ref() {
+            if !sink.parallel_sink() {
+                return false;
+            }
+        }
+        if let Some(source) = self.source.as_ref() {
+            if !source.parallel_source() {
+                return false;
+            }
+        }
+        for operator in self.operators.iter() {
+            if !operator.parallel_operator() {
+                return false;
+            }
+        }
+
+        // auto &scheduler = TaskScheduler::GetScheduler(executor.context);
+        // idx_t active_threads = scheduler.NumberOfThreads();
+        // if (max_threads > active_threads) {
+        // 	max_threads = active_threads;
+        // }
+        // if (max_threads <= 1) {
+        // 	// too small to parallelize
+        // 	return false;
+        // }
+
+        true
+    }
+}
+
+pub struct PipelineRunningTask {
+    pipeline: Arc<Pipeline>,
+    event: Mutex<PipelineEvent>,
+    threads_num: usize,
+}
+
+#[async_trait::async_trait]
+impl Task for PipelineRunningTask {
+    /// The name of task.
+    fn name(&self) -> String {
+        "Pipeline".to_string()
+    }
+
+    async fn execute(&mut self, mode: TaskExecutionMode) -> Result<TaskExecutionResult> {
+        //     let executor = PipelineExecutor::create(self.clone())?;
+
+        //     match mode {
+        //         TaskExecutionMode::Complete => match executor.execute()? {
+        //             PipelineExecuteResult::Finished => Err(Error::Corrupted(
+        //                 "Execute without limit should not return
+        // NOT_FINISHED"
+        //                     .to_string(),
+        //             )),
+        //             PipelineExecuteResult::NotFinished =>
+        // Ok(TaskExecutionResult::NotFinished),
+        // PipelineExecuteResult::Interrupted =>
+        // Ok(TaskExecutionResult::Blocked),         },
+        //         TaskExecutionMode::Partial => match
+        // executor.execute_parital(50_usize)? {
+        // PipelineExecuteResult::Finished => Ok(TaskExecutionResult::Finished),
+        //             PipelineExecuteResult::NotFinished =>
+        // Ok(TaskExecutionResult::NotFinished),
+        // PipelineExecuteResult::Interrupted =>
+        // Ok(TaskExecutionResult::Blocked),         },
+        //     }
+        todo!()
     }
 }

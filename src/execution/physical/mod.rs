@@ -2,9 +2,9 @@ pub mod physical_filter;
 pub mod physical_limit;
 pub mod physical_plan_builder;
 pub mod physical_projection;
+pub mod physical_result_collector;
 pub mod physical_scan;
 pub mod physical_sort;
-pub mod physical_result_collector;
 pub mod physical_topn;
 
 use std::sync::Arc;
@@ -39,10 +39,17 @@ impl PhysicalOperator {
         }
     }
 
-    pub fn parallel_sink(&self) -> bool {
+    pub fn parallel_operator(&self) -> bool {
         todo!()
     }
 
+    pub fn parallel_source(&self) -> bool {
+        todo!()
+    }
+
+    pub fn parallel_sink(&self) -> bool {
+        todo!()
+    }
     pub fn children(&self) -> Vec<PhysicalOperatorRef> {
         match self {
             PhysicalOperator::TableScan(_) => vec![],
