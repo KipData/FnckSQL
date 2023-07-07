@@ -7,6 +7,7 @@ use petgraph::{
 };
 
 use super::{
+    executor::ExecutionQueue,
     parallel::{
         meta_pipeline::MetaPipeline,
         pipeline::Pipeline,
@@ -15,28 +16,6 @@ use super::{
     physical::PhysicalOperator,
 };
 use anyhow::Result;
-
-enum State {
-    Idle,
-    Processing,
-    Finished,
-}
-
-pub struct PipelineNode {
-    state: std::sync::Mutex<State>,
-    pipeline: Pipeline,
-}
-
-impl PipelineNode {
-    pub fn create(pipeline: &Pipeline) -> Arc<PipelineNode> {
-        Arc::new(PipelineNode {
-            state: std::sync::Mutex::new(State::Idle),
-            pipeline: pipeline.clone(),
-        })
-    }
-}
-
-type StateLockGuard = ExecutorGraph;
 
 pub struct ExecutorGraph {
     graph: StableGraph<Arc<PipelineEvent>, ()>,
@@ -219,12 +198,15 @@ impl ExecutorGraph {
         Ok(())
     }
 
-    pub fn init_schedule_queue(&self, threads_num: usize) -> Result<()> {
+    pub async fn init_schedule_event_queue(&self, global_execution_queue: &mut ExecutionQueue) {
         // Schedule source node.
         for node_idx in self.graph.externals(Direction::Outgoing) {
             let node = self.get_node_by_index(node_idx);
+            // todo: fix deref pointer.
+            let pipeline_event =
+                unsafe { &mut *(node.as_ref() as *const PipelineEvent as *mut PipelineEvent) };
+            pipeline_event.schedule(global_execution_queue).await;
         }
-        Ok(())
     }
 
     fn get_node_by_index(&self, index: NodeIndex) -> Arc<PipelineEvent> {

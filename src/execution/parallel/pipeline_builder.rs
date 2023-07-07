@@ -1,5 +1,5 @@
 use super::meta_pipeline::{MetaPipeline, PipelineIx};
-use crate::executor::physical::{PhysicalOperator, PhysicalOperatorRef};
+use crate::execution::physical::{PhysicalOperator, PhysicalOperatorRef};
 use anyhow::Result;
 
 pub struct PipelineBuilder {
@@ -126,7 +126,7 @@ mod pipeline_builder_tests {
 
     use super::*;
     use crate::{
-        executor::physical::{
+        execution::physical::{
             physical_filter::PhysicalFilter, physical_limit::PhysicalLimit,
             physical_projection::PhysicalProjection, physical_scan::PhysicalTableScan,
             physical_sort::PhysicalSort,
