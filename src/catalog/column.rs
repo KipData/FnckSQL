@@ -1,7 +1,7 @@
 use crate::types::{ColumnId, DataType, IdGenerator};
 use sqlparser::ast::{ColumnDef, ColumnOption};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Column {
     pub id: ColumnId,
     pub name: String,
@@ -19,6 +19,14 @@ impl Column {
 
     pub(crate) fn datatype(&self) -> &DataType {
         &self.desc.column_datatype
+    }
+
+    pub(crate) fn id(&self) -> ColumnId {
+        self.id
+    }
+
+    pub fn desc(&self) -> &ColumnDesc {
+        &self.desc
     }
 }
 

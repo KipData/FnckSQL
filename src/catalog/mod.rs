@@ -34,6 +34,17 @@ impl ColumnRefId {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+pub struct TableRefId {
+    pub table_id: TableId,
+}
+
+impl TableRefId {
+    pub const fn new(table_id: TableId) -> Self {
+        TableRefId { table_id }
+    }
+}
+
 /// The error type of catalog operations.
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum CatalogError {

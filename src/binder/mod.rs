@@ -7,13 +7,13 @@ use std::collections::HashMap;
 
 use crate::{catalog::CatalogRef, expression::ScalarExpression, planner::LogicalPlan};
 
-use crate::catalog::DEFAULT_SCHEMA_NAME;
+use crate::catalog::{Root, DEFAULT_SCHEMA_NAME};
 use crate::types::TableId;
 use anyhow::Result;
 use sqlparser::ast::{Ident, ObjectName, Statement};
 #[derive(Clone)]
 pub struct BinderContext {
-    catalog: CatalogRef,
+    catalog: Root,
     bind_table: HashMap<String, TableId>,
     aliases: HashMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
@@ -22,7 +22,7 @@ pub struct BinderContext {
 }
 
 impl BinderContext {
-    pub fn new(catalog: CatalogRef) -> Self {
+    pub fn new(catalog: Root) -> Self {
         BinderContext {
             catalog,
             bind_table: Default::default(),

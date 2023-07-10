@@ -3,7 +3,7 @@ use crate::binder::{lower_case_name, split_name};
 use crate::catalog::{Column, ColumnDesc};
 use crate::planner::logical_create_table_plan::LogicalCreateTablePlan;
 use crate::planner::LogicalPlan;
-use crate::types::ColumnId;
+use crate::types::{ColumnId, TableId};
 use anyhow::Result;
 use sqlparser::ast::{ColumnDef, ObjectName};
 use std::collections::HashSet;
@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn test_create_bind() {
         let sql = "create table t1 (id int , name varchar(10))";
-        let mut binder = Binder::new(BinderContext::new(Arc::new(Root::new())));
+        let mut binder = Binder::new(BinderContext::new(Root::new()));
         let stmt = crate::parser::parse_sql(sql).unwrap();
         let plan1 = binder.bind(&stmt[0]).unwrap();
 

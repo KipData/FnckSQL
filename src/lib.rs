@@ -87,18 +87,12 @@
 // clippy::panic, // allow debug_assert, panic in production code
 // clippy::multiple_crate_versions, // caused by the dependency, can't be fixed
 // )]
-
 pub mod binder;
 pub mod catalog;
+pub mod db;
 pub mod executor;
 pub mod expression;
 pub mod parser;
 pub mod planner;
 pub mod storage;
 pub mod types;
-
-extern crate core;
-
-pub const DEFAULT_PORT: u16 = 6334;
-
-pub const LOCAL_IP: &str = "127.0.0.1";
