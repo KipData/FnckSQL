@@ -1,15 +1,13 @@
 // Module: catalog
+use std::sync::Arc;
+
 pub(crate) use self::column::*;
 pub(crate) use self::root::*;
 pub(crate) use self::table::*;
-
 use crate::types::{ColumnId, TableId};
-use std::sync::Arc;
 
 /// The type of catalog reference.
-pub type CatalogRef = Arc<Root>;
-pub(crate) type TableRef = Arc<Table>;
-pub(crate) type ColumnRef = Arc<Column>;
+pub type CatalogRef = Arc<RootCatalog>;
 
 pub(crate) static DEFAULT_DATABASE_NAME: &str = "kipsql";
 pub(crate) static DEFAULT_SCHEMA_NAME: &str = "kipsql";
@@ -45,8 +43,7 @@ impl TableRefId {
     }
 }
 
-/// The error type of catalog operations.
-#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+#[derive(thiserror::Error, Debug)]
 pub enum CatalogError {
     #[error("{0} not found: {1}")]
     NotFound(&'static str, String),

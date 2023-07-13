@@ -1,62 +1,63 @@
-use crate::catalog::{CatalogRef, Column, Root, TableRefId};
-use crate::types::ColumnId;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+pub(crate) mod memory;
 
-#[derive(thiserror::Error, Debug, PartialEq)]
-pub enum StorageError {
-    #[error("failed to read table")]
-    ReadTableError,
-    #[error("failed to write table")]
-    WriteTableError,
-    #[error("{0}({1}) not found")]
-    NotFound(&'static str, u32),
-    #[error("duplicated {0}: {1}")]
-    Duplicated(&'static str, String),
-    #[error("invalid column id: {0}")]
-    InvalidColumn(ColumnId),
+use std::io;
+
+use arrow::error::ArrowError;
+use arrow::record_batch::RecordBatch;
+
+use crate::catalog::RootCatalog;
+use crate::storage::memory::InMemoryStorage;
+use crate::types::TableId;
+
+#[derive(Debug)]
+pub enum StorageImpl {
+    InMemoryStorage(InMemoryStorage),
 }
 
 pub trait Storage: Sync + Send {
-    fn create_table(&mut self, table_name: &str, columns: &Vec<Column>)
-        -> Result<(), StorageError>;
-}
+    type TableType: Table;
 
-pub type StorageRef = Arc<dyn Storage>;
-
-#[derive(Debug, Clone)]
-pub struct InMemoryStorage {
-    pub catalog: Root,
-}
-
-impl Default for InMemoryStorage {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl InMemoryStorage {
-    pub fn new() -> Self {
-        InMemoryStorage {
-            catalog: Root::new(),
-        }
-    }
-
-    pub fn catalog(&self) -> &Root {
-        &self.catalog
-    }
-}
-
-impl Storage for InMemoryStorage {
     fn create_table(
         &mut self,
+        id: TableId,
         table_name: &str,
-        column_descs: &Vec<Column>,
-    ) -> Result<(), StorageError> {
-        let table_id = self
-            .catalog
-            .add_table(table_name.into(), column_descs.to_vec())
-            .map_err(|_| StorageError::Duplicated("table", table_name.into()))?;
-        Ok(())
-    }
+        columns: Vec<RecordBatch>,
+    ) -> Result<(), StorageError>;
+    fn get_table(&self, id: TableId) -> Result<Self::TableType, StorageError>;
+    fn get_catalog(&self) -> RootCatalog;
+    fn show_tables(&self) -> Result<RecordBatch, StorageError>;
+}
+
+/// Optional bounds of the reader, of the form (offset, limit).
+type Bounds = Option<(usize, usize)>;
+type Projections = Option<Vec<usize>>;
+
+pub trait Table: Sync + Send + Clone + 'static {
+    type TransactionType: Transaction;
+
+    /// The bounds is applied to the whole data batches, not per batch.
+    ///
+    /// The projections is column indices.
+    fn read(
+        &self,
+        bounds: Bounds,
+        projection: Projections,
+    ) -> Result<Self::TransactionType, StorageError>;
+}
+
+// currently we use a transaction to hold csv reader
+pub trait Transaction: Sync + Send + 'static {
+    fn next_batch(&mut self) -> Result<Option<RecordBatch>, StorageError>;
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum StorageError {
+    #[error("arrow error")]
+    ArrowError(#[from] ArrowError),
+
+    #[error("io error")]
+    IoError(#[from] io::Error),
+
+    #[error("table not found: {0}")]
+    TableNotFound(TableId),
 }

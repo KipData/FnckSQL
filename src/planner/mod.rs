@@ -13,3 +13,4 @@ pub enum LogicalPlan {
     Select(LogicalSelectPlan),
     CreateTable(LogicalCreateTablePlan),
 }
+pub enum LogicalPlanError {}

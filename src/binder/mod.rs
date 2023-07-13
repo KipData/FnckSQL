@@ -5,15 +5,16 @@ mod select;
 
 use std::collections::HashMap;
 
-use crate::{catalog::CatalogRef, expression::ScalarExpression, planner::LogicalPlan};
-
-use crate::catalog::{Root, DEFAULT_SCHEMA_NAME};
-use crate::types::TableId;
 use anyhow::Result;
 use sqlparser::ast::{Ident, ObjectName, Statement};
+
+use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME};
+use crate::expression::ScalarExpression;
+use crate::planner::LogicalPlan;
+use crate::types::TableId;
 #[derive(Clone)]
 pub struct BinderContext {
-    catalog: Root,
+    catalog: RootCatalog,
     bind_table: HashMap<String, TableId>,
     aliases: HashMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
@@ -22,7 +23,7 @@ pub struct BinderContext {
 }
 
 impl BinderContext {
-    pub fn new(catalog: Root) -> Self {
+    pub fn new(catalog: RootCatalog) -> Self {
         BinderContext {
             catalog,
             bind_table: Default::default(),
@@ -90,4 +91,22 @@ fn split_name(name: &ObjectName) -> Result<(&str, &str)> {
         [schema, table] => (&schema.value, &table.value),
         _ => return Err(anyhow::anyhow!("Invalid table name: {:?}", name)),
     })
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum BindError {
+    #[error("unsupported statement {0}")]
+    UnsupportedStmt(String),
+    #[error("invalid table {0}")]
+    InvalidTable(String),
+    #[error("invalid table name: {0:?}")]
+    InvalidTableName(Vec<Ident>),
+    #[error("invalid column {0}")]
+    InvalidColumn(String),
+    #[error("ambiguous column {0}")]
+    AmbiguousColumn(String),
+    #[error("binary operator types mismatch: {0} != {1}")]
+    BinaryOpTypeMismatch(String, String),
+    #[error("subquery in FROM must have an alias")]
+    SubqueryMustHaveAlias,
 }

@@ -1,23 +1,24 @@
-use crate::catalog::{CatalogError, Column, Table};
-use crate::types::TableId;
 use std::collections::BTreeMap;
 
+use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog};
+use crate::types::TableId;
+
 #[derive(Debug, Clone)]
-pub struct Root {
+pub struct RootCatalog {
     table_idxs: BTreeMap<String, TableId>,
-    tables: BTreeMap<TableId, Table>,
+    tables: BTreeMap<TableId, TableCatalog>,
 }
 
-impl Default for Root {
+impl Default for RootCatalog {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Root {
+impl RootCatalog {
     #[allow(dead_code)]
     pub fn new() -> Self {
-        Root {
+        RootCatalog {
             table_idxs: Default::default(),
             tables: Default::default(),
         }
@@ -27,11 +28,11 @@ impl Root {
         self.table_idxs.get(name).cloned()
     }
 
-    pub(crate) fn get_table(&self, table_id: TableId) -> Option<&Table> {
+    pub(crate) fn get_table(&self, table_id: TableId) -> Option<&TableCatalog> {
         self.tables.get(&table_id)
     }
 
-    pub(crate) fn get_table_by_name(&self, name: &str) -> Option<&Table> {
+    pub(crate) fn get_table_by_name(&self, name: &str) -> Option<&TableCatalog> {
         let id = self.table_idxs.get(name)?;
         self.tables.get(id)
     }
@@ -39,12 +40,12 @@ impl Root {
     pub(crate) fn add_table(
         &mut self,
         table_name: String,
-        columns: Vec<Column>,
+        columns: Vec<ColumnCatalog>,
     ) -> Result<TableId, CatalogError> {
         if self.table_idxs.contains_key(&table_name) {
             return Err(CatalogError::Duplicated("column", table_name));
         }
-        let table = Table::new(table_name.to_owned(), columns)?;
+        let table = TableCatalog::new(table_name.to_owned(), columns)?;
         let table_id = table.id;
 
         self.table_idxs.insert(table_name, table_id);
@@ -57,20 +58,20 @@ impl Root {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog::Column;
-    use crate::types::{DataTypeExt, DataTypeKind};
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::types::LogicalType;
 
     #[test]
     fn test_root_catalog() {
-        let mut root_catalog = Root::new();
+        let mut root_catalog = RootCatalog::new();
 
-        let col0 = Column::new(
+        let col0 = ColumnCatalog::new(
             "a".to_string(),
-            DataTypeKind::Int(None).not_null().to_column(),
+            ColumnDesc::new(LogicalType::Integer, false),
         );
-        let col1 = Column::new(
+        let col1 = ColumnCatalog::new(
             "b".to_string(),
-            DataTypeKind::Boolean.not_null().to_column(),
+            ColumnDesc::new(LogicalType::Boolean, false),
         );
         let col_catalogs = vec![col0, col1];
 
