@@ -1,36 +1,35 @@
-# KipSQL
-
+# KipSQL 
 
 > build the SQL layer of KipDB database.
 > 
 
-# SQL layer 需要作什么
+# What SQL layer needs to do
 
-- SQL API：用户接口，接收来自外界的请求。
-- 解析器（Parser）：将SQL文本转换为抽象语法树(AST)。
-    - 语义分析：AST树合法性校验
-- 优化器（Optimizer）
-    - 逻辑优化：将AST树转换为优化的逻辑查询计划。
-    - 物理优化：将逻辑查询计划转换为[物理查询计划](https://www.zhihu.com/search?q=%E7%89%A9%E7%90%86%E6%9F%A5%E8%AF%A2%E8%AE%A1%E5%88%92&search_source=Entity&hybrid_search_source=Entity&hybrid_search_extra=%7B%22sourceType%22%3A%22article%22%2C%22sourceId%22%3A%22557876303%22%7D)，供集群中的一个或多个节点执行。
-- 执行器Executor：通过向底层kv存储发出读写请求（发送到事务层），来执行物理计划。
+- SQL API: User interface that receives requests from outside.
+- Parser: Converts SQL text into an abstract syntax tree (AST).
+    - Semantic analysis: Validates the legality of the AST tree.
+- Optimizer:
+    - Logical optimization: Converts the AST tree into an optimized logical query plan.
+    - Physical optimization: Converts the logical query plan into a [physical query plan](https://www.zhihu.com/search?q=%E7%89%A9%E7%90%86%E6%9F%A5%E8%AF%A2%E8%AE%A1%E5%88%92&search_source=Entity&hybrid_search_source=Entity&hybrid_search_extra=%7B%22sourceType%22%3A%22article%22%2C%22sourceId%22%3A%22557876303%22%7D) for one or more nodes in the cluster to execute.
+- Executor: Executes the physical plan by sending read and write requests (sent to the transaction layer) to the underlying kv storage.
 
-流程图可以参考TIDB的，非常明了。
+You can refer to the TIDB flowchart, which is very clear.
 
 ![Untitled](assets/Untitled.png)
 
-# SQL引擎设计
+# SQL Engine Design
 
-### 期望支持的SQL语法类型
+### Expected Supported SQL Syntax Types
 
-- 数据定义语言DDL（Data Definition Language）：对数据库中资源进行定义、修改和删除，如新建表和删除表等。
-- 数据操作语言DML（Data Manipulation Language）：用以改变数据库中存储的数据内容，即增加、修改和删除数据。
-- 数据查询语言DQL（Data Query Language）：也称为数据检索语言，用以从表中获得数据，并描述怎样将数据返回给程序输出。
+- Data Definition Language (DDL): Used to define, modify, and delete resources in the database, such as creating and deleting tables.
+- Data Manipulation Language (DML): Used to change the data stored in the database, i.e., adding, modifying, and deleting data.
+- Data Query Language (DQL): Also known as data retrieval language, used to retrieve data from tables and describe how to return data to program output.
 
 ### Parser
 
-实现解析器的逻辑比较复杂，项目初始阶段可以先使用现成的库
+The logic for implementing the parser is quite complicated. In the initial stages of the project, you can use an existing library for parsing.
 
-parser选型
+Parser selection
 
 [https://github.com/sqlparser-rs/sqlparser-rs](https://github.com/sqlparser-rs/sqlparser-rs)
 
@@ -50,141 +49,136 @@ let ast = Parser::parse_sql(&dialect, sql).unwrap();
 println!("AST: {:?}", ast);
 ```
 
-但sqlparser-rs库只能提供词法分析和语法分析，生成查询树，不能进行语义分析，也就是合法性校验。因此我们将 sqlparser库进行封装，增加语义分析功能
+However, the `sqlparser-rs` library can only provide lexical analysis and syntax analysis, generating the AST tree, but cannot perform semantic analysis, that is, validity verification. Therefore, we wrapped the sqlparser library to add semantic analysis capabilities.
 
-## 语义分析
+## Semantic Analysis
 
-- 及时校验报错
-    - 标识符resolve
-        - 数据库、表、字段、属性存在性、正确性校验
-    - 语义逻辑限制
-        - group by和select的item的关系
-        - distinct和order、group by的关系
-        - select item是否在source relation中
-        - 。。。
-    - SQL片段表达式的正确性
-        - 分别分析各个最小表达式返回类型、表达式正确性，例如where expr1 = subquery 就要求验证 “=” 两边的结果类型可比较
-        - 这些表达式组合后的正确性，例如 expr1 and expr2 就要求 expr1/2 表达式的返回结果必须是boolean型才能 进行 AND操作
-        - 。。。
-- 分析结果，作为可选参数传给 生成 逻辑计划/物理计划 的planner，作为参数进一步被转换应用
-    - 例如可以用functionExpression来转换生成具体的 函数调用，这个过程需要知道 func(A,B) C的参数类型、返回类型等，才能对应调用具体的函数
+- Timely error checking
+    - Identifier resolve
+        - Database, table, column, attribute existence and correctness verification
+    - Semantic logic constraints
+        - The relationship between group by and select items
+        - The relationship between distinct and order, group by
+        - Whether select items are in the source relation
+        - ...
+    - Correctness of SQL fragment expressions
+        - Analyze the return type and correctness of each smallest expression respectively. For example, in where expr1 = subquery, it is required to verify that the results on both sides of "=" can be compared.
+        - The correctness of these expression combinations, for example, expr1 and expr2 require that the return results of expr1/2 expressions must be boolean type to perform the AND operation.
+        - ...
+- Analyze the results, as optional parameters passed to the planner that generates the logical plan, and further converted and applied as parameters.
+    - For example, functionExpression can be used to transform and generate specific function calls. This process requires knowledge of the parameter types, return types, etc. of func(A,B) C, in order to correspondingly call specific functions.
 
 ## Optimizer
 
-### 优化器概述
+### Overview of Optimizer
 
-![Untitled 1](assets/Untitled%201.png)
+![Untitled](assets/Untitled%201.png)
 
-### **查询优化器的核心目的是**
+### The Core Objective of Query Optimizer is
 
-- 根据query生成的plan，在可接受时间内，快速找到一个语义等价的、查询最高效的 查询执行计划
+- To quickly find a semantically equivalent and most efficient query execution plan within an acceptable time frame based on the plan generated from query.
 
-### **其目标最核心的三个要点，尽可能同时满足**
+### The three most important points to satisfy its objective at the core are as follows:
 
-- 时间可接受的，快速的
-- 语义等价
-- 查询最高效的
+- Fast and acceptable time
+- Semantic equivalence
+- Most efficient query
 
-未来实现这个目标，学术界和工业界在不断努力，其中我们常说的查询优化器类型有CBO、RBO、HBO这些。
+Academia and industry are constantly working to achieve the goal of optimizing database query performance. The types of query optimizers that are frequently mentioned include CBO, RBO, and HBO.
 
-HBO（Heuristic-Based Optimizer）和RBO（Rule-Based Optimizer）都是数据库查询优化器的早期实现，它们都有一些局限性，这些局限性导致它们无法满足当今复杂的数据库系统的需求。这就是为什么需要引入CBO（Cost-Based Optimizer）。
-HBO使用启发式算法来选择最优的查询执行计划。它将查询优化过程视为一个搜索问题，尝试使用一些经验法则来指导搜索。然而，这些启发式规则可能不适用于所有情况，导致HBO无法找到最优的查询执行计划。
+HBO (Heuristic-Based Optimizer) and RBO (Rule-Based Optimizer) are early implementations of database query optimizers. However, their limitations make them unable to meet the needs of today's complex database systems. Therefore, CBO (Cost-Based Optimizer) needs to be introduced.
 
-RBO是另一种优化器，它使用一系列的规则来指导查询优化过程。这些规则通常是基于查询语法和数据模式的，并且不考虑查询的复杂度和数据分布等因素。因此，RBO通常只适用于简单的查询，对于复杂的查询无法找到最优的执行计划。
+HBO uses heuristic algorithms to choose the optimal query execution plan. It regards the query optimization process as a search problem and tries to guide the search using some empirical rules. However, these heuristic rules may not be applicable in all cases, resulting in HBO being unable to find the optimal query execution plan.
 
-CBO引入了代价模型的概念，它基于查询代价来选择最优的查询执行计划。代价模型是基于统计信息和数据库结构的，并且考虑了查询的复杂度和数据分布等因素。CBO使用代价模型来评估每个可能的查询执行计划的代价，并选择代价最小的执行计划作为最终的执行计划。因此，CBO能够处理更加复杂的查询，并且能够找到最优的查询执行计划。
-而CBO核心是基于代价的来展开的， 如果代价无法估算正确，那么整个优化结果就是错误的。而估算代价的过程也是个复杂的过程，想要有限时间内，快速从所有的plan tree选择最优解 已经被证明过是个NP-Hard问题。
-这就导致CBO始终没有一个最完美、最全面、最准确的解决方案。
-**对于一个CBO而言，其核心组件有3个，业界把这3个地方抽象为如下图，这也是近年来工业界、学术界的努力聚焦在的细分领域**
+RBO is another optimizer that uses a series of rules to guide the query optimization process. These rules are usually based on query syntax and data schema and do not consider factors such as query complexity and data distribution. Therefore, RBO is usually only applicable to simple queries and cannot find the optimal execution plan for complex queries.
 
-- **Cardinality Estimation 基数估算**
-- **Cost Model 代价模型**
-- **Plan Enumeration 计划枚举搜索**
+CBO introduces the concept of a cost model, which selects the optimal query execution plan based on query cost. The cost model is based on statistical information and database structure and considers factors such as query complexity and data distribution. CBO uses the cost model to evaluate the cost of each possible query execution plan and selects the execution plan with the minimum cost as the final execution plan. Therefore, CBO can handle more complex queries and find the optimal query execution plan.
 
+The core of CBO is based on cost, and if the cost cannot be estimated correctly, the entire optimization result is wrong. The process of estimating the cost is also a complex process, and it has been proven to be an NP-Hard problem to quickly select the optimal solution from all plan trees in a limited time. This has led to CBO never having a perfect, comprehensive, and accurate solution.
 
+For CBO, there are three core components that the industry abstracts, as shown in the figure below, and this is the subdivision that the industry and academia have focused on in recent years.
 
-![Untitled 2](assets/Untitled%202.png)
+- **Cardinality Estimation**
+- **Cost Model**
+- **Plan Enumeration**
 
-**如上图，查询优化器第一步就是有做好基数估算和代价模型。**
+![assets/Untitled%202.png](assets/Untitled%202.png)
 
-- 基数是指一个operator操作数据的规模，例如TableScan这种operator，他的基数就是表的数据量，如果是hashjoin这种operator，那么就是具体数据的NDV个数。如果基数错误，这就导致代价估算的基数就错了，评估得到的代价肯定也是错误的。例如分不清大小表，把大表broadcast到各个节点，小表进行分区join。
-- 代价模型是指各种operator在各种数据的计算代价公式，例如tableScan 1行需要多少时间，filter 1一行需要多少时间，是否需要一些影响因素系数等等，不同的代价公式，会得出不同的代价结果，导致选出来的plan千差万别。
+**As shown in the figure above, the first step of the query optimizer is to perform cardinality estimation and cost modeling.**
 
-**其次就是plan enumeration，其作用就是在众多plan中，快速选取cost代价最小的plan** 。
+- Cardinality refers to the scale of data operated by an operator. For example, for an operator like TableScan, its cardinality is the amount of data in the table, and for an operator like hashjoin, it is the number of specific data NDVs. If the cardinality is incorrect, the estimated cost will be wrong, resulting in an incorrect cost evaluation. For example, broadcasting the large table to each node, and partitioning the small table to perform the join without distinguishing between large and small tables.
+- The cost model refers to the calculation cost formula of various operators in various data, such as how much time it takes for a TableScan to process one row, how much time it takes for a filter to process one row, and whether there are some influencing factor coefficients, etc. Different cost formulas will yield different cost results, resulting in different execution plans being selected.
 
-- 由于枚举plan这个过程是随着join表个数，搜索空间大小会指数变大，全部罗列出plan在挑选最优plan是不现实的
-- 业界通常是使用bottom-up的动态规划办法【System R】、top-down的memorization办法【volcano&cascade系列】、随机join顺序的办法进行【PG 11之前】
-- 从历史发展来看
-    - 随机join肯定是个概率问题，后期演进空间不大；
-    - 而bottom-up的架构，就涉及扩展性和各种迭代开发问题，导致发展缓慢；
-    - 目前比较公认的是 top-down的方式，而top-down典型的又volcano 系列和cascade系列的查询优化器
-        - 其中volcano的优化器有 早期的Apache calcite
-        - cascade系列的早期 MS SqlServer，Columbia，后来columbia合入到PostgreSQL里面。比较新的开源实现是ORCA这个，相对简单。阿里云ADB也是这种cascade架构。
+**The next step is plan enumeration, the purpose of which is to quickly select the plan with the smallest cost among many plans.**
 
-**而针对这三个核心的组件，结合一些公布的学术动态，未来可能得发展方向如下：**
+- Since the process of enumerating plans expands exponentially as the number of join tables increases, it is unrealistic to list all plans and select the optimal plan.
+- The industry usually uses bottom-up dynamic programming methods [System R], top-down memorization methods [volcano&cascade series], and random join order methods [before PG 11] to handle this.
+- From a historical development point of view,
+    - Random joins are definitely a probability problem, and later evolution space is not large;
+    - The bottom-up architecture involves scalability and various iterative development issues, resulting in slow development;
+    - Top-down is currently recognized, and the typical volcano optimizer has the early Apache Calcite
+    - The early MS SQL Server and Columbia in the cascade series were later merged into PostgreSQL. The newer open-source implementation is ORCA, which is relatively simple. Alibaba Cloud ADB also uses the cascade architecture.
+
+**Regarding these three core components, combined with some published academic dynamics, the future development directions may be as follows:**
 
 - Cardinality Estimation
-    - Learning-based methods 最近两年很多这方面的研究工作
-    - Hybrid methods 混合多种方法，互相影响相辅相成
-    - Experimental study 更多实验验证这些 方法的有效性和准确性，否则很多研究还停留在学术上
+    - Learning-based methods, which have been widely studied in the past two years.
+    - Hybrid methods, which combine multiple methods to complement each other.
+    - Experimental studies, which validate the effectiveness and accuracy of these methods through more experiments; otherwise, many studies are still in the academic stage.
 - Cost Model
-    - cloud database systems 结合一些云环境上的代价估算，例如多云的运算时间、云环境付费成本
-    - learning-based methods 基于一些机器学习的方式估算代价，例如对大量的operator进行训练得到各种输入下，operator的代价情况，以此来估算一个新的query的plan的所有operator 代价的sum总代价
+    - Cloud database systems, which combine cost estimation in cloud environments, such as computing time in multi-cloud, cloud environment payment costs, etc.
+    - Learning-based methods, which estimate costs based on some machine learning methods, such as training a large number of operators to obtain various input situations and operator cost situations, so as to estimate the total cost of all operators of a new query plan.
 - Plan Enumeration
-    - Handle Large queries 对于大查询的一些处理，需要深入研究
-    - Learning-based methods 持续研究机器学习的方式，目前主流的还是非机器学习的方案。
+    - Handling Large queries, which requires in-depth research on how to handle them.
+    - Learning-based methods, which continue to study machine learning methods. Currently, this method is not widely commercialized, and non-machine learning solutions are still mainstream.
 
-![Untitled 3](assets/Untitled%203.png)
-
-经过优化器生成物理计划投喂到执行器
+![Untitled](assets/Untitled%203.png)
 
 ## Executor
 
-执行引擎采用 Volcano 模型
+The execution engine in Elasticsearch adopts the Volcano model.
 
-通过优化器得到的物理查询计划树会转换为一个执行器树，树中的每个节点都会实现这个接口，执行器之间通过 Next 接口传递数据。比如 select c1 from t where c2 > 1; 最终生成的执行器是 Projection->Filter->TableScan 这三个执行器，最上层的 Projection 会不断的调用下层执器的 Next 接口，最终调到底层的 TableScan，从表中获取数据。
+The optimizer generates a physical query plan tree which is then converted into an executor tree. Each node in the tree implements the executor interface, and data is passed between executors through the Next interface. For example, for the query "`select c1 from t where c2 > 1;`", the generated executors are Projection->Filter->TableScan. The top-level Projection continuously calls the Next interface of the underlying executors, and finally calls the bottom-level TableScan to obtain data from the table.
 
-![Untitled 4](assets/Untitled%204.png)
+![Untitled](assets/Untitled%204.png)
 
-> 后期可以考虑使用Velox
+> **Velox** can be considered in the future.
 > 
 > 
-> Velox 接受一棵**优化过的** `PlanNode` Tree，然后将其切成一个个的线性的 `Pipeline`，`Task` 负责这个转变过程，每个 Task 针对一个 PlanTree Segment。大多数算子是一对一翻译的，但是有一些特殊的算子，通常出现在多个 Pipeline 的**切口**处，通常来说，这些切口对应计划树的**分叉处**，如 `HashJoinNode`，`CrossJoinNode`， `MergeJoinNode` ，通常会翻译成 XXProbe 和 XXBuild。但也有一些例外，比如 `LocalPartitionNode` 和 `LocalMergeNode` 。
+> **Velox** accepts an optimized `PlanNode` Tree and then cuts it into linear `Pipeline`. `Task` is responsible for this transformation process, and each Task corresponds to a PlanTree Segment. Most operators are one-to-one translations, but there are some special operators that usually appear at the junctions of multiple Pipelines, which correspond to the forks of the plan tree, such as `HashJoinNode`, `CrossJoinNode`, and `MergeJoinNode`, which are usually translated into XXProbe and XXBuild. However, there are also some exceptions, such as `LocalPartitionNode` and `LocalMergeNode`.
 > 
-> ### velox 的必要性
+> ### The Necessity of **Velox**
 > 
-> 不同数据处理系统之间的主要差异在于
+> The main differences between different data processing systems are:
 > 
-> - 语言前端层面：SQL、dataframe、其他DSL等
-> - 优化器
-> - 任务划分：分布式场景下如何划分数据/任务
-> - IO 层
+> - Language front-end level: SQL, dataframe, and other DSLs, etc.
+> - Optimizer
+> - Task partitioning: how to partition data/tasks in a distributed scenario
+> - IO layer
 > 
-> 而它们的执行层都是十分相似的
+> However, their execution layers are very similar:
 > 
-> - 类型系统
-> - 数据在内存中表示/layout
-> - 表达式求值系统
-> - 存储层、[网络序列化](https://www.zhihu.com/search?q=%E7%BD%91%E7%BB%9C%E5%BA%8F%E5%88%97%E5%8C%96&search_source=Entity&hybrid_search_source=Entity&hybrid_search_extra=%7B%22sourceType%22%3A%22article%22%2C%22sourceId%22%3A%22620275762%22%7D)
-> - 编码
-> - 资源管理原语
+> - Type system
+> - Data representation/layout in memory
+> - Expression evaluation system
+> - Storage layer, network serialization
+> - Encoding
+> - Resource management primitives
 > 
-> velox就是致力于成为一个通用的执行层：接受经过optimizer优化过后的查询计划，使用本地资源执行查询计划。但是不做SQL parser、optimizer的工作。
+> **Velox** aims to be a general execution layer: it accepts a query plan optimized by the optimizer and executes the query plan using local resources. However, it does not perform SQL parser or optimizer functions.
 > 
 
-## 后续调研工作
+🪜We are currently building a Push-Based Execution vector execution model similar to DUCKDB, and it is under intense construction.
 
-table 到 kv 映射关系的处理
-[参考TinySQL中TableCodec设计](https://github.com/talent-plan/tinysql/blob/course/courses/proj1-part2-README-zh_CN.md)
+![Untitled](assets/Untitled%205.png)
 
-优化器的具体实现
-[DataFusion Query Optimizer](https://github.com/apache/arrow-datafusion/blob/aae7ec3bdb64bf0346249ccb9e44abdc29880904/datafusion/optimizer/README.md#L4)
+## Future Research
 
-[tinysql优化器文档](https://github.com/talent-plan/tinysql/blob/course/courses/proj4-README-zh_CN.md)
+Processing a table to key-value mapping relationship.
 
-第一阶段可以实现一个简单优化器
+In the initial stage, a simple optimizer can be implemented.
 
-velox 能否接入KipDB作为存储引擎
+Can **Velox** access KipDB as a storage engine?
 
 # Reference
 
@@ -199,3 +193,17 @@ velox 能否接入KipDB作为存储引擎
 [揭秘 TiDB 新优化器：Cascades Planner 原理解析](https://zhuanlan.zhihu.com/p/94079481)
 
 [TiDB 源码初探](https://zhuanlan.zhihu.com/p/24564238)
+
+[Push-Based Execution in DuckDB - Mark Raasveldt](https://www.youtube.com/watch?v=MA0OsvYFGrc)
+
+[Push-Based Execution in DuckDB](https://dsdsd.da.cwi.nl/slides/dsdsd-duckdb-push-based-execution.pdf)
+
+[Paper Reading: MonetDB/X100: Hyper-Pipelining Query Execution](https://frankma.me/posts/papers/monetdb-hyper-pipelining-query-execution/)
+
+[查询执行 | Databend 内幕大揭秘](https://psiace.github.io/databend-internals/docs/the-basics/executor-in-query-process/)
+
+[[转][不会游泳的鱼]SQL引擎发表、落地论文总结](https://distsys.cn/d/179-zhuan-bu-hui-you-yong-de-yu-sqlyin-qing-fa-biao-luo-di-lun-wen-zong-jie)
+
+[Apache Arrow：一种适合异构大数据系统的内存列存数据格式标准](https://tech.ipalfish.com/blog/2020/12/08/apache_arrow_summary/)
+
+[TPC-H benchmark of Hyper and DuckDB on Windows and Linux OS - Architecture et Performance](https://www.architecture-performance.fr/ap_blog/tpc-h-benchmark-of-hyper-and-duckdb-on-windows-and-linux-os/)
