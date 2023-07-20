@@ -166,8 +166,7 @@ impl Binder {
     ///
     /// - Qualified name, e.g. `SELECT t.a FROM t`
     /// - Qualified name with wildcard, e.g. `SELECT t.* FROM t,t1`
-    /// - Scalar expression or aggregate expression, e.g. `SELECT COUNT(*) + 1
-    ///   AS count FROM t`
+    /// - Scalar expression or aggregate expression, e.g. `SELECT COUNT(*) + 1 AS count FROM t`
     ///  
     fn normalize_select_item(&mut self, items: &[SelectItem]) -> Result<Vec<ScalarExpression>> {
         let mut select_items = vec![];
@@ -293,8 +292,8 @@ impl Binder {
             let expr = self.bind_expr(expr)?;
             match expr {
                 ScalarExpression::Constant(dv) => match dv {
-                    DataValue::Int32(v) if v > 0 => limit = v as usize,
-                    DataValue::Int64(v) if v > 0 => limit = v as usize,
+                    DataValue::Int32(Some(v)) if v > 0 => limit = v as usize,
+                    DataValue::Int64(Some(v)) if v > 0 => limit = v as usize,
                     _ => return Err(anyhow::Error::msg("invalid limit expression.".to_owned())),
                 },
                 _ => return Err(anyhow::Error::msg("invalid limit expression.".to_owned())),
@@ -305,8 +304,8 @@ impl Binder {
             let expr = self.bind_expr(&expr.value)?;
             match expr {
                 ScalarExpression::Constant(dv) => match dv {
-                    DataValue::Int32(v) if v > 0 => offset = v as usize,
-                    DataValue::Int64(v) if v > 0 => offset = v as usize,
+                    DataValue::Int32(Some(v)) if v > 0 => offset = v as usize,
+                    DataValue::Int64(Some(v)) if v > 0 => offset = v as usize,
                     _ => return Err(anyhow::Error::msg("invalid limit expression.".to_owned())),
                 },
                 _ => return Err(anyhow::Error::msg("invalid offset expression.".to_owned())),

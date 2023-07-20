@@ -1,18 +1,20 @@
-use crate::catalog::{CatalogError, Column};
-use crate::types::{ColumnId, IdGenerator, TableId};
-use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap};
+
+use itertools::Itertools;
+
+use crate::catalog::{CatalogError, ColumnCatalog};
+use crate::types::{ColumnId, IdGenerator, TableId};
 #[derive(Debug, Clone)]
-pub struct Table {
+pub struct TableCatalog {
     pub id: TableId,
     pub name: String,
     /// Mapping from column names to column ids
     column_idxs: HashMap<String, ColumnId>,
-    columns: BTreeMap<ColumnId, Column>,
+    pub(crate) columns: BTreeMap<ColumnId, ColumnCatalog>,
 }
 
-impl Table {
-    pub(crate) fn get_column_by_id(&self, id: ColumnId) -> Option<&Column> {
+impl TableCatalog {
+    pub(crate) fn get_column_by_id(&self, id: ColumnId) -> Option<&ColumnCatalog> {
         self.columns.get(&id)
     }
 
@@ -24,7 +26,7 @@ impl Table {
         self.column_idxs.contains_key(name)
     }
 
-    pub(crate) fn get_all_columns(&self) -> Vec<(ColumnId, &Column)> {
+    pub(crate) fn get_all_columns(&self) -> Vec<(ColumnId, &ColumnCatalog)> {
         self.columns
             .iter()
             .map(|(col_id, col)| (*col_id, col))
@@ -32,7 +34,10 @@ impl Table {
     }
 
     /// Add a column to the table catalog.
-    pub(crate) fn add_column(&mut self, col_catalog: Column) -> Result<ColumnId, CatalogError> {
+    pub(crate) fn add_column(
+        &mut self,
+        col_catalog: ColumnCatalog,
+    ) -> Result<ColumnId, CatalogError> {
         if self.column_idxs.contains_key(&col_catalog.name) {
             return Err(CatalogError::Duplicated("column", col_catalog.name.into()));
         }
@@ -45,8 +50,11 @@ impl Table {
         Ok(col_id)
     }
 
-    pub(crate) fn new(table_name: String, columns: Vec<Column>) -> Result<Table, CatalogError> {
-        let mut table_catalog = Table {
+    pub(crate) fn new(
+        table_name: String,
+        columns: Vec<ColumnCatalog>,
+    ) -> Result<TableCatalog, CatalogError> {
+        let mut table_catalog = TableCatalog {
             id: IdGenerator::build(),
             name: table_name,
             column_idxs: HashMap::new(),
@@ -64,7 +72,8 @@ impl Table {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{DataType, DataTypeExt, DataTypeKind};
+    use crate::catalog::ColumnDesc;
+    use crate::types::LogicalType;
 
     #[test]
     // | a (Int32) | b (Bool) |
@@ -72,10 +81,10 @@ mod tests {
     // | 1         | true     |
     // | 2         | false    |
     fn test_table_catalog() {
-        let col0 = Column::new("a".into(), DataTypeKind::Int(None).not_null().to_column());
-        let col1 = Column::new("b".into(), DataTypeKind::Boolean.not_null().to_column());
+        let col0 = ColumnCatalog::new("a".into(), ColumnDesc::new(LogicalType::Integer, false));
+        let col1 = ColumnCatalog::new("b".into(), ColumnDesc::new(LogicalType::Boolean, false));
         let col_catalogs = vec![col0, col1];
-        let table_catalog = Table::new("test".to_string(), col_catalogs).unwrap();
+        let table_catalog = TableCatalog::new("test".to_string(), col_catalogs).unwrap();
 
         assert_eq!(table_catalog.contains_column("a"), true);
         assert_eq!(table_catalog.contains_column("b"), true);
@@ -87,16 +96,10 @@ mod tests {
 
         let column_catalog = table_catalog.get_column_by_id(col_a_id).unwrap();
         assert_eq!(column_catalog.name, "a");
-        assert_eq!(
-            column_catalog.datatype(),
-            &DataType::new(DataTypeKind::Int(None), false)
-        );
+        assert_eq!(*column_catalog.datatype(), LogicalType::Integer,);
 
         let column_catalog = table_catalog.get_column_by_id(col_b_id).unwrap();
         assert_eq!(column_catalog.name, "b");
-        assert_eq!(
-            column_catalog.datatype(),
-            &DataType::new(DataTypeKind::Boolean, false)
-        );
+        assert_eq!(*column_catalog.datatype(), LogicalType::Boolean,);
     }
 }

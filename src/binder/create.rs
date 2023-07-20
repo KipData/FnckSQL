@@ -1,12 +1,12 @@
-use super::Binder;
-use crate::binder::{lower_case_name, split_name};
-use crate::catalog::{Column, ColumnDesc};
-use crate::planner::logical_create_table_plan::LogicalCreateTablePlan;
-use crate::planner::LogicalPlan;
-use crate::types::{ColumnId, TableId};
+use std::collections::HashSet;
+
 use anyhow::Result;
 use sqlparser::ast::{ColumnDef, ObjectName};
-use std::collections::HashSet;
+
+use super::Binder;
+use crate::binder::{lower_case_name, split_name};
+use crate::catalog::ColumnCatalog;
+use crate::planner::logical_create_table_plan::LogicalCreateTablePlan;
 
 impl Binder {
     pub(crate) fn bind_create_table(
@@ -29,10 +29,10 @@ impl Binder {
             }
         }
 
-        let mut columns: Vec<Column> = columns
+        let columns: Vec<ColumnCatalog> = columns
             .iter()
             .enumerate()
-            .map(|(_, col)| Column::from(col))
+            .map(|(_, col)| ColumnCatalog::from(col.clone()))
             .collect();
 
         let plan = LogicalCreateTablePlan {
@@ -48,36 +48,31 @@ impl Binder {
 
 #[cfg(test)]
 mod tests {
+    use sqlparser::ast::CharacterLength;
+
     use super::*;
     use crate::binder::BinderContext;
-    use crate::catalog::Root;
-    use crate::types::{DataTypeExt, DataTypeKind};
-    use sqlparser::ast::CharacterLength;
-    use std::sync::Arc;
+    use crate::catalog::{ColumnDesc, RootCatalog};
+    use crate::planner::LogicalPlan;
+    use crate::types::LogicalType;
 
     #[test]
     fn test_create_bind() {
         let sql = "create table t1 (id int , name varchar(10))";
-        let mut binder = Binder::new(BinderContext::new(Root::new()));
+        let binder = Binder::new(BinderContext::new(RootCatalog::new()));
         let stmt = crate::parser::parse_sql(sql).unwrap();
         let plan1 = binder.bind(&stmt[0]).unwrap();
 
-        let character_length = CharacterLength {
-            length: 10,
-            unit: None,
-        };
         let plan2 = LogicalPlan::CreateTable(LogicalCreateTablePlan {
             table_name: "t1".to_string(),
             columns: vec![
                 (
                     "id".to_string(),
-                    DataTypeKind::Int(None).nullable().to_column(),
+                    ColumnDesc::new(LogicalType::Integer, false),
                 ),
                 (
                     "name".to_string(),
-                    DataTypeKind::Varchar(Option::from(character_length))
-                        .nullable()
-                        .to_column(),
+                    ColumnDesc::new(LogicalType::Varchar, false),
                 ),
             ],
         });

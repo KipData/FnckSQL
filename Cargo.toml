@@ -31,12 +31,16 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 async-trait = "0.1.68"
 integer-encoding = "3.0.4"
+arrow = { version = "28", features = ["prettyprint", "simd"] }
+strum_macros = "0.24"
+ordered-float = "3.0"
 petgraph = "0.6.3"
 futures-async-stream = "0.2.6"
 async-channel = "1.8.0"
 async-backtrace = "0.2.6"
 futures = "0.3.25"
 futures-lite = "1.12.0"
+
 
 [dev-dependencies]
 ctor = "0.2.0"

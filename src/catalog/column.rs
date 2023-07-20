@@ -1,23 +1,25 @@
-use crate::types::{ColumnId, DataType, IdGenerator};
-use sqlparser::ast::{ColumnDef, ColumnOption};
+use arrow::datatypes::{DataType, Field};
+use sqlparser::ast::ColumnDef;
+
+use crate::types::{ColumnId, IdGenerator, LogicalType};
 
 #[derive(Debug, Clone)]
-pub struct Column {
+pub struct ColumnCatalog {
     pub id: ColumnId,
     pub name: String,
     pub desc: ColumnDesc,
 }
 
-impl Column {
-    pub(crate) fn new(column_name: String, column_desc: ColumnDesc) -> Column {
-        Column {
+impl ColumnCatalog {
+    pub(crate) fn new(column_name: String, column_desc: ColumnDesc) -> ColumnCatalog {
+        ColumnCatalog {
             id: IdGenerator::build(),
             name: column_name,
             desc: column_desc,
         }
     }
 
-    pub(crate) fn datatype(&self) -> &DataType {
+    pub(crate) fn datatype(&self) -> &LogicalType {
         &self.desc.column_datatype
     }
 
@@ -28,28 +30,35 @@ impl Column {
     pub fn desc(&self) -> &ColumnDesc {
         &self.desc
     }
+
+    pub fn to_field(&self) -> Field {
+        Field::new(
+            &*self.name.clone(),
+            DataType::from(self.desc.column_datatype.clone()),
+            self.desc.is_primary(),
+        )
+    }
 }
 
-impl DataType {
-    #[inline]
-    pub const fn to_column(self) -> ColumnDesc {
-        ColumnDesc::new(self, false)
-    }
-    #[inline]
-    pub const fn to_column_primary_key(self) -> ColumnDesc {
-        ColumnDesc::new(self, true)
+impl From<ColumnDef> for ColumnCatalog {
+    fn from(column_def: ColumnDef) -> Self {
+        let column_name = column_def.name.to_string();
+        let column_datatype = LogicalType::try_from(column_def.data_type).unwrap();
+        let is_primary = false;
+        let column_desc = ColumnDesc::new(column_datatype, is_primary);
+        ColumnCatalog::new(column_name, column_desc)
     }
 }
 
 /// The descriptor of a column.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnDesc {
-    column_datatype: DataType,
-    is_primary: bool,
+    pub(crate) column_datatype: LogicalType,
+    pub(crate) is_primary: bool,
 }
 
 impl ColumnDesc {
-    pub(crate) const fn new(column_datatype: DataType, is_primary: bool) -> ColumnDesc {
+    pub(crate) const fn new(column_datatype: LogicalType, is_primary: bool) -> ColumnDesc {
         ColumnDesc {
             column_datatype,
             is_primary,
@@ -60,51 +69,7 @@ impl ColumnDesc {
         self.is_primary
     }
 
-    pub(crate) fn is_nullable(&self) -> bool {
-        self.column_datatype.is_nullable()
-    }
-
-    pub(crate) fn get_datatype(&self) -> DataType {
+    pub(crate) fn get_datatype(&self) -> LogicalType {
         self.column_datatype.clone()
-    }
-}
-
-impl From<&ColumnDef> for Column {
-    fn from(cdef: &ColumnDef) -> Self {
-        let mut is_nullable = true;
-        let mut is_primary_ = false;
-        for opt in &cdef.options {
-            match opt.option {
-                ColumnOption::Null => is_nullable = true,
-                ColumnOption::NotNull => is_nullable = false,
-                ColumnOption::Unique { is_primary } => is_primary_ = is_primary,
-                _ => todo!("column options"),
-            }
-        }
-        Column::new(
-            cdef.name.value.clone(),
-            ColumnDesc::new(
-                DataType::new(cdef.data_type.clone(), is_nullable),
-                is_primary_,
-            ),
-        )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::{DataTypeExt, DataTypeKind};
-
-    #[test]
-    fn test_column_catalog() {
-        let mut col_catalog = Column::new(
-            "test".to_string(),
-            DataTypeKind::Int(None).not_null().to_column(),
-        );
-
-        assert_eq!(col_catalog.desc.is_primary(), false);
-        assert_eq!(col_catalog.desc.is_nullable(), false);
-        assert_eq!(col_catalog.name, "test");
     }
 }

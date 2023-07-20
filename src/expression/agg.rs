@@ -1,6 +1,5 @@
-use crate::types::DataType;
-
 use super::ScalarExpression;
+use crate::types::LogicalType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AggKind {
@@ -15,6 +14,6 @@ pub enum AggKind {
 pub struct AggCall {
     pub kind: AggKind,
     pub args: Vec<ScalarExpression>,
-    pub return_type: DataType,
+    pub return_type: LogicalType,
     // TODO: add distinct keyword
 }

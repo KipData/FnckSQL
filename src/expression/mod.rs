@@ -1,13 +1,11 @@
 use std::fmt::Display;
 
-use crate::{
-    catalog::{ColumnDesc, ColumnRefId},
-    types::{value::DataValue, DataType},
-};
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
 
 use self::agg::AggKind;
-pub use sqlparser::ast::DataType as DataTypeKind;
+use crate::catalog::{ColumnDesc, ColumnRefId};
+use crate::types::value::DataValue;
+use crate::types::LogicalType;
 
 pub mod agg;
 mod evaluator;
@@ -26,7 +24,7 @@ pub enum ScalarExpression {
     },
     InputRef {
         index: usize,
-        ty: DataType,
+        ty: LogicalType,
     },
     Alias {
         expr: Box<ScalarExpression>,
@@ -34,7 +32,7 @@ pub enum ScalarExpression {
     },
     TypeCast {
         expr: Box<ScalarExpression>,
-        ty: DataType,
+        ty: LogicalType,
         is_try: bool,
     },
     IsNull {
@@ -43,32 +41,32 @@ pub enum ScalarExpression {
     Unary {
         op: UnaryOperator,
         expr: Box<ScalarExpression>,
-        ty: Option<DataType>,
+        ty: LogicalType,
     },
     Binary {
         op: BinaryOperator,
         left_expr: Box<ScalarExpression>,
         right_expr: Box<ScalarExpression>,
-        ty: Option<DataType>,
+        ty: LogicalType,
     },
     AggCall {
         kind: AggKind,
         args: Vec<ScalarExpression>,
-        ty: DataType,
+        ty: LogicalType,
     },
 }
 
 impl ScalarExpression {
-    pub fn return_type(&self) -> Option<DataType> {
+    pub fn return_type(&self) -> Option<LogicalType> {
         match self {
-            Self::Constant(v) => v.data_type(),
+            Self::Constant(v) => Some(v.get_logic_type().clone()),
             Self::ColumnRef { desc, .. } => Some(desc.get_datatype().clone()),
             Self::Binary {
                 ty: return_type, ..
-            } => return_type.clone(),
+            } => Some(return_type.clone()),
             Self::Unary {
                 ty: return_type, ..
-            } => return_type.clone(),
+            } => Some(return_type.clone()),
             Self::TypeCast {
                 ty: return_type, ..
             } => Some(return_type.clone()),
@@ -78,7 +76,7 @@ impl ScalarExpression {
             Self::InputRef {
                 ty: return_type, ..
             } => Some(return_type.clone()),
-            Self::IsNull { .. } => Some(DataType::new(DataTypeKind::Boolean, false)),
+            Self::IsNull { .. } => Some(LogicalType::Boolean),
             Self::Alias { expr, .. } => expr.return_type(),
         }
     }
