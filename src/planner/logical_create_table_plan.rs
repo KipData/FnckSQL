@@ -2,7 +2,7 @@ use crate::catalog::ColumnDesc;
 #[derive(Debug, PartialEq, Clone)]
 pub struct LogicalCreateTablePlan {
     pub table_name: String,
-    pub columns: Vec<(String, ColumnDesc)>,
+    pub columns: Vec<(String, bool, ColumnDesc)>,
 }
 
 // use sqlparser::ast::{ColumnDef, ColumnOption, Statement};

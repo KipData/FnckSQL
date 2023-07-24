@@ -253,7 +253,7 @@ impl DataValue {
         })
     }
 
-    pub fn get_logical_type(&self) -> LogicalType {
+    pub fn logical_type(&self) -> LogicalType {
         match self {
             DataValue::Null => LogicalType::SqlNull,
             DataValue::Boolean(_) => LogicalType::Boolean,
@@ -279,10 +279,14 @@ impl DataValue {
         self.to_array_of_size(1)
     }
 
+    pub fn bool_array(size: usize, e: &Option<bool>) -> ArrayRef {
+        Arc::new(BooleanArray::from(vec![*e; size])) as ArrayRef
+    }
+
     /// Converts a scalar value into an array of `size` rows.
     pub fn to_array_of_size(&self, size: usize) -> ArrayRef {
         match self {
-            DataValue::Boolean(e) => Arc::new(BooleanArray::from(vec![*e; size])) as ArrayRef,
+            DataValue::Boolean(e) => Self::bool_array(size, e),
             DataValue::Float64(e) => {
                 build_array_from_option!(Float64, Float64Array, e, size)
             }
@@ -449,7 +453,7 @@ impl DataValue {
         Ok(())
     }
 
-    pub fn get_logic_type(&self) -> LogicalType {
+    pub fn logic_type(&self) -> LogicalType {
         match self {
             DataValue::Boolean(_) => LogicalType::Boolean,
             DataValue::UInt8(_) => LogicalType::UTinyint,
@@ -470,7 +474,7 @@ impl DataValue {
         }
     }
 
-    pub fn get_datatype(&self) -> DataType {
+    pub fn datatype(&self) -> DataType {
         match self {
             DataValue::Boolean(_) => DataType::Boolean,
             DataValue::UInt8(_) => DataType::UInt8,

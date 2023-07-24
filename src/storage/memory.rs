@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::Arc;
 
 use arrow::record_batch::RecordBatch;
+use parking_lot::Mutex;
 
 use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
@@ -9,8 +10,13 @@ use crate::types::{LogicalType, TableId};
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
-    catalog: Mutex<RootCatalog>,
-    tables: Mutex<HashMap<TableId, InMemoryTable>>,
+    inner: Arc<Mutex<Inner>>,
+}
+
+#[derive(Debug)]
+struct Inner {
+    catalog: RootCatalog,
+    tables: HashMap<TableId, InMemoryTable>,
 }
 
 impl Default for InMemoryStorage {
@@ -22,8 +28,20 @@ impl Default for InMemoryStorage {
 impl InMemoryStorage {
     pub fn new() -> Self {
         InMemoryStorage {
-            catalog: Mutex::new(RootCatalog::default()),
-            tables: Mutex::new(HashMap::new()),
+            inner: Arc::new(Mutex::new(
+                Inner {
+                    catalog: RootCatalog::default(),
+                    tables: HashMap::new(),
+                })
+            )
+        }
+    }
+}
+
+impl Clone for InMemoryStorage {
+    fn clone(&self) -> Self {
+        InMemoryStorage {
+            inner: Arc::clone(&self.inner),
         }
     }
 }
@@ -32,32 +50,35 @@ impl Storage for InMemoryStorage {
     type TableType = InMemoryTable;
 
     fn create_table(
-        &mut self,
-        id: TableId,
+        &self,
         table_name: &str,
         data: Vec<RecordBatch>,
-    ) -> Result<(), StorageError> {
-        let table = InMemoryTable::new(id.clone(), table_name, data)?;
-        self.catalog
-            .lock()
-            .unwrap()
-            .add_table(table.table_name.clone(), table.columns_vec.clone())
-            .unwrap();
-        self.tables.lock().unwrap().insert(id, table);
-        Ok(())
+    ) -> Result<TableId, StorageError> {
+        let mut table = InMemoryTable::new(table_name, data)?;
+        let mut inner = self.inner.lock();
+
+        let table_id = inner.catalog.add_table(
+            table_name.to_string(),
+            table.columns_vec.clone()
+        )?;
+
+        table.table_id = table_id;
+        inner.tables.insert(table_id, table);
+
+        Ok(table_id)
     }
 
     fn get_table(&self, id: TableId) -> Result<Self::TableType, StorageError> {
-        self.tables
-            .lock()
-            .unwrap()
+        self.inner.lock()
+            .tables
             .get(&id)
             .cloned()
             .ok_or(StorageError::TableNotFound(id))
     }
 
     fn get_catalog(&self) -> RootCatalog {
-        self.catalog.lock().unwrap().clone()
+        self.inner.lock()
+            .catalog.clone()
     }
 
     fn show_tables(&self) -> Result<RecordBatch, StorageError> {
@@ -74,10 +95,10 @@ pub struct InMemoryTable {
 }
 
 impl InMemoryTable {
-    pub fn new(id: TableId, name: &str, data: Vec<RecordBatch>) -> Result<Self, StorageError> {
+    pub fn new(name: &str, data: Vec<RecordBatch>) -> Result<Self, StorageError> {
         let columns = Self::infer_catalog(data.first().cloned());
         Ok(Self {
-            table_id: id,
+            table_id: 0,
             table_name: name.to_string(),
             data,
             columns_vec: columns,
@@ -89,9 +110,13 @@ impl InMemoryTable {
         if let Some(batch) = batch {
             for f in batch.schema().fields().iter() {
                 let field_name = f.name().to_string();
-                let column_dec =
+                let column_desc =
                     ColumnDesc::new(LogicalType::try_from(f.data_type()).unwrap(), false);
-                let column_catalog = ColumnCatalog::new(field_name, column_dec);
+                let column_catalog = ColumnCatalog::new(
+                    field_name,
+                    f.is_nullable(),
+                    column_desc
+                );
                 columns.push(column_catalog)
             }
         }
@@ -165,10 +190,9 @@ mod storage_test {
 
     #[test]
     fn test_in_memory_storage_works_with_data() -> Result<(), StorageError> {
-        let id = IdGenerator::build();
         let mut storage = InMemoryStorage::new();
-        storage.create_table(id.clone(), "test", build_record_batch()?)?;
 
+        let id = storage.create_table("test", build_record_batch()?)?;
         let catalog = storage.get_catalog();
         println!("{:?}", catalog);
         let table_catalog = catalog.get_table_by_name("test");

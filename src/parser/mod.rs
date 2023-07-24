@@ -16,6 +16,5 @@ use anyhow::Result;
 /// ```
 pub fn parse_sql(sql: &str) -> Result<Vec<Statement>> {
     let dialect = PostgreSqlDialect {};
-    let statements = Parser::parse_sql(&dialect, sql)?;
-    Ok(statements)
+    Ok(Parser::parse_sql(&dialect, sql)?)
 }

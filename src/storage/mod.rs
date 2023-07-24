@@ -5,7 +5,7 @@ use std::io;
 use arrow::error::ArrowError;
 use arrow::record_batch::RecordBatch;
 
-use crate::catalog::RootCatalog;
+use crate::catalog::{CatalogError, RootCatalog};
 use crate::storage::memory::InMemoryStorage;
 use crate::types::TableId;
 
@@ -14,15 +14,14 @@ pub enum StorageImpl {
     InMemoryStorage(InMemoryStorage),
 }
 
-pub trait Storage: Sync + Send {
+pub trait Storage: Sync + Send + 'static {
     type TableType: Table;
 
     fn create_table(
-        &mut self,
-        id: TableId,
+        &self,
         table_name: &str,
         columns: Vec<RecordBatch>,
-    ) -> Result<(), StorageError>;
+    ) -> Result<TableId, StorageError>;
     fn get_table(&self, id: TableId) -> Result<Self::TableType, StorageError>;
     fn get_catalog(&self) -> RootCatalog;
     fn show_tables(&self) -> Result<RecordBatch, StorageError>;
@@ -60,4 +59,7 @@ pub enum StorageError {
 
     #[error("table not found: {0}")]
     TableNotFound(TableId),
+
+    #[error("catalog error")]
+    CatalogError(#[from] CatalogError),
 }

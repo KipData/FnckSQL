@@ -39,7 +39,7 @@ impl Binder {
             table_name: table_name.to_string(),
             columns: columns
                 .into_iter()
-                .map(|col| (col.name.to_string(), col.desc.clone()))
+                .map(|col| (col.name.to_string(), col.nullable, col.desc.clone()))
                 .collect(),
         };
         Ok(plan)
@@ -68,10 +68,12 @@ mod tests {
             columns: vec![
                 (
                     "id".to_string(),
+                    false,
                     ColumnDesc::new(LogicalType::Integer, false),
                 ),
                 (
                     "name".to_string(),
+                    false,
                     ColumnDesc::new(LogicalType::Varchar, false),
                 ),
             ],

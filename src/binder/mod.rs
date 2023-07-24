@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use sqlparser::ast::{Ident, ObjectName, Statement};
 
-use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME};
+use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME, CatalogError};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::types::TableId;
@@ -109,4 +109,6 @@ pub enum BindError {
     BinaryOpTypeMismatch(String, String),
     #[error("subquery in FROM must have an alias")]
     SubqueryMustHaveAlias,
+    #[error("catalog error")]
+    CatalogError(#[from] CatalogError),
 }
