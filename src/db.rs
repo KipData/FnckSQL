@@ -167,4 +167,16 @@ mod test {
             Ok(())
         })
     }
+    #[test]
+    fn test_sql() -> anyhow::Result<()> {
+        let database = Database::new_on_mem();
+
+        tokio_test::block_on(async move {
+            let _batch = database.run("create table t1 (a int)").await?;
+            let batch = database.run("select a from t1").await?;
+            println!("{:#?}", batch);
+
+            Ok(())
+        })
+    }
 }

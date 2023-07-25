@@ -22,6 +22,11 @@ impl TableCatalog {
         self.column_idxs.get(name).cloned()
     }
 
+    pub(crate) fn get_column_by_name(&self, name: &str) -> Option<&ColumnCatalog> {
+        let id = self.column_idxs.get(name)?;
+        self.columns.get(id)
+    }
+
     pub(crate) fn contains_column(&self, name: &str) -> bool {
         self.column_idxs.contains_key(name)
     }

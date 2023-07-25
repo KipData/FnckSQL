@@ -5,8 +5,8 @@ use crate::types::TableId;
 
 #[derive(Debug, Clone)]
 pub struct RootCatalog {
-    table_idxs: BTreeMap<String, TableId>,
-    tables: BTreeMap<TableId, TableCatalog>,
+    pub table_idxs: BTreeMap<String, TableId>,
+    pub tables: BTreeMap<TableId, TableCatalog>,
 }
 
 impl Default for RootCatalog {
