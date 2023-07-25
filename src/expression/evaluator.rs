@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use arrow::array::{ArrayRef, BooleanArray, new_null_array};
+use arrow::array::ArrayRef;
 use arrow::compute::cast;
 use arrow::datatypes::{DataType, Field};
 use arrow::record_batch::RecordBatch;
@@ -14,9 +13,8 @@ impl ScalarExpression {
             ScalarExpression::Constant(val) =>
                 Ok(val.to_array_of_size(batch.num_rows())),
             ScalarExpression::ColumnRef(col) => {
-                // FIXME: 此处ColumnRef理应被优化器下推至TableScan中,
-                // 并且无法实现eval_column，因为ColumnCatalog并无对应的index
-                Ok(batch.column(0).clone())
+                let index = col.id.expect("The Column does not belong to the Table");
+                Ok(batch.column(index).clone())
             }
             ScalarExpression::InputRef{ index, .. } =>
                 Ok(batch.column(*index).clone()),

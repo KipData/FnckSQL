@@ -7,6 +7,7 @@ pub(crate) mod physical_plan_builder;
 pub(crate) mod physical_projection;
 pub(crate) mod physical_table_scan;
 
+#[derive(Debug)]
 pub enum PhysicalOperator {
     CreateTable(PhysicalCreateTable),
     TableScan(PhysicalTableScan),

@@ -7,7 +7,7 @@ use arrow::record_batch::RecordBatch;
 
 use crate::catalog::{CatalogError, RootCatalog};
 use crate::storage::memory::InMemoryStorage;
-use crate::types::TableId;
+use crate::types::TableIdx;
 
 #[derive(Debug)]
 pub enum StorageImpl {
@@ -21,8 +21,8 @@ pub trait Storage: Sync + Send + 'static {
         &self,
         table_name: &str,
         columns: Vec<RecordBatch>,
-    ) -> Result<TableId, StorageError>;
-    fn get_table(&self, id: TableId) -> Result<Self::TableType, StorageError>;
+    ) -> Result<TableIdx, StorageError>;
+    fn get_table(&self, id: TableIdx) -> Result<Self::TableType, StorageError>;
     fn get_catalog(&self) -> RootCatalog;
     fn show_tables(&self) -> Result<RecordBatch, StorageError>;
 }
@@ -58,7 +58,7 @@ pub enum StorageError {
     IoError(#[from] io::Error),
 
     #[error("table not found: {0}")]
-    TableNotFound(TableId),
+    TableNotFound(TableIdx),
 
     #[error("catalog error")]
     CatalogError(#[from] CatalogError),
