@@ -208,11 +208,7 @@ impl Binder {
                 //     *col_id,
                 //     col.desc().clone(),
                 // );
-                let expr = ScalarExpression::ColumnRef {
-                    column_ref_id,
-                    primary_key: col.desc.is_primary(),
-                    desc: col.desc.clone(),
-                };
+                let expr = ScalarExpression::ColumnRef((*col).clone());
                 exprs.push(expr);
             }
         }
@@ -315,5 +311,41 @@ impl Binder {
         // TODO: validate limit and offset is correct use statistic.
 
         Ok(LimitOperator::new(offset, limit, children))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlparser::ast::CharacterLength;
+
+    use super::*;
+    use crate::binder::{BinderContext, BindError};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
+    use crate::planner::LogicalPlan;
+    use crate::types::LogicalType;
+    use crate::types::LogicalType::{Boolean, Integer};
+
+    fn test_root_catalog() -> Result<RootCatalog, BindError> {
+        let mut root = RootCatalog::new();
+        let cols = vec![
+            ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
+            ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Boolean, false)),
+        ];
+        let _ = root.add_table("t1".to_string(), cols)?;
+        Ok(root)
+    }
+
+    #[test]
+    fn test_select_bind() -> Result<(), BindError> {
+        let sql = "select * from t1";
+        let root = test_root_catalog()?;
+
+        let binder = Binder::new(BinderContext::new(root));
+        let stmt = crate::parser::parse_sql(sql).unwrap();
+        let plan = binder.bind(&stmt[0]).unwrap();
+
+        println!("{:#?}", plan);
+
+        Ok(())
     }
 }

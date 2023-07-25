@@ -10,10 +10,8 @@ use super::{
     executor::ExecutionQueue,
     parallel::{
         meta_pipeline::MetaPipeline,
-        pipeline::Pipeline,
         pipeline_event::{PipelineEvent, PipelineEventStack},
     },
-    physical::PhysicalOperator,
 };
 use anyhow::Result;
 
@@ -150,7 +148,7 @@ impl ExecutorGraph {
 
             // Set up the dependencies within this `MetaPipeline`.
             for pipeline in pipelines.iter() {
-                if let Some(source) = pipeline.get_source() {
+                if let Some(_source) = pipeline.get_source() {
                     //         	if (source->type ==
                     // PhysicalOperatorType::TABLE_SCAN) { //
                     // we have to reset the source here (in the main thread),
@@ -213,6 +211,7 @@ impl ExecutorGraph {
         self.graph[index].clone()
     }
 
+    #[allow(dead_code)]
     fn get_prev_nodes(&self, index: NodeIndex) -> Vec<Arc<PipelineEvent>> {
         let mut prev_nodes = vec![];
         for edge in self.graph.edges_directed(index, Direction::Incoming) {

@@ -1,20 +1,22 @@
 use arrow::datatypes::{DataType, Field};
-use sqlparser::ast::ColumnDef;
+use sqlparser::ast::{ColumnDef, ColumnOption};
 
 use crate::types::{ColumnId, IdGenerator, LogicalType};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ColumnCatalog {
     pub id: ColumnId,
     pub name: String,
+    pub nullable: bool,
     pub desc: ColumnDesc,
 }
 
 impl ColumnCatalog {
-    pub(crate) fn new(column_name: String, column_desc: ColumnDesc) -> ColumnCatalog {
+    pub(crate) fn new(column_name: String, nullable: bool, column_desc: ColumnDesc) -> ColumnCatalog {
         ColumnCatalog {
             id: IdGenerator::build(),
             name: column_name,
+            nullable,
             desc: column_desc,
         }
     }
@@ -33,9 +35,9 @@ impl ColumnCatalog {
 
     pub fn to_field(&self) -> Field {
         Field::new(
-            &*self.name.clone(),
-            DataType::from(self.desc.column_datatype.clone()),
-            self.desc.is_primary(),
+            self.name.as_str(),
+            DataType::from(self.datatype().clone()),
+            self.nullable,
         )
     }
 }
@@ -43,10 +45,22 @@ impl ColumnCatalog {
 impl From<ColumnDef> for ColumnCatalog {
     fn from(column_def: ColumnDef) -> Self {
         let column_name = column_def.name.to_string();
-        let column_datatype = LogicalType::try_from(column_def.data_type).unwrap();
-        let is_primary = false;
-        let column_desc = ColumnDesc::new(column_datatype, is_primary);
-        ColumnCatalog::new(column_name, column_desc)
+        let column_desc = ColumnDesc::new(
+            LogicalType::try_from(column_def.data_type).unwrap(),
+            false
+        );
+        let mut nullable = false;
+
+        // TODO: 这里可以对更多字段可设置内容进行补充
+        for option_def in column_def.options {
+            match option_def.option {
+                ColumnOption::Null => nullable = true,
+                ColumnOption::NotNull => (),
+                _ => todo!()
+            }
+        }
+
+        ColumnCatalog::new(column_name, nullable, column_desc)
     }
 }
 

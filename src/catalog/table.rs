@@ -81,8 +81,8 @@ mod tests {
     // | 1         | true     |
     // | 2         | false    |
     fn test_table_catalog() {
-        let col0 = ColumnCatalog::new("a".into(), ColumnDesc::new(LogicalType::Integer, false));
-        let col1 = ColumnCatalog::new("b".into(), ColumnDesc::new(LogicalType::Boolean, false));
+        let col0 = ColumnCatalog::new("a".into(), false, ColumnDesc::new(LogicalType::Integer, false));
+        let col1 = ColumnCatalog::new("b".into(), false, ColumnDesc::new(LogicalType::Boolean, false));
         let col_catalogs = vec![col0, col1];
         let table_catalog = TableCatalog::new("test".to_string(), col_catalogs).unwrap();
 

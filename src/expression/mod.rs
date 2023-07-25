@@ -3,12 +3,13 @@ use std::fmt::Display;
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
 
 use self::agg::AggKind;
-use crate::catalog::{ColumnDesc, ColumnRefId};
+use crate::catalog::ColumnCatalog;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 
 pub mod agg;
 mod evaluator;
+mod array_compute;
 
 /// ScalarExpression represnet all scalar expression in SQL.
 /// SELECT a+1, b FROM t1.
@@ -17,11 +18,7 @@ mod evaluator;
 #[derive(Debug, PartialEq, Clone)]
 pub enum ScalarExpression {
     Constant(DataValue),
-    ColumnRef {
-        column_ref_id: ColumnRefId,
-        primary_key: bool,
-        desc: ColumnDesc,
-    },
+    ColumnRef(ColumnCatalog),
     InputRef {
         index: usize,
         ty: LogicalType,
@@ -57,10 +54,25 @@ pub enum ScalarExpression {
 }
 
 impl ScalarExpression {
+    pub fn nullable(&self) -> bool {
+        match self {
+            ScalarExpression::Constant(_) => false,
+            ScalarExpression::ColumnRef(col) => col.nullable,
+            ScalarExpression::InputRef { .. } => unreachable!(),
+            ScalarExpression::Alias { expr, .. } => expr.nullable(),
+            ScalarExpression::TypeCast { expr, .. } => expr.nullable(),
+            ScalarExpression::IsNull { expr } => expr.nullable(),
+            ScalarExpression::Unary { expr, .. } => expr.nullable(),
+            ScalarExpression::Binary { left_expr, right_expr, .. } =>
+                left_expr.nullable() && right_expr.nullable(),
+            ScalarExpression::AggCall { args, .. } => args[0].nullable()
+        }
+    }
+
     pub fn return_type(&self) -> Option<LogicalType> {
         match self {
-            Self::Constant(v) => Some(v.get_logic_type().clone()),
-            Self::ColumnRef { desc, .. } => Some(desc.get_datatype().clone()),
+            Self::Constant(v) => Some(v.logic_type().clone()),
+            Self::ColumnRef(col) => Some(col.datatype().clone()),
             Self::Binary {
                 ty: return_type, ..
             } => Some(return_type.clone()),
@@ -96,11 +108,8 @@ impl Display for ScalarExpression {
 pub enum UnaryOperator {
     Plus,
     Minus,
-
     Not,
-
     True,
-
     False,
 }
 

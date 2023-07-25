@@ -1,4 +1,4 @@
-mod errors;
+pub mod errors;
 pub mod value;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering::{Acquire, Release};
