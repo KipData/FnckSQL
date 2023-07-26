@@ -49,7 +49,7 @@ impl Database {
 
         let mut builder = PhysicalPlanBuilder::new();
         let operator = builder.build_plan(&logical_plan)?;
-        println!("operator: {:#?}", logical_plan);
+        println!("operator: {:#?}", operator);
 
         let storage = StorageImpl::InMemoryStorage(self.storage.clone());
         let executor = VolcanoExecutor::new(storage);
