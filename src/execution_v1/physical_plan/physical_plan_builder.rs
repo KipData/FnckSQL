@@ -1,13 +1,14 @@
-use std::sync::Arc;
-use anyhow::anyhow;
-use anyhow::Result;
+use crate::execution_v1::physical_plan::physical_create_table::PhysicalCreateTable;
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_v1::physical_plan::physical_table_scan::PhysicalTableScan;
 use crate::execution_v1::physical_plan::PhysicalOperator;
+use crate::planner::logical_create_table_plan::LogicalCreateTablePlan;
 use crate::planner::logical_select_plan::LogicalSelectPlan;
-use crate::planner::LogicalPlan;
-use crate::planner::operator::Operator;
 use crate::planner::operator::scan::ScanOperator;
+use crate::planner::operator::Operator;
+use crate::planner::LogicalPlan;
+use anyhow::anyhow;
+use anyhow::Result;
 
 pub struct PhysicalPlanBuilder {
     plan_id: u32,
@@ -27,8 +28,20 @@ impl PhysicalPlanBuilder {
     pub fn build_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalOperator> {
         match plan {
             LogicalPlan::Select(select) => self.build_select_logical_plan(select),
-            LogicalPlan::CreateTable(_) => todo!(),
+            LogicalPlan::CreateTable(create_table) => {
+                self.build_create_table_logic_plan(create_table)
+            }
         }
+    }
+
+    fn build_create_table_logic_plan(
+        &mut self,
+        plan: &LogicalCreateTablePlan,
+    ) -> Result<PhysicalOperator> {
+        Ok(PhysicalOperator::CreateTable(PhysicalCreateTable {
+            table_name: plan.table_name.to_string(),
+            columns: plan.columns.clone(),
+        }))
     }
 
     fn build_select_logical_plan(&mut self, plan: &LogicalSelectPlan) -> Result<PhysicalOperator> {

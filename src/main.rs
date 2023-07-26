@@ -7,7 +7,7 @@ use kip_sql::storage::Storage;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(":) Welcome to the KIPSQL, Please input sql.");
 
-    let mut db = Database::new_on_mem();
+    let db = Database::new_on_mem();
     loop {
         println!("> ");
         println!("RootCatalog: {:?}", db.storage.get_catalog());

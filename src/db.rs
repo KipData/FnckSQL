@@ -1,20 +1,14 @@
-use std::sync::Arc;
-
 use anyhow::Result;
-use arrow::datatypes::Schema;
 use arrow::error::ArrowError;
 use arrow::record_batch::RecordBatch;
 use sqlparser::parser::ParserError;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::catalog::ColumnCatalog;
 use crate::execution_v1::physical_plan::physical_plan_builder::PhysicalPlanBuilder;
 use crate::execution_v1::volcano_executor::VolcanoExecutor;
 use crate::parser::parse_sql;
-use crate::planner::LogicalPlan;
 use crate::storage::memory::InMemoryStorage;
 use crate::storage::{Storage, StorageError, StorageImpl};
-use crate::types::IdGenerator;
 
 #[derive(Debug)]
 pub struct Database {
@@ -51,10 +45,11 @@ impl Database {
         ///     Limit(1)
         ///       Project(a,b)
         let logical_plan = binder.bind(&stmts[0])?;
-        println!("logic plan {:#?}", logical_plan);
+        println!("logic plan: {:#?}", logical_plan);
 
         let mut builder = PhysicalPlanBuilder::new();
         let operator = builder.build_plan(&logical_plan)?;
+        println!("operator: {:#?}", operator);
 
         let storage = StorageImpl::InMemoryStorage(self.storage.clone());
         let executor = VolcanoExecutor::new(storage);
@@ -127,7 +122,7 @@ pub enum DatabaseError {
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
-    use arrow::array::Int32Array;
+    use arrow::array::{BooleanArray, Int32Array};
     use arrow::datatypes::Schema;
     use arrow::record_batch::RecordBatch;
     use itertools::Itertools;
@@ -136,22 +131,32 @@ mod test {
     use crate::execution_v1::ExecutorError;
     use crate::storage::{Storage, StorageError};
     use crate::storage::memory::InMemoryStorage;
-    use crate::types::{IdGenerator, LogicalType, TableId};
+    use crate::types::{IdGenerator, LogicalType, TableIdx};
 
-    fn build_table(storage: &impl Storage) -> Result<TableId, StorageError> {
-        let fields = vec![
-            ColumnCatalog::new(
-                "c1".to_string(),
-                false,
-                ColumnDesc::new(LogicalType::Integer, true)
-            ).to_field(),
-        ];
-        let batch = RecordBatch::try_new(
-            Arc::new(Schema::new(fields)),
-            vec![Arc::new(Int32Array::from(vec![1, 2, 3, 4, 5]))]
+    fn build_table(storage: &impl Storage) -> Result<TableIdx, StorageError> {
+        let schema = Arc::new(Schema::new(
+            vec![
+                ColumnCatalog::new(
+                    "c1".to_string(),
+                    false,
+                    ColumnDesc::new(LogicalType::Integer, true)
+                ).to_field(),
+                ColumnCatalog::new(
+                    "c2".to_string(),
+                    false,
+                    ColumnDesc::new(LogicalType::Boolean, false)
+                ).to_field(),
+            ]
+        ));
+        let batch_1 = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int32Array::from(vec![1, 2, 3, 4, 5])),
+                Arc::new(BooleanArray::from(vec![true, true, false, true, false]))
+            ]
         ).unwrap();
 
-        Ok(storage.create_table("t1", vec![batch])?)
+        Ok(storage.create_table("t1", vec![batch_1])?)
     }
 
     #[test]
@@ -161,6 +166,18 @@ mod test {
         let i = build_table(&database.storage)?;
 
         tokio_test::block_on(async move {
+            let batch = database.run("select * from t1").await?;
+            println!("{:#?}", batch);
+
+            Ok(())
+        })
+    }
+    #[test]
+    fn test_sql() -> anyhow::Result<()> {
+        let database = Database::new_on_mem();
+
+        tokio_test::block_on(async move {
+            let _batch = database.run("create table t1 (a int, b int)").await?;
             let batch = database.run("select * from t1").await?;
             println!("{:#?}", batch);
 

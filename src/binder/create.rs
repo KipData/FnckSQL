@@ -31,16 +31,12 @@ impl Binder {
 
         let columns: Vec<ColumnCatalog> = columns
             .iter()
-            .enumerate()
-            .map(|(_, col)| ColumnCatalog::from(col.clone()))
+            .map(|col| ColumnCatalog::from(col.clone()))
             .collect();
 
         let plan = LogicalCreateTablePlan {
             table_name: table_name.to_string(),
-            columns: columns
-                .into_iter()
-                .map(|col| (col.name.to_string(), col.nullable, col.desc.clone()))
-                .collect(),
+            columns,
         };
         Ok(plan)
     }
@@ -48,8 +44,6 @@ impl Binder {
 
 #[cfg(test)]
 mod tests {
-    use sqlparser::ast::CharacterLength;
-
     use super::*;
     use crate::binder::BinderContext;
     use crate::catalog::{ColumnDesc, RootCatalog};
@@ -66,16 +60,16 @@ mod tests {
         let plan2 = LogicalPlan::CreateTable(LogicalCreateTablePlan {
             table_name: "t1".to_string(),
             columns: vec![
-                (
+                ColumnCatalog::new(
                     "id".to_string(),
                     false,
-                    ColumnDesc::new(LogicalType::Integer, false),
+                    ColumnDesc::new(LogicalType::Integer, false)
                 ),
-                (
+                ColumnCatalog::new(
                     "name".to_string(),
                     false,
-                    ColumnDesc::new(LogicalType::Varchar, false),
-                ),
+                    ColumnDesc::new(LogicalType::Varchar, false)
+                )
             ],
         });
 

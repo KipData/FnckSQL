@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 
 use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
-use crate::types::{LogicalType, TableId};
+use crate::types::{LogicalType, TableIdx};
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
@@ -16,7 +16,7 @@ pub struct InMemoryStorage {
 #[derive(Debug)]
 struct Inner {
     catalog: RootCatalog,
-    tables: HashMap<TableId, InMemoryTable>,
+    tables: Vec<InMemoryTable>,
 }
 
 impl Default for InMemoryStorage {
@@ -31,7 +31,7 @@ impl InMemoryStorage {
             inner: Arc::new(Mutex::new(
                 Inner {
                     catalog: RootCatalog::default(),
-                    tables: HashMap::new(),
+                    tables: Vec::new(),
                 })
             )
         }
@@ -53,7 +53,7 @@ impl Storage for InMemoryStorage {
         &self,
         table_name: &str,
         data: Vec<RecordBatch>,
-    ) -> Result<TableId, StorageError> {
+    ) -> Result<TableIdx, StorageError> {
         let mut table = InMemoryTable::new(table_name, data)?;
         let mut inner = self.inner.lock();
 
@@ -68,10 +68,10 @@ impl Storage for InMemoryStorage {
         Ok(table_id)
     }
 
-    fn get_table(&self, id: TableId) -> Result<Self::TableType, StorageError> {
+    fn get_table(&self, id: TableIdx) -> Result<Self::TableType, StorageError> {
         self.inner.lock()
             .tables
-            .get(&id)
+            .get(id)
             .cloned()
             .ok_or(StorageError::TableNotFound(id))
     }
@@ -88,7 +88,7 @@ impl Storage for InMemoryStorage {
 
 #[derive(Debug, Clone)]
 pub struct InMemoryTable {
-    table_id: TableId,
+    table_id: TableIdx,
     table_name: String,
     data: Vec<RecordBatch>,
     columns_vec: Vec<ColumnCatalog>,

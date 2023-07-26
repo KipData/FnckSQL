@@ -1,49 +1,56 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use itertools::Itertools;
 
 use crate::catalog::{CatalogError, ColumnCatalog};
-use crate::types::{ColumnId, IdGenerator, TableId};
+use crate::types::{ColumnIdx, IdGenerator, TableIdx};
 #[derive(Debug, Clone)]
 pub struct TableCatalog {
-    pub id: TableId,
+    pub id: Option<TableIdx>,
     pub name: String,
+    generator: IdGenerator,
     /// Mapping from column names to column ids
-    column_idxs: HashMap<String, ColumnId>,
-    pub(crate) columns: BTreeMap<ColumnId, ColumnCatalog>,
+    column_idxs: HashMap<String, ColumnIdx>,
+    pub(crate) columns: Vec<ColumnCatalog>,
 }
 
 impl TableCatalog {
-    pub(crate) fn get_column_by_id(&self, id: ColumnId) -> Option<&ColumnCatalog> {
-        self.columns.get(&id)
+    pub(crate) fn get_column_by_id(&self, id: ColumnIdx) -> Option<&ColumnCatalog> {
+        self.columns.get(id)
     }
 
-    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnId> {
+    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnIdx> {
         self.column_idxs.get(name).cloned()
+    }
+
+    pub(crate) fn get_column_by_name(&self, name: &str) -> Option<&ColumnCatalog> {
+        let id = self.column_idxs.get(name)?;
+        self.columns.get(*id)
     }
 
     pub(crate) fn contains_column(&self, name: &str) -> bool {
         self.column_idxs.contains_key(name)
     }
 
-    pub(crate) fn get_all_columns(&self) -> Vec<(ColumnId, &ColumnCatalog)> {
+    pub(crate) fn get_all_columns(&self) -> Vec<(ColumnIdx, &ColumnCatalog)> {
         self.columns
             .iter()
-            .map(|(col_id, col)| (*col_id, col))
+            .enumerate()
             .collect_vec()
     }
 
     /// Add a column to the table catalog.
     pub(crate) fn add_column(
         &mut self,
-        col_catalog: ColumnCatalog,
-    ) -> Result<ColumnId, CatalogError> {
+        mut col_catalog: ColumnCatalog,
+    ) -> Result<ColumnIdx, CatalogError> {
         if self.column_idxs.contains_key(&col_catalog.name) {
             return Err(CatalogError::Duplicated("column", col_catalog.name.into()));
         }
 
-        let col_id = col_catalog.id;
+        let col_id = self.generator.build();
 
+        col_catalog.id = Some(col_id);
         self.column_idxs.insert(col_catalog.name.to_owned(), col_id);
         self.columns.insert(col_id, col_catalog);
 
@@ -55,10 +62,11 @@ impl TableCatalog {
         columns: Vec<ColumnCatalog>,
     ) -> Result<TableCatalog, CatalogError> {
         let mut table_catalog = TableCatalog {
-            id: IdGenerator::build(),
+            id: None,
             name: table_name,
+            generator: IdGenerator::new(),
             column_idxs: HashMap::new(),
-            columns: BTreeMap::new(),
+            columns: Vec::new(),
         };
 
         for col_catalog in columns.into_iter() {

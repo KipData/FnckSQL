@@ -11,11 +11,11 @@ use sqlparser::ast::{Ident, ObjectName, Statement};
 use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME, CatalogError};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
-use crate::types::TableId;
+use crate::types::TableIdx;
 #[derive(Clone)]
 pub struct BinderContext {
     catalog: RootCatalog,
-    bind_table: HashMap<String, TableId>,
+    bind_table: HashMap<String, TableIdx>,
     aliases: HashMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
     agg_calls: Vec<ScalarExpression>,

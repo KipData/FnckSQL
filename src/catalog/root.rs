@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog};
-use crate::types::TableId;
+use crate::types::{IdGenerator, TableIdx};
 
 #[derive(Debug, Clone)]
 pub struct RootCatalog {
-    table_idxs: BTreeMap<String, TableId>,
-    tables: BTreeMap<TableId, TableCatalog>,
+    generator: IdGenerator,
+    pub table_idxs: BTreeMap<String, TableIdx>,
+    pub tables: Vec<TableCatalog>,
 }
 
 impl Default for RootCatalog {
@@ -19,35 +20,37 @@ impl RootCatalog {
     #[allow(dead_code)]
     pub fn new() -> Self {
         RootCatalog {
+            generator: IdGenerator::new(),
             table_idxs: Default::default(),
             tables: Default::default(),
         }
     }
 
-    pub(crate) fn get_table_id_by_name(&self, name: &str) -> Option<TableId> {
+    pub(crate) fn get_table_id_by_name(&self, name: &str) -> Option<TableIdx> {
         self.table_idxs.get(name).cloned()
     }
 
-    pub(crate) fn get_table(&self, table_id: TableId) -> Option<&TableCatalog> {
-        self.tables.get(&table_id)
+    pub(crate) fn get_table(&self, table_id: TableIdx) -> Option<&TableCatalog> {
+        self.tables.get(table_id)
     }
 
     pub(crate) fn get_table_by_name(&self, name: &str) -> Option<&TableCatalog> {
         let id = self.table_idxs.get(name)?;
-        self.tables.get(id)
+        self.tables.get(*id)
     }
 
     pub(crate) fn add_table(
         &mut self,
         table_name: String,
         columns: Vec<ColumnCatalog>,
-    ) -> Result<TableId, CatalogError> {
+    ) -> Result<TableIdx, CatalogError> {
         if self.table_idxs.contains_key(&table_name) {
             return Err(CatalogError::Duplicated("column", table_name));
         }
-        let table = TableCatalog::new(table_name.to_owned(), columns)?;
-        let table_id = table.id;
+        let mut table = TableCatalog::new(table_name.to_owned(), columns)?;
+        let table_id = self.generator.build();
 
+        table.id = Some(table_id);
         self.table_idxs.insert(table_name, table_id);
         self.tables.insert(table_id, table);
 
