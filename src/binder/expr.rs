@@ -1,11 +1,13 @@
 use crate::binder::BindError;
 use anyhow::Result;
 use itertools::Itertools;
-use sqlparser::ast::{Expr, Ident};
+use sqlparser::ast::{BinaryOperator, Expr, Function, FunctionArg, FunctionArgExpr, Ident};
 use std::slice;
+use crate::expression::agg::AggKind;
 
 use super::Binder;
 use crate::expression::ScalarExpression;
+use crate::types::LogicalType;
 
 impl Binder {
     pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression> {
@@ -13,6 +15,15 @@ impl Binder {
             Expr::Identifier(ident) => {
                 self.bind_column_ref_from_identifiers(slice::from_ref(ident))
             }
+            Expr::CompoundIdentifier(idents) => {
+                self.bind_column_ref_from_identifiers(idents)
+            }
+            Expr::BinaryOp { left, right, op} => {
+                self.bind_binary_op_internal(left, right, op)
+            }
+            Expr::Value(v) => Ok(ScalarExpression::Constant(v.into())),
+            Expr::Function(func) => self.bind_agg_call(func),
+            Expr::Nested(expr) => self.bind_expr(expr),
             _ => {
                 todo!()
             }
@@ -74,5 +85,72 @@ impl Binder {
                 got_column.ok_or_else(|| BindError::InvalidColumn(column_name.to_string()))?;
             Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
         }
+    }
+
+    fn bind_binary_op_internal(
+        &mut self,
+        left: &Expr,
+        right: &Expr,
+        op: &BinaryOperator,
+    ) -> Result<ScalarExpression> {
+        let left_expr = Box::new(self.bind_expr(left)?);
+        let right_expr = Box::new(self.bind_expr(right)?);
+        let ty = LogicalType::max_logical_type(
+            &left_expr.return_type(),
+            &right_expr.return_type()
+        )?;
+
+        Ok(ScalarExpression::Binary {
+            op: (op.clone()).into(),
+            left_expr,
+            right_expr,
+            ty,
+        })
+    }
+
+    fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression> {
+        let args: Vec<ScalarExpression> = func.args
+            .iter()
+            .map(|arg| {
+                let arg_expr = match arg {
+                    FunctionArg::Named { arg, .. } => arg,
+                    FunctionArg::Unnamed(arg) => arg,
+                };
+                match arg_expr {
+                    FunctionArgExpr::Expr(expr) => self.bind_expr(expr),
+                    _ => todo!()
+                }
+            })
+            .try_collect()?;
+        let ty = args[0].return_type();
+
+        Ok(match func.name.to_string().to_lowercase().as_str() {
+            "count" => ScalarExpression::AggCall{
+                kind: AggKind::Count,
+                args,
+                ty: LogicalType::UInteger,
+            },
+            "sum" => ScalarExpression::AggCall{
+                kind: AggKind::Sum,
+                args,
+                ty,
+            },
+            "min" => ScalarExpression::AggCall{
+                kind: AggKind::Min,
+                args,
+                ty,
+            },
+            "max" => ScalarExpression::AggCall{
+                kind: AggKind::Max,
+                args,
+                ty,
+            },
+            "avg" => ScalarExpression::AggCall{
+                kind: AggKind::Avg,
+                args,
+                ty,
+            },
+            _ => todo!(),
+        })
     }
 }

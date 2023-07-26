@@ -42,7 +42,7 @@ impl ScalarExpression {
             ScalarExpression::InputRef { index, .. } =>
                 batch.schema().field(*index).clone(),
             ScalarExpression::Alias { alias, expr, .. } => {
-                let logic_type = expr.return_type().unwrap();
+                let logic_type = expr.return_type();
                 Field::new(alias, logic_type.into(), true)
             }
             ScalarExpression::TypeCast { expr, ty, .. } => {
@@ -64,7 +64,7 @@ impl ScalarExpression {
                 Field::new(new_name.as_str(), data_type, true)
             }
             ScalarExpression::IsNull { expr } => {
-                let data_type = DataType::from(expr.return_type().unwrap());
+                let data_type = DataType::from(expr.return_type());
                 let new_name = format!("{}", data_type);
                 Field::new(new_name.as_str(), data_type, true)
             }

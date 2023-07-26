@@ -206,7 +206,7 @@ impl Binder {
                 };
 
                 let mut select_item = &mut select_list[i];
-                let return_type = select_item.return_type().unwrap();
+                let return_type = select_item.return_type();
                 self.context.group_by_exprs.push(std::mem::replace(
                     &mut select_item,
                     ScalarExpression::InputRef {
@@ -234,7 +234,7 @@ impl Binder {
                         expr,
                         ScalarExpression::InputRef {
                             index,
-                            ty: expr.return_type().unwrap(),
+                            ty: expr.return_type(),
                         },
                     ))
                 }
