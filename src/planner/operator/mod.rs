@@ -6,8 +6,8 @@ pub mod limit;
 pub mod project;
 pub mod scan;
 pub mod sort;
+pub mod insert;
 
-use crate::planner::operator::create_table::CreateTableOperator;
 use std::sync::Arc;
 
 use self::{
@@ -27,6 +27,4 @@ pub enum Operator {
     Scan(ScanOperator),
     Sort(SortOperator),
     Limit(LimitOperator),
-    #[allow(dead_code)]
-    CreateTable(CreateTableOperator),
 }
