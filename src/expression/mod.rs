@@ -69,26 +69,26 @@ impl ScalarExpression {
         }
     }
 
-    pub fn return_type(&self) -> Option<LogicalType> {
+    pub fn return_type(&self) -> LogicalType {
         match self {
-            Self::Constant(v) => Some(v.logic_type().clone()),
-            Self::ColumnRef(col) => Some(col.datatype().clone()),
+            Self::Constant(v) => v.logic_type().clone(),
+            Self::ColumnRef(col) => col.datatype().clone(),
             Self::Binary {
                 ty: return_type, ..
-            } => Some(return_type.clone()),
+            } => return_type.clone(),
             Self::Unary {
                 ty: return_type, ..
-            } => Some(return_type.clone()),
+            } => return_type.clone(),
             Self::TypeCast {
                 ty: return_type, ..
-            } => Some(return_type.clone()),
+            } => return_type.clone(),
             Self::AggCall {
                 ty: return_type, ..
-            } => Some(return_type.clone()),
+            } => return_type.clone(),
             Self::InputRef {
                 ty: return_type, ..
-            } => Some(return_type.clone()),
-            Self::IsNull { .. } => Some(LogicalType::Boolean),
+            } => return_type.clone(),
+            Self::IsNull { .. } => LogicalType::Boolean,
             Self::Alias { expr, .. } => expr.return_type(),
         }
     }
@@ -144,6 +144,27 @@ pub enum BinaryOperator {
 
 impl From<SqlBinaryOperator> for BinaryOperator {
     fn from(value: SqlBinaryOperator) -> Self {
-        todo!()
+        match value {
+            SqlBinaryOperator::Plus => BinaryOperator::Plus,
+            SqlBinaryOperator::Minus => BinaryOperator::Minus,
+            SqlBinaryOperator::Multiply => BinaryOperator::Multiply,
+            SqlBinaryOperator::Divide => BinaryOperator::Divide,
+            SqlBinaryOperator::Modulo => BinaryOperator::Modulo,
+            SqlBinaryOperator::StringConcat => BinaryOperator::StringConcat,
+            SqlBinaryOperator::Gt => BinaryOperator::Gt,
+            SqlBinaryOperator::Lt => BinaryOperator::Lt,
+            SqlBinaryOperator::GtEq => BinaryOperator::GtEq,
+            SqlBinaryOperator::LtEq => BinaryOperator::LtEq,
+            SqlBinaryOperator::Spaceship => BinaryOperator::Spaceship,
+            SqlBinaryOperator::Eq => BinaryOperator::Eq,
+            SqlBinaryOperator::NotEq => BinaryOperator::NotEq,
+            SqlBinaryOperator::And => BinaryOperator::And,
+            SqlBinaryOperator::Or => BinaryOperator::Or,
+            SqlBinaryOperator::Xor => BinaryOperator::Xor,
+            SqlBinaryOperator::BitwiseOr => BinaryOperator::BitwiseOr,
+            SqlBinaryOperator::BitwiseAnd => BinaryOperator::BitwiseAnd,
+            SqlBinaryOperator::BitwiseXor => BinaryOperator::BitwiseXor,
+            _ => todo!()
+        }
     }
 }
