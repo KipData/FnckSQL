@@ -200,7 +200,7 @@ impl Binder {
         let mut exprs = vec![];
         for ref_id in self.context.bind_table.values().cloned().collect_vec() {
             let table = self.context.catalog.get_table(ref_id).unwrap();
-            for (col_id, col) in &table.all_columns() {
+            for (col_id, col) in &table.get_all_columns() {
                 let column_ref_id = ColumnRefId::from_table(ref_id, *col_id);
                 // self.record_regular_table_column(
                 //     &table.name(),

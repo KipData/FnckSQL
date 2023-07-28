@@ -1,7 +1,6 @@
 mod create_table;
 mod projection;
 mod table_scan;
-mod insert;
 
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_v1::physical_plan::PhysicalOperator;
@@ -13,8 +12,6 @@ use crate::storage::StorageImpl;
 use arrow::record_batch::RecordBatch;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
-use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
-use crate::execution_v1::volcano_executor::insert::Insert;
 
 pub type BoxedExecutor = BoxStream<'static, Result<RecordBatch, ExecutorError>>;
 
@@ -41,11 +38,8 @@ impl VolcanoExecutor {
             PhysicalOperator::CreateTable(op) => match &self.storage {
                 StorageImpl::InMemoryStorage(storage) => CreateTable::execute(op, storage.clone()),
             },
-            PhysicalOperator::Insert(PhysicalInsert { table_name, col_idxs, cols, }) => {
-                match &self.storage {
-                    StorageImpl::InMemoryStorage(storage) =>
-                        Insert::execute(table_name, col_idxs, cols, storage.clone()),
-                }
+            _ => {
+                unimplemented!()
             }
         }
     }

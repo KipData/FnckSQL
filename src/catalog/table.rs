@@ -1,12 +1,10 @@
 use std::collections::HashMap;
-use std::sync::Arc;
-use arrow::datatypes::{Schema, SchemaRef};
 
 use itertools::Itertools;
 
 use crate::catalog::{CatalogError, ColumnCatalog};
 use crate::types::{ColumnIdx, IdGenerator, TableIdx};
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TableCatalog {
     pub id: Option<TableIdx>,
     pub name: String,
@@ -17,10 +15,6 @@ pub struct TableCatalog {
 }
 
 impl TableCatalog {
-    pub(crate) fn columns_len(&self) -> usize {
-        self.columns.len()
-    }
-
     pub(crate) fn get_column_by_id(&self, id: ColumnIdx) -> Option<&ColumnCatalog> {
         self.columns.get(id)
     }
@@ -38,19 +32,11 @@ impl TableCatalog {
         self.column_idxs.contains_key(name)
     }
 
-    pub(crate) fn all_columns(&self) -> Vec<(ColumnIdx, &ColumnCatalog)> {
+    pub(crate) fn get_all_columns(&self) -> Vec<(ColumnIdx, &ColumnCatalog)> {
         self.columns
             .iter()
             .enumerate()
             .collect_vec()
-    }
-
-    // TODO: 缓存schema
-    pub(crate) fn schema(&self) -> SchemaRef {
-        let fields = self.columns.iter()
-            .map(ColumnCatalog::to_field)
-            .collect_vec();
-        Arc::new(Schema::new(fields))
     }
 
     /// Add a column to the table catalog.

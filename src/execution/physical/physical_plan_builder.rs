@@ -30,7 +30,6 @@ impl PhysicalPlanBuilder {
         match plan {
             LogicalPlan::Select(select) => self.build_select_logical_plan(select),
             LogicalPlan::CreateTable(_) => todo!(),
-            LogicalPlan::Insert(_) => todo!(),
         }
     }
 

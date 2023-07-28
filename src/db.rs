@@ -123,7 +123,6 @@ pub enum DatabaseError {
 mod test {
     use std::sync::Arc;
     use arrow::array::{BooleanArray, Int32Array};
-    use arrow::compute::concat_batches;
     use arrow::datatypes::Schema;
     use arrow::record_batch::RecordBatch;
     use itertools::Itertools;
@@ -178,14 +177,9 @@ mod test {
         let database = Database::new_on_mem();
 
         tokio_test::block_on(async move {
-            let _ = database.run("create table t1 (a int, b boolean)").await?;
-            let _ = database.run("insert into t1 values (1, true), (2, false)").await?;
-            let vec_batch = database.run("select * from t1").await?;
-
-            let table = database.storage
-                .get_catalog()
-                .get_table(0).unwrap().clone();
-            println!("{:#?}", concat_batches(&table.schema(), &vec_batch));
+            let _batch = database.run("create table t1 (a int, b int)").await?;
+            let batch = database.run("select * from t1").await?;
+            println!("{:#?}", batch);
 
             Ok(())
         })

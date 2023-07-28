@@ -1,13 +1,12 @@
 pub mod aggregate;
-mod create_table;
+mod create;
 pub mod expr;
 mod select;
-mod insert;
 
 use std::collections::HashMap;
 
 use anyhow::Result;
-use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
+use sqlparser::ast::{Ident, ObjectName, Statement};
 
 use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME, CatalogError};
 use crate::expression::ScalarExpression;
@@ -60,23 +59,14 @@ impl Binder {
     }
 
     pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan> {
-        println!("{:#?}", stmt);
         let plan = match stmt {
             Statement::Query(query) => {
                 let plan = self.bind_query(query)?;
                 LogicalPlan::Select(plan)
             }
             Statement::CreateTable { name, columns, .. } => {
-                let plan = self.bind_create_table(name, &columns)?;
+                let plan = self.bind_create_table(name.to_owned(), &columns)?;
                 LogicalPlan::CreateTable(plan)
-            }
-            Statement::Insert { table_name, columns, source, .. } => {
-                if let SetExpr::Values(values) = source.body.as_ref() {
-                    let plan = self.bind_insert(table_name.to_owned(), columns, &values.rows)?;
-                    LogicalPlan::Insert(plan)
-                } else {
-                    todo!()
-                }
             }
             _ => unimplemented!(),
         };

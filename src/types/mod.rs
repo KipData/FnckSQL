@@ -9,7 +9,7 @@ use strum_macros::AsRefStr;
 
 use crate::types::errors::TypeError;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) struct IdGenerator {
     buf: usize
 }
