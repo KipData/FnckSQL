@@ -11,7 +11,6 @@ use anyhow::anyhow;
 use anyhow::Result;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
 use crate::planner::logical_insert_plan::LogicalInsertPlan;
-use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::project::ProjectOperator;
 
 pub struct PhysicalPlanBuilder {
@@ -44,13 +43,9 @@ impl PhysicalPlanBuilder {
         &mut self,
         plan: &LogicalInsertPlan,
     ) -> PhysicalOperator {
-        let InsertOperator { table, col_idxs, cols: rows } = plan.operator.clone();
-
         PhysicalOperator::Insert(
             PhysicalInsert {
-                table_name: table,
-                col_idxs,
-                cols: rows,
+                op: plan.operator.clone()
             }
         )
     }
@@ -59,12 +54,9 @@ impl PhysicalPlanBuilder {
         &mut self,
         plan: &LogicalCreateTablePlan,
     ) -> PhysicalOperator {
-        let operator = &plan.operator;
-
         PhysicalOperator::CreateTable(
             PhysicalCreateTable {
-                table_name: operator.table_name.to_string(),
-                columns: operator.columns.clone(),
+                op: plan.operator.clone(),
             }
         )
     }

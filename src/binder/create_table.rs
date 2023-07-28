@@ -6,7 +6,7 @@ use super::Binder;
 use crate::binder::{lower_case_name, split_name};
 use crate::catalog::ColumnCatalog;
 use crate::planner::logical_create_table_plan::LogicalCreateTablePlan;
-use crate::planner::operator::create_table::CreateOperator;
+use crate::planner::operator::create_table::CreateTableOperator;
 
 impl Binder {
     pub(crate) fn bind_create_table(
@@ -35,7 +35,7 @@ impl Binder {
             .collect();
 
         let plan = LogicalCreateTablePlan {
-            operator: CreateOperator {
+            operator: CreateTableOperator {
                 table_name: table_name.to_string(),
                 columns
             },
@@ -60,7 +60,7 @@ mod tests {
         let plan1 = binder.bind(&stmt[0]).unwrap();
 
         let plan2 = LogicalPlan::CreateTable(LogicalCreateTablePlan {
-            operator: CreateOperator {
+            operator: CreateTableOperator {
                 table_name: "t1".to_string(),
                 columns: vec![
                     ColumnCatalog::new(

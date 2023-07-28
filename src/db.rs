@@ -174,7 +174,7 @@ mod test {
         })
     }
     #[test]
-    fn test_sql() -> anyhow::Result<()> {
+    fn test_crud_sql() -> anyhow::Result<()> {
         let database = Database::new_on_mem();
 
         tokio_test::block_on(async move {

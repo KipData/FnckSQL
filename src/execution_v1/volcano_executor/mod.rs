@@ -13,8 +13,8 @@ use crate::storage::StorageImpl;
 use arrow::record_batch::RecordBatch;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
-use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_v1::volcano_executor::insert::Insert;
+use crate::planner::operator::insert::InsertOperator;
 
 pub type BoxedExecutor = BoxStream<'static, Result<RecordBatch, ExecutorError>>;
 
@@ -41,10 +41,12 @@ impl VolcanoExecutor {
             PhysicalOperator::CreateTable(op) => match &self.storage {
                 StorageImpl::InMemoryStorage(storage) => CreateTable::execute(op, storage.clone()),
             },
-            PhysicalOperator::Insert(PhysicalInsert { table_name, col_idxs, cols, }) => {
+            PhysicalOperator::Insert(op) => {
+                let InsertOperator { table, col_idxs, cols } = op.op;
+
                 match &self.storage {
                     StorageImpl::InMemoryStorage(storage) =>
-                        Insert::execute(table_name, col_idxs, cols, storage.clone()),
+                        Insert::execute(table, col_idxs, cols, storage.clone()),
                 }
             }
         }

@@ -1,8 +1,8 @@
-use crate::planner::operator::create_table::CreateOperator;
+use crate::planner::operator::create_table::CreateTableOperator;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LogicalCreateTablePlan {
-    pub operator: CreateOperator
+    pub operator: CreateTableOperator
 }
 
 // use sqlparser::ast::{ColumnDef, ColumnOption, Statement};
