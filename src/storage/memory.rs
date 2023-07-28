@@ -9,11 +9,11 @@ use crate::types::{LogicalType, TableIdx};
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
-    inner: Arc<Mutex<Inner>>,
+    inner: Arc<Mutex<StorageInner>>,
 }
 
 #[derive(Debug)]
-struct Inner {
+struct StorageInner {
     catalog: RootCatalog,
     tables: Vec<InMemoryTable>,
 }
@@ -28,7 +28,7 @@ impl InMemoryStorage {
     pub fn new() -> Self {
         InMemoryStorage {
             inner: Arc::new(Mutex::new(
-                Inner {
+                StorageInner {
                     catalog: RootCatalog::default(),
                     tables: Vec::new(),
                 })
@@ -58,7 +58,7 @@ impl Storage for InMemoryStorage {
 
         let table_id = inner.catalog.add_table(
             table_name.to_string(),
-            table.columns_vec.clone()
+            table.inner.lock().columns.clone()
         )?;
 
         table.table_id = table_id;
@@ -89,8 +89,13 @@ impl Storage for InMemoryStorage {
 pub struct InMemoryTable {
     table_id: TableIdx,
     table_name: String,
+    inner: Arc<Mutex<TableInner>>
+}
+
+#[derive(Debug)]
+struct TableInner {
     data: Vec<RecordBatch>,
-    columns_vec: Vec<ColumnCatalog>,
+    columns: Vec<ColumnCatalog>,
 }
 
 impl InMemoryTable {
@@ -99,8 +104,13 @@ impl InMemoryTable {
         Ok(Self {
             table_id: 0,
             table_name: name.to_string(),
-            data,
-            columns_vec: columns,
+
+            inner: Arc::new(Mutex::new(
+                TableInner {
+                    data,
+                    columns,
+                }
+            )),
         })
     }
 
@@ -133,6 +143,13 @@ impl Table for InMemoryTable {
     ) -> Result<Self::TransactionType, StorageError> {
         InMemoryTransaction::start(self)
     }
+
+    fn append(&self, record_batch: RecordBatch) -> Result<(), StorageError> {
+        self.inner.lock()
+            .data.push(record_batch);
+
+        Ok(())
+    }
 }
 
 pub struct InMemoryTransaction {
@@ -144,7 +161,7 @@ impl InMemoryTransaction {
     pub fn start(table: &InMemoryTable) -> Result<Self, StorageError> {
         Ok(Self {
             batch_cursor: 0,
-            data: table.data.clone(),
+            data: table.inner.lock().data.clone(),
         })
     }
 }

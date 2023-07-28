@@ -75,10 +75,6 @@ impl ColumnDesc {
         }
     }
 
-    pub(crate) fn is_primary(&self) -> bool {
-        self.is_primary
-    }
-
     pub(crate) fn get_datatype(&self) -> LogicalType {
         self.column_datatype.clone()
     }
