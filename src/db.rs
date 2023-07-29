@@ -178,8 +178,8 @@ mod test {
         let database = Database::new_on_mem();
 
         tokio_test::block_on(async move {
-            let _ = database.run("create table t1 (a int, b boolean null)").await?;
-            let _ = database.run("insert into t1 values (1, null), (2, null)").await?;
+            let _ = database.run("create table t1 (a int, b boolean)").await?;
+            let _ = database.run("insert into t1 values (1, true), (2, false)").await?;
             let vec_batch = database.run("select * from t1").await?;
 
             let table = database.storage
