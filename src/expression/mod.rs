@@ -71,7 +71,7 @@ impl ScalarExpression {
 
     pub fn return_type(&self) -> LogicalType {
         match self {
-            Self::Constant(v) => v.logic_type().clone(),
+            Self::Constant(v) => v.logical_type(),
             Self::ColumnRef(col) => col.datatype().clone(),
             Self::Binary {
                 ty: return_type, ..

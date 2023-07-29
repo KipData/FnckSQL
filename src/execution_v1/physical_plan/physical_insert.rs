@@ -1,6 +1,7 @@
-use crate::planner::operator::insert::InsertOperator;
+use crate::execution_v1::physical_plan::PhysicalOperator;
 
 #[derive(Debug)]
 pub struct PhysicalInsert {
-    pub op: InsertOperator
+    pub(crate) table_name: String,
+    pub(crate) input: Box<PhysicalOperator>
 }

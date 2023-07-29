@@ -60,7 +60,6 @@ impl Binder {
     }
 
     pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan> {
-        println!("{:#?}", stmt);
         let plan = match stmt {
             Statement::Query(query) => {
                 let plan = self.bind_query(query)?;

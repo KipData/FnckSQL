@@ -1,12 +1,21 @@
+use std::slice;
+use std::sync::Arc;
 use sqlparser::ast::{Expr, Ident, ObjectName};
-use anyhow::Result;
+use anyhow::{Error, Result};
 use itertools::Itertools;
 use crate::binder::{Binder, lower_case_name, split_name};
+use crate::catalog::ColumnCatalog;
 use crate::expression::ScalarExpression;
 use crate::planner::logical_insert_plan::LogicalInsertPlan;
 use crate::planner::operator::insert::InsertOperator;
+use crate::planner::operator::Operator;
+use crate::planner::operator::values::ValuesOperator;
+use crate::types::value::DataValue;
 
 impl Binder {
+
+    // TODO: 支持Project
+    // TODO: 检测多行Values对齐
     pub(crate) fn bind_insert(
         &mut self,
         name: ObjectName,
@@ -17,39 +26,45 @@ impl Binder {
         let (_, table_name) = split_name(&name)?;
 
         if let Some(table) = self.context.catalog.get_table_by_name(table_name) {
-            let mut col_idxs = Vec::new();
+            let mut col_catalogs = Vec::new();
 
-            for ident in idents {
-                let col_name = &ident.value;
-                if let Some(col_idx) = table.get_column_id_by_name(col_name) {
-                    col_idxs.push(col_idx.clone());
-                } else {
-                    return Err(anyhow::Error::msg(format!(
-                        "not found column {} on table {}",
-                        col_name,
-                        table_name
-                    )))
+            if idents.is_empty() {
+                col_catalogs = table.all_columns()
+                    .into_iter()
+                    .map(|(_, catalog)| catalog.clone())
+                    .collect_vec();
+            } else {
+                for ident in idents {
+                    match self.bind_column_ref_from_identifiers(slice::from_ref(ident))? {
+                        ScalarExpression::ColumnRef(catalog) => col_catalogs.push(catalog),
+                        _ => unreachable!()
+                    }
                 }
             }
-            if col_idxs.is_empty() {
-                col_idxs = (0..table.columns_len()).collect_vec()
-            }
 
-            // 行转列
-            let mut cols: Vec<Vec<ScalarExpression>> = vec![Vec::new(); rows[0].len()];
+            let rows = rows
+                .into_iter()
+                .map(|row| {
+                    row.into_iter()
+                        .map(|expr| match self.bind_expr(expr)? {
+                            ScalarExpression::Constant(value) => Ok::<DataValue, Error>(value),
+                            _ => unreachable!(),
+                        })
+                        .try_collect()
+                })
+                .try_collect()?;
 
-            for row in rows {
-                for (i, expr) in row.into_iter().enumerate() {
-                    cols[i].push(self.bind_expr(expr)?);
-                }
-            }
+            let values_plan = self.bind_values(rows, col_catalogs.clone());
 
             Ok(LogicalInsertPlan {
-                operator: InsertOperator {
-                    table: table_name.to_string(),
-                    col_idxs,
-                    cols,
-                },
+                operator: Arc::new(
+                    Operator::Insert(
+                        InsertOperator {
+                            table: table_name.to_string(),
+                        }
+                    )
+                ),
+                children: vec![Arc::new(values_plan)],
             })
         } else {
             Err(anyhow::Error::msg(format!(
@@ -59,5 +74,17 @@ impl Binder {
         }
     }
 
-
+    fn bind_values(
+        &mut self,
+        rows: Vec<Vec<DataValue>>,
+        col_catalogs: Vec<ColumnCatalog>
+    ) -> LogicalInsertPlan {
+        LogicalInsertPlan {
+            operator: Arc::new(Operator::Values(ValuesOperator {
+                rows,
+                col_catalogs,
+            })),
+            children: vec![],
+        }
+    }
 }

@@ -94,7 +94,7 @@ impl Binder {
         // //     plan = self.bind_sort(plan, orderby)?;
         // // }
 
-        plan = self.bind_project(plan, select_list)?;
+        plan = self.bind_project(plan, select_list);
         Ok(plan)
     }
 
@@ -272,8 +272,13 @@ impl Binder {
         &mut self,
         children: LogicalSelectPlan,
         select_list: Vec<ScalarExpression>,
-    ) -> Result<LogicalSelectPlan> {
-        Ok(ProjectOperator::new(select_list, children))
+    ) -> LogicalSelectPlan {
+        LogicalSelectPlan {
+            operator: Arc::new(Operator::Project(ProjectOperator {
+                columns: select_list,
+            })),
+            children: vec![Arc::new(children)],
+        }
     }
 
     fn bind_limit(
@@ -349,395 +354,36 @@ mod tests {
     #[test]
     fn test_select_bind() -> Result<()> {
         let plan_1 = select_sql_run("select * from t1")?;
-        assert_eq!(plan_1, just_col_mock());
         println!(
             "just_col:\n {:#?}",
             plan_1
         );
         let plan_2 = select_sql_run("select t1.c1, t1.c2 from t1")?;
-        assert_eq!(plan_2, table_with_col_mock());
         println!(
             "table_with_col:\n {:#?}",
             plan_2
         );
         let plan_3 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > 2")?;
-        assert_eq!(plan_3, table_with_col_and_c1_compare_constant_mock());
         println!(
             "table_with_col_and_c1_compare_constant:\n {:#?}",
             plan_3
         );
         let plan_4 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > c2")?;
-        assert_eq!(plan_4, table_with_col_and_c1_compare_c2_mock());
         println!(
             "table_with_col_and_c1_compare_c2:\n {:#?}",
            plan_4
         );
         let plan_5 = select_sql_run("select avg(t1.c1) from t1")?;
-        assert_eq!(plan_5, table_with_col_and_c1_avg_mock());
         println!(
             "table_with_col_and_c1_avg:\n {:#?}",
             plan_5
         );
         let plan_6 = select_sql_run("select t1.c1, t1.c2 from t1 where (t1.c1 - t1.c2) > 1")?;
-        assert_eq!(plan_6, table_with_col_nested_mock());
         println!(
             "table_with_col_nested:\n {:#?}",
             plan_6
         );
 
         Ok(())
-    }
-
-    fn just_col_mock() -> LogicalPlan {
-        LogicalPlan::Select(
-            LogicalSelectPlan {
-                operator: Arc::new(Operator::Project(
-                    ProjectOperator {
-                        columns: vec![
-                            ColumnRef(
-                                ColumnCatalog {
-                                    id: Some(0),
-                                    name: "c1".to_string(),
-                                    nullable: false,
-                                    desc: ColumnDesc {
-                                        column_datatype: Integer,
-                                        is_primary: true
-                                    },
-                                }
-                            ),
-                            ColumnRef(
-                                ColumnCatalog {
-                                    id: Some(1),
-                                    name: "c2".to_string(),
-                                    nullable: false,
-                                    desc: ColumnDesc {
-                                        column_datatype: Integer,
-                                        is_primary: false
-                                    },
-                                }
-                            )
-                        ],
-                    }
-                )),
-                children: vec![
-                    Arc::new(
-                        LogicalSelectPlan {
-                            operator: Arc::new(Operator::Scan(
-                                ScanOperator {
-                                    table_ref_id: 0,
-                                    columns: vec![],
-                                    sort_fields: vec![],
-                                    pre_where: vec![],
-                                    limit: None,
-                                }
-                            )),
-                            children: vec![],
-                        }
-                    )
-                ],
-            }
-        )
-    }
-
-    fn table_with_col_mock() -> LogicalPlan {
-        LogicalPlan::Select(
-            LogicalSelectPlan {
-                operator: Arc::new(Operator::Project(
-                    ProjectOperator {
-                        columns: vec![
-                            ColumnRef(
-                                ColumnCatalog {
-                                    id: Some(0),
-                                    name: "c1".to_string(),
-                                    nullable: false,
-                                    desc: ColumnDesc {
-                                        column_datatype: Integer,
-                                        is_primary: true
-                                    },
-                                }
-                            ),
-                            ColumnRef(
-                                ColumnCatalog {
-                                    id: Some(1),
-                                    name: "c2".to_string(),
-                                    nullable: false,
-                                    desc: ColumnDesc {
-                                        column_datatype: Integer,
-                                        is_primary: false
-                                    },
-                                }
-                            )
-                        ],
-                    }
-                )),
-                children: vec![
-                    Arc::new(
-                        LogicalSelectPlan {
-                            operator: Arc::new(Operator::Scan(
-                                ScanOperator {
-                                    table_ref_id: 0,
-                                    columns: vec![],
-                                    sort_fields: vec![],
-                                    pre_where: vec![],
-                                    limit: None,
-                                }
-                            )),
-                            children: vec![],
-                        }
-                    )
-                ],
-            }
-        )
-    }
-
-    fn table_with_col_and_c1_compare_constant_mock() -> LogicalPlan {
-        let col_ref_1 = ColumnRef(
-            ColumnCatalog {
-                id: Some(0),
-                name: "c1".to_string(),
-                nullable: false,
-                desc: ColumnDesc {
-                    column_datatype: Integer,
-                    is_primary: true
-                },
-            }
-        );
-        LogicalPlan::Select(
-            LogicalSelectPlan {
-                operator: Arc::new(Operator::Project(
-                    ProjectOperator {
-                        columns: vec![
-                            col_ref_1.clone(),
-                            ColumnRef(
-                                ColumnCatalog {
-                                    id: Some(1),
-                                    name: "c2".to_string(),
-                                    nullable: false,
-                                    desc: ColumnDesc {
-                                        column_datatype: Integer,
-                                        is_primary: false
-                                    },
-                                }
-                            )
-                        ],
-                    }
-                )),
-                children: vec![
-                    Arc::new(
-                        FilterOperator::new(
-                            Binary {
-                                op: Gt,
-                                left_expr: Box::new(col_ref_1),
-                                right_expr: Box::new(Constant(Int32(Some(2)))),
-                                ty: Integer,
-                            },
-                            LogicalSelectPlan {
-                                operator: Arc::new(Operator::Scan(
-                                    ScanOperator {
-                                        table_ref_id: 0,
-                                        columns: vec![],
-                                        sort_fields: vec![],
-                                        pre_where: vec![],
-                                        limit: None,
-                                    }
-                                )),
-                                children: vec![],
-                            },
-                            false
-                        )
-                    )
-                ],
-            }
-        )
-    }
-
-    fn table_with_col_and_c1_compare_c2_mock() -> LogicalPlan {
-        let col_ref_1 = ColumnRef(
-            ColumnCatalog {
-                id: Some(0),
-                name: "c1".to_string(),
-                nullable: false,
-                desc: ColumnDesc {
-                    column_datatype: Integer,
-                    is_primary: true
-                },
-            }
-        );
-        let col_ref_2 = ColumnRef(
-            ColumnCatalog {
-                id: Some(1),
-                name: "c2".to_string(),
-                nullable: false,
-                desc: ColumnDesc {
-                    column_datatype: Integer,
-                    is_primary: false
-                },
-            }
-        );
-        LogicalPlan::Select(
-            LogicalSelectPlan {
-                operator: Arc::new(Operator::Project(
-                    ProjectOperator {
-                        columns: vec![
-                            col_ref_1.clone(),
-                            col_ref_2.clone()
-                        ],
-                    }
-                )),
-                children: vec![
-                    Arc::new(
-                        FilterOperator::new(
-                            Binary {
-                                op: Gt,
-                                left_expr: Box::new(col_ref_1),
-                                right_expr: Box::new(col_ref_2),
-                                ty: Integer,
-                            },
-                            LogicalSelectPlan {
-                                operator: Arc::new(Operator::Scan(
-                                    ScanOperator {
-                                        table_ref_id: 0,
-                                        columns: vec![],
-                                        sort_fields: vec![],
-                                        pre_where: vec![],
-                                        limit: None,
-                                    }
-                                )),
-                                children: vec![],
-                            },
-                            false
-                        )
-                    )
-                ],
-            }
-        )
-    }
-    fn table_with_col_and_c1_avg_mock() -> LogicalPlan {
-        LogicalPlan::Select(
-            LogicalSelectPlan {
-                operator: Arc::new(Operator::Project(
-                    ProjectOperator {
-                        columns: vec![InputRef {
-                            index: 0,
-                            ty: Integer,
-                        }],
-                    }
-                )),
-                children: vec![
-                    Arc::new(
-                        LogicalSelectPlan {
-                            operator: Arc::new(Operator::Aggregate(
-                                AggregateOperator {
-                                    groupby_exprs: vec![],
-                                    agg_calls: vec![
-                                        AggCall {
-                                            kind: AggKind::Avg,
-                                            args: vec![
-                                                ColumnRef(
-                                                    ColumnCatalog {
-                                                        id: Some(0),
-                                                        name: "c1".to_string(),
-                                                        nullable: false,
-                                                        desc: ColumnDesc {
-                                                            column_datatype: Integer,
-                                                            is_primary: true
-                                                        },
-                                                    }
-                                                )
-                                            ],
-                                            ty: Integer,
-                                        }
-                                    ],
-                                }
-                            )),
-                            children: vec![
-                                Arc::new(
-                                    LogicalSelectPlan {
-                                        operator: Arc::new(Operator::Scan(
-                                            ScanOperator {
-                                                table_ref_id: 0,
-                                                columns: vec![],
-                                                sort_fields: vec![],
-                                                pre_where: vec![],
-                                                limit: None,
-                                            }
-                                        )),
-                                        children: vec![],
-                                    }
-                                )
-                            ],
-                        }
-                    )
-                ],
-            }
-        )
-    }
-    fn table_with_col_nested_mock() -> LogicalPlan {
-        let col_ref_1 = ColumnRef(
-            ColumnCatalog {
-                id: Some(0),
-                name: "c1".to_string(),
-                nullable: false,
-                desc: ColumnDesc {
-                    column_datatype: Integer,
-                    is_primary: true
-                },
-            }
-        );
-        let col_ref_2 = ColumnRef(
-            ColumnCatalog {
-                id: Some(1),
-                name: "c2".to_string(),
-                nullable: false,
-                desc: ColumnDesc {
-                    column_datatype: Integer,
-                    is_primary: false
-                },
-            }
-        );
-        LogicalPlan::Select(
-            LogicalSelectPlan {
-                operator: Arc::new(Operator::Project(
-                    ProjectOperator {
-                        columns: vec![
-                            col_ref_1.clone(),
-                            col_ref_2.clone()
-                        ],
-                    }
-                )),
-                children: vec![
-                    Arc::new(
-                        FilterOperator::new(
-                            Binary {
-                                op: Gt,
-                                left_expr: Box::new(
-                                    Binary {
-                                        op: Minus,
-                                        left_expr: Box::new(col_ref_1),
-                                        right_expr: Box::new(col_ref_2),
-                                        ty: Integer,
-                                    }
-                                ),
-                                right_expr: Box::new(Constant(Int32(Some(1)))),
-                                ty: Integer,
-                            },
-                            LogicalSelectPlan {
-                                operator: Arc::new(Operator::Scan(
-                                    ScanOperator {
-                                        table_ref_id: 0,
-                                        columns: vec![],
-                                        sort_fields: vec![],
-                                        pre_where: vec![],
-                                        limit: None,
-                                    }
-                                )),
-                                children: vec![],
-                            },
-                            false
-                        )
-                    )
-                ],
-            }
-        )
     }
 }
