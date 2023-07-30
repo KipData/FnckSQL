@@ -453,27 +453,6 @@ impl DataValue {
         Ok(())
     }
 
-    pub fn logic_type(&self) -> LogicalType {
-        match self {
-            DataValue::Boolean(_) => LogicalType::Boolean,
-            DataValue::UInt8(_) => LogicalType::UTinyint,
-            DataValue::UInt16(_) => LogicalType::USmallint,
-            DataValue::UInt32(_) => LogicalType::UInteger,
-            DataValue::UInt64(_) => LogicalType::UBigint,
-            DataValue::Int8(_) => LogicalType::Tinyint,
-            DataValue::Int16(_) => LogicalType::Smallint,
-            DataValue::Int32(_) => LogicalType::Integer,
-            DataValue::Int64(_) => LogicalType::Bigint,
-            DataValue::Float32(_) => LogicalType::Float,
-            DataValue::Float64(_) => LogicalType::Double,
-            DataValue::Utf8(_) => LogicalType::Varchar,
-            DataValue::Null => LogicalType::Invalid,
-            DataValue::Date32(_) => LogicalType::Date,
-            DataValue::IntervalYearMonth(_) => LogicalType::Interval(IntervalUnit::YearMonth),
-            DataValue::IntervalDayTime(_) => LogicalType::Interval(IntervalUnit::DayTime),
-        }
-    }
-
     pub fn datatype(&self) -> DataType {
         match self {
             DataValue::Boolean(_) => DataType::Boolean,

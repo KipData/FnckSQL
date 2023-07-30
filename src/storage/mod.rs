@@ -42,6 +42,8 @@ pub trait Table: Sync + Send + Clone + 'static {
         bounds: Bounds,
         projection: Projections,
     ) -> Result<Self::TransactionType, StorageError>;
+
+    fn append(&self, record_batch: RecordBatch) -> Result<(), StorageError>;
 }
 
 // currently we use a transaction to hold csv reader

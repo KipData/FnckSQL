@@ -1,8 +1,8 @@
-use crate::catalog::ColumnCatalog;
+use crate::planner::operator::create_table::CreateTableOperator;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct LogicalCreateTablePlan {
-    pub table_name: String,
-    pub columns: Vec<ColumnCatalog>,
+    pub operator: CreateTableOperator
 }
 
 // use sqlparser::ast::{ColumnDef, ColumnOption, Statement};
