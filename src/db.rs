@@ -126,6 +126,7 @@ mod test {
     use arrow::compute::concat_batches;
     use arrow::datatypes::Schema;
     use arrow::record_batch::RecordBatch;
+    use arrow::util::pretty::print_batches;
     use itertools::Itertools;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::Database;
@@ -185,7 +186,7 @@ mod test {
             let table = database.storage
                 .get_catalog()
                 .get_table(0).unwrap().clone();
-            println!("{:#?}", concat_batches(&table.schema(), &vec_batch));
+            print_batches(&vec_batch)?;
 
             Ok(())
         })
