@@ -9,9 +9,11 @@ use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use anyhow::anyhow;
 use anyhow::Result;
+use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_v1::physical_plan::physical_values::PhysicalValues;
 use crate::planner::logical_insert_plan::LogicalInsertPlan;
+use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::project::ProjectOperator;
 use crate::planner::operator::values::ValuesOperator;
@@ -84,6 +86,7 @@ impl PhysicalPlanBuilder {
         match plan.operator.as_ref() {
             Operator::Project(op) => self.build_physical_select_projection(plan, op),
             Operator::Scan(scan) => Ok(self.build_physical_scan(scan.clone())),
+            Operator::Filter(op) => self.build_physical_filter(plan, op),
             _ => Err(anyhow!(format!(
                 "Unsupported physical plan: {:?}",
                 plan.operator
@@ -103,5 +106,15 @@ impl PhysicalPlanBuilder {
 
     fn build_physical_scan(&mut self, base: ScanOperator) -> PhysicalOperator {
         PhysicalOperator::TableScan(PhysicalTableScan { plan_id: self.next_plan_id(), base })
+    }
+
+    fn build_physical_filter(&mut self, plan: &LogicalSelectPlan, base: &FilterOperator) -> Result<PhysicalOperator> {
+        let input = self.build_select_logical_plan(plan.child(0)?)?;
+
+        Ok(PhysicalOperator::Filter(PhysicalFilter {
+            plan_id: 0,
+            predicate: base.predicate.clone(),
+            input: Box::new(input),
+        }))
     }
 }

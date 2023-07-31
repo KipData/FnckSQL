@@ -10,6 +10,7 @@ use crate::types::LogicalType;
 pub mod agg;
 mod evaluator;
 mod array_compute;
+mod cast;
 
 /// ScalarExpression represnet all scalar expression in SQL.
 /// SELECT a+1, b FROM t1.

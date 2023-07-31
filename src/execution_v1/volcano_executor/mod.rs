@@ -3,6 +3,7 @@ mod projection;
 mod table_scan;
 mod insert;
 mod values;
+mod filter;
 
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_v1::physical_plan::PhysicalOperator;
@@ -14,7 +15,9 @@ use crate::storage::StorageImpl;
 use arrow::record_batch::RecordBatch;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
+use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
+use crate::execution_v1::volcano_executor::filter::Filter;
 use crate::execution_v1::volcano_executor::insert::Insert;
 use crate::execution_v1::volcano_executor::values::Values;
 
@@ -38,6 +41,7 @@ impl VolcanoExecutor {
             }
             PhysicalOperator::Projection(PhysicalProjection { input, exprs, .. }) => {
                 let input = self.build(*input);
+
                 Projection::execute(exprs, input)
             }
             PhysicalOperator::CreateTable(op) => match &self.storage {
@@ -51,7 +55,12 @@ impl VolcanoExecutor {
                         Insert::execute(table_name, input, storage.clone()),
                 }
             }
-            PhysicalOperator::Values(op) => Values::execute(op)
+            PhysicalOperator::Values(op) => Values::execute(op),
+            PhysicalOperator::Filter(PhysicalFilter { predicate, input, .. }) => {
+                let input = self.build(*input);
+
+                Filter::execute(predicate, input)
+            }
         }
     }
 

@@ -95,10 +95,22 @@ impl Binder {
     ) -> Result<ScalarExpression> {
         let left_expr = Box::new(self.bind_expr(left)?);
         let right_expr = Box::new(self.bind_expr(right)?);
-        let ty = LogicalType::max_logical_type(
-            &left_expr.return_type(),
-            &right_expr.return_type()
-        )?;
+
+        let ty = match op {
+            BinaryOperator::Plus | BinaryOperator::Minus | BinaryOperator::Multiply |
+            BinaryOperator::Divide | BinaryOperator::Modulo => {
+                LogicalType::max_logical_type(
+                    &left_expr.return_type(),
+                    &right_expr.return_type()
+                )?
+            }
+            BinaryOperator::Gt | BinaryOperator::Lt | BinaryOperator::GtEq |
+            BinaryOperator::LtEq | BinaryOperator::Eq | BinaryOperator::NotEq |
+            BinaryOperator::And | BinaryOperator::Or | BinaryOperator::Xor => {
+                LogicalType::Boolean
+            },
+            _ => todo!()
+        };
 
         Ok(ScalarExpression::Binary {
             op: (op.clone()).into(),
