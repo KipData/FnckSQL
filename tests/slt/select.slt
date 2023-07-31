@@ -1,0 +1,51 @@
+skipif sqlrs_v2
+query IIII
+select first_name, state, id, salary from employee;
+----
+Bill CA 1 12000
+Gregg CO 2 10000
+John CO 3 11500
+Von (empty) 4 NULL
+
+# test insert projection with cast expression
+onlyif sqlrs_v2
+statement ok
+create table t2(v1 tinyint);
+insert into t2(v1) values (1), (5);
+
+onlyif sqlrs_v2
+statement ok
+create table t1(v1 int, v2 int, v3 int);
+insert into t1(v3, v2, v1) values (0, 4, 1), (1, 5, 2);
+
+
+onlyif sqlrs_v2
+query III
+select t1.v1, v2 from t1;
+----
+1 4
+2 5
+
+
+onlyif sqlrs_v2
+query III
+select *, t1.* from t1;
+----
+1 4 0 1 4 0
+2 5 1 2 5 1
+
+
+# TODO: use alias function to verify output column names
+onlyif sqlrs_v2
+query III
+select t.v1 as a, v2 as b from t1 as t;
+----
+1 4
+2 5
+
+
+onlyif sqlrs_v2
+query III
+select 1, 2.3, '😇', true, null;
+----
+1 2.3 😇 true NULL

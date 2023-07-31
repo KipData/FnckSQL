@@ -1,8 +1,8 @@
-pub mod util;
 
 use arrow::record_batch::RecordBatch;
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use arrow::error::ArrowError;
+use arrow::util::display::array_value_to_string;
 
 pub fn record_batch_to_string(batch: &RecordBatch) -> Result<String, ArrowError> {
     let mut output = String::new();
