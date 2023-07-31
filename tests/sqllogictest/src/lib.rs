@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use sqllogictest::{AsyncDB, Runner};
 use kip_sql::db::{Database,DatabaseError};
-
+use kip_sql::util::record_batch_to_string;
 fn init_tables(){
     
     let db = Arc::new( Database::new_on_mem());
