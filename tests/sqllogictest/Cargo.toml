@@ -1,0 +1,15 @@
+[package]
+name = "sqllogictest-test"
+version = "0.4.0"
+edition = "2021"
+
+[dependencies]
+"kip-sql" = { path = "../.." }
+sqllogictest = "0.6"
+glob = "0.3"
+async-trait = "0.1"
+libtest-mimic = "0.6"
+
+[[test]]
+name = "sqllogictest"
+harness = false

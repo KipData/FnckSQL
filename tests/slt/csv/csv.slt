@@ -1,0 +1,20 @@
+onlyif sqlrs_v2
+statement ok
+create table state(id varchar, state_code varchar, state_name varchar);
+
+onlyif sqlrs_v2
+statement ok
+copy state from 'tests/slt/csv/state1.csv' ( DELIMITER '|' );
+
+onlyif sqlrs_v2
+statement ok
+copy state from 'tests/slt/csv/state2.csv' ( DELIMITER '|', HEADER false);
+
+onlyif sqlrs_v2
+query I
+SELECT id FROM state
+----
+1
+2
+3
+4
