@@ -45,11 +45,11 @@ impl Database {
         ///     Limit(1)
         ///       Project(a,b)
         let logical_plan = binder.bind(&stmts[0])?;
-        println!("logic plan: {:#?}", logical_plan);
+        // println!("logic plan: {:#?}", logical_plan);
 
         let mut builder = PhysicalPlanBuilder::new();
         let operator = builder.build_plan(&logical_plan)?;
-        println!("operator: {:#?}", operator);
+        // println!("operator: {:#?}", operator);
 
         let storage = StorageImpl::InMemoryStorage(self.storage.clone());
         let executor = VolcanoExecutor::new(storage);
@@ -57,33 +57,6 @@ impl Database {
         let mut stream = executor.build(operator);
 
         Ok(VolcanoExecutor::try_collect(&mut stream).await?)
-
-        // // let physical_planner = PhysicalPlaner::default();
-        // // let executor_builder = ExecutorBuilder::new(self.env.clone());
-        //
-        // // let physical_plan = physical_planner.plan(logical_plan)?;
-        // // let executor = executor_builder.build(physical_plan)?;
-        // // futures::executor::block_on(executor).unwrap();
-        //
-        // /// THE FOLLOWING CODE IS FOR TESTING ONLY
-        // /// THE FINAL CODE WILL BE IN executor MODULE
-        // if let LogicalPlan::CreateTable(plan) = logical_plan {
-        //     let mut columns = Vec::new();
-        //     plan.columns.iter().for_each(|c| {
-        //         columns.push(ColumnCatalog::new(c.0.clone(), c.1, c.2.clone()));
-        //     });
-        //     let table_name = plan.table_name.clone();
-        //     // columns->batch record
-        //     let mut data = Vec::new();
-        //
-        //     columns.iter().for_each(|c| {
-        //         let batch = RecordBatch::new_empty(Arc::new(Schema::new(vec![c.to_field()])));
-        //         data.push(batch);
-        //     });
-        //
-        //     self.storage
-        //         .create_table(IdGenerator::build(), table_name.as_str(), data)?;
-        // }
     }
 }
 
@@ -174,19 +147,22 @@ mod test {
             Ok(())
         })
     }
+
     #[test]
     fn test_crud_sql() -> anyhow::Result<()> {
-        let database = Database::new_on_mem();
+        let kipsql = Database::new_on_mem();
 
         tokio_test::block_on(async move {
-            let _ = database.run("create table t1 (a int, b boolean)").await?;
-            let _ = database.run("insert into t1 values (1, true), (2, false)").await?;
-            let vec_batch = database.run("select * from t1 where a = 1 or b = false").await?;
+            let _ = kipsql.run("create table t1 (a int, b int)").await?;
+            let _ = kipsql.run("insert into t1 values (1, 2), (3, 4)").await?;
 
-            let table = database.storage
-                .get_catalog()
-                .get_table(0).unwrap().clone();
-            print_batches(&vec_batch)?;
+            println!("full:");
+            let vec_batch_full_fields = kipsql.run("select * from t1").await?;
+            print_batches(&vec_batch_full_fields)?;
+
+            println!("projection_and_filter:");
+            let vec_batch_projection_a = kipsql.run("select a from t1 where a != 3 and a < b ").await?;
+            print_batches(&vec_batch_projection_a)?;
 
             Ok(())
         })
