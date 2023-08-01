@@ -4,6 +4,7 @@ mod table_scan;
 mod insert;
 mod values;
 mod filter;
+mod sort;
 
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_v1::physical_plan::PhysicalOperator;
@@ -17,8 +18,10 @@ use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
+use crate::execution_v1::physical_plan::physical_sort::PhysicalSort;
 use crate::execution_v1::volcano_executor::filter::Filter;
 use crate::execution_v1::volcano_executor::insert::Insert;
+use crate::execution_v1::volcano_executor::sort::Sort;
 use crate::execution_v1::volcano_executor::values::Values;
 
 pub type BoxedExecutor = BoxStream<'static, Result<RecordBatch, ExecutorError>>;
@@ -60,6 +63,11 @@ impl VolcanoExecutor {
                 let input = self.build(*input);
 
                 Filter::execute(predicate, input)
+            }
+            PhysicalOperator::Sort(PhysicalSort {op, input, ..}) => {
+                let input = self.build(*input);
+
+                Sort::execute(op.sort_fields, op.limit, input)
             }
         }
     }

@@ -154,14 +154,14 @@ mod test {
 
         tokio_test::block_on(async move {
             let _ = kipsql.run("create table t1 (a int, b int)").await?;
-            let _ = kipsql.run("insert into t1 values (1, 2), (3, 4)").await?;
+            let _ = kipsql.run("insert into t1 values (1, 1), (2, 3), (5, 4)").await?;
 
             println!("full:");
             let vec_batch_full_fields = kipsql.run("select * from t1").await?;
             print_batches(&vec_batch_full_fields)?;
 
             println!("projection_and_filter:");
-            let vec_batch_projection_a = kipsql.run("select a from t1 where a != 3 and a < b ").await?;
+            let vec_batch_projection_a = kipsql.run("select a from t1 where a <= b order by a desc ").await?;
             print_batches(&vec_batch_projection_a)?;
 
             Ok(())
