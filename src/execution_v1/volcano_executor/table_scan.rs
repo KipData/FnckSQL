@@ -13,7 +13,7 @@ impl TableScan {
     pub async fn execute(plan: PhysicalTableScan, storage: impl Storage) {
         // TODO: sort_fields, pre_where, limit
         let ScanOperator { table_ref_id,  .. } = plan.base;
-        println!("ref id: {}", table_ref_id);
+
         let table = storage.get_table(table_ref_id)?;
         let mut transaction = table.read(
             None,

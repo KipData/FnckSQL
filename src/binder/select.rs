@@ -324,13 +324,8 @@ mod tests {
     use super::*;
     use crate::binder::BinderContext;
     use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
-    use crate::expression::agg::AggKind;
-    use crate::expression::BinaryOperator::{Gt, Minus};
-    use crate::expression::ScalarExpression::{AggCall, Binary, ColumnRef, Constant, InputRef};
     use crate::planner::LogicalPlan;
-    use crate::planner::operator::aggregate::AggregateOperator;
     use crate::types::LogicalType::Integer;
-    use crate::types::value::DataValue::Int32;
 
     fn test_root_catalog() -> Result<RootCatalog> {
         let mut root = RootCatalog::new();
