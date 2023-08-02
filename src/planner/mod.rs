@@ -1,19 +1,22 @@
 pub mod display;
-pub mod logical_create_table_plan;
 pub mod logical_plan_builder;
-pub mod logical_select_plan;
 pub mod operator;
-pub mod logical_insert_plan;
 
-use crate::planner::logical_insert_plan::LogicalInsertPlan;
-use self::{
-    logical_create_table_plan::LogicalCreateTablePlan, logical_select_plan::LogicalSelectPlan,
-};
+use std::sync::Arc;
+use anyhow::Result;
+use crate::planner::operator::OperatorRef;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum LogicalPlan {
-    Select(LogicalSelectPlan),
-    CreateTable(LogicalCreateTablePlan),
-    Insert(LogicalInsertPlan)
+pub struct LogicalPlan {
+    pub operator: OperatorRef,
+    pub children: Vec<Arc<LogicalPlan>>,
 }
-pub enum LogicalPlanError {}
+
+impl LogicalPlan {
+    pub fn child(&self, index: usize) -> Result<&LogicalPlan> {
+        self.children
+            .get(index)
+            .map(|v| v.as_ref())
+            .ok_or_else(|| anyhow::Error::msg(format!("Invalid children index {}", index)))
+    }
+}

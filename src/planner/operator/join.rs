@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use crate::{expression::ScalarExpression, planner::logical_select_plan::LogicalSelectPlan};
+use crate::expression::ScalarExpression;
+use crate::planner::LogicalPlan;
 
 use super::Operator;
 
@@ -25,12 +26,12 @@ pub struct JoinOperator {
 
 impl JoinOperator {
     pub fn new(
-        left: LogicalSelectPlan,
-        right: LogicalSelectPlan,
+        left: LogicalPlan,
+        right: LogicalPlan,
         on: Option<ScalarExpression>,
         join_type: JoinType,
-    ) -> LogicalSelectPlan {
-        LogicalSelectPlan {
+    ) -> LogicalPlan {
+        LogicalPlan {
             operator: Arc::new(Operator::Join(JoinOperator { on, join_type })),
             children: vec![Arc::new(left), Arc::new(right)],
         }

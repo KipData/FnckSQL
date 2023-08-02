@@ -1,19 +1,21 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 use anyhow::Result;
 use sqlparser::ast::{ColumnDef, ObjectName};
 
 use super::Binder;
 use crate::binder::{lower_case_name, split_name};
 use crate::catalog::ColumnCatalog;
-use crate::planner::logical_create_table_plan::LogicalCreateTablePlan;
+use crate::planner::LogicalPlan;
 use crate::planner::operator::create_table::CreateTableOperator;
+use crate::planner::operator::Operator;
 
 impl Binder {
     pub(crate) fn bind_create_table(
         &mut self,
         name: &ObjectName,
         columns: &[ColumnDef],
-    ) -> Result<LogicalCreateTablePlan> {
+    ) -> Result<LogicalPlan> {
         let name = lower_case_name(&name);
         let (_, table_name) = split_name(&name)?;
 
@@ -34,11 +36,16 @@ impl Binder {
             .map(|col| ColumnCatalog::from(col.clone()))
             .collect();
 
-        let plan = LogicalCreateTablePlan {
-            operator: CreateTableOperator {
-                table_name: table_name.to_string(),
-                columns
-            },
+        let plan = LogicalPlan {
+            operator: Arc::new(
+                Operator::CreateTable(
+                    CreateTableOperator {
+                        table_name: table_name.to_string(),
+                        columns
+                    }
+                )
+            ),
+            children: vec![],
         };
         Ok(plan)
     }
@@ -59,23 +66,28 @@ mod tests {
         let stmt = crate::parser::parse_sql(sql).unwrap();
         let plan1 = binder.bind(&stmt[0]).unwrap();
 
-        let plan2 = LogicalPlan::CreateTable(LogicalCreateTablePlan {
-            operator: CreateTableOperator {
-                table_name: "t1".to_string(),
-                columns: vec![
-                    ColumnCatalog::new(
-                        "id".to_string(),
-                        false,
-                        ColumnDesc::new(LogicalType::Integer, false)
-                    ),
-                    ColumnCatalog::new(
-                        "name".to_string(),
-                        false,
-                        ColumnDesc::new(LogicalType::Varchar, false)
-                    )
-                ],
-            },
-        });
+        let plan2 = LogicalPlan {
+            operator: Arc::new(
+                Operator::CreateTable(
+                    CreateTableOperator {
+                        table_name: "t1".to_string(),
+                        columns: vec![
+                            ColumnCatalog::new(
+                                "id".to_string(),
+                                false,
+                                ColumnDesc::new(LogicalType::Integer, false)
+                            ),
+                            ColumnCatalog::new(
+                                "name".to_string(),
+                                false,
+                                ColumnDesc::new(LogicalType::Varchar, false)
+                            )
+                        ],
+                    }
+                )
+            ),
+            children: vec![],
+        };
 
         assert_eq!(plan1, plan2);
     }

@@ -5,20 +5,20 @@ use sqlparser::ast::{Expr, OrderByExpr};
 use crate::{
     expression::ScalarExpression,
     planner::{
-        logical_select_plan::LogicalSelectPlan,
         operator::{aggregate::AggregateOperator, sort::SortField},
     },
 };
+use crate::planner::LogicalPlan;
 
 use super::Binder;
 
 impl Binder {
     pub fn bind_aggregate(
         &mut self,
-        children: LogicalSelectPlan,
+        children: LogicalPlan,
         agg_calls: Vec<ScalarExpression>,
         groupby_exprs: Vec<ScalarExpression>,
-    ) -> LogicalSelectPlan {
+    ) -> LogicalPlan {
         AggregateOperator::new(children, agg_calls, groupby_exprs)
     }
 
