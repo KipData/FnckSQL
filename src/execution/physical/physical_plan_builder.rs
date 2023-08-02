@@ -55,7 +55,7 @@ impl PhysicalPlanBuilder {
                 Ok(PhysicalOperator::Limit(PhysicalLimit {
                     plan_id: self.next_plan_id(),
                     input: Arc::new(input),
-                    limit: limit.count,
+                    limit: limit.limit,
                     offset: limit.offset,
                 }))
             }
