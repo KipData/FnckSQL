@@ -64,24 +64,22 @@ mod tests {
         let plan1 = binder.bind(&stmt[0]).unwrap();
 
         let plan2 = LogicalPlan {
-            operator: Arc::new(
-                Operator::CreateTable(
-                    CreateTableOperator {
-                        table_name: "t1".to_string(),
-                        columns: vec![
-                            ColumnCatalog::new(
-                                "id".to_string(),
-                                false,
-                                ColumnDesc::new(LogicalType::Integer, false)
-                            ),
-                            ColumnCatalog::new(
-                                "name".to_string(),
-                                false,
-                                ColumnDesc::new(LogicalType::Varchar, false)
-                            )
-                        ],
-                    }
-                )
+            operator: Operator::CreateTable(
+                CreateTableOperator {
+                    table_name: "t1".to_string(),
+                    columns: vec![
+                        ColumnCatalog::new(
+                            "id".to_string(),
+                            false,
+                            ColumnDesc::new(LogicalType::Integer, false)
+                        ),
+                        ColumnCatalog::new(
+                            "name".to_string(),
+                            false,
+                            ColumnDesc::new(LogicalType::Varchar, false)
+                        )
+                    ],
+                }
             ),
             childrens: vec![],
         };
