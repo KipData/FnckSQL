@@ -164,6 +164,10 @@ mod test {
             let vec_batch_projection_a = kipsql.run("select a from t1 where a <= b order by a desc ").await?;
             print_batches(&vec_batch_projection_a)?;
 
+            println!("limit:");
+            let vec_batch_limit=kipsql.run("select * from t1  limit 2 offset 1").await?;
+            print_batches(&vec_batch_limit)?;
+
             Ok(())
         })
     }
