@@ -18,7 +18,7 @@ pub(crate) mod physical_sort;
 pub(crate) mod physical_limit;
 
 #[derive(Debug)]
-pub enum PhysicalOperator {
+pub enum PhysicalPlan {
     Insert(PhysicalInsert),
     CreateTable(PhysicalCreateTable),
     TableScan(PhysicalTableScan),

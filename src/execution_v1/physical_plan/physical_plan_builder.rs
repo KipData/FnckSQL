@@ -1,7 +1,7 @@
 use crate::execution_v1::physical_plan::physical_create_table::PhysicalCreateTable;
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_v1::physical_plan::physical_table_scan::PhysicalTableScan;
-use crate::execution_v1::physical_plan::PhysicalOperator;
+use crate::execution_v1::physical_plan::PhysicalPlan;
 use crate::planner::operator::scan::ScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
@@ -27,16 +27,16 @@ impl PhysicalPlanBuilder {
         PhysicalPlanBuilder { }
     }
 
-    pub fn build_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalOperator> {
+    pub fn build_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalPlan> {
         match plan.operator.as_ref() {
             Operator::Project(op) => self.build_physical_select_projection(plan, op),
             Operator::Scan(scan) => Ok(self.build_physical_scan(scan.clone())),
             Operator::Filter(op) => self.build_physical_filter(plan, op),
             Operator::CreateTable(op) => Ok(self.build_physical_create_table(op)),
-            Operator::Insert(op) => self.bind_insert(plan, op),
-            Operator::Values(op) => Ok(Self::bind_values(op)),
+            Operator::Insert(op) => self.build_insert(plan, op),
+            Operator::Values(op) => Ok(Self::build_values(op)),
             Operator::Sort(op) => self.build_physical_sort(plan, op),
-            Operator::Limit(op)=>self.build_physical_limit(plan,op),
+            Operator::Limit(op)=>self.build_physical_limit(plan, op),
             _ => Err(anyhow!(format!(
                 "Unsupported physical plan: {:?}",
                 plan.operator
@@ -44,14 +44,14 @@ impl PhysicalPlanBuilder {
         }
     }
 
-    fn bind_values(op: &ValuesOperator) -> PhysicalOperator {
-        PhysicalOperator::Values(PhysicalValues { base: op.clone() })
+    fn build_values(op: &ValuesOperator) -> PhysicalPlan {
+        PhysicalPlan::Values(PhysicalValues { base: op.clone() })
     }
 
-    fn bind_insert(&mut self, plan: &LogicalPlan, op: &InsertOperator) -> Result<PhysicalOperator> {
+    fn build_insert(&mut self, plan: &LogicalPlan, op: &InsertOperator) -> Result<PhysicalPlan> {
         let input = self.build_plan(plan.child(0)?)?;
 
-        Ok(PhysicalOperator::Insert(PhysicalInsert {
+        Ok(PhysicalPlan::Insert(PhysicalInsert {
             table_name: op.table.clone(),
             input: Box::new(input),
         }))
@@ -60,49 +60,49 @@ impl PhysicalPlanBuilder {
     fn build_physical_create_table(
         &mut self,
         op: &CreateTableOperator,
-    ) -> PhysicalOperator {
-        PhysicalOperator::CreateTable(
+    ) -> PhysicalPlan {
+        PhysicalPlan::CreateTable(
             PhysicalCreateTable {
                 op: op.clone(),
             }
         )
     }
 
-    fn build_physical_select_projection(&mut self, plan: &LogicalPlan, op: &ProjectOperator) -> Result<PhysicalOperator> {
+    fn build_physical_select_projection(&mut self, plan: &LogicalPlan, op: &ProjectOperator) -> Result<PhysicalPlan> {
         let input = self.build_plan(plan.child(0)?)?;
 
-        Ok(PhysicalOperator::Projection(PhysicalProjection {
+        Ok(PhysicalPlan::Projection(PhysicalProjection {
             exprs: op.columns.clone(),
             input: Box::new(input),
         }))
     }
 
-    fn build_physical_scan(&mut self, base: ScanOperator) -> PhysicalOperator {
-        PhysicalOperator::TableScan(PhysicalTableScan { base })
+    fn build_physical_scan(&mut self, base: ScanOperator) -> PhysicalPlan {
+        PhysicalPlan::TableScan(PhysicalTableScan { base })
     }
 
-    fn build_physical_filter(&mut self, plan: &LogicalPlan, base: &FilterOperator) -> Result<PhysicalOperator> {
+    fn build_physical_filter(&mut self, plan: &LogicalPlan, base: &FilterOperator) -> Result<PhysicalPlan> {
         let input = self.build_plan(plan.child(0)?)?;
 
-        Ok(PhysicalOperator::Filter(PhysicalFilter {
+        Ok(PhysicalPlan::Filter(PhysicalFilter {
             predicate: base.predicate.clone(),
             input: Box::new(input),
         }))
     }
 
-    fn build_physical_sort(&mut self, plan: &LogicalPlan, base: &SortOperator) -> Result<PhysicalOperator> {
+    fn build_physical_sort(&mut self, plan: &LogicalPlan, base: &SortOperator) -> Result<PhysicalPlan> {
         let input = self.build_plan(plan.child(0)?)?;
 
-        Ok(PhysicalOperator::Sort(PhysicalSort {
+        Ok(PhysicalPlan::Sort(PhysicalSort {
             op: base.clone(),
             input: Box::new(input),
         }))
     }
 
-    fn build_physical_limit(&mut self, plan: &LogicalPlan, base : &LimitOperator)->Result<PhysicalOperator>{
+    fn build_physical_limit(&mut self, plan: &LogicalPlan, base : &LimitOperator)->Result<PhysicalPlan>{
         let input =self.build_plan(plan.child(0)?)?;
 
-        Ok(PhysicalOperator::Limit(PhysicalLimit{
+        Ok(PhysicalPlan::Limit(PhysicalLimit{
             op:base.clone(),
             input: Box::new(input),
         }))
