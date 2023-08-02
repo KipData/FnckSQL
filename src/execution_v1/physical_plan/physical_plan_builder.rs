@@ -11,11 +11,13 @@ use anyhow::anyhow;
 use anyhow::Result;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
+use crate::execution_v1::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_v1::physical_plan::physical_sort::PhysicalSort;
 use crate::execution_v1::physical_plan::physical_values::PhysicalValues;
 use crate::planner::logical_insert_plan::LogicalInsertPlan;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::insert::InsertOperator;
+use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::project::ProjectOperator;
 use crate::planner::operator::sort::SortOperator;
 use crate::planner::operator::values::ValuesOperator;
@@ -82,6 +84,7 @@ impl PhysicalPlanBuilder {
             Operator::Scan(scan) => Ok(self.build_physical_scan(scan.clone())),
             Operator::Filter(op) => self.build_physical_filter(plan, op),
             Operator::Sort(op) => self.build_physical_sort(plan, op),
+            Operator::Limit(op)=>self.build_physical_limit(plan,op),
             _ => Err(anyhow!(format!(
                 "Unsupported physical plan: {:?}",
                 plan.operator
@@ -116,6 +119,15 @@ impl PhysicalPlanBuilder {
 
         Ok(PhysicalOperator::Sort(PhysicalSort {
             op: base.clone(),
+            input: Box::new(input),
+        }))
+    }
+
+    fn build_physical_limit(&mut self, plan: &LogicalSelectPlan,base : &LimitOperator)->Result<PhysicalOperator>{
+        let input =self.build_select_logical_plan(plan.child(0)?)?;
+
+        Ok(PhysicalOperator::Limit(PhysicalLimit{
+            op:base.clone(),
             input: Box::new(input),
         }))
     }

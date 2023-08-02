@@ -394,6 +394,18 @@ mod tests {
             plan_6
         );
 
+        let plan_7 = select_sql_run("select * from t1 limit 1")?;
+        println!(
+            "limit:\n {:#?}",
+            plan_7
+        );
+
+        let plan_8 = select_sql_run("select * from t1 offset 2")?;
+        println!(
+            "offset:\n {:#?}",
+            plan_8
+        );
+
         Ok(())
     }
 }
