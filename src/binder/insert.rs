@@ -1,5 +1,4 @@
 use std::slice;
-use std::sync::Arc;
 use sqlparser::ast::{Expr, Ident, ObjectName};
 use anyhow::{Error, Result};
 use itertools::Itertools;
@@ -57,14 +56,12 @@ impl Binder {
             let values_plan = self.bind_values(rows, col_catalogs.clone());
 
             Ok(LogicalPlan {
-                operator: Arc::new(
-                    Operator::Insert(
-                        InsertOperator {
-                            table: table_name.to_string(),
-                        }
-                    )
+                operator: Operator::Insert(
+                    InsertOperator {
+                        table: table_name.to_string(),
+                    }
                 ),
-                children: vec![Arc::new(values_plan)],
+                childrens: vec![values_plan],
             })
         } else {
             Err(anyhow::Error::msg(format!(
@@ -80,11 +77,11 @@ impl Binder {
         col_catalogs: Vec<ColumnCatalog>
     ) -> LogicalPlan {
         LogicalPlan {
-            operator: Arc::new(Operator::Values(ValuesOperator {
+            operator: Operator::Values(ValuesOperator {
                 rows,
                 col_catalogs,
-            })),
-            children: vec![],
+            }),
+            childrens: vec![],
         }
     }
 }

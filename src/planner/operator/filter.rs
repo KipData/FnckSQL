@@ -1,4 +1,4 @@
-use std::{sync::Arc, vec};
+use std::vec;
 
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
@@ -18,8 +18,8 @@ impl FilterOperator {
         having: bool,
     ) -> LogicalPlan {
         LogicalPlan {
-            operator: Arc::new(Operator::Filter(FilterOperator { predicate, having })),
-            children: vec![Arc::new(children)],
+            operator: Operator::Filter(FilterOperator { predicate, having }),
+            childrens: vec![children],
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, sync::Arc};
+use std::borrow::Borrow;
 
 use crate::{
     catalog::ColumnRefId,
@@ -103,8 +103,8 @@ impl Binder {
         assert!(from.len() < 2, "not support yet.");
         if from.is_empty() {
             return Ok(LogicalPlan {
-                operator: Arc::new(Operator::Dummy),
-                children: vec![],
+                operator: Operator::Dummy,
+                childrens: vec![],
             });
         }
 
@@ -201,16 +201,15 @@ impl Binder {
         let mut exprs = vec![];
         for ref_id in self.context.bind_table.values().cloned().collect_vec() {
             let table = self.context.catalog.get_table(ref_id).unwrap();
-            for (col_id, col) in &table.all_columns() {
-                let column_ref_id = ColumnRefId::from_table(ref_id, *col_id);
+            for (col_id, col) in table.all_columns() {
+                let column_ref_id = ColumnRefId::from_table(ref_id, col_id);
                 // self.record_regular_table_column(
                 //     &table.name(),
                 //     col.name(),
                 //     *col_id,
                 //     col.desc().clone(),
                 // );
-                let expr = ScalarExpression::ColumnRef((*col).clone());
-                exprs.push(expr);
+                exprs.push(ScalarExpression::ColumnRef(col.clone()));
             }
         }
 
@@ -275,10 +274,10 @@ impl Binder {
         select_list: Vec<ScalarExpression>,
     ) -> LogicalPlan {
         LogicalPlan {
-            operator: Arc::new(Operator::Project(ProjectOperator {
+            operator: Operator::Project(ProjectOperator {
                 columns: select_list,
-            })),
-            children: vec![Arc::new(children)],
+            }),
+            childrens: vec![children],
         }
     }
 
@@ -288,11 +287,11 @@ impl Binder {
         sort_fields: Vec<SortField>,
     ) -> LogicalPlan {
         LogicalPlan {
-            operator: Arc::new(Operator::Sort(SortOperator {
+            operator: Operator::Sort(SortOperator {
                 sort_fields,
                 limit: None,
-            })),
-            children: vec![Arc::new(children)],
+            }),
+            childrens: vec![children],
         }
     }
 

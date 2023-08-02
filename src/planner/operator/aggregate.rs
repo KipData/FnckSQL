@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     expression::ScalarExpression,
     planner::operator::Operator,
@@ -20,11 +18,11 @@ impl AggregateOperator {
         groupby_exprs: Vec<ScalarExpression>,
     ) -> LogicalPlan {
         LogicalPlan {
-            operator: Arc::new(Operator::Aggregate(Self {
+            operator: Operator::Aggregate(Self {
                 groupby_exprs,
                 agg_calls,
-            })),
-            children: vec![Arc::new(children)],
+            }),
+            childrens: vec![children],
         }
     }
 }

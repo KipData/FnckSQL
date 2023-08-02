@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::planner::LogicalPlan;
 
 use super::Operator;
@@ -13,8 +11,8 @@ pub struct LimitOperator {
 impl LimitOperator {
 pub fn new(offset: usize, limit: usize, children: LogicalPlan) -> LogicalPlan {
         LogicalPlan {
-            operator: Arc::new(Operator::Limit(LimitOperator { offset, limit })),
-            children: vec![Arc::new(children)],
+            operator: Operator::Limit(LimitOperator { offset, limit }),
+            childrens: vec![children],
         }
     }
 }

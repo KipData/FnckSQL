@@ -2,21 +2,19 @@ pub mod display;
 pub mod logical_plan_builder;
 pub mod operator;
 
-use std::sync::Arc;
 use anyhow::Result;
-use crate::planner::operator::OperatorRef;
+use crate::planner::operator::Operator;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub struct LogicalPlan {
-    pub operator: OperatorRef,
-    pub children: Vec<Arc<LogicalPlan>>,
+    pub operator: Operator,
+    pub childrens: Vec<LogicalPlan>,
 }
 
 impl LogicalPlan {
     pub fn child(&self, index: usize) -> Result<&LogicalPlan> {
-        self.children
+        self.childrens
             .get(index)
-            .map(|v| v.as_ref())
             .ok_or_else(|| anyhow::Error::msg(format!("Invalid children index {}", index)))
     }
 }

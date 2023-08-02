@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 
@@ -32,8 +30,8 @@ impl JoinOperator {
         join_type: JoinType,
     ) -> LogicalPlan {
         LogicalPlan {
-            operator: Arc::new(Operator::Join(JoinOperator { on, join_type })),
-            children: vec![Arc::new(left), Arc::new(right)],
+            operator: Operator::Join(JoinOperator { on, join_type }),
+            childrens: vec![left, right],
         }
     }
 }

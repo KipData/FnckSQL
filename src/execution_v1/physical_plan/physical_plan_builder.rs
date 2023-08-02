@@ -28,7 +28,7 @@ impl PhysicalPlanBuilder {
     }
 
     pub fn build_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalPlan> {
-        match plan.operator.as_ref() {
+        match &plan.operator {
             Operator::Project(op) => self.build_physical_select_projection(plan, op),
             Operator::Scan(scan) => Ok(self.build_physical_scan(scan.clone())),
             Operator::Filter(op) => self.build_physical_filter(plan, op),

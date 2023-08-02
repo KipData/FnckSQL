@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::sync::Arc;
 use anyhow::Result;
 use sqlparser::ast::{ColumnDef, ObjectName};
 
@@ -37,15 +36,13 @@ impl Binder {
             .collect();
 
         let plan = LogicalPlan {
-            operator: Arc::new(
-                Operator::CreateTable(
-                    CreateTableOperator {
-                        table_name: table_name.to_string(),
-                        columns
-                    }
-                )
+            operator: Operator::CreateTable(
+                CreateTableOperator {
+                    table_name: table_name.to_string(),
+                    columns
+                }
             ),
-            children: vec![],
+            childrens: vec![],
         };
         Ok(plan)
     }
@@ -86,7 +83,7 @@ mod tests {
                     }
                 )
             ),
-            children: vec![],
+            childrens: vec![],
         };
 
         assert_eq!(plan1, plan2);

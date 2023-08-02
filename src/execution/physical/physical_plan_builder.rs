@@ -31,9 +31,10 @@ impl PhysicalPlanBuilder {
     }
 
     fn build_select_logical_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalOperator> {
-        match plan.operator.as_ref() {
+        match &plan.operator {
             Operator::Project(_) => {
                 let input = self.build_select_logical_plan(plan.child(0)?)?;
+
                 Ok(PhysicalOperator::Prjection(PhysicalProjection {
                     plan_id: self.next_plan_id(),
                     input: Arc::new(input),

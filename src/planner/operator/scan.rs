@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::types::TableIdx;
 use crate::{catalog::ColumnRefId, expression::ScalarExpression};
 use crate::planner::LogicalPlan;
@@ -20,14 +18,14 @@ pub struct ScanOperator {
 impl ScanOperator {
     pub fn new(table_ref_id: TableIdx) -> LogicalPlan {
         LogicalPlan {
-            operator: Arc::new(Operator::Scan(ScanOperator {
+            operator: Operator::Scan(ScanOperator {
                 table_ref_id,
                 columns: vec![],
                 sort_fields: vec![],
                 pre_where: vec![],
                 limit: None,
-            })),
-            children: vec![],
+            }),
+            childrens: vec![],
         }
     }
 }
