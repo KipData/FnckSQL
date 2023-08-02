@@ -11,9 +11,9 @@ pub struct LimitOperator {
 }
 
 impl LimitOperator {
-pub fn new(offset: usize, count: usize, children: LogicalPlan) -> LogicalPlan {
+pub fn new(offset: usize, limit: usize, children: LogicalPlan) -> LogicalPlan {
         LogicalPlan {
-            operator: Arc::new(Operator::Limit(LimitOperator { offset, count })),
+            operator: Arc::new(Operator::Limit(LimitOperator { offset, limit })),
             children: vec![Arc::new(children)],
         }
     }

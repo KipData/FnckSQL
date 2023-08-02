@@ -17,7 +17,6 @@ use crate::storage::StorageImpl;
 use arrow::record_batch::RecordBatch;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
-use serde::de::Unexpected::Option;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_v1::physical_plan::physical_limit::PhysicalLimit;

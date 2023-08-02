@@ -165,7 +165,7 @@ mod test {
             print_batches(&vec_batch_projection_a)?;
 
             println!("limit:");
-            let vec_batch_limit=kipsql.run("select * from t1  limit 2 offset 1").await?;
+            let vec_batch_limit=kipsql.run("select * from t1 limit 1 offset 1").await?;
             print_batches(&vec_batch_limit)?;
 
             Ok(())
