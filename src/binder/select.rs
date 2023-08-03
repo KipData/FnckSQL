@@ -23,6 +23,7 @@ use sqlparser::ast::{
     Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
+use crate::planner::operator::sort::{SortField, SortOperator};
 
 impl Binder {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalSelectPlan> {
@@ -90,9 +91,9 @@ impl Binder {
         //     plan = self.bind_distinct(plan, select_list.clone())?;
         // }
 
-        // // if let Some(orderby) = having_orderby.1 {
-        // //     plan = self.bind_sort(plan, orderby)?;
-        // // }
+        if let Some(orderby) = having_orderby.1 {
+            plan = self.bind_sort(plan, orderby);
+        }
 
         plan = self.bind_project(plan, select_list);
         Ok(plan)
@@ -281,6 +282,20 @@ impl Binder {
         }
     }
 
+    fn bind_sort(
+        &mut self,
+        children: LogicalSelectPlan,
+        sort_fields: Vec<SortField>,
+    ) -> LogicalSelectPlan {
+        LogicalSelectPlan {
+            operator: Arc::new(Operator::Sort(SortOperator {
+                sort_fields,
+                limit: None,
+            })),
+            children: vec![Arc::new(children)],
+        }
+    }
+
     fn bind_limit(
         &mut self,
         children: LogicalSelectPlan,
@@ -377,6 +392,18 @@ mod tests {
         println!(
             "table_with_col_nested:\n {:#?}",
             plan_6
+        );
+
+        let plan_7 = select_sql_run("select * from t1 limit 1")?;
+        println!(
+            "limit:\n {:#?}",
+            plan_7
+        );
+
+        let plan_8 = select_sql_run("select * from t1 offset 2")?;
+        println!(
+            "offset:\n {:#?}",
+            plan_8
         );
 
         Ok(())

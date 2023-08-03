@@ -1,8 +1,8 @@
 use crate::execution_v1::physical_plan::PhysicalOperator;
-use crate::expression::ScalarExpression;
+use crate::planner::operator::sort::SortOperator;
 
 #[derive(Debug)]
-pub struct PhysicalFilter {
-    pub(crate) predicate: ScalarExpression,
+pub struct PhysicalSort {
+    pub(crate) op: SortOperator,
     pub(crate) input: Box<PhysicalOperator>
 }

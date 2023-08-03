@@ -1,7 +1,9 @@
 use crate::execution_v1::physical_plan::physical_create_table::PhysicalCreateTable;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
+use crate::execution_v1::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
+use crate::execution_v1::physical_plan::physical_sort::PhysicalSort;
 use crate::execution_v1::physical_plan::physical_table_scan::PhysicalTableScan;
 use crate::execution_v1::physical_plan::physical_values::PhysicalValues;
 
@@ -12,6 +14,8 @@ pub(crate) mod physical_table_scan;
 pub(crate) mod physical_insert;
 pub(crate) mod physical_values;
 pub(crate) mod physical_filter;
+pub(crate) mod physical_sort;
+pub(crate) mod physical_limit;
 
 #[derive(Debug)]
 pub enum PhysicalOperator {
@@ -20,5 +24,7 @@ pub enum PhysicalOperator {
     TableScan(PhysicalTableScan),
     Projection(PhysicalProjection),
     Filter(PhysicalFilter),
-    Values(PhysicalValues)
+    Sort(PhysicalSort),
+    Values(PhysicalValues),
+    Limit(PhysicalLimit),
 }

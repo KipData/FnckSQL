@@ -1,8 +1,8 @@
 use crate::execution_v1::physical_plan::PhysicalOperator;
-use crate::expression::ScalarExpression;
+use crate::planner::operator::limit::LimitOperator;
 
 #[derive(Debug)]
-pub struct PhysicalFilter {
-    pub(crate) predicate: ScalarExpression,
+pub struct PhysicalLimit {
+    pub(crate) op: LimitOperator,
     pub(crate) input: Box<PhysicalOperator>
 }
