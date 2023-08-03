@@ -61,18 +61,11 @@ impl Binder {
 
     pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan> {
         let plan = match stmt {
-            Statement::Query(query) => {
-                let plan = self.bind_query(query)?;
-                LogicalPlan::Select(plan)
-            }
-            Statement::CreateTable { name, columns, .. } => {
-                let plan = self.bind_create_table(name, &columns)?;
-                LogicalPlan::CreateTable(plan)
-            }
+            Statement::Query(query) => self.bind_query(query)?,
+            Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
             Statement::Insert { table_name, columns, source, .. } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
-                    let plan = self.bind_insert(table_name.to_owned(), columns, &values.rows)?;
-                    LogicalPlan::Insert(plan)
+                    self.bind_insert(table_name.to_owned(), columns, &values.rows)?
                 } else {
                     todo!()
                 }

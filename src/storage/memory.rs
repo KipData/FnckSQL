@@ -182,7 +182,6 @@ impl Transaction for InMemoryTransaction {
 mod storage_test {
     use std::sync::Arc;
 
-    use crate::types::IdGenerator;
     use arrow::array::Int32Array;
     use arrow::datatypes::{DataType, Field, Schema};
 

@@ -1,12 +1,11 @@
 use std::slice;
-use std::sync::Arc;
 use sqlparser::ast::{Expr, Ident, ObjectName};
 use anyhow::{Error, Result};
 use itertools::Itertools;
 use crate::binder::{Binder, lower_case_name, split_name};
 use crate::catalog::ColumnCatalog;
 use crate::expression::ScalarExpression;
-use crate::planner::logical_insert_plan::LogicalInsertPlan;
+use crate::planner::LogicalPlan;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::Operator;
 use crate::planner::operator::values::ValuesOperator;
@@ -21,7 +20,7 @@ impl Binder {
         name: ObjectName,
         idents: &[Ident],
         rows: &Vec<Vec<Expr>>
-    ) -> Result<LogicalInsertPlan> {
+    ) -> Result<LogicalPlan> {
         let name = lower_case_name(&name);
         let (_, table_name) = split_name(&name)?;
 
@@ -56,15 +55,13 @@ impl Binder {
 
             let values_plan = self.bind_values(rows, col_catalogs.clone());
 
-            Ok(LogicalInsertPlan {
-                operator: Arc::new(
-                    Operator::Insert(
-                        InsertOperator {
-                            table: table_name.to_string(),
-                        }
-                    )
+            Ok(LogicalPlan {
+                operator: Operator::Insert(
+                    InsertOperator {
+                        table: table_name.to_string(),
+                    }
                 ),
-                children: vec![Arc::new(values_plan)],
+                childrens: vec![values_plan],
             })
         } else {
             Err(anyhow::Error::msg(format!(
@@ -78,13 +75,13 @@ impl Binder {
         &mut self,
         rows: Vec<Vec<DataValue>>,
         col_catalogs: Vec<ColumnCatalog>
-    ) -> LogicalInsertPlan {
-        LogicalInsertPlan {
-            operator: Arc::new(Operator::Values(ValuesOperator {
+    ) -> LogicalPlan {
+        LogicalPlan {
+            operator: Operator::Values(ValuesOperator {
                 rows,
                 col_catalogs,
-            })),
-            children: vec![],
+            }),
+            childrens: vec![],
         }
     }
 }

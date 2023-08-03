@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use crate::planner::logical_select_plan::LogicalSelectPlan;
+use crate::planner::LogicalPlan;
 
 use super::Operator;
 
@@ -11,10 +9,10 @@ pub struct LimitOperator {
 }
 
 impl LimitOperator {
-    pub fn new(offset: usize, limit: usize, children: LogicalSelectPlan) -> LogicalSelectPlan {
-        LogicalSelectPlan {
-            operator: Arc::new(Operator::Limit(LimitOperator { offset, limit })),
-            children: vec![Arc::new(children)],
+pub fn new(offset: usize, limit: usize, children: LogicalPlan) -> LogicalPlan {
+        LogicalPlan {
+            operator: Operator::Limit(LimitOperator { offset, limit }),
+            childrens: vec![children],
         }
     }
 }

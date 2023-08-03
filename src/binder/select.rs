@@ -1,10 +1,9 @@
-use std::{borrow::Borrow, sync::Arc};
+use std::borrow::Borrow;
 
 use crate::{
     catalog::ColumnRefId,
     expression::ScalarExpression,
     planner::{
-        logical_select_plan::LogicalSelectPlan,
         operator::{
             filter::FilterOperator, join::JoinOperator as LJoinOperator, limit::LimitOperator,
             project::ProjectOperator, Operator,
@@ -23,10 +22,11 @@ use sqlparser::ast::{
     Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
+use crate::planner::LogicalPlan;
 use crate::planner::operator::sort::{SortField, SortOperator};
 
 impl Binder {
-    pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalSelectPlan> {
+    pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan> {
         if let Some(_with) = &query.with {
             // TODO support with clause.
         }
@@ -51,7 +51,7 @@ impl Binder {
         &mut self,
         select: &Select,
         orderby: &[OrderByExpr],
-    ) -> Result<LogicalSelectPlan> {
+    ) -> Result<LogicalPlan> {
         let mut plan = self.bind_table_ref(&select.from)?;
 
         // Resolve scalar function call.
@@ -99,12 +99,12 @@ impl Binder {
         Ok(plan)
     }
 
-    fn bind_table_ref(&mut self, from: &[TableWithJoins]) -> Result<LogicalSelectPlan> {
+    fn bind_table_ref(&mut self, from: &[TableWithJoins]) -> Result<LogicalPlan> {
         assert!(from.len() < 2, "not support yet.");
         if from.is_empty() {
-            return Ok(LogicalSelectPlan {
-                operator: Arc::new(Operator::Dummy),
-                children: vec![],
+            return Ok(LogicalPlan {
+                operator: Operator::Dummy,
+                childrens: vec![],
             });
         }
 
@@ -120,7 +120,7 @@ impl Binder {
         Ok(plan)
     }
 
-    fn bind_single_table_ref(&mut self, table: &TableFactor) -> Result<LogicalSelectPlan> {
+    fn bind_single_table_ref(&mut self, table: &TableFactor) -> Result<LogicalPlan> {
         let plan = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
@@ -201,23 +201,22 @@ impl Binder {
         let mut exprs = vec![];
         for ref_id in self.context.bind_table.values().cloned().collect_vec() {
             let table = self.context.catalog.get_table(ref_id).unwrap();
-            for (col_id, col) in &table.all_columns() {
-                let column_ref_id = ColumnRefId::from_table(ref_id, *col_id);
+            for (col_id, col) in table.all_columns() {
+                let column_ref_id = ColumnRefId::from_table(ref_id, col_id);
                 // self.record_regular_table_column(
                 //     &table.name(),
                 //     col.name(),
                 //     *col_id,
                 //     col.desc().clone(),
                 // );
-                let expr = ScalarExpression::ColumnRef((*col).clone());
-                exprs.push(expr);
+                exprs.push(ScalarExpression::ColumnRef(col.clone()));
             }
         }
 
         Ok(exprs)
     }
 
-    fn bind_join(&mut self, left: LogicalSelectPlan, join: &Join) -> Result<LogicalSelectPlan> {
+    fn bind_join(&mut self, left: LogicalPlan, join: &Join) -> Result<LogicalPlan> {
         let Join {
             relation,
             join_operator,
@@ -250,9 +249,9 @@ impl Binder {
 
     fn bind_where(
         &mut self,
-        children: LogicalSelectPlan,
+        children: LogicalPlan,
         predicate: &Expr,
-    ) -> Result<LogicalSelectPlan> {
+    ) -> Result<LogicalPlan> {
         Ok(FilterOperator::new(
             self.bind_expr(predicate)?,
             children,
@@ -262,46 +261,46 @@ impl Binder {
 
     fn bind_having(
         &mut self,
-        children: LogicalSelectPlan,
+        children: LogicalPlan,
         having: ScalarExpression,
-    ) -> Result<LogicalSelectPlan> {
+    ) -> Result<LogicalPlan> {
         self.validate_having_orderby(&having)?;
         Ok(FilterOperator::new(having, children, true))
     }
 
     fn bind_project(
         &mut self,
-        children: LogicalSelectPlan,
+        children: LogicalPlan,
         select_list: Vec<ScalarExpression>,
-    ) -> LogicalSelectPlan {
-        LogicalSelectPlan {
-            operator: Arc::new(Operator::Project(ProjectOperator {
+    ) -> LogicalPlan {
+        LogicalPlan {
+            operator: Operator::Project(ProjectOperator {
                 columns: select_list,
-            })),
-            children: vec![Arc::new(children)],
+            }),
+            childrens: vec![children],
         }
     }
 
     fn bind_sort(
         &mut self,
-        children: LogicalSelectPlan,
+        children: LogicalPlan,
         sort_fields: Vec<SortField>,
-    ) -> LogicalSelectPlan {
-        LogicalSelectPlan {
-            operator: Arc::new(Operator::Sort(SortOperator {
+    ) -> LogicalPlan {
+        LogicalPlan {
+            operator: Operator::Sort(SortOperator {
                 sort_fields,
                 limit: None,
-            })),
-            children: vec![Arc::new(children)],
+            }),
+            childrens: vec![children],
         }
     }
 
     fn bind_limit(
         &mut self,
-        children: LogicalSelectPlan,
+        children: LogicalPlan,
         limit_expr: &Option<Expr>,
         offset_expr: &Option<Offset>,
-    ) -> Result<LogicalSelectPlan> {
+    ) -> Result<LogicalPlan> {
         let mut limit = 0;
         let mut offset = 0;
         if let Some(expr) = limit_expr {

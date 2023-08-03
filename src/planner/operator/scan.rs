@@ -1,10 +1,6 @@
-use std::sync::Arc;
-
 use crate::types::TableIdx;
-use crate::{
-    catalog::ColumnRefId, expression::ScalarExpression,
-    planner::logical_select_plan::LogicalSelectPlan,
-};
+use crate::{catalog::ColumnRefId, expression::ScalarExpression};
+use crate::planner::LogicalPlan;
 
 use super::{sort::SortField, Operator};
 
@@ -20,16 +16,16 @@ pub struct ScanOperator {
     pub limit: Option<usize>,
 }
 impl ScanOperator {
-    pub fn new(table_ref_id: TableIdx) -> LogicalSelectPlan {
-        LogicalSelectPlan {
-            operator: Arc::new(Operator::Scan(ScanOperator {
+    pub fn new(table_ref_id: TableIdx) -> LogicalPlan {
+        LogicalPlan {
+            operator: Operator::Scan(ScanOperator {
                 table_ref_id,
                 columns: vec![],
                 sort_fields: vec![],
                 pre_where: vec![],
                 limit: None,
-            })),
-            children: vec![],
+            }),
+            childrens: vec![],
         }
     }
 }

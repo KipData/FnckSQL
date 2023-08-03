@@ -96,17 +96,13 @@ pub enum DatabaseError {
 mod test {
     use std::sync::Arc;
     use arrow::array::{BooleanArray, Int32Array};
-    use arrow::compute::concat_batches;
     use arrow::datatypes::Schema;
     use arrow::record_batch::RecordBatch;
     use arrow::util::pretty::print_batches;
-    use itertools::Itertools;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::Database;
-    use crate::execution_v1::ExecutorError;
     use crate::storage::{Storage, StorageError};
-    use crate::storage::memory::InMemoryStorage;
-    use crate::types::{IdGenerator, LogicalType, TableIdx};
+    use crate::types::{LogicalType, TableIdx};
 
     fn build_table(storage: &impl Storage) -> Result<TableIdx, StorageError> {
         let schema = Arc::new(Schema::new(
@@ -161,11 +157,15 @@ mod test {
             print_batches(&vec_batch_full_fields)?;
 
             println!("projection_and_filter:");
-            let vec_batch_projection_a = kipsql.run("select a from t1 where a <= b order by a desc ").await?;
+            let vec_batch_projection_a = kipsql.run("select a from t1 where a <= b").await?;
+            print_batches(&vec_batch_projection_a)?;
+
+            println!("projection_and_sort:");
+            let vec_batch_projection_a = kipsql.run("select a from t1 order by a").await?;
             print_batches(&vec_batch_projection_a)?;
 
             println!("limit:");
-            let vec_batch_limit=kipsql.run("select * from t1  limit 2 offset 1").await?;
+            let vec_batch_limit=kipsql.run("select * from t1 limit 1 offset 1").await?;
             print_batches(&vec_batch_limit)?;
 
             Ok(())

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::planner::operator::scan::ScanOperator;
-use crate::planner::{logical_select_plan::LogicalSelectPlan, operator::Operator, LogicalPlan};
+use crate::planner::{operator::Operator, LogicalPlan};
 
 use super::{
     physical_filter::PhysicalFilter, physical_limit::PhysicalLimit,
@@ -27,17 +27,14 @@ impl PhysicalPlanBuilder {
     }
 
     pub fn build_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalOperator> {
-        match plan {
-            LogicalPlan::Select(select) => self.build_select_logical_plan(select),
-            LogicalPlan::CreateTable(_) => todo!(),
-            LogicalPlan::Insert(_) => todo!(),
-        }
+        self.build_select_logical_plan(plan)
     }
 
-    fn build_select_logical_plan(&mut self, plan: &LogicalSelectPlan) -> Result<PhysicalOperator> {
-        match plan.operator.as_ref() {
+    fn build_select_logical_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalOperator> {
+        match &plan.operator {
             Operator::Project(_) => {
                 let input = self.build_select_logical_plan(plan.child(0)?)?;
+
                 Ok(PhysicalOperator::Prjection(PhysicalProjection {
                     plan_id: self.next_plan_id(),
                     input: Arc::new(input),
