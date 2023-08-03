@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use libtest_mimic::{Arguments, Trial};
-use sqllogictest_test::{test_run};
+use sqllogictest_test::test_run;
 
 fn main() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");

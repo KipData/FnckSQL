@@ -1,13 +1,12 @@
 #![feature(iterator_try_collect)]
 use std::sync::Arc;
 
-use sqllogictest::{AsyncDB, Runner};
-use kip_sql::db::{Database,DatabaseError};
+use kip_sql::db::{Database, DatabaseError};
 use kip_sql::util::record_batch_to_string;
-pub fn test_run(sqlfile: &str){
-    
-    let db = Arc::new( Database::new_on_mem());
-    let mut tester = Runner::new(DatabaseWrapper {db});
+use sqllogictest::{AsyncDB, Runner};
+pub fn test_run(sqlfile: &str) {
+    let db = Arc::new(Database::new_on_mem());
+    let mut tester = Runner::new(DatabaseWrapper { db });
     tester.run_file(sqlfile).unwrap()
 }
 
@@ -23,5 +22,4 @@ impl AsyncDB for DatabaseWrapper {
         let output = chunks.iter().map(record_batch_to_string).try_collect();
         Ok(output?)
     }
-    
 }
