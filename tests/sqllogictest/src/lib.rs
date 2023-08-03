@@ -9,19 +9,6 @@ pub fn test_run(sqlfile: &str){
     let db = Arc::new( Database::new_on_mem());
     let mut tester = Runner::new(DatabaseWrapper {db});
     tester.run_file(sqlfile).unwrap()
-    // tokio_test::block_on(async move {
-    //     let _ = database.run("create table t1 (a int, b boolean)").await?;
-    //     let _ = database.run("insert into t1 values (1, true), (2, false)").await?;
-    //     let vec_batch = database.run("select * from t1").await?;
-
-    //     let table = database.storage
-    //         .get_catalog()
-    //         .get_table(0).unwrap().clone();
-    //     println!("{:#?}", concat_batches(&table.schema(), &vec_batch));
-
-    //     Ok(())
-    // })
-
 }
 
 struct DatabaseWrapper {

@@ -1,21 +1,21 @@
 # Test common insert case
-onlyif sqlrs_v2
+
 statement ok
 create table t1(v1 varchar, v2 varchar, v3 varchar);
 
-onlyif sqlrs_v2
+
 statement error
 insert into t1(v3) values ('0','4');
 
-onlyif sqlrs_v2
+
 statement ok
 insert into t1(v3, v2) values ('0','4'), ('1','5');
 
-onlyif sqlrs_v2
+
 statement ok
 insert into t1 values ('2','7','9');
 
-onlyif sqlrs_v2
+
 query III
 select v1, v3, v2 from t1;
 ----
@@ -25,15 +25,15 @@ NULL 1 5
 
 
 # Test insert value cast type
-onlyif sqlrs_v2
+
 statement ok
 create table t2(v1 int, v2 int, v3 int);
 
-onlyif sqlrs_v2
+
 statement ok
 insert into t2(v3, v2, v1) values (0, 4, 1), (1, 5, 2);
 
-onlyif sqlrs_v2
+
 query III
 select v3, v2, v1 from t2;
 ----
@@ -42,29 +42,29 @@ select v3, v2, v1 from t2;
 
 
 # Test insert type cast
-onlyif sqlrs_v2
+
 statement ok
 create table t3(v1 TINYINT UNSIGNED);
 
-onlyif sqlrs_v2
+
 statement error
 insert into t3(v1) values (1481);
 
 
 # Test insert null values
-onlyif sqlrs_v2
+
 statement ok
 create table t4(v1 varchar, v2 smallint unsigned, v3 bigint unsigned);
 
-onlyif sqlrs_v2
+
 statement ok
 insert into t4 values (NULL, 1, 2), ('', 3, NULL);
 
-onlyif sqlrs_v2
+
 statement ok
 insert into t4 values (NULL, NULL, NULL);
 
-onlyif sqlrs_v2
+
 query III
 select v1, v2, v3 from t4;
 ----
@@ -74,16 +74,18 @@ NULL NULL NULL
 
 
 # Test insert from select
-onlyif sqlrs_v2
+
 statement ok
 CREATE TABLE integers(i INTEGER);
 
-onlyif sqlrs_v2
+
 statement ok
 INSERT INTO integers SELECT 42;
+
+statement ok
 INSERT INTO integers SELECT null;
 
-onlyif sqlrs_v2
+
 query I
 SELECT * FROM integers
 ----
