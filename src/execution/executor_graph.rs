@@ -196,6 +196,7 @@ impl ExecutorGraph {
         Ok(())
     }
 
+    #[allow(invalid_reference_casting)]
     pub async fn init_schedule_event_queue(&self, global_execution_queue: &mut ExecutionQueue) {
         // Schedule source node.
         for node_idx in self.graph.externals(Direction::Outgoing) {

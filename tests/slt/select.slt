@@ -1,0 +1,46 @@
+# test insert projection with cast expression
+
+statement ok
+create table t2(v1 tinyint);
+
+statement ok
+insert into t2(v1) values (1), (5);
+
+
+statement ok
+create table t1(v1 int, v2 int, v3 int);
+
+statement ok
+insert into t1(v3, v2, v1) values (0, 4, 1), (1, 5, 2);
+
+
+
+query III
+select t1.v1, v2 from t1;
+----
+1 4
+2 5
+
+
+
+query III
+select *, t1.* from t1;
+----
+1 4 0 1 4 0
+2 5 1 2 5 1
+
+
+# TODO: use alias function to verify output column names
+
+query III
+select t.v1 as a, v2 as b from t1 as t;
+----
+1 4
+2 5
+
+
+
+query III
+select 1, 2.3, '😇', true, null;
+----
+1 2.3 😇 true NULL
