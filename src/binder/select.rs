@@ -15,15 +15,19 @@ use crate::{
 
 use super::Binder;
 
-use crate::catalog::{DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME};
+use crate::catalog::{DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog};
 use anyhow::Result;
 use itertools::Itertools;
+use sqlparser::ast;
 use sqlparser::ast::{
     Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
+use crate::expression::BinaryOperator;
 use crate::planner::LogicalPlan;
+use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
+use crate::types::{LogicalType, TableIdx};
 
 impl Binder {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan> {
@@ -110,18 +114,18 @@ impl Binder {
 
         let TableWithJoins { relation, joins } = &from[0];
 
-        let mut plan = self.bind_single_table_ref(relation)?;
+        let (left_id, mut plan) = self.bind_single_table_ref(relation)?;
 
         if !joins.is_empty() {
             for join in joins {
-                plan = self.bind_join(plan, join)?;
+                plan = self.bind_join(left_id, plan, join)?;
             }
         }
         Ok(plan)
     }
 
-    fn bind_single_table_ref(&mut self, table: &TableFactor) -> Result<LogicalPlan> {
-        let plan = match table {
+    fn bind_single_table_ref(&mut self, table: &TableFactor) -> Result<(TableIdx, LogicalPlan)> {
+        let plan_with_id = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
                     .0
@@ -155,12 +159,12 @@ impl Binder {
 
                 self.context.bind_table.insert(table.into(), table_ref_id);
 
-                ScanOperator::new(table_ref_id)
+                (table_ref_id, ScanOperator::new(table_ref_id))
             }
             _ => unimplemented!(),
         };
 
-        Ok(plan)
+        Ok(plan_with_id)
     }
 
     /// Normalize select item.
@@ -216,34 +220,40 @@ impl Binder {
         Ok(exprs)
     }
 
-    fn bind_join(&mut self, left: LogicalPlan, join: &Join) -> Result<LogicalPlan> {
+    fn bind_join(&mut self, left_id: TableIdx, left: LogicalPlan, join: &Join) -> Result<LogicalPlan> {
         let Join {
             relation,
             join_operator,
         } = join;
 
-        let right = self.bind_single_table_ref(relation)?;
+        let (right_id, right) = self.bind_single_table_ref(relation)?;
 
         let join_type = match join_operator {
             JoinOperator::Inner(constraint) => (JoinType::Inner, Some(constraint)),
-            JoinOperator::LeftOuter(constraint) => (JoinType::LeftOuter, Some(constraint)),
-            JoinOperator::RightOuter(constraint) => (JoinType::RightOuter, Some(constraint)),
-            JoinOperator::FullOuter(constraint) => (JoinType::FullOuter, Some(constraint)),
+            JoinOperator::LeftOuter(constraint) => (JoinType::Left, Some(constraint)),
+            JoinOperator::RightOuter(constraint) => (JoinType::Right, Some(constraint)),
+            JoinOperator::FullOuter(constraint) => (JoinType::Full, Some(constraint)),
             JoinOperator::CrossJoin => (JoinType::Cross, None),
-            JoinOperator::LeftSemi(constraint) => (JoinType::LeftSemi, Some(constraint)),
-            JoinOperator::RightSemi(constraint) => (JoinType::RightSemi, Some(constraint)),
-            JoinOperator::LeftAnti(constraint) => (JoinType::LeftAnti, Some(constraint)),
-            JoinOperator::RightAnti(constraint) => (JoinType::RightAnti, Some(constraint)),
             _ => unimplemented!(),
         };
+        let left_table = self.context.catalog
+            .get_table(left_id)
+            .cloned()
+            .expect("Left table not found");
+        let right_table = self.context.catalog
+            .get_table(right_id)
+            .cloned()
+            .expect("Right table not found");
 
         let on = match join_type.1 {
-            Some(constraint) => match constraint {
-                JoinConstraint::On(expr) => Some(self.bind_expr(expr)?),
-                _ => unimplemented!(),
-            },
-            None => None,
+            Some(constraint) => self.bind_join_constraint(
+                &left_table,
+                &right_table,
+                constraint
+            )?,
+            None => JoinCondition::None,
         };
+
         Ok(LJoinOperator::new(left, right, on, join_type.0))
     }
 
@@ -331,6 +341,119 @@ impl Binder {
 
         Ok(LimitOperator::new(offset, limit, children))
     }
+
+    fn bind_join_constraint(
+        &mut self,
+        left_table: &TableCatalog,
+        right_table: &TableCatalog,
+        constraint: &JoinConstraint,
+    ) -> Result<JoinCondition> {
+        match constraint {
+            JoinConstraint::On(expr) => {
+                // left and right columns that match equi-join pattern
+                let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = vec![];
+                // expression that didn't match equi-join pattern
+                let mut filter = vec![];
+
+                self.extract_join_keys(expr, &mut on_keys, &mut filter, left_table, right_table)?;
+
+                // combine multiple filter exprs into one BinaryExpr
+                let join_filter = filter
+                    .into_iter()
+                    .reduce(|acc, expr| ScalarExpression::Binary {
+                        op: BinaryOperator::And,
+                        left_expr: Box::new(acc),
+                        right_expr: Box::new(expr),
+                        ty: LogicalType::Boolean,
+                    });
+                // TODO: handle cross join if on_keys is empty
+                Ok(JoinCondition::On {
+                    on: on_keys,
+                    filter: join_filter,
+                })
+            }
+            _ => unimplemented!("not supported join constraint {:?}", constraint),
+        }
+    }
+
+    /// for sqlrs
+    /// original idea from datafusion planner.rs
+    /// Extracts equijoin ON condition be a single Eq or multiple conjunctive Eqs
+    /// Filters matching this pattern are added to `accum`
+    /// Filters that don't match this pattern are added to `accum_filter`
+    /// Examples:
+    /// ```text
+    /// foo = bar => accum=[(foo, bar)] accum_filter=[]
+    /// foo = bar AND bar = baz => accum=[(foo, bar), (bar, baz)] accum_filter=[]
+    /// foo = bar AND baz > 1 => accum=[(foo, bar)] accum_filter=[baz > 1]
+    /// ```
+    fn extract_join_keys(
+        &mut self,
+        expr: &Expr,
+        accum: &mut Vec<(ScalarExpression, ScalarExpression)>,
+        accum_filter: &mut Vec<ScalarExpression>,
+        left_schema: &TableCatalog,
+        right_schema: &TableCatalog,
+    ) -> Result<()> {
+        match expr {
+            Expr::BinaryOp { left, op, right } => match op {
+                ast::BinaryOperator::Eq => {
+                    let left = self.bind_expr(left)?;
+                    let right = self.bind_expr(right)?;
+
+                    match (&left, &right) {
+                        // example: foo = bar
+                        (ScalarExpression::ColumnRef(l), ScalarExpression::ColumnRef(r)) => {
+                            // reorder left and right joins keys to pattern: (left, right)
+                            if left_schema.contains_column(&l.name)
+                                && right_schema.contains_column(&r.name)
+                            {
+                                accum.push((left, right));
+                            } else if left_schema.contains_column(&r.name)
+                                && right_schema.contains_column(&l.name)
+                            {
+                                accum.push((right, left));
+                            } else {
+                                accum_filter.push(self.bind_expr(expr)?);
+                            }
+                        }
+                        // example: baz = 1
+                        _other => {
+                            accum_filter.push(self.bind_expr(expr)?);
+                        }
+                    }
+                }
+                ast::BinaryOperator::And => {
+                    // example: foo = bar AND baz > 1
+                    if let Expr::BinaryOp { left, op: _, right } = expr {
+                        self.extract_join_keys(
+                            left,
+                            accum,
+                            accum_filter,
+                            left_schema,
+                            right_schema,
+                        )?;
+                        self.extract_join_keys(
+                            right,
+                            accum,
+                            accum_filter,
+                            left_schema,
+                            right_schema,
+                        )?;
+                    }
+                }
+                _other => {
+                    // example: baz > 1
+                    accum_filter.push(self.bind_expr(expr)?);
+                }
+            },
+            _other => {
+                // example: baz in (xxx), something else will convert to filter logic
+                accum_filter.push(self.bind_expr(expr)?);
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -343,11 +466,18 @@ mod tests {
 
     fn test_root_catalog() -> Result<RootCatalog> {
         let mut root = RootCatalog::new();
-        let cols = vec![
+
+        let cols_t1 = vec![
             ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
             ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
         ];
-        let _ = root.add_table("t1".to_string(), cols)?;
+        let _ = root.add_table("t1".to_string(), cols_t1)?;
+
+        let cols_t2 = vec![
+            ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
+            ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
+        ];
+        let _ = root.add_table("t2".to_string(), cols_t2)?;
         Ok(root)
     }
 
@@ -403,6 +533,12 @@ mod tests {
         println!(
             "offset:\n {:#?}",
             plan_8
+        );
+
+        let plan_9 = select_sql_run("select * from t1 inner join t2 on c1 = c3 and c1 > 1")?;
+        println!(
+            "join:\n {:#?}",
+            plan_9
         );
 
         Ok(())

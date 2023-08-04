@@ -4,7 +4,7 @@ pub mod expr;
 mod select;
 mod insert;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use anyhow::Result;
 use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
@@ -16,8 +16,8 @@ use crate::types::TableIdx;
 #[derive(Clone)]
 pub struct BinderContext {
     catalog: RootCatalog,
-    bind_table: HashMap<String, TableIdx>,
-    aliases: HashMap<String, ScalarExpression>,
+    bind_table: BTreeMap<String, TableIdx>,
+    aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
     agg_calls: Vec<ScalarExpression>,
     index: u16,

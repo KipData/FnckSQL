@@ -23,6 +23,8 @@ impl Insert {
                 let mut arrays = batch.columns().to_vec();
                 let col_len = arrays[0].len();
 
+                arrays.reverse();
+
                 let full_arrays = table.all_columns()
                     .into_iter()
                     .map(|(_, col_catalog)| {
