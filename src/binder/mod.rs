@@ -12,11 +12,11 @@ use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
 use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME, CatalogError};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
-use crate::types::TableIdx;
-#[derive(Clone)]
+use crate::types::TableId;
+#[derive(Debug, Clone)]
 pub struct BinderContext {
-    catalog: RootCatalog,
-    bind_table: BTreeMap<String, TableIdx>,
+    pub(crate) catalog: RootCatalog,
+    pub(crate) bind_table: BTreeMap<String, TableId>,
     aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
     agg_calls: Vec<ScalarExpression>,
@@ -59,7 +59,7 @@ impl Binder {
         Binder { context }
     }
 
-    pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan> {
+    pub fn bind(mut self, stmt: &Statement) -> Result<(LogicalPlan, BinderContext)> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query)?,
             Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
@@ -72,7 +72,7 @@ impl Binder {
             }
             _ => unimplemented!(),
         };
-        Ok(plan)
+        Ok((plan, self.context))
     }
 }
 

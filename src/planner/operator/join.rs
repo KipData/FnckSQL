@@ -3,7 +3,7 @@ use crate::planner::LogicalPlan;
 
 use super::Operator;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum JoinType {
     Inner,
     Left,

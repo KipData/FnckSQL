@@ -1,11 +1,11 @@
 use arrow::datatypes::{DataType, Field};
 use sqlparser::ast::{ColumnDef, ColumnOption};
 
-use crate::types::{ColumnIdx, LogicalType};
+use crate::types::{ColumnId, LogicalType};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColumnCatalog {
-    pub id: Option<ColumnIdx>,
+    pub id: Option<ColumnId>,
     pub name: String,
     pub nullable: bool,
     pub desc: ColumnDesc,

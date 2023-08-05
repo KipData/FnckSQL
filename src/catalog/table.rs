@@ -1,19 +1,18 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use arrow::datatypes::{Schema, SchemaRef};
 
 use itertools::Itertools;
 
 use crate::catalog::{CatalogError, ColumnCatalog};
-use crate::types::{ColumnIdx, IdGenerator, TableIdx};
+use crate::types::{ColumnId, IdGenerator, TableId};
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableCatalog {
-    pub id: Option<TableIdx>,
+    pub id: Option<TableId>,
     pub name: String,
-    generator: IdGenerator,
     /// Mapping from column names to column ids
-    column_idxs: HashMap<String, ColumnIdx>,
-    pub(crate) columns: Vec<ColumnCatalog>,
+    column_idxs: BTreeMap<String, ColumnId>,
+    columns: BTreeMap<ColumnId, ColumnCatalog>,
 }
 
 impl TableCatalog {
@@ -21,34 +20,33 @@ impl TableCatalog {
         self.columns.len()
     }
 
-    pub(crate) fn get_column_by_id(&self, id: ColumnIdx) -> Option<&ColumnCatalog> {
+    pub(crate) fn get_column_by_id(&self, id: &ColumnId) -> Option<&ColumnCatalog> {
         self.columns.get(id)
     }
 
-    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnIdx> {
+    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnId> {
         self.column_idxs.get(name).cloned()
     }
 
     pub(crate) fn get_column_by_name(&self, name: &str) -> Option<&ColumnCatalog> {
         let id = self.column_idxs.get(name)?;
-        self.columns.get(*id)
+        self.columns.get(id)
     }
 
     pub(crate) fn contains_column(&self, name: &str) -> bool {
         self.column_idxs.contains_key(name)
     }
 
-    pub(crate) fn all_columns(&self) -> Vec<(ColumnIdx, &ColumnCatalog)> {
+    pub(crate) fn all_columns(&self) -> Vec<(&ColumnId, &ColumnCatalog)> {
         self.columns
             .iter()
-            .enumerate()
-            .collect_vec()
+            .collect()
     }
 
     // TODO: 缓存schema
     pub(crate) fn schema(&self) -> SchemaRef {
         let fields = self.columns.iter()
-            .map(ColumnCatalog::to_field)
+            .map(|(_, col)| col.to_field())
             .collect_vec();
         Arc::new(Schema::new(fields))
     }
@@ -57,12 +55,12 @@ impl TableCatalog {
     pub(crate) fn add_column(
         &mut self,
         mut col_catalog: ColumnCatalog,
-    ) -> Result<ColumnIdx, CatalogError> {
+    ) -> Result<ColumnId, CatalogError> {
         if self.column_idxs.contains_key(&col_catalog.name) {
             return Err(CatalogError::Duplicated("column", col_catalog.name.into()));
         }
 
-        let col_id = self.generator.build();
+        let col_id = IdGenerator::build();
 
         col_catalog.id = Some(col_id);
         self.column_idxs.insert(col_catalog.name.to_owned(), col_id);
@@ -78,9 +76,8 @@ impl TableCatalog {
         let mut table_catalog = TableCatalog {
             id: None,
             name: table_name,
-            generator: IdGenerator::new(),
-            column_idxs: HashMap::new(),
-            columns: Vec::new(),
+            column_idxs: BTreeMap::new(),
+            columns: BTreeMap::new(),
         };
 
         for col_catalog in columns.into_iter() {
@@ -116,11 +113,11 @@ mod tests {
         let col_b_id = table_catalog.get_column_id_by_name("b").unwrap();
         assert!(col_a_id < col_b_id);
 
-        let column_catalog = table_catalog.get_column_by_id(col_a_id).unwrap();
+        let column_catalog = table_catalog.get_column_by_id(&col_a_id).unwrap();
         assert_eq!(column_catalog.name, "a");
         assert_eq!(*column_catalog.datatype(), LogicalType::Integer,);
 
-        let column_catalog = table_catalog.get_column_by_id(col_b_id).unwrap();
+        let column_catalog = table_catalog.get_column_by_id(&col_b_id).unwrap();
         assert_eq!(column_catalog.name, "b");
         assert_eq!(*column_catalog.datatype(), LogicalType::Boolean,);
     }

@@ -29,6 +29,7 @@ impl Sort {
             .into_iter()
             .map(|SortField { expr, desc, nulls_first }| -> Result<SortColumn, ExecutorError> {
                 let values = expr.eval_column(&batch)?;
+
                 Ok(SortColumn {
                     values,
                     options: Some(SortOptions {

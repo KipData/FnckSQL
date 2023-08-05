@@ -1,7 +1,6 @@
 use std::borrow::Borrow;
 
 use crate::{
-    catalog::ColumnRefId,
     expression::ScalarExpression,
     planner::{
         operator::{
@@ -27,7 +26,7 @@ use crate::expression::BinaryOperator;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
-use crate::types::{LogicalType, TableIdx};
+use crate::types::{LogicalType, TableId};
 
 impl Binder {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan> {
@@ -100,6 +99,7 @@ impl Binder {
         }
 
         plan = self.bind_project(plan, select_list);
+
         Ok(plan)
     }
 
@@ -124,7 +124,7 @@ impl Binder {
         Ok(plan)
     }
 
-    fn bind_single_table_ref(&mut self, table: &TableFactor) -> Result<(TableIdx, LogicalPlan)> {
+    fn bind_single_table_ref(&mut self, table: &TableFactor) -> Result<(TableId, LogicalPlan)> {
         let plan_with_id = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
@@ -203,16 +203,9 @@ impl Binder {
 
     fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>> {
         let mut exprs = vec![];
-        for ref_id in self.context.bind_table.values().cloned().collect_vec() {
-            let table = self.context.catalog.get_table(ref_id).unwrap();
-            for (col_id, col) in table.all_columns() {
-                let column_ref_id = ColumnRefId::from_table(ref_id, col_id);
-                // self.record_regular_table_column(
-                //     &table.name(),
-                //     col.name(),
-                //     *col_id,
-                //     col.desc().clone(),
-                // );
+        for table_id in self.context.bind_table.values().cloned().collect_vec() {
+            let table = self.context.catalog.get_table(&table_id).unwrap();
+            for (_, col) in table.all_columns() {
                 exprs.push(ScalarExpression::ColumnRef(col.clone()));
             }
         }
@@ -220,7 +213,7 @@ impl Binder {
         Ok(exprs)
     }
 
-    fn bind_join(&mut self, left_id: TableIdx, left: LogicalPlan, join: &Join) -> Result<LogicalPlan> {
+    fn bind_join(&mut self, left_id: TableId, left: LogicalPlan, join: &Join) -> Result<LogicalPlan> {
         let Join {
             relation,
             join_operator,
@@ -237,11 +230,11 @@ impl Binder {
             _ => unimplemented!(),
         };
         let left_table = self.context.catalog
-            .get_table(left_id)
+            .get_table(&left_id)
             .cloned()
             .expect("Left table not found");
         let right_table = self.context.catalog
-            .get_table(right_id)
+            .get_table(&right_id)
             .cloned()
             .expect("Right table not found");
 
@@ -487,7 +480,7 @@ mod tests {
         let binder = Binder::new(BinderContext::new(root));
         let stmt = crate::parser::parse_sql(sql).unwrap();
 
-        binder.bind(&stmt[0])
+        Ok(binder.bind(&stmt[0])?.0)
     }
 
     #[test]
@@ -535,7 +528,7 @@ mod tests {
             plan_8
         );
 
-        let plan_9 = select_sql_run("select * from t1 inner join t2 on c1 = c3 and c1 > 1")?;
+        let plan_9 = select_sql_run("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1")?;
         println!(
             "join:\n {:#?}",
             plan_9

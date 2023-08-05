@@ -12,12 +12,9 @@ impl ScalarExpression {
         match &self {
             ScalarExpression::Constant(val) =>
                 Ok(val.to_array_of_size(batch.num_rows())),
-            ScalarExpression::ColumnRef(col) => {
-                let index = col.id.expect("The Column does not belong to the Table");
-                Ok(batch.column(index).clone())
-            }
+            ScalarExpression::ColumnRef(_) => unreachable!("column ref should be resolved"),
             ScalarExpression::InputRef{ index, .. } =>
-                Ok(batch.column(*index).clone()),
+                Ok(batch.column(*index % batch.num_columns()).clone()),
             ScalarExpression::Alias{ expr, .. } =>
                 expr.eval_column(batch),
             ScalarExpression::TypeCast{ expr, ty, .. } =>

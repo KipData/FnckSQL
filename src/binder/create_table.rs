@@ -61,7 +61,7 @@ mod tests {
         let sql = "create table t1 (id int , name varchar(10))";
         let binder = Binder::new(BinderContext::new(RootCatalog::new()));
         let stmt = crate::parser::parse_sql(sql).unwrap();
-        let plan1 = binder.bind(&stmt[0]).unwrap();
+        let (plan1, _) = binder.bind(&stmt[0]).unwrap();
 
         let plan2 = LogicalPlan {
             operator: Operator::CreateTable(

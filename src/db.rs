@@ -44,10 +44,10 @@ impl Database {
         ///   Sort(a)
         ///     Limit(1)
         ///       Project(a,b)
-        let logical_plan = binder.bind(&stmts[0])?;
+        let (logical_plan, bind_context) = binder.bind(&stmts[0])?;
         // println!("logic plan: {:#?}", logical_plan);
 
-        let mut builder = PhysicalPlanBuilder::new();
+        let mut builder = PhysicalPlanBuilder::new(bind_context);
         let operator = builder.build_plan(&logical_plan)?;
         // println!("operator: {:#?}", operator);
 
@@ -102,9 +102,9 @@ mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::Database;
     use crate::storage::{Storage, StorageError};
-    use crate::types::{LogicalType, TableIdx};
+    use crate::types::{LogicalType, TableId};
 
-    fn build_table(storage: &impl Storage) -> Result<TableIdx, StorageError> {
+    fn build_table(storage: &impl Storage) -> Result<TableId, StorageError> {
         let schema = Arc::new(Schema::new(
             vec![
                 ColumnCatalog::new(
@@ -155,7 +155,7 @@ mod test {
             let _ = kipsql.run("insert into t2 values (1, 2), (2, 3), (5, 6)").await?;
 
             println!("full:");
-            let vec_batch_full_fields = kipsql.run("select * from t1 right join t2 on a = c").await?;
+            let vec_batch_full_fields = kipsql.run("select * from t1").await?;
             print_batches(&vec_batch_full_fields)?;
 
             println!("projection_and_filter:");
@@ -171,19 +171,19 @@ mod test {
             print_batches(&vec_batch_limit)?;
 
             println!("inner join:");
-            let vec_batch_inner_join = kipsql.run("select * from t1 inner join t2 on a = c and c > 1").await?;
+            let vec_batch_inner_join = kipsql.run("select * from t1 inner join t2 on a = c").await?;
             print_batches(&vec_batch_inner_join)?;
 
             println!("left join:");
-            let vec_batch_left_join = kipsql.run("select * from t1 left join t2 on a = c and c > 1").await?;
+            let vec_batch_left_join = kipsql.run("select * from t1 left join t2 on a = c").await?;
             print_batches(&vec_batch_left_join)?;
 
             println!("right join:");
-            let vec_batch_right_join = kipsql.run("select * from t1 right join t2 on a = c and c > 1").await?;
+            let vec_batch_right_join = kipsql.run("select * from t1 right join t2 on a = c and a > 1").await?;
             print_batches(&vec_batch_right_join)?;
 
             println!("full join:");
-            let vec_batch_full_join = kipsql.run("select * from t1 full join t2 on a = c and c > 1").await?;
+            let vec_batch_full_join = kipsql.run("select d, b from t1 full join t2 on a = c and a > 1").await?;
             print_batches(&vec_batch_full_join)?;
 
             Ok(())
