@@ -65,10 +65,10 @@ impl HashJoin {
             left_batches.push(batch);
         }
 
-        let left_single_batch = if left_batches.is_empty() && (ty == JoinType::Left || ty == JoinType::Inner) {
-            None
-        } else {
+        let left_single_batch = if !left_batches.is_empty() {
             Some(compute::concat_batches(&left_batches[0].schema(), &left_batches)?)
+        } else {
+            None
         };
 
         // probe phase
@@ -88,11 +88,12 @@ impl HashJoin {
             let rows_hashes = Self::hash_columns(&on_right_keys, &hash_random_state, &batch)?;
 
             // init join_schema
-            let schema = join_schema.get_or_insert_with(|| {
-                Self::filling_fields(&mut join_fields, right_force_nullable, &batch);
-
-                Arc::new(Schema::new(mem::take(&mut join_fields)))
-            });
+            let schema = Self::init_schema(
+                &mut join_fields,
+                &mut join_schema,
+                right_force_nullable,
+                &batch
+            );
 
             // 1. build left and right indices
             let mut left_indices = UInt32Builder::new();
@@ -116,7 +117,7 @@ impl HashJoin {
 
             // 2. build intermediate batch that from left and right all columns
             let mut left_indices = left_indices.finish();
-            let mut  right_indices = right_indices.finish();
+            let mut right_indices = right_indices.finish();
 
             let mut intermediate_batch = Self::build_batch(
                 &left_single_batch,
@@ -127,27 +128,36 @@ impl HashJoin {
             )?;
 
             if let Some(ref expr) = filter {
-                let predicate = expr.eval_column(&intermediate_batch)?
-                    .as_any()
-                    .downcast_ref::<BooleanArray>()
-                    .cloned()
-                    .expect("join filter expected evaluate boolean array");
-                left_indices = PrimitiveArray::<UInt32Type>::from(
-                    compute::filter(&left_indices, &predicate)?.data().clone(),
-                );
-                if ty == JoinType::Right || ty == JoinType::Full {
-                    right_indices = PrimitiveArray::<UInt32Type>::from(
-                        compute::filter(&right_indices, &predicate)?.data().clone(),
-                    )
-                };
+                if !(ty == JoinType::Full || ty == JoinType::Cross) {
+                    let predicate = expr.eval_column(&intermediate_batch)?
+                        .as_any()
+                        .downcast_ref::<BooleanArray>()
+                        .cloned()
+                        .expect("join filter expected evaluate boolean array");
+                    left_indices = PrimitiveArray::<UInt32Type>::from(
+                        compute::filter(&left_indices, &predicate)?.data().clone(),
+                    );
+                    if ty == JoinType::Right {
+                        let abs = left_indices.len().abs_diff(right_indices.len());
+                        if abs > 0 {
+                            left_indices = left_indices.into_iter()
+                                .chain((0..abs).map(|_| None))
+                                .collect();
+                        }
+                    } else {
+                        right_indices = PrimitiveArray::<UInt32Type>::from(
+                            compute::filter(&right_indices, &predicate)?.data().clone(),
+                        );
+                    }
 
-                intermediate_batch = Self::build_batch(
-                    &left_single_batch,
-                    &batch,
-                    schema,
-                    &left_indices,
-                    &right_indices
-                )?;
+                    intermediate_batch = Self::build_batch(
+                        &left_single_batch,
+                        &batch,
+                        schema,
+                        &left_indices,
+                        &right_indices
+                    )?;
+                }
             }
 
             if ty == JoinType::Left || ty == JoinType::Full {
@@ -162,28 +172,48 @@ impl HashJoin {
         }
 
         if let Some(left_batch) = left_single_batch {
-            if ty == JoinType::Left || ty == JoinType::Full {
-                let join_schema = join_schema.unwrap();
-
-                let indices: PrimitiveArray<UInt32Type> = PrimitiveArray::from_iter_values(
-                    full_left_side
-                        .symmetric_difference(&visited_left_side)
-                        .cloned()
-                );
-
-                let mut arrays: Vec<ArrayRef> = left_batch
-                    .columns()
-                    .iter()
-                    .map(|col| compute::take(col, &indices, None))
-                    .try_collect()?;
-                let offset = arrays.len();
-                for field in join_schema.fields()[offset..].iter() {
-                    arrays.push(new_null_array(field.data_type(), indices.len()));
-                }
-
-                yield RecordBatch::try_new(join_schema, arrays)?;
+            if !(ty == JoinType::Left || ty == JoinType::Full) {
+                return Ok(());
             }
+
+            let schema = Self::init_schema(
+                &mut join_fields,
+                &mut join_schema,
+                left_force_nullable,
+                &left_batch
+            ).clone();
+
+            let indices: PrimitiveArray<UInt32Type> = PrimitiveArray::from_iter_values(
+                full_left_side
+                    .symmetric_difference(&visited_left_side)
+                    .cloned()
+            );
+
+            let mut arrays: Vec<ArrayRef> = left_batch
+                .columns()
+                .iter()
+                .map(|col| compute::take(col, &indices, None))
+                .try_collect()?;
+            let offset = arrays.len();
+            for field in schema.fields()[offset..].iter() {
+                arrays.push(new_null_array(field.data_type(), indices.len()));
+            }
+
+            yield RecordBatch::try_new(schema, arrays)?;
         }
+    }
+
+    fn init_schema<'a>(
+        join_fields: &mut Vec<Field>,
+        join_schema: &'a mut Option<Arc<Schema>>,
+        force_nullable: bool,
+        batch: &RecordBatch
+    ) -> &'a mut Arc<Schema> {
+        join_schema.get_or_insert_with(|| {
+            Self::filling_fields(join_fields, force_nullable, &batch);
+
+            Arc::new(Schema::new(mem::take(join_fields)))
+        })
     }
 
     fn filling_fields(join_fields: &mut Vec<Field>, force_nullable: bool, batch: &RecordBatch) {

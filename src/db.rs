@@ -154,6 +154,7 @@ mod test {
             let _ = kipsql.run("insert into t1 values (1, 1), (3, 3), (5, 4)").await?;
             let _ = kipsql.run("insert into t2 values (1, 2), (2, 3), (5, 6)").await?;
 
+            println!("full:");
             let vec_batch_full_fields = kipsql.run("select * from t1 right join t2 on a = c").await?;
             print_batches(&vec_batch_full_fields)?;
 
@@ -170,19 +171,19 @@ mod test {
             print_batches(&vec_batch_limit)?;
 
             println!("inner join:");
-            let vec_batch_inner_join = kipsql.run("select * from t1 inner join t2 on a = c").await?;
+            let vec_batch_inner_join = kipsql.run("select * from t1 inner join t2 on a = c and c > 1").await?;
             print_batches(&vec_batch_inner_join)?;
 
             println!("left join:");
-            let vec_batch_left_join = kipsql.run("select * from t1 left join t2 on a = c").await?;
+            let vec_batch_left_join = kipsql.run("select * from t1 left join t2 on a = c and c > 1").await?;
             print_batches(&vec_batch_left_join)?;
 
             println!("right join:");
-            let vec_batch_right_join = kipsql.run("select * from t1 right join t2 on a = c").await?;
+            let vec_batch_right_join = kipsql.run("select * from t1 right join t2 on a = c and c > 1").await?;
             print_batches(&vec_batch_right_join)?;
 
             println!("full join:");
-            let vec_batch_full_join = kipsql.run("select * from t1 full join t2 on a = c").await?;
+            let vec_batch_full_join = kipsql.run("select * from t1 full join t2 on a = c and c > 1").await?;
             print_batches(&vec_batch_full_join)?;
 
             Ok(())
