@@ -45,10 +45,12 @@ impl RootCatalog {
         if self.table_idxs.contains_key(&table_name) {
             return Err(CatalogError::Duplicated("column", table_name));
         }
-        let mut table = TableCatalog::new(table_name.to_owned(), columns)?;
-        let table_id = IdGenerator::build();
+        let table = TableCatalog::new(
+            table_name.to_owned(),
+            columns
+        )?;
+        let table_id = table.id;
 
-        table.id = Some(table_id);
         self.table_idxs.insert(table_name, table_id);
         self.tables.insert(table_id, table);
 

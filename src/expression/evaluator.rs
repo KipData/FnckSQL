@@ -12,7 +12,10 @@ impl ScalarExpression {
         match &self {
             ScalarExpression::Constant(val) =>
                 Ok(val.to_array_of_size(batch.num_rows())),
-            ScalarExpression::ColumnRef(_) => unreachable!("column ref should be resolved"),
+            ScalarExpression::ColumnRef(col) => {
+                let index = batch.schema().index_of(&col.name)?;
+                Ok(batch.column(index).clone())
+            },
             ScalarExpression::InputRef{ index, .. } =>
                 Ok(batch.column(*index % batch.num_columns()).clone()),
             ScalarExpression::Alias{ expr, .. } =>

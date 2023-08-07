@@ -1,5 +1,4 @@
-use std::mem;
-use ahash::HashMap;
+use ahash::{HashMap, HashMapExt};
 use crate::execution_v1::physical_plan::physical_create_table::PhysicalCreateTable;
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_v1::physical_plan::physical_table_scan::PhysicalTableScan;
@@ -26,34 +25,41 @@ use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::project::ProjectOperator;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::operator::values::ValuesOperator;
-use crate::types::ColumnId;
+use crate::types::TableId;
 
 pub struct PhysicalPlanBuilder {
-    column_index: HashMap<ColumnId, usize>
+    table_force_nullable: HashMap<TableId, bool>
+
 }
 
 impl PhysicalPlanBuilder {
     pub fn new(context: BinderContext) -> Self {
-        let mut pos = 0usize;
-        let root = &context.catalog;
-        let column_index = context.bind_table
-            .iter()
-            .filter_map(|(_, table_id)| {
-                root.get_table(table_id)
-                    .map(|table| {
-                        table.all_columns()
-                            .iter()
-                            .map(|(col_id, _)| {
-                                let next_pos = pos + 1;
-                                (**col_id, mem::replace(&mut pos, next_pos))
-                            })
-                            .collect_vec()
-                    })
-            })
-            .flatten()
-            .collect();
+        let bind_tables = &context.bind_table;
+        let mut table_force_nullable = HashMap::new();
+        let mut left_table_force_nullable = false;
+        let mut left_table_id = None;
 
-        PhysicalPlanBuilder { column_index }
+        for (table_id, join_option) in bind_tables.values() {
+            if let Some(join_type) = join_option {
+                let (left_force_nullable, right_force_nullable) = match join_type {
+                    JoinType::Inner => (false, false),
+                    JoinType::Left => (false, true),
+                    JoinType::Right => (true, false),
+                    JoinType::Full => (true, true),
+                    JoinType::Cross => (true, true),
+                };
+                table_force_nullable.insert(*table_id, right_force_nullable);
+                left_table_force_nullable = left_force_nullable;
+            } else {
+                left_table_id = Some(*table_id);
+            }
+        }
+
+        if let Some(id) = left_table_id {
+            table_force_nullable.insert(id, left_table_force_nullable);
+        }
+
+        PhysicalPlanBuilder { table_force_nullable }
     }
 
     pub fn build_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalPlan> {
@@ -193,11 +199,12 @@ impl PhysicalPlanBuilder {
     fn rewriter_expr(&mut self, expr: &ScalarExpression) -> ScalarExpression {
         match expr {
             ScalarExpression::ColumnRef(col) => {
-                ScalarExpression::InputRef {
-                    // FIXME: remove unwrap
-                    index: *self.column_index.get(&col.id.unwrap()).unwrap(),
-                    ty: col.datatype().clone(),
+                let mut new_col = col.clone();
+                if let Some(nullable) = self.table_force_nullable.get(&col.table_id.unwrap()) {
+                    new_col.nullable = *nullable;
                 }
+
+                ScalarExpression::ColumnRef(new_col)
             }
             ScalarExpression::Alias { expr, alias } => {
                 ScalarExpression::Alias {

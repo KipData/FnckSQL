@@ -36,7 +36,6 @@ impl HashJoin {
 
         let hash_random_state = RandomState::with_seeds(0, 0, 0, 0);
         let mut join_fields: Vec<Field> = Vec::new();
-        // FIXME: 应该在Binder层处理，使Project能够同时获取此nullable信息(因为Join会改变主键的nullable判定)
         let (left_force_nullable, right_force_nullable) = match ty {
             JoinType::Inner => (false, false),
             JoinType::Left => (false, true),

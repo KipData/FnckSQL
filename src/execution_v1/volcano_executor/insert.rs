@@ -39,7 +39,7 @@ impl Insert {
 
                 let new_batch = RecordBatch::try_new(table.schema(), full_arrays)?;
 
-                storage.get_table(&table.id.unwrap())?.append(new_batch)?;
+                storage.get_table(&table.id)?.append(new_batch)?;
             }
         } else {
             Err(CatalogError::NotFound("root", table_name.to_string()))?;

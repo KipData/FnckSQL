@@ -114,7 +114,7 @@ impl Binder {
 
         let TableWithJoins { relation, joins } = &from[0];
 
-        let (left_id, mut plan) = self.bind_single_table_ref(relation)?;
+        let (left_id, mut plan) = self.bind_single_table_ref(relation, None)?;
 
         if !joins.is_empty() {
             for join in joins {
@@ -124,7 +124,7 @@ impl Binder {
         Ok(plan)
     }
 
-    fn bind_single_table_ref(&mut self, table: &TableFactor) -> Result<(TableId, LogicalPlan)> {
+    fn bind_single_table_ref(&mut self, table: &TableFactor, joint_type: Option<JoinType>) -> Result<(TableId, LogicalPlan)> {
         let plan_with_id = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
@@ -157,7 +157,7 @@ impl Binder {
                     .get_table_id_by_name(table)
                     .ok_or_else(|| anyhow::Error::msg(format!("bind table {}", table)))?;
 
-                self.context.bind_table.insert(table.into(), table_ref_id);
+                self.context.bind_table.insert(table.into(), (table_ref_id, joint_type));
 
                 (table_ref_id, ScanOperator::new(table_ref_id))
             }
@@ -203,7 +203,7 @@ impl Binder {
 
     fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>> {
         let mut exprs = vec![];
-        for table_id in self.context.bind_table.values().cloned().collect_vec() {
+        for (table_id, _) in self.context.bind_table.values().cloned() {
             let table = self.context.catalog.get_table(&table_id).unwrap();
             for (_, col) in table.all_columns() {
                 exprs.push(ScalarExpression::ColumnRef(col.clone()));
@@ -219,9 +219,7 @@ impl Binder {
             join_operator,
         } = join;
 
-        let (right_id, right) = self.bind_single_table_ref(relation)?;
-
-        let join_type = match join_operator {
+        let (join_type, joint_condition) = match join_operator {
             JoinOperator::Inner(constraint) => (JoinType::Inner, Some(constraint)),
             JoinOperator::LeftOuter(constraint) => (JoinType::Left, Some(constraint)),
             JoinOperator::RightOuter(constraint) => (JoinType::Right, Some(constraint)),
@@ -229,6 +227,9 @@ impl Binder {
             JoinOperator::CrossJoin => (JoinType::Cross, None),
             _ => unimplemented!(),
         };
+
+        let (right_id, right) = self.bind_single_table_ref(relation, Some(join_type))?;
+
         let left_table = self.context.catalog
             .get_table(&left_id)
             .cloned()
@@ -238,7 +239,7 @@ impl Binder {
             .cloned()
             .expect("Right table not found");
 
-        let on = match join_type.1 {
+        let on = match joint_condition {
             Some(constraint) => self.bind_join_constraint(
                 &left_table,
                 &right_table,
@@ -247,7 +248,7 @@ impl Binder {
             None => JoinCondition::None,
         };
 
-        Ok(LJoinOperator::new(left, right, on, join_type.0))
+        Ok(LJoinOperator::new(left, right, on, join_type))
     }
 
     fn bind_where(

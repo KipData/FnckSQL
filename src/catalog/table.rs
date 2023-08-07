@@ -8,7 +8,7 @@ use crate::catalog::{CatalogError, ColumnCatalog};
 use crate::types::{ColumnId, IdGenerator, TableId};
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableCatalog {
-    pub id: Option<TableId>,
+    pub id: TableId,
     pub name: String,
     /// Mapping from column names to column ids
     column_idxs: BTreeMap<String, ColumnId>,
@@ -60,9 +60,9 @@ impl TableCatalog {
             return Err(CatalogError::Duplicated("column", col_catalog.name.into()));
         }
 
-        let col_id = IdGenerator::build();
+        let col_id = col_catalog.id;
 
-        col_catalog.id = Some(col_id);
+        col_catalog.table_id = Some(self.id);
         self.column_idxs.insert(col_catalog.name.to_owned(), col_id);
         self.columns.insert(col_id, col_catalog);
 
@@ -74,7 +74,7 @@ impl TableCatalog {
         columns: Vec<ColumnCatalog>,
     ) -> Result<TableCatalog, CatalogError> {
         let mut table_catalog = TableCatalog {
-            id: None,
+            id: IdGenerator::build(),
             name: table_name,
             column_idxs: BTreeMap::new(),
             columns: BTreeMap::new(),

@@ -1,12 +1,13 @@
 use arrow::datatypes::{DataType, Field};
 use sqlparser::ast::{ColumnDef, ColumnOption};
 
-use crate::types::{ColumnId, LogicalType};
+use crate::types::{ColumnId, IdGenerator, LogicalType, TableId};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColumnCatalog {
-    pub id: Option<ColumnId>,
+    pub id: ColumnId,
     pub name: String,
+    pub table_id: Option<TableId>,
     pub nullable: bool,
     pub desc: ColumnDesc,
 }
@@ -14,8 +15,9 @@ pub struct ColumnCatalog {
 impl ColumnCatalog {
     pub(crate) fn new(column_name: String, nullable: bool, column_desc: ColumnDesc) -> ColumnCatalog {
         ColumnCatalog {
-            id: None,
+            id: IdGenerator::build(),
             name: column_name,
+            table_id: None,
             nullable,
             desc: column_desc,
         }
