@@ -1,5 +1,6 @@
-use arrow::array::{Array, new_null_array};
-use arrow::datatypes::DataType;
+use ahash::HashMap;
+use arrow::array::{Array, ArrayRef, new_null_array};
+use arrow::datatypes::{DataType, Field};
 use arrow::record_batch::RecordBatch;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
@@ -20,19 +21,19 @@ impl Insert {
 
                 let projection_schema =  batch.schema();
                 let fields = projection_schema.fields();
-                let mut arrays = batch.columns().to_vec();
-                let col_len = arrays[0].len();
+                let arrays = batch.columns();
 
-                arrays.reverse();
+                let col_len = arrays[0].len();
+                let insert_values: HashMap<Field, ArrayRef> = (0..fields.len()).into_iter()
+                    .map(|i| (fields[i].clone(), arrays[i].clone()))
+                    .collect();
 
                 let full_arrays = table.all_columns()
                     .into_iter()
-                    .map(|(_, col_catalog)| {
-                        if fields.contains(&col_catalog.to_field()) {
-                            arrays.pop().unwrap()
-                        } else {
-                            new_null_array(&DataType::from(col_catalog.datatype().clone()), col_len)
-                        }
+                    .filter_map(|(_, col_catalog)| {
+                        insert_values.get(&col_catalog.to_field())
+                            .map(ArrayRef::clone)
+                            .or_else(|| Some(new_null_array(&DataType::from(col_catalog.datatype().clone()), col_len)))
                     })
                     .collect_vec();
 
