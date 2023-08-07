@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog};
-use crate::types::{IdGenerator, TableId};
+use crate::types::TableId;
 
 #[derive(Debug, Clone)]
 pub struct RootCatalog {

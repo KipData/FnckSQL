@@ -52,38 +52,28 @@ impl Binder {
 mod tests {
     use super::*;
     use crate::binder::BinderContext;
-    use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
-    use crate::planner::LogicalPlan;
+    use crate::catalog::{ColumnDesc, RootCatalog};
     use crate::types::LogicalType;
 
     #[test]
     fn test_create_bind() {
-        let sql = "create table t1 (id int , name varchar(10))";
+        let sql = "create table t1 (id int , name varchar(10) null)";
         let binder = Binder::new(BinderContext::new(RootCatalog::new()));
         let stmt = crate::parser::parse_sql(sql).unwrap();
         let (plan1, _) = binder.bind(&stmt[0]).unwrap();
 
-        let plan2 = LogicalPlan {
-            operator: Operator::CreateTable(
-                CreateTableOperator {
-                    table_name: "t1".to_string(),
-                    columns: vec![
-                        ColumnCatalog::new(
-                            "id".to_string(),
-                            false,
-                            ColumnDesc::new(LogicalType::Integer, false)
-                        ),
-                        ColumnCatalog::new(
-                            "name".to_string(),
-                            false,
-                            ColumnDesc::new(LogicalType::Varchar, false)
-                        )
-                    ],
-                }
-            ),
-            childrens: vec![],
-        };
+        match plan1.operator {
+            Operator::CreateTable(op) => {
+                assert_eq!(op.table_name, "t1".to_string());
+                assert_eq!(op.columns[0].name, "id".to_string());
+                assert_eq!(op.columns[0].nullable, false);
+                assert_eq!(op.columns[0].desc, ColumnDesc::new(LogicalType::Integer, false));
+                assert_eq!(op.columns[1].name, "name".to_string());
+                assert_eq!(op.columns[1].nullable, true);
+                assert_eq!(op.columns[1].desc, ColumnDesc::new(LogicalType::Varchar, false));
+            }
+            _ => unreachable!()
+        }
 
-        assert_eq!(plan1, plan2);
     }
 }
