@@ -44,10 +44,10 @@ impl Database {
         ///   Sort(a)
         ///     Limit(1)
         ///       Project(a,b)
-        let (logical_plan, bind_context) = binder.bind(&stmts[0])?;
+        let logical_plan = binder.bind(&stmts[0])?;
         // println!("logic plan: {:#?}", logical_plan);
 
-        let mut builder = PhysicalPlanBuilder::new(bind_context);
+        let mut builder = PhysicalPlanBuilder::new();
         let operator = builder.build_plan(&logical_plan)?;
         // println!("operator: {:#?}", operator);
 

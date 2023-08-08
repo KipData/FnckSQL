@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::collections::HashMap;
 
 use crate::{
     expression::ScalarExpression,
@@ -61,6 +62,8 @@ impl Binder {
         // TODO support SRF(Set-Returning Function).
 
         let mut select_list = self.normalize_select_item(&select.projection)?;
+
+        self.extract_select_join(&mut select_list);
 
         if let Some(predicate) = &select.selection {
             plan = self.bind_where(plan, predicate)?;
@@ -336,6 +339,48 @@ impl Binder {
         Ok(LimitOperator::new(offset, limit, children))
     }
 
+    pub fn extract_select_join(
+        &mut self,
+        select_items: &mut [ScalarExpression],
+    ) {
+        let bind_tables = &self.context.bind_table;
+        if bind_tables.len() < 2 {
+            return;
+        }
+
+        let mut table_force_nullable = HashMap::new();
+        let mut left_table_force_nullable = false;
+        let mut left_table_id = None;
+
+        for (table_id, join_option) in bind_tables.values() {
+            if let Some(join_type) = join_option {
+                let (left_force_nullable, right_force_nullable) = match join_type {
+                    JoinType::Inner => (false, false),
+                    JoinType::Left => (false, true),
+                    JoinType::Right => (true, false),
+                    JoinType::Full => (true, true),
+                    JoinType::Cross => (true, true),
+                };
+                table_force_nullable.insert(*table_id, right_force_nullable);
+                left_table_force_nullable = left_force_nullable;
+            } else {
+                left_table_id = Some(*table_id);
+            }
+        }
+
+        if let Some(id) = left_table_id {
+            table_force_nullable.insert(id, left_table_force_nullable);
+        }
+
+        for column in select_items {
+            if let ScalarExpression::ColumnRef(col) = column {
+                if let Some(nullable) = table_force_nullable.get(&col.table_id.unwrap()) {
+                    col.nullable = *nullable;
+                }
+            }
+        }
+    }
+
     fn bind_join_constraint(
         &mut self,
         left_table: &TableCatalog,
@@ -481,7 +526,7 @@ mod tests {
         let binder = Binder::new(BinderContext::new(root));
         let stmt = crate::parser::parse_sql(sql).unwrap();
 
-        Ok(binder.bind(&stmt[0])?.0)
+        Ok(binder.bind(&stmt[0])?)
     }
 
     #[test]

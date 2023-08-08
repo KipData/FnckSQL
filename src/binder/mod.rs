@@ -60,7 +60,7 @@ impl Binder {
         Binder { context }
     }
 
-    pub fn bind(mut self, stmt: &Statement) -> Result<(LogicalPlan, BinderContext)> {
+    pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query)?,
             Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
@@ -73,7 +73,7 @@ impl Binder {
             }
             _ => unimplemented!(),
         };
-        Ok((plan, self.context))
+        Ok(plan)
     }
 }
 

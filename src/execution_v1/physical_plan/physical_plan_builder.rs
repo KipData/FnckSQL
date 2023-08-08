@@ -8,63 +8,31 @@ use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use anyhow::anyhow;
 use anyhow::Result;
-use itertools::Itertools;
-use crate::binder::BinderContext;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_hash_join::PhysicalHashJoin;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_v1::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_v1::physical_plan::physical_sort::PhysicalSort;
 use crate::execution_v1::physical_plan::physical_values::PhysicalValues;
-use crate::expression::ScalarExpression;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::insert::InsertOperator;
-use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
+use crate::planner::operator::join::{JoinOperator, JoinType};
 use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::project::ProjectOperator;
-use crate::planner::operator::sort::{SortField, SortOperator};
+use crate::planner::operator::sort::SortOperator;
 use crate::planner::operator::values::ValuesOperator;
-use crate::types::TableId;
 
-pub struct PhysicalPlanBuilder {
-    table_force_nullable: HashMap<TableId, bool>
-
-}
+pub struct PhysicalPlanBuilder { }
 
 impl PhysicalPlanBuilder {
-    pub fn new(context: BinderContext) -> Self {
-        let bind_tables = &context.bind_table;
-        let mut table_force_nullable = HashMap::new();
-        let mut left_table_force_nullable = false;
-        let mut left_table_id = None;
-
-        for (table_id, join_option) in bind_tables.values() {
-            if let Some(join_type) = join_option {
-                let (left_force_nullable, right_force_nullable) = match join_type {
-                    JoinType::Inner => (false, false),
-                    JoinType::Left => (false, true),
-                    JoinType::Right => (true, false),
-                    JoinType::Full => (true, true),
-                    JoinType::Cross => (true, true),
-                };
-                table_force_nullable.insert(*table_id, right_force_nullable);
-                left_table_force_nullable = left_force_nullable;
-            } else {
-                left_table_id = Some(*table_id);
-            }
-        }
-
-        if let Some(id) = left_table_id {
-            table_force_nullable.insert(id, left_table_force_nullable);
-        }
-
-        PhysicalPlanBuilder { table_force_nullable }
+    pub fn new() -> Self {
+        PhysicalPlanBuilder { }
     }
 
     pub fn build_plan(&mut self, plan: &LogicalPlan) -> Result<PhysicalPlan> {
         match &plan.operator {
-            Operator::Project(op) => self.build_physical_projection(plan, op),
+            Operator::Project(op) => self.build_physical_select_projection(plan, op),
             Operator::Scan(scan) => Ok(self.build_physical_scan(scan.clone())),
             Operator::Filter(op) => self.build_physical_filter(plan, op),
             Operator::CreateTable(op) => Ok(self.build_physical_create_table(op)),
@@ -104,16 +72,11 @@ impl PhysicalPlanBuilder {
         )
     }
 
-    fn build_physical_projection(&mut self, plan: &LogicalPlan, op: &ProjectOperator) -> Result<PhysicalPlan> {
+    fn build_physical_select_projection(&mut self, plan: &LogicalPlan, op: &ProjectOperator) -> Result<PhysicalPlan> {
         let input = self.build_plan(plan.child(0)?)?;
 
-        let exprs = op.columns
-            .iter()
-            .map(|expr| self.rewriter_expr(expr))
-            .collect_vec();
-
         Ok(PhysicalPlan::Projection(PhysicalProjection {
-            exprs,
+            exprs: op.columns.clone(),
             input: Box::new(input),
         }))
     }
@@ -126,30 +89,16 @@ impl PhysicalPlanBuilder {
         let input = self.build_plan(plan.child(0)?)?;
 
         Ok(PhysicalPlan::Filter(PhysicalFilter {
-            predicate: self.rewriter_expr(&base.predicate),
+            predicate: base.predicate.clone(),
             input: Box::new(input),
         }))
     }
 
-    fn build_physical_sort(&mut self, plan: &LogicalPlan, SortOperator { sort_fields, limit }: &SortOperator) -> Result<PhysicalPlan> {
+    fn build_physical_sort(&mut self, plan: &LogicalPlan, base: &SortOperator) -> Result<PhysicalPlan> {
         let input = self.build_plan(plan.child(0)?)?;
 
-        let rewrite_sort_fields = sort_fields
-            .into_iter()
-            .map(|SortField{ expr, desc, nulls_first }| {
-                SortField {
-                    expr: self.rewriter_expr(expr),
-                    desc: desc.clone(),
-                    nulls_first: nulls_first.clone(),
-                }
-            })
-            .collect_vec();
-
         Ok(PhysicalPlan::Sort(PhysicalSort {
-            op: SortOperator {
-                sort_fields: rewrite_sort_fields,
-                limit: limit.clone(),
-            },
+            op: base.clone(),
             input: Box::new(input),
         }))
     }
@@ -163,95 +112,18 @@ impl PhysicalPlanBuilder {
         }))
     }
 
-    fn build_physical_join(&mut self, plan: &LogicalPlan, JoinOperator{ on, join_type } : &JoinOperator) -> Result<PhysicalPlan> {
+    fn build_physical_join(&mut self, plan: &LogicalPlan, base: &JoinOperator) -> Result<PhysicalPlan> {
         let left_input = Box::new(self.build_plan(plan.child(0)?)?);
         let right_input = Box::new(self.build_plan(plan.child(1)?)?);
 
-        let on =  if let JoinCondition::On { on, filter } = on {
-            let rewrite_on = on.iter()
-                .map(|(left_expr, right_expr)| {
-                    (self.rewriter_expr(left_expr), self.rewriter_expr(right_expr))
-                })
-                .collect_vec();
-            let filter = filter
-                .as_ref()
-                .map(|expr| self.rewriter_expr(expr));
-
-            JoinCondition::On { on: rewrite_on, filter }
-        } else {
-            JoinCondition::None
-        };
-
-        if join_type == &JoinType::Cross {
+        if base.join_type == JoinType::Cross {
             todo!()
         } else {
             Ok(PhysicalPlan::HashJoin(PhysicalHashJoin {
-                op: JoinOperator {
-                    on,
-                    join_type: join_type.clone(),
-                },
+                op: base.clone(),
                 left_input,
                 right_input,
             }))
-        }
-    }
-
-    fn rewriter_expr(&mut self, expr: &ScalarExpression) -> ScalarExpression {
-        match expr {
-            ScalarExpression::ColumnRef(col) => {
-                let mut new_col = col.clone();
-                if let Some(nullable) = self.table_force_nullable.get(&col.table_id.unwrap()) {
-                    new_col.nullable = *nullable;
-                }
-
-                ScalarExpression::ColumnRef(new_col)
-            }
-            ScalarExpression::Alias { expr, alias } => {
-                ScalarExpression::Alias {
-                    expr: Box::new(self.rewriter_expr(expr)),
-                    alias: alias.clone()
-                }
-            }
-            ScalarExpression::TypeCast { expr, ty, is_try } => {
-                ScalarExpression::TypeCast {
-                    expr: Box::new(self.rewriter_expr(expr)),
-                    ty: ty.clone(),
-                    is_try: is_try.clone(),
-                }
-            }
-            ScalarExpression::IsNull { expr } => {
-                ScalarExpression::IsNull {
-                    expr: Box::new(self.rewriter_expr(expr))
-                }
-            }
-            ScalarExpression::Unary { op, expr, ty } => {
-                ScalarExpression::Unary {
-                    op: op.clone(),
-                    expr: Box::new(self.rewriter_expr(expr)),
-                    ty: ty.clone(),
-                }
-            }
-            ScalarExpression::Binary { op, left_expr, right_expr, ty } => {
-                ScalarExpression::Binary {
-                    op: op.clone(),
-                    left_expr: Box::new(self.rewriter_expr(left_expr)),
-                    right_expr: Box::new(self.rewriter_expr(right_expr)),
-                    ty: ty.clone(),
-                }
-            }
-            ScalarExpression::AggCall { kind, args, ty } => {
-                let rewrite_args = args
-                    .into_iter()
-                    .map(|expr| self.rewriter_expr(expr))
-                    .collect_vec();
-
-                ScalarExpression::AggCall {
-                    kind: kind.clone(),
-                    args: rewrite_args,
-                    ty: ty.clone(),
-                }
-            }
-            _ => expr.clone()
         }
     }
 }
