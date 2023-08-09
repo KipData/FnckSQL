@@ -18,7 +18,7 @@ use self::{
     project::ProjectOperator, scan::ScanOperator, sort::SortOperator,
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Operator {
     Dummy,
     Aggregate(AggregateOperator),

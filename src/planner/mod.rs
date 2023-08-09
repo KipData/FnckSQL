@@ -1,11 +1,10 @@
 pub mod display;
-pub mod logical_plan_builder;
 pub mod operator;
 
 use anyhow::Result;
 use crate::planner::operator::Operator;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LogicalPlan {
     pub operator: Operator,
     pub childrens: Vec<LogicalPlan>,

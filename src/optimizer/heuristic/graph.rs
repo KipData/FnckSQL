@@ -1,0 +1,187 @@
+use itertools::Itertools;
+use petgraph::stable_graph::{NodeIndex, StableDiGraph};
+use petgraph::visit::{EdgeRef, IntoEdges};
+use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
+use crate::planner::LogicalPlan;
+
+/// HepNodeId is used in optimizer to identify a node.
+pub type HepNodeId = NodeIndex<OptExprNodeId>;
+
+#[derive(Debug, PartialEq)]
+struct HepNode {
+    node: OptExprNode,
+    source_id: Option<HepNodeId>
+}
+
+#[derive(Debug)]
+struct HepGraph {
+    graph: StableDiGraph<HepNode, usize, usize>,
+    root_index: HepNodeId,
+}
+
+impl HepGraph {
+    pub(crate) fn new(root: LogicalPlan) -> Self {
+        fn graph_filling(
+            graph: &mut StableDiGraph<HepNode, usize, usize>,
+            LogicalPlan{ operator, childrens }: LogicalPlan,
+            source_id: Option<HepNodeId>
+        ) -> HepNodeId {
+            let index = graph.add_node(HepNode {
+                node: OptExprNode::OperatorRef(operator),
+                source_id,
+            });
+            for (order, child) in childrens.into_iter().enumerate() {
+                let child_index = graph_filling(graph, child, Some(index));
+                let _ = graph.add_edge(index, child_index, order);
+            }
+
+            index
+        }
+
+        let mut graph = StableDiGraph::<HepNode, usize, usize>::default();
+
+        let root_index = graph_filling(
+            &mut graph,
+            root,
+            None
+        );
+
+        HepGraph {
+            graph,
+            root_index,
+        }
+    }
+
+    pub(crate) fn add_node(&mut self, source_id: HepNodeId, children_option: Option<HepNodeId>, new_node: OptExprNode) {
+        let new_index = self.graph.add_node(HepNode {
+            node: new_node,
+            source_id: Some(source_id),
+        });
+
+        let mut order = self.graph
+            .edges(source_id)
+            .count();
+
+        if let Some(children_id) = children_option {
+            self.graph.find_edge(source_id, children_id)
+                .map(|old_edge_id| {
+                    order = self.graph
+                        .remove_edge(old_edge_id)
+                        .unwrap_or(0);
+
+                    self.graph[children_id].source_id = Some(new_index);
+                    self.graph.add_edge(new_index, children_id, 0);
+                });
+        }
+
+        self.graph.add_edge(source_id, new_index, order);
+    }
+
+    pub(crate) fn replace_node(&mut self, source_id: HepNodeId, new_node: OptExprNode) {
+        let node = &self.graph[source_id];
+
+        self.graph[source_id] = HepNode {
+            node: new_node,
+            source_id: node.source_id,
+        }
+    }
+
+    pub(crate) fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) {
+        let children_ids = self.graph.edges(source_id)
+            .map(|edge_ref| edge_ref.target())
+            .collect_vec();
+
+        if let Some(source) = self.graph.remove_node(source_id) {
+            if with_childrens { return; }
+            if source.source_id.is_none() {
+                assert!(children_ids.len() < 2);
+                self.root_index = children_ids[0];
+
+                return;
+            }
+
+            for (order, children_id) in children_ids.into_iter().enumerate() {
+                if let Some(parent_id) = source.source_id {
+                    let _ = self.graph.add_edge(parent_id, children_id, order);
+                }
+            }
+        }
+    }
+
+    pub(crate) fn to_plan(self) -> LogicalPlan {
+        todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+    use itertools::Itertools;
+    use petgraph::stable_graph::{EdgeIndex, IndexType, NodeIndex};
+    use crate::binder::test::select_sql_run;
+    use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
+    use crate::optimizer::heuristic::graph::{HepGraph, HepNode, HepNodeId};
+    use crate::planner::operator::Operator;
+
+    #[test]
+    fn test_graph() -> Result<()> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+        let mut graph = HepGraph::new(plan);
+
+        graph.add_node(
+            HepNodeId::new(1),
+            None,
+            OptExprNode::OperatorRef(Operator::Dummy)
+        );
+
+        graph.add_node(
+            HepNodeId::new(1),
+            Some(HepNodeId::new(4)),
+            OptExprNode::OperatorRef(Operator::Dummy)
+        );
+
+        graph.add_node(
+            HepNodeId::new(5),
+            None,
+            OptExprNode::OperatorRef(Operator::Dummy)
+        );
+
+        graph.replace_node(HepNodeId::new(5), OptExprNode::OptExpr(OptExprNodeId::new(5)));
+
+        assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(2)));
+        assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(3)));
+        assert!(graph.graph.contains_edge(NodeIndex::new(0), NodeIndex::new(1)));
+        assert!(graph.graph.contains_edge(NodeIndex::new(5), NodeIndex::new(4)));
+        assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(5)));
+        assert!(graph.graph.contains_edge(NodeIndex::new(5), NodeIndex::new(6)));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(0)), Some(&0));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(1)), Some(&1));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(2)), Some(&0));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(3)), Some(&0));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(4)), Some(&2));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(5)), Some(&1));
+        assert_eq!(
+            graph.graph.node_weight(NodeIndex::new(5)),
+            Some(&HepNode { node: OptExprNode::OptExpr(5), source_id: Some(NodeIndex::new(1)) })
+        );
+        assert_eq!(graph.root_index, NodeIndex::new(0));
+
+        graph.remove_node(
+            HepNodeId::new(0),
+            false
+        );
+
+        graph.remove_node(
+            HepNodeId::new(5),
+            true
+        );
+
+        assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(2)));
+        assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(3)));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(0)), Some(&0));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(1)), Some(&1));
+        assert_eq!(graph.root_index, NodeIndex::new(1));
+
+        Ok(())
+    }
+}
