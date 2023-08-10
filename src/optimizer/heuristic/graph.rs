@@ -1,8 +1,10 @@
 use itertools::Itertools;
 use petgraph::stable_graph::{NodeIndex, StableDiGraph};
-use petgraph::visit::{EdgeRef, IntoEdges};
+use petgraph::visit::{Bfs, EdgeRef, IntoEdges};
 use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
+use crate::optimizer::heuristic::matcher::HepMatchOrder;
 use crate::planner::LogicalPlan;
+use crate::planner::operator::Operator;
 
 /// HepNodeId is used in optimizer to identify a node.
 pub type HepNodeId = NodeIndex<OptExprNodeId>;
@@ -108,15 +110,67 @@ impl HepGraph {
         }
     }
 
-    pub(crate) fn to_plan(self) -> LogicalPlan {
-        todo!()
+    /// Traverse the graph in BFS order.
+    fn bfs(&self, start: HepNodeId) -> Vec<HepNodeId> {
+        let mut ids = Vec::with_capacity(self.graph.node_count());
+        let mut iter = Bfs::new(&self.graph, start);
+        while let Some(node_id) = iter.next(&self.graph) {
+            ids.push(node_id);
+        }
+        ids
+    }
+
+    /// Use bfs to traverse the graph and return node ids. If the node is a join, the children order
+    /// is unstable. Maybe `left, right` or `right, left`.
+    pub fn nodes_iter(&self, order: HepMatchOrder) -> Box<dyn Iterator<Item = HepNodeId>> {
+        let ids = self.bfs(self.root_index);
+        match order {
+            HepMatchOrder::TopDown => Box::new(ids.into_iter()),
+            HepMatchOrder::BottomUp => Box::new(ids.into_iter().rev()),
+        }
+    }
+
+    pub fn get_operator(&self, node_id: HepNodeId) -> &Operator {
+        match &self.graph[node_id].node {
+            OptExprNode::OperatorRef(op) => op,
+            OptExprNode::OptExpr(node_id) => self.get_operator(HepNodeId::new(*node_id)),
+        }
+    }
+
+    pub(crate) fn to_plan(&self) -> LogicalPlan {
+        let mut root_plan = LogicalPlan {
+            operator: self.get_operator(self.root_index).clone(),
+            childrens: vec![],
+        };
+
+        self.build_childrens(&mut root_plan, self.root_index);
+
+        root_plan
+    }
+
+    fn build_childrens(
+        &self,
+        plan: &mut LogicalPlan,
+        node_index: HepNodeId,
+    ) {
+        for edge in self.graph
+            .edges(node_index)
+            .sorted_by_key(|edge| edge.weight())
+        {
+            let mut child_plan = LogicalPlan {
+                operator: self.get_operator(edge.target()).clone(),
+                childrens: vec![],
+            };
+
+            self.build_childrens(&mut child_plan, edge.target());
+            plan.childrens.push(child_plan);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use itertools::Itertools;
     use petgraph::stable_graph::{EdgeIndex, IndexType, NodeIndex};
     use crate::binder::test::select_sql_run;
     use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
@@ -126,7 +180,7 @@ mod tests {
     #[test]
     fn test_graph() -> Result<()> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
-        let mut graph = HepGraph::new(plan);
+        let mut graph = HepGraph::new(plan.clone());
 
         graph.add_node(
             HepNodeId::new(1),
@@ -181,6 +235,15 @@ mod tests {
         assert_eq!(graph.graph.edge_weight(EdgeIndex::new(0)), Some(&0));
         assert_eq!(graph.graph.edge_weight(EdgeIndex::new(1)), Some(&1));
         assert_eq!(graph.root_index, NodeIndex::new(1));
+
+        let final_plan = graph.to_plan();
+
+        match final_plan.operator {
+            Operator::Join(_) => (),
+            _ => unreachable!("Should be a join operator"),
+        }
+
+        assert_eq!(final_plan.childrens.len(), 2);
 
         Ok(())
     }
