@@ -1,4 +1,3 @@
-use crate::optimizer::core::opt_expr::OptExpr;
 use crate::planner::operator::Operator;
 
 #[allow(dead_code)]

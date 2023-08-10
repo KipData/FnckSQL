@@ -26,18 +26,12 @@ impl OptExprNode {
         match self {
             OptExprNode::OperatorRef(op) => op,
             OptExprNode::OptExpr(_) => {
-                panic!("OptExprNode::get_plan_ref() called on OptExprNode::OptExpr")
+                panic!("OptExprNode::get_operator() called on OptExprNode::OptExpr")
             }
         }
     }
 }
 
-/// A sub-plan-tree representation used in Rule and Matcher. Every root node could be new node or
-/// existing graph node. For new node, it will be added in graph, for existing node, it will be
-/// reconnect in graph later.
-///
-/// It constructed by `PatternMatcher` when optimizer to match a rule, and consumed by `Rule` to do
-/// transformation, and `Rule` return new `OptExpr` to replace the matched sub-tree.
 #[derive(Clone, Debug)]
 pub struct OptExpr {
     /// The root of the tree.
@@ -52,13 +46,11 @@ impl OptExpr {
         Self { root, childrens }
     }
 
-    /// Create OptExpr tree from OperatorRef tree, it will change all nodes' children to dummy nodes.
     pub fn new_from_op_ref(plan: &LogicalPlan) -> Self {
         OptExpr::build_opt_expr_internal(plan)
     }
 
     fn build_opt_expr_internal(input: &LogicalPlan) -> OptExpr {
-        // FIXME: clone with dummy children to fix comments in PatternMatcher.
         let root = OptExprNode::OperatorRef(input.operator.clone());
         let childrens = input
             .childrens

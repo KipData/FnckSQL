@@ -216,7 +216,7 @@ mod storage_test {
         assert!(table_catalog.unwrap().get_column_id_by_name("a").is_some());
 
         let table = storage.get_table(&id)?;
-        let mut tx = table.read(None, None)?;
+        let mut tx = table.read((None, None), vec![])?;
         let batch = tx.next_batch()?;
         println!("{:?}", batch);
         assert!(batch.is_some());

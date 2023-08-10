@@ -2,5 +2,5 @@
 /// such as (/core) are referenced from sqlrs
 
 mod core;
-mod heuristic;
-mod rule;
+pub mod heuristic;
+pub mod rule;
