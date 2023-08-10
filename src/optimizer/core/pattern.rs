@@ -1,24 +1,20 @@
 use crate::optimizer::core::opt_expr::OptExpr;
-use crate::planner::LogicalPlan;
+use crate::planner::operator::Operator;
 
 #[allow(dead_code)]
 pub enum PatternChildrenPredicate {
-    /// All children and their children are matched and will be collected as
-    /// `OptExprNode::PlanRef`. Currently used in one-time-applied rule.
+    /// all childrens nodes match all
     MatchedRecursive,
-    /// All children will be evaluated in `PatternMatcher`, if pattern match, node will collected
-    /// as `OptExprNode::PlanRef`. if vec is empty, it means no children are matched and
-    /// collected.
+    /// childrens nodes are matched according to paterns order
     Predicate(Vec<Pattern>),
-    /// We don't care the children, and them will be collected as existing nodes
-    /// `OptExprNode::OptExpr` in OptExpr tree.
+    /// childrens jump out match
     None,
 }
 
 /// The pattern tree to match a plan tree. It defined in `Rule` and used in `PatternMatcher`.
 pub struct Pattern {
     /// The root node predicate, not contains the children.
-    pub predicate: fn(&LogicalPlan) -> bool,
+    pub predicate: fn(&Operator) -> bool,
     /// The children's predicate of current node.
     pub children: PatternChildrenPredicate,
 }

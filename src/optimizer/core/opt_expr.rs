@@ -43,13 +43,13 @@ pub struct OptExpr {
     /// The root of the tree.
     pub root: OptExprNode,
     /// The root's children expressions.
-    pub children: Vec<OptExpr>,
+    pub childrens: Vec<OptExpr>,
 }
 
 
 impl OptExpr {
-    pub fn new(root: OptExprNode, children: Vec<OptExpr>) -> Self {
-        Self { root, children }
+    pub fn new(root: OptExprNode, childrens: Vec<OptExpr>) -> Self {
+        Self { root, childrens }
     }
 
     /// Create OptExpr tree from OperatorRef tree, it will change all nodes' children to dummy nodes.
@@ -60,19 +60,19 @@ impl OptExpr {
     fn build_opt_expr_internal(input: &LogicalPlan) -> OptExpr {
         // FIXME: clone with dummy children to fix comments in PatternMatcher.
         let root = OptExprNode::OperatorRef(input.operator.clone());
-        let children = input
+        let childrens = input
             .childrens
             .iter()
             .map(OptExpr::build_opt_expr_internal)
             .collect::<Vec<_>>();
-        OptExpr { root, children }
+        OptExpr { root, childrens }
     }
 
     pub fn to_plan_ref(&self) -> LogicalPlan {
         match &self.root {
             OptExprNode::OperatorRef(op) => {
                 let childrens = self
-                    .children
+                    .childrens
                     .iter()
                     .map(|c| c.to_plan_ref())
                     .collect::<Vec<_>>();

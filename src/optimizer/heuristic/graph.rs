@@ -1,7 +1,8 @@
 use itertools::Itertools;
+use petgraph::data::DataMap;
 use petgraph::stable_graph::{NodeIndex, StableDiGraph};
 use petgraph::visit::{Bfs, EdgeRef, IntoEdges};
-use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
+use crate::optimizer::core::opt_expr::{OptExpr, OptExprNode, OptExprNodeId};
 use crate::optimizer::heuristic::matcher::HepMatchOrder;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::Operator;
@@ -10,13 +11,13 @@ use crate::planner::operator::Operator;
 pub type HepNodeId = NodeIndex<OptExprNodeId>;
 
 #[derive(Debug, PartialEq)]
-struct HepNode {
+pub(crate) struct HepNode {
     node: OptExprNode,
     source_id: Option<HepNodeId>
 }
 
 #[derive(Debug)]
-struct HepGraph {
+pub(crate) struct HepGraph {
     graph: StableDiGraph<HepNode, usize, usize>,
     root_index: HepNodeId,
 }
@@ -122,28 +123,58 @@ impl HepGraph {
 
     /// Use bfs to traverse the graph and return node ids. If the node is a join, the children order
     /// is unstable. Maybe `left, right` or `right, left`.
-    pub fn nodes_iter(&self, order: HepMatchOrder) -> Box<dyn Iterator<Item = HepNodeId>> {
-        let ids = self.bfs(self.root_index);
+    pub fn nodes_iter(&self, order: HepMatchOrder, start_option: Option<HepNodeId>) -> Box<dyn Iterator<Item = HepNodeId>> {
+        let ids = self.bfs(start_option.unwrap_or(self.root_index));
         match order {
             HepMatchOrder::TopDown => Box::new(ids.into_iter()),
             HepMatchOrder::BottomUp => Box::new(ids.into_iter().rev()),
         }
     }
 
-    pub fn get_operator(&self, node_id: HepNodeId) -> &Operator {
+    pub(crate) fn node(&self, node_id: HepNodeId) -> Option<&HepNode> {
+        self.graph.node_weight(node_id)
+    }
+
+    pub fn operator(&self, node_id: HepNodeId) -> &Operator {
         match &self.graph[node_id].node {
             OptExprNode::OperatorRef(op) => op,
-            OptExprNode::OptExpr(node_id) => self.get_operator(HepNodeId::new(*node_id)),
+            OptExprNode::OptExpr(node_id) => self.operator(HepNodeId::new(*node_id)),
         }
     }
 
     pub(crate) fn to_plan(&self) -> LogicalPlan {
+        self.to_plan_with_index(self.root_index)
+    }
+
+    /// If input node is join, we use the edge weight to control the join chilren order.
+    pub fn children_at(&self, id: HepNodeId) -> Vec<HepNodeId> {
+        self
+            .graph
+            .edges(id)
+            .sorted_by_key(|edge| edge.weight())
+            .map(|edge| edge.target())
+            .collect_vec()
+    }
+
+    pub fn to_opt_expr(&self, start: HepNodeId) -> OptExpr {
+        let children = self
+            .children_at(start)
+            .iter()
+            .map(|&id| self.to_opt_expr(id))
+            .collect::<Vec<_>>();
+        OptExpr::new(
+            OptExprNode::OperatorRef(self.operator(start).clone()),
+            children,
+        )
+    }
+
+    pub(crate) fn to_plan_with_index(&self, start_index: HepNodeId) -> LogicalPlan {
         let mut root_plan = LogicalPlan {
-            operator: self.get_operator(self.root_index).clone(),
+            operator: self.operator(start_index).clone(),
             childrens: vec![],
         };
 
-        self.build_childrens(&mut root_plan, self.root_index);
+        self.build_childrens(&mut root_plan, start_index);
 
         root_plan
     }
@@ -151,18 +182,15 @@ impl HepGraph {
     fn build_childrens(
         &self,
         plan: &mut LogicalPlan,
-        node_index: HepNodeId,
+        start: HepNodeId,
     ) {
-        for edge in self.graph
-            .edges(node_index)
-            .sorted_by_key(|edge| edge.weight())
-        {
+        for child_id in self.children_at(start) {
             let mut child_plan = LogicalPlan {
-                operator: self.get_operator(edge.target()).clone(),
+                operator: self.operator(child_id).clone(),
                 childrens: vec![],
             };
 
-            self.build_childrens(&mut child_plan, edge.target());
+            self.build_childrens(&mut child_plan, child_id);
             plan.childrens.push(child_plan);
         }
     }
@@ -244,6 +272,33 @@ mod tests {
         }
 
         assert_eq!(final_plan.childrens.len(), 2);
+
+        let part_plan = graph.to_plan_with_index(HepNodeId::new(3));
+
+        match part_plan.operator {
+            Operator::Scan(_) => (),
+            _ => unreachable!("Should be a scan operator"),
+        }
+
+        assert_eq!(part_plan.childrens.len(), 0);
+
+        let root_expr = graph.to_opt_expr(HepNodeId::new(1));
+
+        match root_expr.root.get_operator() {
+            Operator::Join(_) => (),
+            _ => unreachable!("Should be a join operator"),
+        }
+
+        assert_eq!(root_expr.childrens.len(), 2);
+
+        let part_expr = graph.to_opt_expr(HepNodeId::new(3));
+
+        match part_expr.root.get_operator() {
+            Operator::Scan(_) => (),
+            _ => unreachable!("Should be a scan operator"),
+        }
+
+        assert_eq!(part_expr.childrens.len(), 0);
 
         Ok(())
     }
