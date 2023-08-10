@@ -3,3 +3,4 @@
 
 mod core;
 mod heuristic;
+mod rule;

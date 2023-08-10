@@ -1,5 +1,5 @@
-use crate::optimizer::core::opt_expr::OptExpr;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate, PatternMatcher};
+use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 
 /// Use pattern to determines which rule can be applied
@@ -17,8 +17,10 @@ impl<'a, 'b> HepMatcher<'a, 'b> {
             graph,
         }
     }
+}
 
-    fn _match_opt_expr(&self) -> bool {
+impl PatternMatcher for HepMatcher<'_, '_> {
+    fn match_opt_expr(&self) -> bool {
         let op = self.graph.operator(self.start_id);
         // check the root node predicate
         if !(self.pattern.predicate)(&op) {
@@ -36,7 +38,7 @@ impl<'a, 'b> HepMatcher<'a, 'b> {
             }
             PatternChildrenPredicate::Predicate(patterns) => {
                 for (i, node_id) in self.graph.children_at(self.start_id).into_iter().enumerate() {
-                    if !HepMatcher::new(&patterns[i], node_id, self.graph)._match_opt_expr() {
+                    if !HepMatcher::new(&patterns[i], node_id, self.graph).match_opt_expr() {
                         return false;
                     }
                 }
@@ -46,23 +48,6 @@ impl<'a, 'b> HepMatcher<'a, 'b> {
 
         true
     }
-}
-
-impl PatternMatcher for HepMatcher<'_, '_> {
-    fn match_opt_expr(&self) -> Option<OptExpr> {
-        self._match_opt_expr()
-            .then(|| self.graph.to_opt_expr(self.start_id))
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum HepMatchOrder {
-    /// Match from root down. A match attempt at an ancestor always precedes all match attempts at
-    /// its descendants.
-    TopDown,
-    /// Match from leaves up. A match attempt at a descendant precedes all match attempts at its
-    /// ancestors.
-    BottomUp,
 }
 
 #[cfg(test)]
@@ -94,21 +79,10 @@ mod tests {
             }]),
         };
 
-        let expr = HepMatcher::new(&project_into_table_scan_pattern, HepNodeId::new(0), &graph)
-            .match_opt_expr()
-            .unwrap();
-
-        match expr.root.get_operator() {
-            Operator::Project(_) => (),
-            _ => unreachable!("Should be a projection operator"),
-        }
-
-        assert_eq!(expr.childrens.len(), 1);
-
-        match expr.childrens[0].root.get_operator() {
-            Operator::Scan(_) => (),
-            _ => unreachable!("Should be a scan operator"),
-        }
+        assert!(
+            HepMatcher::new(&project_into_table_scan_pattern, HepNodeId::new(0), &graph)
+                .match_opt_expr()
+        );
 
         Ok(())
     }
@@ -146,7 +120,6 @@ mod tests {
         assert!(
             HepMatcher::new(&only_dummy_pattern, HepNodeId::new(0), &graph)
                 .match_opt_expr()
-                .is_some()
         );
 
         Ok(())

@@ -3,7 +3,7 @@ use petgraph::data::DataMap;
 use petgraph::stable_graph::{NodeIndex, StableDiGraph};
 use petgraph::visit::{Bfs, EdgeRef, IntoEdges};
 use crate::optimizer::core::opt_expr::{OptExpr, OptExprNode, OptExprNodeId};
-use crate::optimizer::heuristic::matcher::HepMatchOrder;
+use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::Operator;
 
@@ -11,19 +11,19 @@ use crate::planner::operator::Operator;
 pub type HepNodeId = NodeIndex<OptExprNodeId>;
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct HepNode {
+pub struct HepNode {
     node: OptExprNode,
     source_id: Option<HepNodeId>
 }
 
 #[derive(Debug)]
-pub(crate) struct HepGraph {
+pub struct HepGraph {
     graph: StableDiGraph<HepNode, usize, usize>,
     root_index: HepNodeId,
 }
 
 impl HepGraph {
-    pub(crate) fn new(root: LogicalPlan) -> Self {
+    pub fn new(root: LogicalPlan) -> Self {
         fn graph_filling(
             graph: &mut StableDiGraph<HepNode, usize, usize>,
             LogicalPlan{ operator, childrens }: LogicalPlan,
@@ -55,7 +55,7 @@ impl HepGraph {
         }
     }
 
-    pub(crate) fn add_node(&mut self, source_id: HepNodeId, children_option: Option<HepNodeId>, new_node: OptExprNode) {
+    pub fn add_node(&mut self, source_id: HepNodeId, children_option: Option<HepNodeId>, new_node: OptExprNode) {
         let new_index = self.graph.add_node(HepNode {
             node: new_node,
             source_id: Some(source_id),
@@ -80,7 +80,7 @@ impl HepGraph {
         self.graph.add_edge(source_id, new_index, order);
     }
 
-    pub(crate) fn replace_node(&mut self, source_id: HepNodeId, new_node: OptExprNode) {
+    pub fn replace_node(&mut self, source_id: HepNodeId, new_node: OptExprNode) {
         let node = &self.graph[source_id];
 
         self.graph[source_id] = HepNode {
@@ -89,7 +89,7 @@ impl HepGraph {
         }
     }
 
-    pub(crate) fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) {
+    pub fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) {
         let children_ids = self.graph.edges(source_id)
             .map(|edge_ref| edge_ref.target())
             .collect_vec();
@@ -121,8 +121,7 @@ impl HepGraph {
         ids
     }
 
-    /// Use bfs to traverse the graph and return node ids. If the node is a join, the children order
-    /// is unstable. Maybe `left, right` or `right, left`.
+    /// Use bfs to traverse the graph and return node ids
     pub fn nodes_iter(&self, order: HepMatchOrder, start_option: Option<HepNodeId>) -> Box<dyn Iterator<Item = HepNodeId>> {
         let ids = self.bfs(start_option.unwrap_or(self.root_index));
         match order {
@@ -131,7 +130,7 @@ impl HepGraph {
         }
     }
 
-    pub(crate) fn node(&self, node_id: HepNodeId) -> Option<&HepNode> {
+    pub fn node(&self, node_id: HepNodeId) -> Option<&HepNode> {
         self.graph.node_weight(node_id)
     }
 
@@ -142,7 +141,7 @@ impl HepGraph {
         }
     }
 
-    pub(crate) fn to_plan(&self) -> LogicalPlan {
+    pub fn to_plan(&self) -> LogicalPlan {
         self.to_plan_with_index(self.root_index)
     }
 
@@ -168,7 +167,7 @@ impl HepGraph {
         )
     }
 
-    pub(crate) fn to_plan_with_index(&self, start_index: HepNodeId) -> LogicalPlan {
+    pub fn to_plan_with_index(&self, start_index: HepNodeId) -> LogicalPlan {
         let mut root_plan = LogicalPlan {
             operator: self.operator(start_index).clone(),
             childrens: vec![],

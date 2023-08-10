@@ -19,10 +19,6 @@ pub struct Pattern {
     pub children: PatternChildrenPredicate,
 }
 
-/// The matcher use a pattern tree to match a plan tree.
-///
-/// Result organized in `OptExpr`. Matched nodes are `OptExprNode::PlanRef`, and non-matched
-/// children nodes are `OptExprNode::OptExpr`.
 pub trait PatternMatcher {
-    fn match_opt_expr(&self) -> Option<OptExpr>;
+    fn match_opt_expr(&self) -> bool;
 }

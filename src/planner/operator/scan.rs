@@ -7,7 +7,7 @@ use super::{sort::SortField, Operator};
 #[derive(Debug, PartialEq, Clone)]
 pub struct ScanOperator {
     pub table_id: TableId,
-    pub columns: Vec<ColumnId>,
+    pub columns: Vec<ScalarExpression>,
     pub sort_fields: Vec<SortField>,
     // Support push down predicate.
     // If pre_where is simple predicate, for example:  a > 1 then can calculate directly when read data.

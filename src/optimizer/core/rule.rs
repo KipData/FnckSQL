@@ -1,15 +1,10 @@
-use crate::optimizer::core::opt_expr::OptExpr;
 use crate::optimizer::core::pattern::Pattern;
+use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 
-/// A rule is to transform logically equivalent expression. There are two kinds of rules:
-///
-/// - Transformation Rule: Logical to Logical
-/// - Implementation Rule: Logical to Physical
+/// A rule is to transform logically equivalent expression
 pub trait Rule {
     /// The pattern to determine whether the rule can be applied.
     fn pattern(&self) -> &Pattern;
 
-    /// Apply the rule and write the transformation result to `Substitute`.
-    /// The pattern tree determines the opt_expr tree internal nodes type.
-    fn apply(&self, opt_expr: OptExpr) -> OptExpr;
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool;
 }
