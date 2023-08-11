@@ -9,7 +9,7 @@ use crate::execution_v1::physical_plan::physical_table_scan::PhysicalTableScan;
 use crate::execution_v1::physical_plan::physical_values::PhysicalValues;
 
 pub(crate) mod physical_create_table;
-pub(crate) mod physical_plan_builder;
+pub(crate) mod physical_plan_mapping;
 pub(crate) mod physical_projection;
 pub(crate) mod physical_table_scan;
 pub(crate) mod physical_insert;

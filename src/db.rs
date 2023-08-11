@@ -4,7 +4,7 @@ use arrow::record_batch::RecordBatch;
 use sqlparser::parser::ParserError;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution_v1::physical_plan::physical_plan_builder::PhysicalPlanBuilder;
+use crate::execution_v1::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
 use crate::execution_v1::volcano_executor::VolcanoExecutor;
 use crate::parser::parse_sql;
 use crate::storage::memory::InMemoryStorage;
@@ -47,14 +47,13 @@ impl Database {
         let logical_plan = binder.bind(&stmts[0])?;
         // println!("logic plan: {:#?}", logical_plan);
 
-        let mut builder = PhysicalPlanBuilder::new();
-        let operator = builder.build_plan(&logical_plan)?;
-        // println!("operator: {:#?}", operator);
+        let physical_plan = PhysicalPlanMapping::build_plan(logical_plan)?;
+        // println!("physical_plan: {:#?}", physical_plan);
 
         let storage = StorageImpl::InMemoryStorage(self.storage.clone());
         let executor = VolcanoExecutor::new(storage);
 
-        let mut stream = executor.build(operator);
+        let mut stream = executor.build(physical_plan);
 
         Ok(VolcanoExecutor::try_collect(&mut stream).await?)
     }
