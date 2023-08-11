@@ -6,6 +6,9 @@ use sqlparser::parser::ParserError;
 use crate::binder::{BindError, Binder, BinderContext};
 use crate::execution_v1::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
 use crate::execution_v1::volcano_executor::VolcanoExecutor;
+use crate::optimizer::heuristic::batch::HepBatchStrategy;
+use crate::optimizer::heuristic::optimizer::HepOptimizer;
+use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
 use crate::storage::memory::InMemoryStorage;
 use crate::storage::{Storage, StorageError, StorageImpl};
@@ -44,10 +47,21 @@ impl Database {
         ///   Sort(a)
         ///     Limit(1)
         ///       Project(a,b)
-        let logical_plan = binder.bind(&stmts[0])?;
-        // println!("logic plan: {:#?}", logical_plan);
+        let source_plan = binder.bind(&stmts[0])?;
+        // println!("source_plan plan: {:#?}", source_plan);
 
-        let physical_plan = PhysicalPlanMapping::build_plan(logical_plan)?;
+        let best_plan = HepOptimizer::new(source_plan)
+            .batch(
+                "column pruning".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::PushProjectIntoTableScan
+                ]
+            )
+            .find_best();
+        // println!("best_plan plan: {:#?}", best_plan);
+
+        let physical_plan = PhysicalPlanMapping::build_plan(best_plan)?;
         // println!("physical_plan: {:#?}", physical_plan);
 
         let storage = StorageImpl::InMemoryStorage(self.storage.clone());

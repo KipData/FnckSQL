@@ -1,6 +1,7 @@
+use std::any::Any;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::Rule;
-use crate::optimizer::heuristic::batch::HepBatch;
+use crate::optimizer::heuristic::batch::{HepBatch, HepBatchStrategy};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
 use crate::optimizer::rule::RuleImpl;
@@ -19,8 +20,8 @@ impl HepOptimizer {
         }
     }
 
-    pub fn batch(mut self, batch: HepBatch) -> Self {
-        self.batches.push(batch);
+    pub fn batch(mut self, name: String, strategy: HepBatchStrategy, rules: Vec<RuleImpl>) -> Self {
+        self.batches.push(HepBatch::new(name, strategy, rules));
         self
     }
 
@@ -81,11 +82,11 @@ mod tests {
         let plan = select_sql_run("select * from t1")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
-            .batch(HepBatch::new(
+            .batch(
                 "test_project_into_table_scan".to_string(),
                 HepBatchStrategy::once_topdown(),
                 vec![RuleImpl::PushProjectIntoTableScan]
-            ))
+            )
             .find_best();
 
         assert_eq!(best_plan.childrens.len(), 0);

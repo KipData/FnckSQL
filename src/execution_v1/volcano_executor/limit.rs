@@ -19,7 +19,7 @@ impl Limit {
         for batch in input {
             let batch = batch?;
 
-            let cardinality = batch.num_rows() as usize;
+            let cardinality = batch.num_rows();
             let limit_val = limit.unwrap_or(cardinality);
 
             let start = returned_count.max(offset_val) - returned_count;
@@ -49,7 +49,7 @@ impl Limit {
                 yield batch;
             } else {
                 let length = end - start;
-                yield batch.slice(start as usize, length as usize);
+                yield batch.slice(start, length);
             }
 
             // dut to returned_count is always += cardinality, and returned_batch maybe slsliced,

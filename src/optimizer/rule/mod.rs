@@ -5,7 +5,7 @@ use crate::optimizer::rule::column_pruning::PushProjectIntoTableScan;
 
 mod column_pruning;
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum RuleImpl {
     PushProjectIntoTableScan
 }
