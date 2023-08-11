@@ -1,7 +1,8 @@
 pub mod errors;
 pub mod value;
 
-use std::mem;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering::{Acquire, Release};
 
 use arrow::datatypes::IntervalUnit;
 use integer_encoding::FixedInt;
@@ -9,34 +10,32 @@ use strum_macros::AsRefStr;
 
 use crate::types::errors::TypeError;
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct IdGenerator {
-    buf: usize
-}
+static ID_BUF: AtomicU32 = AtomicU32::new(0);
+
+pub(crate) struct IdGenerator { }
 
 impl IdGenerator {
-    pub(crate) fn encode_to_raw(&self) -> Vec<u8> {
-        self.buf.encode_fixed_vec()
+    pub(crate) fn encode_to_raw() -> Vec<u8> {
+        ID_BUF
+            .load(Acquire)
+            .encode_fixed_vec()
     }
 
-    pub(crate) fn decode_from_raw(&mut self, buf: &[u8]) {
-        self.buf = u32::decode_fixed(buf) as usize;
+    pub(crate) fn from_raw(buf: &[u8]) {
+        Self::init(u32::decode_fixed(buf))
     }
 
-    pub(crate) fn new() -> Self {
-        IdGenerator {
-            buf: 0
-        }
+    pub(crate) fn init(init_value: u32) {
+        ID_BUF.store(init_value, Release)
     }
 
-    pub(crate) fn build(&mut self) -> usize {
-        let next_idx = self.buf + 1;
-        mem::replace(&mut self.buf, next_idx)
+    pub(crate) fn build() -> u32 {
+        ID_BUF.fetch_add(1, Release)
     }
 }
 
-pub type TableIdx = usize;
-pub type ColumnIdx = usize;
+pub type TableId = u32;
+pub type ColumnId = u32;
 
 /// Sqlrs type conversion:
 /// sqlparser::ast::DataType -> LogicalType -> arrow::datatypes::DataType
@@ -348,25 +347,29 @@ impl std::fmt::Display for LogicalType {
 
 #[cfg(test)]
 mod test {
+    use std::sync::atomic::Ordering::Release;
 
-    use crate::types::IdGenerator;
+    use crate::types::{IdGenerator, ID_BUF};
 
+    /// Tips: 由于IdGenerator为static全局性质生成的id，因此需要单独测试避免其他测试方法干扰
     #[test]
+    #[ignore]
     fn test_id_generator() {
-        let mut generator_1 = IdGenerator::new();
+        assert_eq!(IdGenerator::build(), 0);
+        assert_eq!(IdGenerator::build(), 1);
 
-        assert_eq!(generator_1.build(), 0);
-        assert_eq!(generator_1.build(), 1);
+        let buf = IdGenerator::encode_to_raw();
+        test_id_generator_reset();
 
-        let buf = generator_1.encode_to_raw();
+        assert_eq!(IdGenerator::build(), 0);
 
-        let mut generator_2 = IdGenerator::new();
+        IdGenerator::from_raw(&buf);
 
-        assert_eq!(generator_2.build(), 0);
+        assert_eq!(IdGenerator::build(), 2);
+        assert_eq!(IdGenerator::build(), 3);
+    }
 
-        generator_2.decode_from_raw(&buf);
-
-        assert_eq!(generator_2.build(), 2);
-        assert_eq!(generator_2.build(), 3);
+    fn test_id_generator_reset() {
+        ID_BUF.store(0, Release)
     }
 }

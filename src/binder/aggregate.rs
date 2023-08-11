@@ -90,11 +90,7 @@ impl Binder {
             ScalarExpression::AggCall {
                 ty: return_type, ..
             } => {
-                let index = if self.context.agg_calls.len() == 0 {
-                    0
-                } else {
-                    self.context.agg_calls.len() + 1
-                };
+                let index = self.context.agg_calls.len();
                 let input_ref = ScalarExpression::InputRef {
                     index,
                     ty: return_type.clone(),

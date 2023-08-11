@@ -12,9 +12,9 @@ impl TableScan {
     #[try_stream(boxed, ok = RecordBatch, error = ExecutorError)]
     pub async fn execute(plan: PhysicalTableScan, storage: impl Storage) {
         // TODO: sort_fields, pre_where, limit
-        let ScanOperator { table_ref_id,  .. } = plan.base;
+        let ScanOperator { table_id,  .. } = plan.base;
 
-        let table = storage.get_table(table_ref_id)?;
+        let table = storage.get_table(&table_id)?;
         let mut transaction = table.read(
             None,
             None

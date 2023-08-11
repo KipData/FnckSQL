@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
+use std::collections::HashMap;
 
 use crate::{
-    catalog::ColumnRefId,
     expression::ScalarExpression,
     planner::{
         operator::{
@@ -15,15 +15,19 @@ use crate::{
 
 use super::Binder;
 
-use crate::catalog::{DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME};
+use crate::catalog::{DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog};
 use anyhow::Result;
 use itertools::Itertools;
+use sqlparser::ast;
 use sqlparser::ast::{
     Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
+use crate::expression::BinaryOperator;
 use crate::planner::LogicalPlan;
+use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
+use crate::types::{LogicalType, TableId};
 
 impl Binder {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan> {
@@ -58,6 +62,8 @@ impl Binder {
         // TODO support SRF(Set-Returning Function).
 
         let mut select_list = self.normalize_select_item(&select.projection)?;
+
+        self.extract_select_join(&mut select_list);
 
         if let Some(predicate) = &select.selection {
             plan = self.bind_where(plan, predicate)?;
@@ -96,6 +102,7 @@ impl Binder {
         }
 
         plan = self.bind_project(plan, select_list);
+
         Ok(plan)
     }
 
@@ -110,18 +117,18 @@ impl Binder {
 
         let TableWithJoins { relation, joins } = &from[0];
 
-        let mut plan = self.bind_single_table_ref(relation)?;
+        let (left_id, mut plan) = self.bind_single_table_ref(relation, None)?;
 
         if !joins.is_empty() {
             for join in joins {
-                plan = self.bind_join(plan, join)?;
+                plan = self.bind_join(left_id, plan, join)?;
             }
         }
         Ok(plan)
     }
 
-    fn bind_single_table_ref(&mut self, table: &TableFactor) -> Result<LogicalPlan> {
-        let plan = match table {
+    fn bind_single_table_ref(&mut self, table: &TableFactor, joint_type: Option<JoinType>) -> Result<(TableId, LogicalPlan)> {
+        let plan_with_id = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
                     .0
@@ -153,14 +160,14 @@ impl Binder {
                     .get_table_id_by_name(table)
                     .ok_or_else(|| anyhow::Error::msg(format!("bind table {}", table)))?;
 
-                self.context.bind_table.insert(table.into(), table_ref_id);
+                self.context.bind_table.insert(table.into(), (table_ref_id, joint_type));
 
-                ScanOperator::new(table_ref_id)
+                (table_ref_id, ScanOperator::new(table_ref_id))
             }
             _ => unimplemented!(),
         };
 
-        Ok(plan)
+        Ok(plan_with_id)
     }
 
     /// Normalize select item.
@@ -199,16 +206,9 @@ impl Binder {
 
     fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>> {
         let mut exprs = vec![];
-        for ref_id in self.context.bind_table.values().cloned().collect_vec() {
-            let table = self.context.catalog.get_table(ref_id).unwrap();
-            for (col_id, col) in table.all_columns() {
-                let column_ref_id = ColumnRefId::from_table(ref_id, col_id);
-                // self.record_regular_table_column(
-                //     &table.name(),
-                //     col.name(),
-                //     *col_id,
-                //     col.desc().clone(),
-                // );
+        for (table_id, _) in self.context.bind_table.values().cloned() {
+            let table = self.context.catalog.get_table(&table_id).unwrap();
+            for (_, col) in table.all_columns() {
                 exprs.push(ScalarExpression::ColumnRef(col.clone()));
             }
         }
@@ -216,35 +216,42 @@ impl Binder {
         Ok(exprs)
     }
 
-    fn bind_join(&mut self, left: LogicalPlan, join: &Join) -> Result<LogicalPlan> {
+    fn bind_join(&mut self, left_id: TableId, left: LogicalPlan, join: &Join) -> Result<LogicalPlan> {
         let Join {
             relation,
             join_operator,
         } = join;
 
-        let right = self.bind_single_table_ref(relation)?;
-
-        let join_type = match join_operator {
+        let (join_type, joint_condition) = match join_operator {
             JoinOperator::Inner(constraint) => (JoinType::Inner, Some(constraint)),
-            JoinOperator::LeftOuter(constraint) => (JoinType::LeftOuter, Some(constraint)),
-            JoinOperator::RightOuter(constraint) => (JoinType::RightOuter, Some(constraint)),
-            JoinOperator::FullOuter(constraint) => (JoinType::FullOuter, Some(constraint)),
+            JoinOperator::LeftOuter(constraint) => (JoinType::Left, Some(constraint)),
+            JoinOperator::RightOuter(constraint) => (JoinType::Right, Some(constraint)),
+            JoinOperator::FullOuter(constraint) => (JoinType::Full, Some(constraint)),
             JoinOperator::CrossJoin => (JoinType::Cross, None),
-            JoinOperator::LeftSemi(constraint) => (JoinType::LeftSemi, Some(constraint)),
-            JoinOperator::RightSemi(constraint) => (JoinType::RightSemi, Some(constraint)),
-            JoinOperator::LeftAnti(constraint) => (JoinType::LeftAnti, Some(constraint)),
-            JoinOperator::RightAnti(constraint) => (JoinType::RightAnti, Some(constraint)),
             _ => unimplemented!(),
         };
 
-        let on = match join_type.1 {
-            Some(constraint) => match constraint {
-                JoinConstraint::On(expr) => Some(self.bind_expr(expr)?),
-                _ => unimplemented!(),
-            },
-            None => None,
+        let (right_id, right) = self.bind_single_table_ref(relation, Some(join_type))?;
+
+        let left_table = self.context.catalog
+            .get_table(&left_id)
+            .cloned()
+            .expect("Left table not found");
+        let right_table = self.context.catalog
+            .get_table(&right_id)
+            .cloned()
+            .expect("Right table not found");
+
+        let on = match joint_condition {
+            Some(constraint) => self.bind_join_constraint(
+                &left_table,
+                &right_table,
+                constraint
+            )?,
+            None => JoinCondition::None,
         };
-        Ok(LJoinOperator::new(left, right, on, join_type.0))
+
+        Ok(LJoinOperator::new(left, right, on, join_type))
     }
 
     fn bind_where(
@@ -331,6 +338,161 @@ impl Binder {
 
         Ok(LimitOperator::new(offset, limit, children))
     }
+
+    pub fn extract_select_join(
+        &mut self,
+        select_items: &mut [ScalarExpression],
+    ) {
+        let bind_tables = &self.context.bind_table;
+        if bind_tables.len() < 2 {
+            return;
+        }
+
+        let mut table_force_nullable = HashMap::new();
+        let mut left_table_force_nullable = false;
+        let mut left_table_id = None;
+
+        for (table_id, join_option) in bind_tables.values() {
+            if let Some(join_type) = join_option {
+                let (left_force_nullable, right_force_nullable) = match join_type {
+                    JoinType::Inner => (false, false),
+                    JoinType::Left => (false, true),
+                    JoinType::Right => (true, false),
+                    JoinType::Full => (true, true),
+                    JoinType::Cross => (true, true),
+                };
+                table_force_nullable.insert(*table_id, right_force_nullable);
+                left_table_force_nullable = left_force_nullable;
+            } else {
+                left_table_id = Some(*table_id);
+            }
+        }
+
+        if let Some(id) = left_table_id {
+            table_force_nullable.insert(id, left_table_force_nullable);
+        }
+
+        for column in select_items {
+            if let ScalarExpression::ColumnRef(col) = column {
+                if let Some(nullable) = table_force_nullable.get(&col.table_id.unwrap()) {
+                    col.nullable = *nullable;
+                }
+            }
+        }
+    }
+
+    fn bind_join_constraint(
+        &mut self,
+        left_table: &TableCatalog,
+        right_table: &TableCatalog,
+        constraint: &JoinConstraint,
+    ) -> Result<JoinCondition> {
+        match constraint {
+            JoinConstraint::On(expr) => {
+                // left and right columns that match equi-join pattern
+                let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = vec![];
+                // expression that didn't match equi-join pattern
+                let mut filter = vec![];
+
+                self.extract_join_keys(expr, &mut on_keys, &mut filter, left_table, right_table)?;
+
+                // combine multiple filter exprs into one BinaryExpr
+                let join_filter = filter
+                    .into_iter()
+                    .reduce(|acc, expr| ScalarExpression::Binary {
+                        op: BinaryOperator::And,
+                        left_expr: Box::new(acc),
+                        right_expr: Box::new(expr),
+                        ty: LogicalType::Boolean,
+                    });
+                // TODO: handle cross join if on_keys is empty
+                Ok(JoinCondition::On {
+                    on: on_keys,
+                    filter: join_filter,
+                })
+            }
+            _ => unimplemented!("not supported join constraint {:?}", constraint),
+        }
+    }
+
+    /// for sqlrs
+    /// original idea from datafusion planner.rs
+    /// Extracts equijoin ON condition be a single Eq or multiple conjunctive Eqs
+    /// Filters matching this pattern are added to `accum`
+    /// Filters that don't match this pattern are added to `accum_filter`
+    /// Examples:
+    /// ```text
+    /// foo = bar => accum=[(foo, bar)] accum_filter=[]
+    /// foo = bar AND bar = baz => accum=[(foo, bar), (bar, baz)] accum_filter=[]
+    /// foo = bar AND baz > 1 => accum=[(foo, bar)] accum_filter=[baz > 1]
+    /// ```
+    fn extract_join_keys(
+        &mut self,
+        expr: &Expr,
+        accum: &mut Vec<(ScalarExpression, ScalarExpression)>,
+        accum_filter: &mut Vec<ScalarExpression>,
+        left_schema: &TableCatalog,
+        right_schema: &TableCatalog,
+    ) -> Result<()> {
+        match expr {
+            Expr::BinaryOp { left, op, right } => match op {
+                ast::BinaryOperator::Eq => {
+                    let left = self.bind_expr(left)?;
+                    let right = self.bind_expr(right)?;
+
+                    match (&left, &right) {
+                        // example: foo = bar
+                        (ScalarExpression::ColumnRef(l), ScalarExpression::ColumnRef(r)) => {
+                            // reorder left and right joins keys to pattern: (left, right)
+                            if left_schema.contains_column(&l.name)
+                                && right_schema.contains_column(&r.name)
+                            {
+                                accum.push((left, right));
+                            } else if left_schema.contains_column(&r.name)
+                                && right_schema.contains_column(&l.name)
+                            {
+                                accum.push((right, left));
+                            } else {
+                                accum_filter.push(self.bind_expr(expr)?);
+                            }
+                        }
+                        // example: baz = 1
+                        _other => {
+                            accum_filter.push(self.bind_expr(expr)?);
+                        }
+                    }
+                }
+                ast::BinaryOperator::And => {
+                    // example: foo = bar AND baz > 1
+                    if let Expr::BinaryOp { left, op: _, right } = expr {
+                        self.extract_join_keys(
+                            left,
+                            accum,
+                            accum_filter,
+                            left_schema,
+                            right_schema,
+                        )?;
+                        self.extract_join_keys(
+                            right,
+                            accum,
+                            accum_filter,
+                            left_schema,
+                            right_schema,
+                        )?;
+                    }
+                }
+                _other => {
+                    // example: baz > 1
+                    accum_filter.push(self.bind_expr(expr)?);
+                }
+            },
+            _other => {
+                // example: baz in (xxx), something else will convert to filter logic
+                accum_filter.push(self.bind_expr(expr)?);
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -343,11 +505,18 @@ mod tests {
 
     fn test_root_catalog() -> Result<RootCatalog> {
         let mut root = RootCatalog::new();
-        let cols = vec![
+
+        let cols_t1 = vec![
             ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
             ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
         ];
-        let _ = root.add_table("t1".to_string(), cols)?;
+        let _ = root.add_table("t1".to_string(), cols_t1)?;
+
+        let cols_t2 = vec![
+            ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
+            ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
+        ];
+        let _ = root.add_table("t2".to_string(), cols_t2)?;
         Ok(root)
     }
 
@@ -357,7 +526,7 @@ mod tests {
         let binder = Binder::new(BinderContext::new(root));
         let stmt = crate::parser::parse_sql(sql).unwrap();
 
-        binder.bind(&stmt[0])
+        Ok(binder.bind(&stmt[0])?)
     }
 
     #[test]
@@ -403,6 +572,12 @@ mod tests {
         println!(
             "offset:\n {:#?}",
             plan_8
+        );
+
+        let plan_9 = select_sql_run("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1")?;
+        println!(
+            "join:\n {:#?}",
+            plan_9
         );
 
         Ok(())
