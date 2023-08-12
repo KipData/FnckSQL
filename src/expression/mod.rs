@@ -94,6 +94,44 @@ impl ScalarExpression {
         }
     }
 
+    pub fn referenced_columns(&self) -> Vec<ColumnCatalog> {
+        fn columns_collect(expr: &ScalarExpression, vec: &mut Vec<ColumnCatalog>) {
+            match expr {
+                ScalarExpression::ColumnRef(col) => {
+                    vec.push(col.clone());
+                }
+                ScalarExpression::Alias { expr, .. } => {
+                    columns_collect(&expr, vec)
+                }
+                ScalarExpression::TypeCast { expr, .. } => {
+                    columns_collect(&expr, vec)
+                }
+                ScalarExpression::IsNull { expr, .. } => {
+                    columns_collect(&expr, vec)
+                }
+                ScalarExpression::Unary { expr, .. } => {
+                    columns_collect(&expr, vec)
+                }
+                ScalarExpression::Binary { left_expr, right_expr, .. } => {
+                    columns_collect(left_expr, vec);
+                    columns_collect(right_expr, vec);
+                }
+                ScalarExpression::AggCall { args, .. } => {
+                    for expr in args {
+                        columns_collect(expr, vec)
+                    }
+                }
+                _ => (),
+            }
+        }
+
+        let mut exprs = Vec::new();
+
+        columns_collect(self, &mut exprs);
+
+        exprs
+    }
+
     pub fn has_agg_call(&self) -> bool {
         todo!()
     }

@@ -227,21 +227,17 @@ impl InMemoryTransaction {
 }
 
 fn projection_batch(exprs: &Vec<ScalarExpression>, batch: RecordBatch) -> Result<RecordBatch, StorageError> {
-    if exprs.is_empty() {
-        Ok(batch)
-    } else {
-        let columns = exprs
-            .iter()
-            .map(|e| e.eval_column(&batch))
-            .try_collect()
-            .unwrap();
-        let fields = exprs.iter().map(|e| e.eval_field(&batch)).collect();
-        let schema = SchemaRef::new(Schema::new_with_metadata(
-            fields,
-            batch.schema().metadata().clone(),
-        ));
-        Ok(RecordBatch::try_new(schema, columns).unwrap())
-    }
+    let columns = exprs
+        .iter()
+        .map(|e| e.eval_column(&batch))
+        .try_collect()
+        .unwrap();
+    let fields = exprs.iter().map(|e| e.eval_field(&batch)).collect();
+    let schema = SchemaRef::new(Schema::new_with_metadata(
+        fields,
+        batch.schema().metadata().clone(),
+    ));
+    Ok(RecordBatch::try_new(schema, columns).unwrap())
 }
 
 impl Transaction for InMemoryTransaction {

@@ -4,7 +4,6 @@ use crate::planner::operator::Operator;
 pub enum PatternChildrenPredicate {
     /// all childrens nodes match all
     MatchedRecursive,
-    /// childrens nodes are matched according to paterns order
     Predicate(Vec<Pattern>),
     /// childrens jump out match
     None,

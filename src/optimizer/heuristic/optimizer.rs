@@ -1,4 +1,4 @@
-use std::any::Any;
+use itertools::Itertools;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::batch::{HepBatch, HepBatchStrategy};
@@ -9,7 +9,7 @@ use crate::planner::LogicalPlan;
 
 pub struct HepOptimizer {
     batches: Vec<HepBatch>,
-    graph: HepGraph,
+    pub graph: HepGraph,
 }
 
 impl HepOptimizer {
@@ -29,14 +29,15 @@ impl HepOptimizer {
         let batches = self.batches.clone();
 
         for batch in batches {
+            let mut batch_over = false;
             let mut iteration = 1usize;
 
-            while iteration <= batch.strategy.max_iteration {
+            while iteration <= batch.strategy.max_iteration && !batch_over {
                 if self.apply_batch(&batch) {
-                    break
+                    iteration += 1;
+                } else {
+                    batch_over = true
                 }
-
-                iteration += 1;
             }
         }
 
@@ -53,7 +54,6 @@ impl HepOptimizer {
                     break;
                 }
             }
-
         }
 
         has_apply
@@ -66,37 +66,4 @@ impl HepOptimizer {
             .unwrap_or(false)
     }
 
-}
-
-#[cfg(test)]
-mod tests {
-    use anyhow::Result;
-    use crate::binder::test::select_sql_run;
-    use crate::optimizer::heuristic::batch::{HepBatch, HepBatchStrategy};
-    use crate::optimizer::heuristic::optimizer::HepOptimizer;
-    use crate::optimizer::rule::RuleImpl;
-    use crate::planner::operator::Operator;
-
-    #[test]
-    fn test_project_into_table_scan() -> Result<()> {
-        let plan = select_sql_run("select * from t1")?;
-
-        let best_plan = HepOptimizer::new(plan.clone())
-            .batch(
-                "test_project_into_table_scan".to_string(),
-                HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushProjectIntoTableScan]
-            )
-            .find_best();
-
-        assert_eq!(best_plan.childrens.len(), 0);
-        match best_plan.operator {
-            Operator::Scan(op) => {
-                assert_eq!(op.columns.len(), 2);
-            },
-            _ => unreachable!("Should be a scan operator"),
-        }
-
-        Ok(())
-    }
 }

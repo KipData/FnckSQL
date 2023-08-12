@@ -37,9 +37,11 @@ impl PatternMatcher for HepMatcher<'_, '_> {
                 }
             }
             PatternChildrenPredicate::Predicate(patterns) => {
-                for (i, node_id) in self.graph.children_at(self.start_id).into_iter().enumerate() {
-                    if !HepMatcher::new(&patterns[i], node_id, self.graph).match_opt_expr() {
-                        return false;
+                for node_id in self.graph.children_at(self.start_id) {
+                    for pattern in patterns {
+                        if !HepMatcher::new(pattern, node_id, self.graph).match_opt_expr() {
+                            return false;
+                        }
                     }
                 }
             }

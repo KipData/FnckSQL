@@ -1,7 +1,6 @@
 use itertools::Itertools;
-use petgraph::data::DataMap;
 use petgraph::stable_graph::{NodeIndex, StableDiGraph};
-use petgraph::visit::{Bfs, EdgeRef, IntoEdges};
+use petgraph::visit::{Bfs, EdgeRef};
 use crate::optimizer::core::opt_expr::{OptExpr, OptExprNode, OptExprNodeId};
 use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::planner::LogicalPlan;
@@ -90,25 +89,33 @@ impl HepGraph {
     }
 
     pub fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) {
-        let children_ids = self.graph.edges(source_id)
-            .map(|edge_ref| edge_ref.target())
-            .collect_vec();
+        if with_childrens {
+            self.graph.remove_node(source_id);
+            return;
+        }
 
-        if let Some(source) = self.graph.remove_node(source_id) {
-            if with_childrens { return; }
-            if source.source_id.is_none() {
+        if let Some(source_node) = self.graph.node_weight(source_id) {
+            let children_ids = self.graph.edges(source_id)
+                .sorted_by_key(|edge_ref| edge_ref.weight())
+                .map(|edge_ref| edge_ref.target())
+                .collect_vec();
+
+            if let Some(parent_id) = source_node.source_id {
+                if let Some(edge) = self.graph.find_edge(parent_id, source_id) {
+                    let weight = *self.graph.edge_weight(edge)
+                        .unwrap_or(&0);
+
+                    for (order, children_id) in children_ids.into_iter().enumerate() {
+                        let _ = self.graph.add_edge(parent_id, children_id, weight + order);
+                    }
+                }
+            } else {
                 assert!(children_ids.len() < 2);
                 self.root_index = children_ids[0];
-
-                return;
-            }
-
-            for (order, children_id) in children_ids.into_iter().enumerate() {
-                if let Some(parent_id) = source.source_id {
-                    let _ = self.graph.add_edge(parent_id, children_id, order);
-                }
             }
         }
+
+        self.graph.remove_node(source_id);
     }
 
     /// Traverse the graph in BFS order.

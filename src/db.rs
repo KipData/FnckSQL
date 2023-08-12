@@ -55,6 +55,7 @@ impl Database {
                 "column pruning".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
+                    RuleImpl::PushProjectThroughChild,
                     RuleImpl::PushProjectIntoTableScan
                 ]
             )

@@ -1,3 +1,5 @@
+use itertools::Itertools;
+use crate::catalog::TableCatalog;
 use crate::types::{ColumnId, TableId};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
@@ -16,11 +18,18 @@ pub struct ScanOperator {
     pub limit: Option<usize>,
 }
 impl ScanOperator {
-    pub fn new(table_id: TableId) -> LogicalPlan {
+    pub fn new(table_id: TableId, table_catalog: &TableCatalog) -> LogicalPlan {
+        // Fill all Columns in TableCatalog by default
+        let columns = table_catalog
+            .all_columns()
+            .into_iter()
+            .map(|(_, col)| ScalarExpression::ColumnRef(col.clone()))
+            .collect_vec();
+
         LogicalPlan {
             operator: Operator::Scan(ScanOperator {
                 table_id,
-                columns: vec![],
+                columns,
                 sort_fields: vec![],
                 pre_where: vec![],
                 limit: None,

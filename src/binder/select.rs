@@ -154,15 +154,15 @@ impl Binder {
                     )));
                 }
 
-                let table_ref_id = self
+                let table_catalog = self
                     .context
-                    .catalog
-                    .get_table_id_by_name(table)
+                    .catalog.get_table_by_name(table)
                     .ok_or_else(|| anyhow::Error::msg(format!("bind table {}", table)))?;
+                let table_ref_id = table_catalog.id;
 
                 self.context.bind_table.insert(table.into(), (table_ref_id, joint_type));
 
-                (table_ref_id, ScanOperator::new(table_ref_id))
+                (table_ref_id, ScanOperator::new(table_ref_id, &table_catalog))
             }
             _ => unimplemented!(),
         };
