@@ -4,6 +4,7 @@ use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
+use crate::optimizer::rule::is_subset_exprs;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::Operator;
 use crate::types::LogicalType;
@@ -39,11 +40,6 @@ lazy_static! {
             }]),
         }
     };
-}
-
-/// Return true when left is subset of right
-pub fn is_subset_exprs(left: &[ScalarExpression], right: &[ScalarExpression]) -> bool {
-    left.iter().all(|l| right.contains(l))
 }
 
 /// Combine two adjacent project operators into one.

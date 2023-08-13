@@ -1,13 +1,16 @@
+use crate::expression::ScalarExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::rule::column_pruning::{PushProjectIntoTableScan, PushProjectThroughChild};
 use crate::optimizer::rule::combine_operators::{CollapseProject, CombineFilter};
 use crate::optimizer::rule::pushdown_limit::{LimitProjectTranspose, EliminateLimits, PushLimitThroughJoin, PushLimitIntoTableScan};
+use crate::optimizer::rule::pushdown_predicates::PushPredicateThroughJoin;
 
 mod column_pruning;
 mod combine_operators;
 mod pushdown_limit;
+mod pushdown_predicates;
 
 #[derive(Debug, Copy, Clone)]
 pub enum RuleImpl {
@@ -22,6 +25,8 @@ pub enum RuleImpl {
     EliminateLimits,
     PushLimitThroughJoin,
     PushLimitIntoTableScan,
+    // PushDown predicates
+    PushPredicateThroughJoin
 }
 
 impl Rule for RuleImpl {
@@ -35,6 +40,7 @@ impl Rule for RuleImpl {
             RuleImpl::EliminateLimits => EliminateLimits {}.pattern(),
             RuleImpl::PushLimitThroughJoin => PushLimitThroughJoin {}.pattern(),
             RuleImpl::PushLimitIntoTableScan => PushLimitIntoTableScan {}.pattern(),
+            RuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin {}.pattern(),
         }
     }
 
@@ -48,6 +54,12 @@ impl Rule for RuleImpl {
             RuleImpl::EliminateLimits => EliminateLimits {}.apply(node_id, graph),
             RuleImpl::PushLimitThroughJoin => PushLimitThroughJoin {}.apply(node_id, graph),
             RuleImpl::PushLimitIntoTableScan => PushLimitIntoTableScan {}.apply(node_id, graph),
+            RuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin {}.apply(node_id, graph),
         }
     }
+}
+
+/// Return true when left is subset of right
+pub fn is_subset_exprs(left: &[ScalarExpression], right: &[ScalarExpression]) -> bool {
+    left.iter().all(|l| right.contains(l))
 }

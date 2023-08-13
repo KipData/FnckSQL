@@ -69,6 +69,13 @@ impl Database {
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
             .batch(
+                "Predicate pushdown".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::PushPredicateThroughJoin
+                ]
+            )
+            .batch(
                 "Limit pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
