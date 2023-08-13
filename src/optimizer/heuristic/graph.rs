@@ -1,3 +1,4 @@
+use std::mem;
 use itertools::Itertools;
 use petgraph::stable_graph::{NodeIndex, StableDiGraph};
 use petgraph::visit::{Bfs, EdgeRef};
@@ -9,7 +10,7 @@ use crate::planner::operator::Operator;
 /// HepNodeId is used in optimizer to identify a node.
 pub type HepNodeId = NodeIndex<OptExprNodeId>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct HepNode {
     node: OptExprNode,
     source_id: Option<HepNodeId>
@@ -54,6 +55,21 @@ impl HepGraph {
         }
     }
 
+    pub fn add_root(&mut self, new_node: OptExprNode) {
+        let old_root_id = mem::replace(
+            &mut self.root_index,
+            self.graph.add_node(HepNode {
+                node: new_node,
+                source_id: None,
+            })
+        );
+        let old_root = self.graph.node_weight_mut(old_root_id).unwrap();
+
+        old_root.source_id = Some(self.root_index);
+
+        self.graph.add_edge(self.root_index, old_root_id, 0);
+    }
+
     pub fn add_node(&mut self, source_id: HepNodeId, children_option: Option<HepNodeId>, new_node: OptExprNode) {
         let new_index = self.graph.add_node(HepNode {
             node: new_node,
@@ -88,34 +104,32 @@ impl HepGraph {
         }
     }
 
-    pub fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) {
-        if with_childrens {
-            self.graph.remove_node(source_id);
-            return;
-        }
+    pub fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) -> Option<OptExprNode> {
+        if !with_childrens {
+            if let Some(source_node) = self.graph.node_weight(source_id) {
+                let children_ids = self.graph.edges(source_id)
+                    .sorted_by_key(|edge_ref| edge_ref.weight())
+                    .map(|edge_ref| edge_ref.target())
+                    .collect_vec();
 
-        if let Some(source_node) = self.graph.node_weight(source_id) {
-            let children_ids = self.graph.edges(source_id)
-                .sorted_by_key(|edge_ref| edge_ref.weight())
-                .map(|edge_ref| edge_ref.target())
-                .collect_vec();
+                if let Some(parent_id) = source_node.source_id {
+                    if let Some(edge) = self.graph.find_edge(parent_id, source_id) {
+                        let weight = *self.graph.edge_weight(edge)
+                            .unwrap_or(&0);
 
-            if let Some(parent_id) = source_node.source_id {
-                if let Some(edge) = self.graph.find_edge(parent_id, source_id) {
-                    let weight = *self.graph.edge_weight(edge)
-                        .unwrap_or(&0);
-
-                    for (order, children_id) in children_ids.into_iter().enumerate() {
-                        let _ = self.graph.add_edge(parent_id, children_id, weight + order);
+                        for (order, children_id) in children_ids.into_iter().enumerate() {
+                            let _ = self.graph.add_edge(parent_id, children_id, weight + order);
+                        }
                     }
+                } else {
+                    assert!(children_ids.len() < 2);
+                    self.root_index = children_ids[0];
                 }
-            } else {
-                assert!(children_ids.len() < 2);
-                self.root_index = children_ids[0];
             }
         }
 
-        self.graph.remove_node(source_id);
+        self.graph.remove_node(source_id)
+            .map(|node| node.node)
     }
 
     /// Traverse the graph in BFS order.
@@ -254,10 +268,10 @@ mod tests {
         );
         assert_eq!(graph.root_index, NodeIndex::new(0));
 
-        graph.remove_node(
+        let old_root_node = graph.remove_node(
             HepNodeId::new(0),
             false
-        );
+        ).unwrap();
 
         graph.remove_node(
             HepNodeId::new(5),
@@ -305,6 +319,17 @@ mod tests {
         }
 
         assert_eq!(part_expr.childrens.len(), 0);
+
+        graph.add_root(old_root_node);
+
+        let re_root_plan = graph.to_plan();
+
+        match re_root_plan.operator {
+            Operator::Project(_) => (),
+            _ => unreachable!("Should be a project operator"),
+        }
+
+        assert_eq!(re_root_plan.childrens.len(), 1);
 
         Ok(())
     }

@@ -3,13 +3,26 @@ use sqlparser::ast::{ColumnDef, ColumnOption};
 
 use crate::types::{ColumnId, IdGenerator, LogicalType, TableId};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct ColumnCatalog {
     pub id: ColumnId,
     pub name: String,
     pub table_id: Option<TableId>,
     pub nullable: bool,
     pub desc: ColumnDesc,
+}
+
+// Tips: When there is a Join, the on condition in the Join has a nullable condition,
+// and the nullable in the Projection will change after being affected by the JoinType,
+// so that Eq does not necessarily match, so only use the ID as the matching criterion
+impl PartialEq<Self> for ColumnCatalog {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for ColumnCatalog {
+
 }
 
 impl ColumnCatalog {

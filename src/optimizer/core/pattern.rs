@@ -3,7 +3,8 @@ use crate::planner::operator::Operator;
 #[allow(dead_code)]
 pub enum PatternChildrenPredicate {
     /// all childrens nodes match all
-    MatchedRecursive,
+    Recursive,
+    /// match many pattern at the time
     Predicate(Vec<Pattern>),
     /// childrens jump out match
     None,

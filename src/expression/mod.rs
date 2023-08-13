@@ -16,7 +16,7 @@ mod cast;
 /// SELECT a+1, b FROM t1.
 /// a+1 -> ScalarExpression::Unary(a + 1)
 /// b   -> ScalarExpression::ColumnRef()
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ScalarExpression {
     Constant(DataValue),
     ColumnRef(ColumnCatalog),
@@ -143,7 +143,7 @@ impl Display for ScalarExpression {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOperator {
     Plus,
     Minus,
@@ -158,7 +158,7 @@ impl From<SqlUnaryOperator> for UnaryOperator {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOperator {
     Plus,
     Minus,

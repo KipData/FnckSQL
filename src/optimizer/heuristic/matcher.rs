@@ -28,7 +28,7 @@ impl PatternMatcher for HepMatcher<'_, '_> {
         }
 
         match &self.pattern.children {
-            PatternChildrenPredicate::MatchedRecursive => {
+            PatternChildrenPredicate::Recursive => {
                 // check
                 for node_id in self.graph.nodes_iter(HepMatchOrder::TopDown, Some(self.start_id)) {
                     if !(self.pattern.predicate)(&self.graph.operator(node_id)) {
@@ -116,7 +116,7 @@ mod tests {
                 Operator::Dummy => true,
                 _ => false,
             },
-            children: PatternChildrenPredicate::MatchedRecursive,
+            children: PatternChildrenPredicate::Recursive,
         };
 
         assert!(

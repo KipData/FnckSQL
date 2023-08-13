@@ -8,7 +8,7 @@ use super::Operator;
 #[derive(Debug, PartialEq, Clone)]
 pub struct FilterOperator {
     pub predicate: ScalarExpression,
-    having: bool,
+    pub having: bool,
 }
 
 impl FilterOperator {

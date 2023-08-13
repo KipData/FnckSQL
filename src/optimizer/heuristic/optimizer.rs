@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::batch::{HepBatch, HepBatchStrategy};

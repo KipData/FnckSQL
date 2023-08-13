@@ -10,6 +10,7 @@ use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
+use crate::planner::LogicalPlan;
 use crate::storage::memory::InMemoryStorage;
 use crate::storage::{Storage, StorageError, StorageImpl};
 
@@ -50,15 +51,7 @@ impl Database {
         let source_plan = binder.bind(&stmts[0])?;
         // println!("source_plan plan: {:#?}", source_plan);
 
-        let best_plan = HepOptimizer::new(source_plan)
-            .batch(
-                "column pruning".to_string(),
-                HepBatchStrategy::fix_point_topdown(10),
-                vec![
-                    RuleImpl::PushProjectThroughChild,
-                    RuleImpl::PushProjectIntoTableScan
-                ]
-            )
+        let best_plan = Self::default_optimizer(source_plan)
             .find_best();
         // println!("best_plan plan: {:#?}", best_plan);
 
@@ -71,6 +64,26 @@ impl Database {
         let mut stream = executor.build(physical_plan);
 
         Ok(VolcanoExecutor::try_collect(&mut stream).await?)
+    }
+
+    fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
+        HepOptimizer::new(source_plan)
+            .batch(
+                "Column pruning".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::PushProjectThroughChild,
+                    RuleImpl::PushProjectIntoTableScan
+                ]
+            )
+            .batch(
+                "Combine operators".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::CollapseProject,
+                    RuleImpl::CombineFilter
+                ]
+            )
     }
 }
 

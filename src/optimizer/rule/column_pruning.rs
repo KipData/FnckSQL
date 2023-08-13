@@ -180,17 +180,15 @@ mod tests {
     fn test_project_through_child_on_join() -> Result<()> {
         let plan = select_sql_run("select c1, c3 from t1 left join t2 on c1 = c3")?;
 
-        let mut op = HepOptimizer::new(plan.clone())
+        let best_plan = HepOptimizer::new(plan.clone())
             .batch(
-                "test_project_into_table_scan".to_string(),
+                "test_project_through_child_on_join".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::PushProjectThroughChild,
                     RuleImpl::PushProjectIntoTableScan
                 ]
-            );
-
-        let best_plan = op.find_best();
+            ).find_best();
 
         assert_eq!(best_plan.childrens.len(), 1);
         match best_plan.operator {
