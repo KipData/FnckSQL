@@ -29,7 +29,7 @@ pub trait Storage: Sync + Send + 'static {
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).
-type Bounds = (Option<usize>, Option<usize>);
+pub(crate) type Bounds = (Option<usize>, Option<usize>);
 type Projections = Vec<ScalarExpression>;
 
 pub trait Table: Sync + Send + Clone + 'static {

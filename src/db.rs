@@ -69,6 +69,16 @@ impl Database {
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
             .batch(
+                "Limit pushdown".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::LimitProjectTranspose,
+                    RuleImpl::PushLimitThroughJoin,
+                    RuleImpl::PushLimitIntoTableScan,
+                    RuleImpl::EliminateLimits,
+                ],
+            )
+            .batch(
                 "Column pruning".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![

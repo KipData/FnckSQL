@@ -1,8 +1,9 @@
 use itertools::Itertools;
 use crate::catalog::TableCatalog;
-use crate::types::{ColumnId, TableId};
+use crate::types::TableId;
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
+use crate::storage::Bounds;
 
 use super::{sort::SortField, Operator};
 
@@ -15,7 +16,7 @@ pub struct ScanOperator {
     // If pre_where is simple predicate, for example:  a > 1 then can calculate directly when read data.
     pub pre_where: Vec<ScalarExpression>,
     // Support push down limit.
-    pub limit: Option<usize>,
+    pub limit: Bounds,
 }
 impl ScanOperator {
     pub fn new(table_id: TableId, table_catalog: &TableCatalog) -> LogicalPlan {
@@ -32,7 +33,7 @@ impl ScanOperator {
                 columns,
                 sort_fields: vec![],
                 pre_where: vec![],
-                limit: None,
+                limit: (None, None),
             }),
             childrens: vec![],
         }

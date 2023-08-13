@@ -104,6 +104,15 @@ impl HepGraph {
         }
     }
 
+    pub fn swap_node(&mut self, a: HepNodeId, b: HepNodeId) {
+        let tmp = self.graph[a].node.clone();
+
+        self.graph[a].node = mem::replace(
+            &mut self.graph[b].node,
+            tmp
+        );
+    }
+
     pub fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) -> Option<OptExprNode> {
         if !with_childrens {
             if let Some(source_node) = self.graph.node_weight(source_id) {
@@ -330,6 +339,24 @@ mod tests {
         }
 
         assert_eq!(re_root_plan.childrens.len(), 1);
+
+        graph.swap_node(HepNodeId::new(2), HepNodeId::new(3));
+
+        let swap_plan = graph.to_plan();
+
+        match &swap_plan.childrens[0].childrens[0].operator {
+            Operator::Scan(op) => {
+                assert_eq!(op.columns[0].referenced_columns()[0].name, "c3");
+            },
+            _ => unreachable!("Should be a scan operator"),
+        }
+
+        match &swap_plan.childrens[0].childrens[1].operator {
+            Operator::Scan(op) => {
+                assert_eq!(op.columns[0].referenced_columns()[0].name, "c1");
+            },
+            _ => unreachable!("Should be a scan operator"),
+        }
 
         Ok(())
     }
