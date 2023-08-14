@@ -3,7 +3,7 @@ use futures_async_stream::try_stream;
 use crate::execution_v1::ExecutorError;
 use crate::execution_v1::volcano_executor::BoxedExecutor;
 use crate::expression::ScalarExpression;
-use crate::expression::agg::{AggKind, AggCall};
+use crate::expression::agg::AggKind;
 use arrow::compute;
 use arrow::compute::kernels::cast::cast;
 use crate::types::value::DataValue;
@@ -37,12 +37,9 @@ macro_rules! typed_sum {
 pub struct Agg{}
 
 impl Agg {
- 
-
-
     #[try_stream(boxed, ok = RecordBatch, error = ExecutorError)]
     pub async fn execute(exprs: Vec<ScalarExpression>, input: BoxedExecutor){
-        let mut sumAcc = create_accumulators(&exprs);
+        let mut acc = create_accumulators(&exprs);
 
         let mut agg_fileds: Option<Vec<Field>> = None;
         #[for_await]
@@ -51,41 +48,32 @@ impl Agg {
              // only support one epxrssion in aggregation, not supported example: `sum(distinct a)`
             let columns: Result<Vec<_>, ExecutorError> = exprs
                 .iter()
-                .map(|expr| {
-                    match expr {
-                        ScalarExpression::AggCall { args, .. } => {
-                            // 处理 ScalarExpression::AggCall 类型的表达式
-                            args[0].eval_column(&batch)
-                        }
-                        // 处理其他类型的表达式
-                        _ => {
-                            println!("处理其他类型的表达式");
-                            unimplemented!();}
+                .map(|expr| match expr {
+                    ScalarExpression::AggCall { args, .. } => {
+                        // TODO: Only single-argument aggregate functions are supported
+                        // 处理 ScalarExpression::AggCall 类型的表达式
+                        args[0].eval_column(&batch)
                     }
-                }).try_collect();
+                    // 处理其他类型的表达式
+                    _ => unimplemented!(),
+                })
+                .try_collect();
             // build new schema for aggregation result
             if agg_fileds.is_none() {
                 agg_fileds = Some(
-                    exprs.iter().map(|expr|{
-                        match expr {
-                            ScalarExpression::AggCall { kind,args, ty} => {
-                                let inner_name = args[0].eval_field(&batch).name().clone();
-                                let new_name = format!("{}({})", kind, inner_name);
-                                Field::new(new_name.as_str(), (*ty).clone().into(), false)
-                            }
-                            _ => unreachable!(),
-                        }
-                    }).collect(),
+                    exprs.iter()
+                        .map(|expr| expr.output_columns().to_field())
+                        .collect(),
                 )
             }
             let columns = columns?;
             // sumAcc[0].update_batch(&columns[0]);
-            for (acc, column) in sumAcc.iter_mut().zip_eq(columns.iter()) {
+            for (acc, column) in acc.iter_mut().zip_eq(columns.iter()) {
                 acc.update_batch(column)?;
             }
         }
         let mut columns: Vec<ArrayRef> = Vec::new();
-        for acc in sumAcc.iter() {
+        for acc in acc.iter() {
             let res = acc.evaluate()?;
             columns.push(res.to_array_of_size(1));
         }
@@ -142,9 +130,9 @@ pub struct SumAccumulator {
 
 impl SumAccumulator {
     pub fn new(data_type: DataType) -> Self {
-        let initValue = DataValue::new_none_value(&data_type).unwrap();
+        let init_value = DataValue::new_none_value(&data_type).unwrap();
         Self {
-            result: initValue,
+            result: init_value,
             data_type,
         }
     }

@@ -20,7 +20,6 @@ use crate::storage::StorageImpl;
 use arrow::record_batch::RecordBatch;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
-use serde::de::Unexpected::Option;
 use crate::execution_v1::physical_plan::physical_agg::PhysicalAgg;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_hash_join::PhysicalHashJoin;
@@ -94,7 +93,7 @@ impl VolcanoExecutor {
 
                 HashJoin::execute(on, join_type, left_input, right_input)
             }
-            PhysicalOperator::Aggregate(PhysicalAgg{op, input, ..}) =>{
+            PhysicalPlan::Aggregate(PhysicalAgg{op, input, ..}) =>{
                 let input = self.build(*input);
                 Agg::execute(op.agg_calls, input)
             }

@@ -1,4 +1,3 @@
-use ahash::{HashMap, HashMapExt};
 use crate::execution_v1::physical_plan::physical_create_table::PhysicalCreateTable;
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_v1::physical_plan::physical_table_scan::PhysicalTableScan;
@@ -16,7 +15,6 @@ use crate::execution_v1::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_v1::physical_plan::physical_sort::PhysicalSort;
 use crate::execution_v1::physical_plan::physical_values::PhysicalValues;
 use crate::planner::operator::create_table::CreateTableOperator;
-use crate::planner::logical_insert_plan::LogicalInsertPlan;
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::insert::InsertOperator;
@@ -131,9 +129,10 @@ impl PhysicalPlanBuilder {
             }))
         }
     }
-    fn build_physical_agg(&mut self, plan: &LogicalSelectPlan,base : &AggregateOperator)->Result<PhysicalOperator>{
-        let input =self.build_select_logical_plan(plan.child(0)?)?;
-        Ok(PhysicalOperator::Aggregate(PhysicalAgg{
+    fn build_physical_agg(&mut self, plan: &LogicalPlan, base: &AggregateOperator)->Result<PhysicalPlan>{
+        let input =self.build_plan(plan.child(0)?)?;
+
+        Ok(PhysicalPlan::Aggregate(PhysicalAgg{
             op:base.clone(),
             input: Box::new(input),
         }))

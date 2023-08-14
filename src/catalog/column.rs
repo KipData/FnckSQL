@@ -5,7 +5,7 @@ use crate::types::{ColumnId, IdGenerator, LogicalType, TableId};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColumnCatalog {
-    pub id: ColumnId,
+    pub id: Option<ColumnId>,
     pub name: String,
     pub table_id: Option<TableId>,
     pub nullable: bool,
@@ -13,9 +13,9 @@ pub struct ColumnCatalog {
 }
 
 impl ColumnCatalog {
-    pub(crate) fn new(column_name: String, nullable: bool, column_desc: ColumnDesc) -> ColumnCatalog {
+    pub(crate) fn new(with_id: bool, column_name: String, nullable: bool, column_desc: ColumnDesc) -> ColumnCatalog {
         ColumnCatalog {
-            id: IdGenerator::build(),
+            id: with_id.then(|| IdGenerator::build()),
             name: column_name,
             table_id: None,
             nullable,
@@ -58,7 +58,7 @@ impl From<ColumnDef> for ColumnCatalog {
             }
         }
 
-        ColumnCatalog::new(column_name, nullable, column_desc)
+        ColumnCatalog::new(false, column_name, nullable, column_desc)
     }
 }
 

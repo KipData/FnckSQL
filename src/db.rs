@@ -108,11 +108,13 @@ mod test {
         let schema = Arc::new(Schema::new(
             vec![
                 ColumnCatalog::new(
+                    true,
                     "c1".to_string(),
                     false,
                     ColumnDesc::new(LogicalType::Integer, true)
                 ).to_field(),
                 ColumnCatalog::new(
+                    true,
                     "c2".to_string(),
                     false,
                     ColumnDesc::new(LogicalType::Boolean, false)

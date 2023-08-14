@@ -1,5 +1,4 @@
 use std::fmt;
-use strum_macros::Display;
 use super::ScalarExpression;
 use crate::types::LogicalType;
 

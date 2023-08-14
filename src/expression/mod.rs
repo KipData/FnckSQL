@@ -1,9 +1,10 @@
 use std::fmt::Display;
+use itertools::Itertools;
 
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
 
 use self::agg::AggKind;
-use crate::catalog::ColumnCatalog;
+use crate::catalog::{ColumnCatalog, ColumnDesc};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 
@@ -91,6 +92,43 @@ impl ScalarExpression {
             } => return_type.clone(),
             Self::IsNull { .. } => LogicalType::Boolean,
             Self::Alias { expr, .. } => expr.return_type(),
+        }
+    }
+
+    pub fn output_columns(&self) -> ColumnCatalog {
+        match self {
+            ScalarExpression::ColumnRef(col) => {
+                col.clone()
+            }
+            ScalarExpression::Constant(value) => {
+                ColumnCatalog::new(
+                    false,
+                    String::new(),
+                    true,
+                    ColumnDesc::new(value.logical_type(), false)
+                )
+            }
+            ScalarExpression::Alias { expr, alias } => {
+                ColumnCatalog::new(
+                    false,
+                    alias.to_string(),
+                    true,
+                    ColumnDesc::new(expr.return_type(), false)
+                )
+            }
+            ScalarExpression::AggCall { kind, args, ty } => {
+                let args_str = args.iter()
+                    .map(|expr| expr.output_columns().name)
+                    .join(", ");
+
+                ColumnCatalog::new(
+                    false,
+                    format!("{}({})", kind, args_str),
+                    true,
+                    ColumnDesc::new(ty.clone(), false)
+                )
+            }
+            _ => unreachable!()
         }
     }
 
