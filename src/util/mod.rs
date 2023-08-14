@@ -1,6 +1,7 @@
+pub mod hash_utils;
 
 use arrow::record_batch::RecordBatch;
-use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use arrow::datatypes::DataType;
 use arrow::error::ArrowError;
 use arrow::util::display::array_value_to_string;
 

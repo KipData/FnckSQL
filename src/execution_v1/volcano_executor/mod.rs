@@ -6,11 +6,12 @@ mod values;
 mod filter;
 mod sort;
 mod limit;
+mod hash_join;
 mod agg;
 
 
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
-use crate::execution_v1::physical_plan::PhysicalOperator;
+use crate::execution_v1::physical_plan::PhysicalPlan;
 use crate::execution_v1::volcano_executor::create_table::CreateTable;
 use crate::execution_v1::volcano_executor::projection::Projection;
 use crate::execution_v1::volcano_executor::table_scan::TableScan;
@@ -22,15 +23,18 @@ use futures::TryStreamExt;
 use serde::de::Unexpected::Option;
 use crate::execution_v1::physical_plan::physical_agg::PhysicalAgg;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
+use crate::execution_v1::physical_plan::physical_hash_join::PhysicalHashJoin;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_v1::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_v1::physical_plan::physical_sort::PhysicalSort;
 use crate::execution_v1::volcano_executor::agg::Agg;
 use crate::execution_v1::volcano_executor::filter::Filter;
+use crate::execution_v1::volcano_executor::hash_join::HashJoin;
 use crate::execution_v1::volcano_executor::insert::Insert;
 use crate::execution_v1::volcano_executor::limit::Limit;
 use crate::execution_v1::volcano_executor::sort::Sort;
 use crate::execution_v1::volcano_executor::values::Values;
+use crate::planner::operator::join::JoinOperator;
 
 pub type BoxedExecutor = BoxStream<'static, Result<RecordBatch, ExecutorError>>;
 
@@ -43,22 +47,22 @@ impl VolcanoExecutor {
         Self { storage }
     }
 
-    pub(crate) fn build(&self, plan: PhysicalOperator) -> BoxedExecutor {
+    pub(crate) fn build(&self, plan: PhysicalPlan) -> BoxedExecutor {
         match plan {
-            PhysicalOperator::TableScan(op) => {
+            PhysicalPlan::TableScan(op) => {
                 match &self.storage {
                     StorageImpl::InMemoryStorage(storage) => TableScan::execute(op, storage.clone())
                 }
             }
-            PhysicalOperator::Projection(PhysicalProjection { input, exprs, .. }) => {
+            PhysicalPlan::Projection(PhysicalProjection { input, exprs, .. }) => {
                 let input = self.build(*input);
 
                 Projection::execute(exprs, input)
             }
-            PhysicalOperator::CreateTable(op) => match &self.storage {
+            PhysicalPlan::CreateTable(op) => match &self.storage {
                 StorageImpl::InMemoryStorage(storage) => CreateTable::execute(op, storage.clone()),
             },
-            PhysicalOperator::Insert(PhysicalInsert { table_name, input}) => {
+            PhysicalPlan::Insert(PhysicalInsert { table_name, input}) => {
                 let input = self.build(*input);
 
                 match &self.storage {
@@ -66,21 +70,29 @@ impl VolcanoExecutor {
                         Insert::execute(table_name, input, storage.clone()),
                 }
             }
-            PhysicalOperator::Values(op) => Values::execute(op),
-            PhysicalOperator::Filter(PhysicalFilter { predicate, input, .. }) => {
+            PhysicalPlan::Values(op) => Values::execute(op),
+            PhysicalPlan::Filter(PhysicalFilter { predicate, input, .. }) => {
                 let input = self.build(*input);
 
                 Filter::execute(predicate, input)
             }
-            PhysicalOperator::Sort(PhysicalSort {op, input, ..}) => {
+            PhysicalPlan::Sort(PhysicalSort {op, input, ..}) => {
                 let input = self.build(*input);
 
                 Sort::execute(op.sort_fields, op.limit, input)
             }
-            PhysicalOperator::Limit(PhysicalLimit {op,input, ..}) =>{
+            PhysicalPlan::Limit(PhysicalLimit {op,input, ..}) => {
                 let input = self.build(*input);
 
                 Limit::execute(Some(op.offset), Some(op.limit), input)
+            }
+            PhysicalPlan::HashJoin(PhysicalHashJoin { op, left_input, right_input}) => {
+                let left_input = self.build(*left_input);
+                let right_input = self.build(*right_input);
+
+                let JoinOperator { on, join_type } = op;
+
+                HashJoin::execute(on, join_type, left_input, right_input)
             }
             PhysicalOperator::Aggregate(PhysicalAgg{op, input, ..}) =>{
                 let input = self.build(*input);

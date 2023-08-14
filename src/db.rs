@@ -36,7 +36,7 @@ impl Database {
         let catalog = self.storage.get_catalog();
 
         let binder = Binder::new(BinderContext::new(catalog.clone()));
-        println!("binder is : {:#?}",binder);
+
         /// Build a logical plan.
         ///
         /// SELECT a,b FROM t1 ORDER BY a LIMIT 1;
@@ -96,19 +96,15 @@ pub enum DatabaseError {
 mod test {
     use std::sync::Arc;
     use arrow::array::{BooleanArray, Int32Array};
-    use arrow::compute::concat_batches;
     use arrow::datatypes::Schema;
     use arrow::record_batch::RecordBatch;
     use arrow::util::pretty::print_batches;
-    use itertools::Itertools;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::Database;
-    use crate::execution_v1::ExecutorError;
     use crate::storage::{Storage, StorageError};
-    use crate::storage::memory::InMemoryStorage;
-    use crate::types::{IdGenerator, LogicalType, TableIdx};
+    use crate::types::{LogicalType, TableId};
 
-    fn build_table(storage: &impl Storage) -> Result<TableIdx, StorageError> {
+    fn build_table(storage: &impl Storage) -> Result<TableId, StorageError> {
         let schema = Arc::new(Schema::new(
             vec![
                 ColumnCatalog::new(
@@ -142,12 +138,10 @@ mod test {
 
         tokio_test::block_on(async move {
             let batch = database.run("select * from t1").await?;
-            // println!("{:#?}", batch);
+            println!("{:#?}", batch);
 
             Ok(())
         })
-
-
     }
 
     #[test]
@@ -156,19 +150,45 @@ mod test {
 
         tokio_test::block_on(async move {
             let _ = kipsql.run("create table t1 (a int, b int)").await?;
-            let _ = kipsql.run("insert into t1 values (1, 1), (2, 4), (5, 7)").await?;
+            let _ = kipsql.run("create table t2 (c int, d int)").await?;
+            let _ = kipsql.run("insert into t1 (b, a) values (1, 1), (3, 3), (5, 4)").await?;
+            let _ = kipsql.run("insert into t2 (d, c) values (1, 2), (2, 3), (5, 6)").await?;
 
-            println!("full:");
-            let vec_batch_full_fields = kipsql.run("select * from t1").await?;
-            print_batches(&vec_batch_full_fields)?;
+            println!("full t1:");
+            let vec_batch_full_fields_t1 = kipsql.run("select * from t1").await?;
+            print_batches(&vec_batch_full_fields_t1)?;
+
+            println!("full t2:");
+            let vec_batch_full_fields_t2 = kipsql.run("select * from t2").await?;
+            print_batches(&vec_batch_full_fields_t2)?;
 
             println!("projection_and_filter:");
-            let vec_batch_projection_a = kipsql.run("select a from t1 where a <= b order by a desc ").await?;
+            let vec_batch_projection_a = kipsql.run("select a from t1 where a <= b").await?;
+            print_batches(&vec_batch_projection_a)?;
+
+            println!("projection_and_sort:");
+            let vec_batch_projection_a = kipsql.run("select a from t1 order by a").await?;
             print_batches(&vec_batch_projection_a)?;
 
             println!("limit:");
-            let vec_batch_limit=kipsql.run("select * from t1  limit 2 offset 1").await?;
+            let vec_batch_limit=kipsql.run("select * from t1 limit 1 offset 1").await?;
             print_batches(&vec_batch_limit)?;
+
+            println!("inner join:");
+            let vec_batch_inner_join = kipsql.run("select * from t1 inner join t2 on a = c").await?;
+            print_batches(&vec_batch_inner_join)?;
+
+            println!("left join:");
+            let vec_batch_left_join = kipsql.run("select * from t1 left join t2 on a = c").await?;
+            print_batches(&vec_batch_left_join)?;
+
+            println!("right join:");
+            let vec_batch_right_join = kipsql.run("select * from t1 right join t2 on a = c and a > 1").await?;
+            print_batches(&vec_batch_right_join)?;
+
+            println!("full join:");
+            let vec_batch_full_join = kipsql.run("select d, b from t1 full join t2 on a = c and a > 1").await?;
+            print_batches(&vec_batch_full_join)?;
 
             println!("aggregate sum");
             let vec_batch_sum_a = kipsql.run("select sum(a) from t1").await?;

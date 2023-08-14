@@ -1,38 +1,43 @@
-use std::sync::Arc;
-
-use crate::{expression::ScalarExpression, planner::logical_select_plan::LogicalSelectPlan};
+use crate::expression::ScalarExpression;
+use crate::planner::LogicalPlan;
 
 use super::Operator;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum JoinType {
     Inner,
-    LeftOuter,
-    RightOuter,
-    FullOuter,
+    Left,
+    Right,
+    Full,
     Cross,
-    LeftSemi,
-    RightSemi,
-    LeftAnti,
-    RightAnti,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub enum JoinCondition {
+    On {
+        /// Equijoin clause expressed as pairs of (left, right) join columns
+        on: Vec<(ScalarExpression, ScalarExpression)>,
+        /// Filters applied during join (non-equi conditions)
+        filter: Option<ScalarExpression>,
+    },
+    None,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct JoinOperator {
-    pub on: Option<ScalarExpression>,
+    pub on: JoinCondition,
     pub join_type: JoinType,
 }
 
 impl JoinOperator {
     pub fn new(
-        left: LogicalSelectPlan,
-        right: LogicalSelectPlan,
-        on: Option<ScalarExpression>,
+        left: LogicalPlan,
+        right: LogicalPlan,
+        on: JoinCondition,
         join_type: JoinType,
-    ) -> LogicalSelectPlan {
-        LogicalSelectPlan {
-            operator: Arc::new(Operator::Join(JoinOperator { on, join_type })),
-            children: vec![Arc::new(left), Arc::new(right)],
+    ) -> LogicalPlan {
+        LogicalPlan {
+            operator: Operator::Join(JoinOperator { on, join_type }),
+            childrens: vec![left, right],
         }
     }
 }

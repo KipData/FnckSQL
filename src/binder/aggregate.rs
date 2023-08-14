@@ -5,20 +5,20 @@ use sqlparser::ast::{Expr, OrderByExpr};
 use crate::{
     expression::ScalarExpression,
     planner::{
-        logical_select_plan::LogicalSelectPlan,
         operator::{aggregate::AggregateOperator, sort::SortField},
     },
 };
+use crate::planner::LogicalPlan;
 
 use super::Binder;
 
 impl Binder {
     pub fn bind_aggregate(
         &mut self,
-        children: LogicalSelectPlan,
+        children: LogicalPlan,
         agg_calls: Vec<ScalarExpression>,
         groupby_exprs: Vec<ScalarExpression>,
-    ) -> LogicalSelectPlan {
+    ) -> LogicalPlan {
         AggregateOperator::new(children, agg_calls, groupby_exprs)
     }
 
@@ -90,11 +90,7 @@ impl Binder {
             ScalarExpression::AggCall {
                 ty: return_type, ..
             } => {
-                let index = if self.context.agg_calls.len() == 0 {
-                    0
-                } else {
-                    self.context.agg_calls.len() + 1
-                };
+                let index = self.context.agg_calls.len();
                 let input_ref = ScalarExpression::InputRef {
                     index,
                     ty: return_type.clone(),

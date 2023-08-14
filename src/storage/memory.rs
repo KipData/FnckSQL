@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow::record_batch::RecordBatch;
@@ -5,7 +6,7 @@ use parking_lot::Mutex;
 
 use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
-use crate::types::{LogicalType, TableIdx};
+use crate::types::{LogicalType, TableId};
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
@@ -15,7 +16,7 @@ pub struct InMemoryStorage {
 #[derive(Debug)]
 struct StorageInner {
     catalog: RootCatalog,
-    tables: Vec<InMemoryTable>,
+    tables: BTreeMap<TableId, InMemoryTable>,
 }
 
 impl Default for InMemoryStorage {
@@ -30,7 +31,7 @@ impl InMemoryStorage {
             inner: Arc::new(Mutex::new(
                 StorageInner {
                     catalog: RootCatalog::default(),
-                    tables: Vec::new(),
+                    tables: BTreeMap::new(),
                 })
             )
         }
@@ -52,7 +53,7 @@ impl Storage for InMemoryStorage {
         &self,
         table_name: &str,
         data: Vec<RecordBatch>,
-    ) -> Result<TableIdx, StorageError> {
+    ) -> Result<TableId, StorageError> {
         let mut table = InMemoryTable::new(table_name, data)?;
         let mut inner = self.inner.lock();
 
@@ -67,12 +68,12 @@ impl Storage for InMemoryStorage {
         Ok(table_id)
     }
 
-    fn get_table(&self, id: TableIdx) -> Result<Self::TableType, StorageError> {
+    fn get_table(&self, id: &TableId) -> Result<Self::TableType, StorageError> {
         self.inner.lock()
             .tables
             .get(id)
             .cloned()
-            .ok_or(StorageError::TableNotFound(id))
+            .ok_or(StorageError::TableNotFound(*id))
     }
 
     fn get_catalog(&self) -> RootCatalog {
@@ -87,7 +88,7 @@ impl Storage for InMemoryStorage {
 
 #[derive(Debug, Clone)]
 pub struct InMemoryTable {
-    table_id: TableIdx,
+    table_id: TableId,
     table_name: String,
     inner: Arc<Mutex<TableInner>>
 }
@@ -182,7 +183,6 @@ impl Transaction for InMemoryTransaction {
 mod storage_test {
     use std::sync::Arc;
 
-    use crate::types::IdGenerator;
     use arrow::array::Int32Array;
     use arrow::datatypes::{DataType, Field, Schema};
 
@@ -215,7 +215,7 @@ mod storage_test {
         assert!(table_catalog.is_some());
         assert!(table_catalog.unwrap().get_column_id_by_name("a").is_some());
 
-        let table = storage.get_table(id)?;
+        let table = storage.get_table(&id)?;
         let mut tx = table.read(None, None)?;
         let batch = tx.next_batch()?;
         println!("{:?}", batch);

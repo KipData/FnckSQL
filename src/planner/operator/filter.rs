@@ -1,6 +1,7 @@
-use std::{sync::Arc, vec};
+use std::vec;
 
-use crate::{expression::ScalarExpression, planner::logical_select_plan::LogicalSelectPlan};
+use crate::expression::ScalarExpression;
+use crate::planner::LogicalPlan;
 
 use super::Operator;
 
@@ -13,12 +14,12 @@ pub struct FilterOperator {
 impl FilterOperator {
     pub fn new(
         predicate: ScalarExpression,
-        children: LogicalSelectPlan,
+        children: LogicalPlan,
         having: bool,
-    ) -> LogicalSelectPlan {
-        LogicalSelectPlan {
-            operator: Arc::new(Operator::Filter(FilterOperator { predicate, having })),
-            children: vec![Arc::new(children)],
+    ) -> LogicalPlan {
+        LogicalPlan {
+            operator: Operator::Filter(FilterOperator { predicate, having }),
+            childrens: vec![children],
         }
     }
 }

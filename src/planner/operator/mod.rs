@@ -9,7 +9,7 @@ pub mod sort;
 pub mod insert;
 pub mod values;
 
-use std::sync::Arc;
+use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::values::ValuesOperator;
 
@@ -18,9 +18,7 @@ use self::{
     project::ProjectOperator, scan::ScanOperator, sort::SortOperator,
 };
 
-pub type OperatorRef = Arc<Operator>;
-
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub enum Operator {
     Dummy,
     Aggregate(AggregateOperator),
@@ -32,4 +30,5 @@ pub enum Operator {
     Limit(LimitOperator),
     Insert(InsertOperator),
     Values(ValuesOperator),
+    CreateTable(CreateTableOperator)
 }

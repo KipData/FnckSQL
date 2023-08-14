@@ -1,9 +1,8 @@
-use std::sync::Arc;
-
 use crate::{
     expression::ScalarExpression,
-    planner::{logical_select_plan::LogicalSelectPlan, operator::Operator},
+    planner::operator::Operator,
 };
+use crate::planner::LogicalPlan;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct AggregateOperator {
@@ -14,16 +13,16 @@ pub struct AggregateOperator {
 
 impl AggregateOperator {
     pub fn new(
-        children: LogicalSelectPlan,
+        children: LogicalPlan,
         agg_calls: Vec<ScalarExpression>,
         groupby_exprs: Vec<ScalarExpression>,
-    ) -> LogicalSelectPlan {
-        LogicalSelectPlan {
-            operator: Arc::new(Operator::Aggregate(Self {
+    ) -> LogicalPlan {
+        LogicalPlan {
+            operator: Operator::Aggregate(Self {
                 groupby_exprs,
                 agg_calls,
-            })),
-            children: vec![Arc::new(children)],
+            }),
+            childrens: vec![children],
         }
     }
 }

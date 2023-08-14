@@ -4,7 +4,7 @@ pub mod expr;
 mod select;
 mod insert;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use anyhow::Result;
 use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
@@ -12,12 +12,13 @@ use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
 use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME, CatalogError};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
-use crate::types::TableIdx;
-#[derive(Clone,Debug)]
+use crate::planner::operator::join::JoinType;
+use crate::types::TableId;
+#[derive(Debug, Clone)]
 pub struct BinderContext {
-    catalog: RootCatalog,
-    bind_table: HashMap<String, TableIdx>,
-    aliases: HashMap<String, ScalarExpression>,
+    pub(crate) catalog: RootCatalog,
+    pub(crate) bind_table: BTreeMap<String, (TableId, Option<JoinType>)>,
+    aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
     agg_calls: Vec<ScalarExpression>,
     index: u16,
@@ -50,7 +51,6 @@ impl BinderContext {
     }
 }
 
-#[derive(Debug)]
 pub struct Binder {
     context: BinderContext,
 }
@@ -62,18 +62,11 @@ impl Binder {
 
     pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan> {
         let plan = match stmt {
-            Statement::Query(query) => {
-                let plan = self.bind_query(query)?;
-                LogicalPlan::Select(plan)
-            }
-            Statement::CreateTable { name, columns, .. } => {
-                let plan = self.bind_create_table(name, &columns)?;
-                LogicalPlan::CreateTable(plan)
-            }
+            Statement::Query(query) => self.bind_query(query)?,
+            Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
             Statement::Insert { table_name, columns, source, .. } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
-                    let plan = self.bind_insert(table_name.to_owned(), columns, &values.rows)?;
-                    LogicalPlan::Insert(plan)
+                    self.bind_insert(table_name.to_owned(), columns, &values.rows)?
                 } else {
                     todo!()
                 }

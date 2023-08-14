@@ -1,19 +1,20 @@
 pub mod display;
-pub mod logical_create_table_plan;
 pub mod logical_plan_builder;
-pub mod logical_select_plan;
 pub mod operator;
-pub mod logical_insert_plan;
 
-use crate::planner::logical_insert_plan::LogicalInsertPlan;
-use self::{
-    logical_create_table_plan::LogicalCreateTablePlan, logical_select_plan::LogicalSelectPlan,
-};
+use anyhow::Result;
+use crate::planner::operator::Operator;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum LogicalPlan {
-    Select(LogicalSelectPlan),
-    CreateTable(LogicalCreateTablePlan),
-    Insert(LogicalInsertPlan)
+#[derive(Debug, PartialEq)]
+pub struct LogicalPlan {
+    pub operator: Operator,
+    pub childrens: Vec<LogicalPlan>,
 }
-pub enum LogicalPlanError {}
+
+impl LogicalPlan {
+    pub fn child(&self, index: usize) -> Result<&LogicalPlan> {
+        self.childrens
+            .get(index)
+            .ok_or_else(|| anyhow::Error::msg(format!("Invalid children index {}", index)))
+    }
+}

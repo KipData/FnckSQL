@@ -1,4 +1,3 @@
-use crate::execution_v1::physical_plan::physical_agg::PhysicalAgg;
 use crate::execution_v1::physical_plan::physical_create_table::PhysicalCreateTable;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
@@ -17,11 +16,12 @@ pub(crate) mod physical_values;
 pub(crate) mod physical_filter;
 pub(crate) mod physical_sort;
 pub(crate) mod physical_limit;
+pub(crate) mod physical_hash_join;
 pub(crate) mod physical_agg;
 
 
 #[derive(Debug)]
-pub enum PhysicalOperator {
+pub enum PhysicalPlan {
     Insert(PhysicalInsert),
     CreateTable(PhysicalCreateTable),
     TableScan(PhysicalTableScan),
@@ -30,5 +30,6 @@ pub enum PhysicalOperator {
     Sort(PhysicalSort),
     Values(PhysicalValues),
     Limit(PhysicalLimit),
+    HashJoin(PhysicalHashJoin),
     Aggregate(PhysicalAgg),
 }
