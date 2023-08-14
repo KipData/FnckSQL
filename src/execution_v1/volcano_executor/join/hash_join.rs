@@ -10,6 +10,7 @@ use futures_async_stream::try_stream;
 use itertools::Itertools;
 use crate::execution_v1::ExecutorError;
 use crate::execution_v1::volcano_executor::BoxedExecutor;
+use crate::execution_v1::volcano_executor::join::joins_nullable;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinType};
 use crate::util::hash_utils::create_hashes;
@@ -36,13 +37,7 @@ impl HashJoin {
 
         let hash_random_state = RandomState::with_seeds(0, 0, 0, 0);
         let mut join_fields: Vec<Field> = Vec::new();
-        let (left_force_nullable, right_force_nullable) = match ty {
-            JoinType::Inner => (false, false),
-            JoinType::Left => (false, true),
-            JoinType::Right => (true, false),
-            JoinType::Full => (true, true),
-            JoinType::Cross => (true, true),
-        };
+        let (left_force_nullable, right_force_nullable) = joins_nullable(&ty);
 
         #[for_await]
         for batch in left_input {

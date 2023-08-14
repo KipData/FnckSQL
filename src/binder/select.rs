@@ -23,6 +23,7 @@ use sqlparser::ast::{
     Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
+use crate::execution_v1::volcano_executor::join::joins_nullable;
 use crate::expression::BinaryOperator;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinCondition;
@@ -354,13 +355,7 @@ impl Binder {
 
         for (table_id, join_option) in bind_tables.values() {
             if let Some(join_type) = join_option {
-                let (left_force_nullable, right_force_nullable) = match join_type {
-                    JoinType::Inner => (false, false),
-                    JoinType::Left => (false, true),
-                    JoinType::Right => (true, false),
-                    JoinType::Full => (true, true),
-                    JoinType::Cross => (true, true),
-                };
+                let (left_force_nullable, right_force_nullable) = joins_nullable(join_type);
                 table_force_nullable.insert(*table_id, right_force_nullable);
                 left_table_force_nullable = left_force_nullable;
             } else {
