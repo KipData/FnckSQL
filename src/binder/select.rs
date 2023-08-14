@@ -507,14 +507,14 @@ mod tests {
         let mut root = RootCatalog::new();
 
         let cols_t1 = vec![
-            ColumnCatalog::new(true, "c1".to_string(), false, ColumnDesc::new(Integer, true)),
-            ColumnCatalog::new(true, "c2".to_string(), false, ColumnDesc::new(Integer, false)),
+            ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
+            ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
         ];
         let _ = root.add_table("t1".to_string(), cols_t1)?;
 
         let cols_t2 = vec![
-            ColumnCatalog::new(true, "c3".to_string(), false, ColumnDesc::new(Integer, true)),
-            ColumnCatalog::new(true, "c4".to_string(), false, ColumnDesc::new(Integer, false)),
+            ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
+            ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
         ];
         let _ = root.add_table("t2".to_string(), cols_t2)?;
         Ok(root)

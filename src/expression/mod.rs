@@ -102,7 +102,6 @@ impl ScalarExpression {
             }
             ScalarExpression::Constant(value) => {
                 ColumnCatalog::new(
-                    false,
                     String::new(),
                     true,
                     ColumnDesc::new(value.logical_type(), false)
@@ -110,7 +109,6 @@ impl ScalarExpression {
             }
             ScalarExpression::Alias { expr, alias } => {
                 ColumnCatalog::new(
-                    false,
                     alias.to_string(),
                     true,
                     ColumnDesc::new(expr.return_type(), false)
@@ -122,7 +120,6 @@ impl ScalarExpression {
                     .join(", ");
 
                 ColumnCatalog::new(
-                    false,
                     format!("{}({})", kind, args_str),
                     true,
                     ColumnDesc::new(ty.clone(), false)

@@ -75,13 +75,11 @@ mod tests {
         let mut root_catalog = RootCatalog::new();
 
         let col0 = ColumnCatalog::new(
-            true,
             "a".to_string(),
             false,
             ColumnDesc::new(LogicalType::Integer, false),
         );
         let col1 = ColumnCatalog::new(
-            true,
             "b".to_string(),
             false,
             ColumnDesc::new(LogicalType::Boolean, false),

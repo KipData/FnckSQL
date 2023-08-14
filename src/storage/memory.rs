@@ -123,7 +123,6 @@ impl InMemoryTable {
                 let column_desc =
                     ColumnDesc::new(LogicalType::try_from(f.data_type()).unwrap(), false);
                 let column_catalog = ColumnCatalog::new(
-                    true,
                     field_name,
                     f.is_nullable(),
                     column_desc

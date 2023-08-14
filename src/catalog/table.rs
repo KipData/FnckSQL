@@ -60,7 +60,7 @@ impl TableCatalog {
             return Err(CatalogError::Duplicated("column", col_catalog.name.into()));
         }
 
-        let col_id = col_catalog.id.unwrap();
+        let col_id = col_catalog.id;
 
         col_catalog.table_id = Some(self.id);
         self.column_idxs.insert(col_catalog.name.to_owned(), col_id);
@@ -100,8 +100,8 @@ mod tests {
     // | 1         | true     |
     // | 2         | false    |
     fn test_table_catalog() {
-        let col0 = ColumnCatalog::new(true, "a".into(), false, ColumnDesc::new(LogicalType::Integer, false));
-        let col1 = ColumnCatalog::new(true, "b".into(), false, ColumnDesc::new(LogicalType::Boolean, false));
+        let col0 = ColumnCatalog::new("a".into(), false, ColumnDesc::new(LogicalType::Integer, false));
+        let col1 = ColumnCatalog::new("b".into(), false, ColumnDesc::new(LogicalType::Boolean, false));
         let col_catalogs = vec![col0, col1];
         let table_catalog = TableCatalog::new("test".to_string(), col_catalogs).unwrap();
 
