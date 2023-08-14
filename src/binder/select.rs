@@ -405,6 +405,11 @@ mod tests {
             "offset:\n {:#?}",
             plan_8
         );
+        let plan_9 = select_sql_run("select sum(c1) from t1")?;
+        println!(
+            "sum:\n {:#?}",
+            plan_9
+        );
 
         Ok(())
     }

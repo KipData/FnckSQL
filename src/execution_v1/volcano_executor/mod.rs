@@ -6,6 +6,8 @@ mod values;
 mod filter;
 mod sort;
 mod limit;
+mod agg;
+
 
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_v1::physical_plan::PhysicalOperator;
@@ -18,10 +20,12 @@ use arrow::record_batch::RecordBatch;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use serde::de::Unexpected::Option;
+use crate::execution_v1::physical_plan::physical_agg::PhysicalAgg;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_v1::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_v1::physical_plan::physical_sort::PhysicalSort;
+use crate::execution_v1::volcano_executor::agg::Agg;
 use crate::execution_v1::volcano_executor::filter::Filter;
 use crate::execution_v1::volcano_executor::insert::Insert;
 use crate::execution_v1::volcano_executor::limit::Limit;
@@ -77,6 +81,10 @@ impl VolcanoExecutor {
                 let input = self.build(*input);
 
                 Limit::execute(Some(op.offset), Some(op.limit), input)
+            }
+            PhysicalOperator::Aggregate(PhysicalAgg{op, input, ..}) =>{
+                let input = self.build(*input);
+                Agg::execute(op.agg_calls, input)
             }
         }
     }

@@ -13,7 +13,7 @@ use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME, CatalogError};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::types::TableIdx;
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct BinderContext {
     catalog: RootCatalog,
     bind_table: HashMap<String, TableIdx>,
@@ -50,6 +50,7 @@ impl BinderContext {
     }
 }
 
+#[derive(Debug)]
 pub struct Binder {
     context: BinderContext,
 }

@@ -36,7 +36,7 @@ impl Database {
         let catalog = self.storage.get_catalog();
 
         let binder = Binder::new(BinderContext::new(catalog.clone()));
-
+        println!("binder is : {:#?}",binder);
         /// Build a logical plan.
         ///
         /// SELECT a,b FROM t1 ORDER BY a LIMIT 1;
@@ -142,10 +142,12 @@ mod test {
 
         tokio_test::block_on(async move {
             let batch = database.run("select * from t1").await?;
-            println!("{:#?}", batch);
+            // println!("{:#?}", batch);
 
             Ok(())
         })
+
+
     }
 
     #[test]
@@ -154,7 +156,7 @@ mod test {
 
         tokio_test::block_on(async move {
             let _ = kipsql.run("create table t1 (a int, b int)").await?;
-            let _ = kipsql.run("insert into t1 values (1, 1), (2, 3), (5, 4)").await?;
+            let _ = kipsql.run("insert into t1 values (1, 1), (2, 4), (5, 7)").await?;
 
             println!("full:");
             let vec_batch_full_fields = kipsql.run("select * from t1").await?;
@@ -167,6 +169,10 @@ mod test {
             println!("limit:");
             let vec_batch_limit=kipsql.run("select * from t1  limit 2 offset 1").await?;
             print_batches(&vec_batch_limit)?;
+
+            println!("aggregate sum");
+            let vec_batch_sum_a = kipsql.run("select sum(a) from t1").await?;
+            print_batches(&vec_batch_sum_a)?;
 
             Ok(())
         })

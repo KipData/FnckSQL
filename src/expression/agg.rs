@@ -1,3 +1,5 @@
+use std::fmt;
+use strum_macros::Display;
 use super::ScalarExpression;
 use crate::types::LogicalType;
 
@@ -16,4 +18,18 @@ pub struct AggCall {
     pub args: Vec<ScalarExpression>,
     pub return_type: LogicalType,
     // TODO: add distinct keyword
+}
+
+impl fmt::Display for AggKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AggKind::Count => write!(f, "Count"),
+            AggKind::Sum => write!(f, "Sum"),
+            AggKind::Min => write!(f, "Min"),
+            AggKind::Max => write!(f, "Max"),
+            AggKind::Avg => write!(f, "MinMax"),
+            AggKind::RowCount => write!(f, "RowCount"),
+
+        }
+    }
 }

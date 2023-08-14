@@ -9,12 +9,14 @@ use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use anyhow::anyhow;
 use anyhow::Result;
+use crate::execution_v1::physical_plan::physical_agg::PhysicalAgg;
 use crate::execution_v1::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_v1::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_v1::physical_plan::physical_sort::PhysicalSort;
 use crate::execution_v1::physical_plan::physical_values::PhysicalValues;
 use crate::planner::logical_insert_plan::LogicalInsertPlan;
+use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::limit::LimitOperator;
@@ -85,6 +87,7 @@ impl PhysicalPlanBuilder {
             Operator::Filter(op) => self.build_physical_filter(plan, op),
             Operator::Sort(op) => self.build_physical_sort(plan, op),
             Operator::Limit(op)=>self.build_physical_limit(plan,op),
+            Operator::Aggregate(op) => self.build_physical_agg(plan,op),
             _ => Err(anyhow!(format!(
                 "Unsupported physical plan: {:?}",
                 plan.operator
@@ -131,4 +134,12 @@ impl PhysicalPlanBuilder {
             input: Box::new(input),
         }))
     }
+    fn build_physical_agg(&mut self, plan: &LogicalSelectPlan,base : &AggregateOperator)->Result<PhysicalOperator>{
+        let input =self.build_select_logical_plan(plan.child(0)?)?;
+        Ok(PhysicalOperator::Aggregate(PhysicalAgg{
+            op:base.clone(),
+            input: Box::new(input),
+        }))
+    }
+
 }

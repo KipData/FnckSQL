@@ -134,7 +134,7 @@ impl Binder {
                 }
             })
             .try_collect()?;
-        let ty = args[0].return_type();
+        let ty: LogicalType = args[0].return_type();
 
         Ok(match func.name.to_string().to_lowercase().as_str() {
             "count" => ScalarExpression::AggCall{
