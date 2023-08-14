@@ -102,6 +102,7 @@ impl Rule for PushPredicateThroughJoin {
         &PUSH_PREDICATE_THROUGH_JOIN
     }
 
+    // TODO: pushdown_predicates need to consider output columns
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
         let child_id = graph.children_at(node_id)[0];
         if let Operator::Join(child_op) = graph.operator(child_id) {

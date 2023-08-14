@@ -168,6 +168,10 @@ impl HashJoin {
                     });
             }
             yield intermediate_batch;
+
+            if ty == JoinType::Left && full_left_side.len() == visited_left_side.len() {
+                break;
+            }
         }
 
         if let Some(left_batch) = left_single_batch {
