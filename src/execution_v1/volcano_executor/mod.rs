@@ -7,7 +7,7 @@ mod filter;
 mod sort;
 mod limit;
 mod hash_join;
-mod agg;
+mod aggregate;
 
 
 use crate::execution_v1::physical_plan::physical_projection::PhysicalProjection;
@@ -26,7 +26,7 @@ use crate::execution_v1::physical_plan::physical_hash_join::PhysicalHashJoin;
 use crate::execution_v1::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_v1::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_v1::physical_plan::physical_sort::PhysicalSort;
-use crate::execution_v1::volcano_executor::agg::Agg;
+use crate::execution_v1::volcano_executor::aggregate::simple_agg::Agg;
 use crate::execution_v1::volcano_executor::filter::Filter;
 use crate::execution_v1::volcano_executor::hash_join::HashJoin;
 use crate::execution_v1::volcano_executor::insert::Insert;
