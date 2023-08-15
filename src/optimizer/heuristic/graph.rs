@@ -13,13 +13,14 @@ pub type HepNodeId = NodeIndex<OptExprNodeId>;
 #[derive(Debug, PartialEq, Clone)]
 pub struct HepNode {
     node: OptExprNode,
-    source_id: Option<HepNodeId>
+    source_id: Option<HepNodeId>,
 }
 
 #[derive(Debug)]
 pub struct HepGraph {
     graph: StableDiGraph<HepNode, usize, usize>,
     root_index: HepNodeId,
+    pub version: usize,
 }
 
 impl HepGraph {
@@ -52,6 +53,7 @@ impl HepGraph {
         HepGraph {
             graph,
             root_index,
+            version: 0,
         }
     }
 
@@ -68,6 +70,7 @@ impl HepGraph {
         old_root.source_id = Some(self.root_index);
 
         self.graph.add_edge(self.root_index, old_root_id, 0);
+        self.version += 1;
     }
 
     pub fn add_node(&mut self, source_id: HepNodeId, children_option: Option<HepNodeId>, new_node: OptExprNode) {
@@ -93,6 +96,7 @@ impl HepGraph {
         }
 
         self.graph.add_edge(source_id, new_index, order);
+        self.version += 1;
     }
 
     pub fn replace_node(&mut self, source_id: HepNodeId, new_node: OptExprNode) {
@@ -101,7 +105,8 @@ impl HepGraph {
         self.graph[source_id] = HepNode {
             node: new_node,
             source_id: node.source_id,
-        }
+        };
+        self.version += 1;
     }
 
     pub fn swap_node(&mut self, a: HepNodeId, b: HepNodeId) {
@@ -111,6 +116,7 @@ impl HepGraph {
             &mut self.graph[b].node,
             tmp
         );
+        self.version += 1;
     }
 
     pub fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) -> Option<OptExprNode> {
@@ -137,6 +143,7 @@ impl HepGraph {
             }
         }
 
+        self.version += 1;
         self.graph.remove_node(source_id)
             .map(|node| node.node)
     }
@@ -259,6 +266,8 @@ mod tests {
 
         graph.replace_node(HepNodeId::new(5), OptExprNode::OptExpr(OptExprNodeId::new(5)));
 
+        assert_eq!(graph.version, 4);
+
         assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(2)));
         assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(3)));
         assert!(graph.graph.contains_edge(NodeIndex::new(0), NodeIndex::new(1)));
@@ -286,6 +295,8 @@ mod tests {
             HepNodeId::new(5),
             true
         );
+
+        assert_eq!(graph.version, 6);
 
         assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(2)));
         assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(3)));
@@ -331,6 +342,8 @@ mod tests {
 
         graph.add_root(old_root_node);
 
+        assert_eq!(graph.version, 7);
+
         let re_root_plan = graph.to_plan();
 
         match re_root_plan.operator {
@@ -341,6 +354,8 @@ mod tests {
         assert_eq!(re_root_plan.childrens.len(), 1);
 
         graph.swap_node(HepNodeId::new(2), HepNodeId::new(3));
+
+        assert_eq!(graph.version, 8);
 
         let swap_plan = graph.to_plan();
 

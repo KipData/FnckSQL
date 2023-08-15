@@ -58,7 +58,7 @@ impl Rule for PushProjectIntoTableScan {
         &PUSH_PROJECT_INTO_TABLE_SCAN_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         if let Operator::Project(project_op) = graph.operator(node_id) {
             let child_index = graph.children_at(node_id)[0];
             if let Operator::Scan(scan_op) = graph.operator(child_index) {
@@ -71,11 +71,8 @@ impl Rule for PushProjectIntoTableScan {
                     child_index,
                     OptExprNode::OperatorRef(Operator::Scan(new_scan_op))
                 );
-                return true;
             }
         }
-
-        false
     }
 }
 
@@ -93,7 +90,7 @@ impl Rule for PushProjectThroughChild {
         &PUSH_PROJECT_THROUGH_CHILD_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         let node_operator = graph.operator(node_id);
         if let Operator::Project(_) = node_operator {
             let child_index = graph.children_at(node_id)[0];
@@ -112,10 +109,9 @@ impl Rule for PushProjectThroughChild {
                 .collect::<HashSet<ColumnId>>();
 
             if intersection_columns_ids.is_empty() {
-                return false;
+                return;
             }
 
-            let mut has_append = false;
             for grandson_id in graph.children_at(child_index) {
                 let columns = graph.operator(grandson_id)
                     .referenced_columns()
@@ -133,13 +129,9 @@ impl Rule for PushProjectThroughChild {
                             Operator::Project(ProjectOperator { columns })
                         )
                     );
-                    has_append = true;
                 }
             }
-            return has_append;
         }
-
-        false
     }
 }
 

@@ -44,25 +44,27 @@ impl HepOptimizer {
     }
 
     fn apply_batch(&mut self, HepBatch{ rules, strategy, .. }: &HepBatch) -> bool {
-        let mut has_apply = false;
+        let start_ver = self.graph.version;
 
         for rule in rules {
             for node_id in self.graph.nodes_iter(strategy.match_order, None) {
                 if self.apply_rule(rule, node_id) {
-                    has_apply = true;
                     break;
                 }
             }
         }
 
-        has_apply
+        start_ver != self.graph.version
     }
 
     fn apply_rule(&mut self, rule: &RuleImpl, node_id: HepNodeId) -> bool {
-        HepMatcher::new(rule.pattern(), node_id, &self.graph)
-            .match_opt_expr()
-            .then(|| rule.apply(node_id, &mut self.graph))
-            .unwrap_or(false)
+        let after_version = self.graph.version;
+
+        if HepMatcher::new(rule.pattern(), node_id, &self.graph).match_opt_expr() {
+            rule.apply(node_id, &mut self.graph);
+        }
+
+        after_version != self.graph.version
     }
 
 }

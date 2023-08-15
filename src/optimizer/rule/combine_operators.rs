@@ -50,19 +50,15 @@ impl Rule for CollapseProject {
         &COLLAPSE_PROJECT_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         if let Operator::Project(op) = graph.operator(node_id) {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Project(child_op) = graph.operator(child_id) {
                 if is_subset_exprs(&op.columns, &child_op.columns) {
                     graph.remove_node(child_id, false);
-
-                    return true;
                 }
             }
         }
-
-        false
     }
 }
 
@@ -74,7 +70,7 @@ impl Rule for CombineFilter {
         &COMBINE_FILTERS_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         if let Operator::Filter(op) = graph.operator(node_id) {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Filter(child_op) = graph.operator(child_id) {
@@ -92,12 +88,8 @@ impl Rule for CombineFilter {
                     OptExprNode::OperatorRef(Operator::Filter(new_filter_op))
                 );
                 graph.remove_node(child_id, false);
-
-                return true;
             }
         }
-
-        false
     }
 }
 

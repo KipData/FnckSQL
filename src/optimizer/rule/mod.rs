@@ -44,7 +44,7 @@ impl Rule for RuleImpl {
         }
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         match self {
             RuleImpl::PushProjectIntoTableScan => PushProjectIntoTableScan {}.apply(node_id, graph),
             RuleImpl::PushProjectThroughChild => PushProjectThroughChild {}.apply(node_id, graph),

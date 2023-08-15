@@ -79,13 +79,11 @@ impl Rule for LimitProjectTranspose {
         &LIMIT_PROJECT_TRANSPOSE_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         graph.swap_node(
             node_id,
             graph.children_at(node_id)[0]
         );
-
-        true
     }
 }
 
@@ -98,7 +96,7 @@ impl Rule for EliminateLimits {
         &ELIMINATE_LIMITS_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         if let Operator::Limit(op) = graph.operator(node_id) {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Limit(child_op) = graph.operator(child_id) {
@@ -114,12 +112,8 @@ impl Rule for EliminateLimits {
                         Operator::Limit(new_limit_op)
                     )
                 );
-
-                return true;
             }
         }
-
-        false
     }
 }
 
@@ -135,7 +129,7 @@ impl Rule for PushLimitThroughJoin {
         &PUSH_LIMIT_THROUGH_JOIN_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         let child_id = graph.children_at(node_id)[0];
         let join_type = if let Operator::Join(op) = graph.operator(child_id) {
             Some(op.join_type)
@@ -156,12 +150,8 @@ impl Rule for PushLimitThroughJoin {
                     Some(grandson_id),
                     limit_node
                 );
-
-                return true;
             }
         }
-
-        false
     }
 }
 
@@ -173,7 +163,7 @@ impl Rule for PushLimitIntoTableScan {
         &PUSH_LIMIT_INTO_TABLE_SCAN_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         if let Operator::Limit(limit_op) = graph.operator(node_id) {
             let child_index = graph.children_at(node_id)[0];
             if let Operator::Scan(scan_op) = graph.operator(child_index) {
@@ -186,11 +176,8 @@ impl Rule for PushLimitIntoTableScan {
                     child_index,
                     OptExprNode::OperatorRef(Operator::Scan(new_scan_op))
                 );
-                return true;
             }
         }
-
-        false
     }
 }
 

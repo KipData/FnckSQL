@@ -29,6 +29,7 @@ lazy_static! {
         }
     };
 
+    // TODO
     static ref PUSH_PREDICATE_THROUGH_NON_JOIN: Pattern = {
         Pattern {
             predicate: |op| match op {
@@ -103,11 +104,11 @@ impl Rule for PushPredicateThroughJoin {
     }
 
     // TODO: pushdown_predicates need to consider output columns
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> bool {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         let child_id = graph.children_at(node_id)[0];
         if let Operator::Join(child_op) = graph.operator(child_id) {
             if !matches!(child_op.join_type, JoinType::Inner | JoinType::Left | JoinType::Right) {
-                return false;
+                return ;
             }
 
             let join_childs = graph.children_at(child_id);
@@ -180,16 +181,12 @@ impl Rule for PushPredicateThroughJoin {
                 }
             }
 
-            let mut change = false;
-
             if let Some(left_op) = new_ops.0 {
                 graph.add_node(
                     child_id,
                     Some(join_childs[0]),
                     OptExprNode::OperatorRef(left_op)
                 );
-
-                change = true;
             }
 
             if let Some(right_op) = new_ops.1 {
@@ -198,8 +195,6 @@ impl Rule for PushPredicateThroughJoin {
                     Some(join_childs[1]),
                     OptExprNode::OperatorRef(right_op)
                 );
-
-                change = true;
             }
 
             if let Some(common_op) = new_ops.2 {
@@ -210,11 +205,7 @@ impl Rule for PushPredicateThroughJoin {
             } else {
                 graph.remove_node(node_id, false);
             }
-
-            return change;
         }
-
-        false
     }
 }
 
