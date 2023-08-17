@@ -1,9 +1,10 @@
 use std::fmt::Display;
+use itertools::Itertools;
 
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
 
 use self::agg::AggKind;
-use crate::catalog::ColumnCatalog;
+use crate::catalog::{ColumnCatalog, ColumnDesc};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 
@@ -16,7 +17,7 @@ mod cast;
 /// SELECT a+1, b FROM t1.
 /// a+1 -> ScalarExpression::Unary(a + 1)
 /// b   -> ScalarExpression::ColumnRef()
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ScalarExpression {
     Constant(DataValue),
     ColumnRef(ColumnCatalog),
@@ -94,8 +95,80 @@ impl ScalarExpression {
         }
     }
 
+    pub fn referenced_columns(&self) -> Vec<ColumnCatalog> {
+        fn columns_collect(expr: &ScalarExpression, vec: &mut Vec<ColumnCatalog>) {
+            match expr {
+                ScalarExpression::ColumnRef(col) => {
+                    vec.push(col.clone());
+                }
+                ScalarExpression::Alias { expr, .. } => {
+                    columns_collect(&expr, vec)
+                }
+                ScalarExpression::TypeCast { expr, .. } => {
+                    columns_collect(&expr, vec)
+                }
+                ScalarExpression::IsNull { expr, .. } => {
+                    columns_collect(&expr, vec)
+                }
+                ScalarExpression::Unary { expr, .. } => {
+                    columns_collect(&expr, vec)
+                }
+                ScalarExpression::Binary { left_expr, right_expr, .. } => {
+                    columns_collect(left_expr, vec);
+                    columns_collect(right_expr, vec);
+                }
+                ScalarExpression::AggCall { args, .. } => {
+                    for expr in args {
+                        columns_collect(expr, vec)
+                    }
+                }
+                _ => (),
+            }
+        }
+
+        let mut exprs = Vec::new();
+
+        columns_collect(self, &mut exprs);
+
+        exprs
+    }
+
     pub fn has_agg_call(&self) -> bool {
         todo!()
+    }
+
+    pub fn output_column(&self) -> ColumnCatalog {
+        match self {
+            ScalarExpression::ColumnRef(col) => {
+                col.clone()
+            }
+            ScalarExpression::Constant(value) => {
+                ColumnCatalog::new(
+                    String::new(),
+                    true,
+                    ColumnDesc::new(value.logical_type(), false)
+                )
+            }
+            ScalarExpression::Alias { expr, alias } => {
+                ColumnCatalog::new(
+                    alias.to_string(),
+                    true,
+                    ColumnDesc::new(expr.return_type(), false)
+                )
+            }
+            ScalarExpression::AggCall { kind, args, ty } => {
+                let args_str = args.iter()
+                    .map(|expr| expr.output_column().name)
+                    .join(", ");
+
+                ColumnCatalog::new(
+                    format!("{:?}({})", kind, args_str),
+                    true,
+                    ColumnDesc::new(ty.clone(), false)
+                )
+            }
+            _ => unreachable!()
+        }
     }
 }
 
@@ -105,7 +178,7 @@ impl Display for ScalarExpression {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOperator {
     Plus,
     Minus,
@@ -120,7 +193,7 @@ impl From<SqlUnaryOperator> for UnaryOperator {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOperator {
     Plus,
     Minus,

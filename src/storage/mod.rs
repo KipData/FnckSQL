@@ -6,6 +6,7 @@ use arrow::error::ArrowError;
 use arrow::record_batch::RecordBatch;
 
 use crate::catalog::{CatalogError, RootCatalog};
+use crate::expression::ScalarExpression;
 use crate::storage::memory::InMemoryStorage;
 use crate::types::TableId;
 
@@ -28,8 +29,8 @@ pub trait Storage: Sync + Send + 'static {
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).
-type Bounds = Option<(usize, usize)>;
-type Projections = Option<Vec<usize>>;
+pub(crate) type Bounds = (Option<usize>, Option<usize>);
+type Projections = Vec<ScalarExpression>;
 
 pub trait Table: Sync + Send + Clone + 'static {
     type TransactionType: Transaction;

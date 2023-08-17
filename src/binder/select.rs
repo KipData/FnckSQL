@@ -23,6 +23,7 @@ use sqlparser::ast::{
     Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
+use crate::execution_v1::volcano_executor::join::joins_nullable;
 use crate::expression::BinaryOperator;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinCondition;
@@ -154,15 +155,15 @@ impl Binder {
                     )));
                 }
 
-                let table_ref_id = self
+                let table_catalog = self
                     .context
-                    .catalog
-                    .get_table_id_by_name(table)
+                    .catalog.get_table_by_name(table)
                     .ok_or_else(|| anyhow::Error::msg(format!("bind table {}", table)))?;
+                let table_ref_id = table_catalog.id;
 
                 self.context.bind_table.insert(table.into(), (table_ref_id, joint_type));
 
-                (table_ref_id, ScanOperator::new(table_ref_id))
+                (table_ref_id, ScanOperator::new(table_ref_id, &table_catalog))
             }
             _ => unimplemented!(),
         };
@@ -354,13 +355,7 @@ impl Binder {
 
         for (table_id, join_option) in bind_tables.values() {
             if let Some(join_type) = join_option {
-                let (left_force_nullable, right_force_nullable) = match join_type {
-                    JoinType::Inner => (false, false),
-                    JoinType::Left => (false, true),
-                    JoinType::Right => (true, false),
-                    JoinType::Full => (true, true),
-                    JoinType::Cross => (true, true),
-                };
+                let (left_force_nullable, right_force_nullable) = joins_nullable(join_type);
                 table_force_nullable.insert(*table_id, right_force_nullable);
                 left_table_force_nullable = left_force_nullable;
             } else {
@@ -498,36 +493,7 @@ impl Binder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::binder::BinderContext;
-    use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
-    use crate::planner::LogicalPlan;
-    use crate::types::LogicalType::Integer;
-
-    fn test_root_catalog() -> Result<RootCatalog> {
-        let mut root = RootCatalog::new();
-
-        let cols_t1 = vec![
-            ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
-            ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
-        ];
-        let _ = root.add_table("t1".to_string(), cols_t1)?;
-
-        let cols_t2 = vec![
-            ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
-            ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
-        ];
-        let _ = root.add_table("t2".to_string(), cols_t2)?;
-        Ok(root)
-    }
-
-    fn select_sql_run(sql: &str) -> Result<LogicalPlan> {
-        let root = test_root_catalog()?;
-
-        let binder = Binder::new(BinderContext::new(root));
-        let stmt = crate::parser::parse_sql(sql).unwrap();
-
-        Ok(binder.bind(&stmt[0])?)
-    }
+    use crate::binder::test::select_sql_run;
 
     #[test]
     fn test_select_bind() -> Result<()> {

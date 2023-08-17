@@ -13,10 +13,10 @@ impl Binder {
     pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression> {
         match expr {
             Expr::Identifier(ident) => {
-                self.bind_column_ref_from_identifiers(slice::from_ref(ident))
+                self.bind_column_ref_from_identifiers(slice::from_ref(ident), None)
             }
             Expr::CompoundIdentifier(idents) => {
-                self.bind_column_ref_from_identifiers(idents)
+                self.bind_column_ref_from_identifiers(idents, None)
             }
             Expr::BinaryOp { left, right, op} => {
                 self.bind_binary_op_internal(left, right, op)
@@ -33,6 +33,7 @@ impl Binder {
     pub fn bind_column_ref_from_identifiers(
         &mut self,
         idents: &[Ident],
+        bind_table_name: Option<&String>,
     ) -> Result<ScalarExpression> {
         let idents = idents
             .iter()
@@ -54,7 +55,7 @@ impl Binder {
             }
         };
 
-        if let Some(table) = table_name {
+        if let Some(table) = table_name.or(bind_table_name) {
             let table_catalog = self
                 .context
                 .catalog

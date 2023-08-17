@@ -115,3 +115,38 @@ pub enum BindError {
     #[error("catalog error")]
     CatalogError(#[from] CatalogError),
 }
+
+#[cfg(test)]
+pub mod test {
+    use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
+    use crate::planner::LogicalPlan;
+    use crate::types::LogicalType::Integer;
+    use anyhow::Result;
+    use crate::binder::{Binder, BinderContext};
+
+    fn test_root_catalog() -> Result<RootCatalog> {
+        let mut root = RootCatalog::new();
+
+        let cols_t1 = vec![
+            ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
+            ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
+        ];
+        let _ = root.add_table("t1".to_string(), cols_t1)?;
+
+        let cols_t2 = vec![
+            ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
+            ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
+        ];
+        let _ = root.add_table("t2".to_string(), cols_t2)?;
+        Ok(root)
+    }
+
+    pub fn select_sql_run(sql: &str) -> Result<LogicalPlan> {
+        let root = test_root_catalog()?;
+
+        let binder = Binder::new(BinderContext::new(root));
+        let stmt = crate::parser::parse_sql(sql).unwrap();
+
+        Ok(binder.bind(&stmt[0])?)
+    }
+}

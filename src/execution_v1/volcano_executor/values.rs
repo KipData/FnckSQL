@@ -15,7 +15,7 @@ pub struct Values { }
 impl Values {
     #[try_stream(boxed, ok = RecordBatch, error = ExecutorError)]
     pub async fn execute(plan: PhysicalValues) {
-        let ValuesOperator { col_catalogs, rows } = plan.base;
+        let ValuesOperator { col_catalogs, rows } = plan.op;
 
         let fields = col_catalogs.iter()
             .map(ColumnCatalog::to_field)

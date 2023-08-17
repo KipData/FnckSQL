@@ -33,8 +33,12 @@ impl Binder {
                     .map(|(_, catalog)| catalog.clone())
                     .collect_vec();
             } else {
+                let bind_table_name = Some(table.name.to_string());
                 for ident in idents {
-                    match self.bind_column_ref_from_identifiers(slice::from_ref(ident))? {
+                    match self.bind_column_ref_from_identifiers(
+                        slice::from_ref(ident),
+                        bind_table_name.as_ref()
+                    )? {
                         ScalarExpression::ColumnRef(catalog) => col_catalogs.push(catalog),
                         _ => unreachable!()
                     }

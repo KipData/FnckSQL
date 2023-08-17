@@ -1,7 +1,7 @@
 use super::ScalarExpression;
 use crate::types::LogicalType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AggKind {
     Avg,
     RowCount,

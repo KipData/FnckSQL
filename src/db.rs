@@ -4,9 +4,13 @@ use arrow::record_batch::RecordBatch;
 use sqlparser::parser::ParserError;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution_v1::physical_plan::physical_plan_builder::PhysicalPlanBuilder;
+use crate::execution_v1::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
 use crate::execution_v1::volcano_executor::VolcanoExecutor;
+use crate::optimizer::heuristic::batch::HepBatchStrategy;
+use crate::optimizer::heuristic::optimizer::HepOptimizer;
+use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
+use crate::planner::LogicalPlan;
 use crate::storage::memory::InMemoryStorage;
 use crate::storage::{Storage, StorageError, StorageImpl};
 
@@ -44,19 +48,59 @@ impl Database {
         ///   Sort(a)
         ///     Limit(1)
         ///       Project(a,b)
-        let logical_plan = binder.bind(&stmts[0])?;
-        // println!("logic plan: {:#?}", logical_plan);
+        let source_plan = binder.bind(&stmts[0])?;
+        // println!("source_plan plan: {:#?}", source_plan);
 
-        let mut builder = PhysicalPlanBuilder::new();
-        let operator = builder.build_plan(&logical_plan)?;
-        // println!("operator: {:#?}", operator);
+        let best_plan = Self::default_optimizer(source_plan)
+            .find_best();
+        // println!("best_plan plan: {:#?}", best_plan);
+
+        let physical_plan = PhysicalPlanMapping::build_plan(best_plan)?;
+        // println!("physical_plan: {:#?}", physical_plan);
 
         let storage = StorageImpl::InMemoryStorage(self.storage.clone());
         let executor = VolcanoExecutor::new(storage);
 
-        let mut stream = executor.build(operator);
+        let mut stream = executor.build(physical_plan);
 
         Ok(VolcanoExecutor::try_collect(&mut stream).await?)
+    }
+
+    fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
+        HepOptimizer::new(source_plan)
+            .batch(
+                "Predicate pushdown".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::PushPredicateThroughJoin
+                ]
+            )
+            .batch(
+                "Limit pushdown".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::LimitProjectTranspose,
+                    RuleImpl::PushLimitThroughJoin,
+                    RuleImpl::PushLimitIntoTableScan,
+                    RuleImpl::EliminateLimits,
+                ],
+            )
+            .batch(
+                "Column pruning".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::PushProjectThroughChild,
+                    RuleImpl::PushProjectIntoScan
+                ]
+            )
+            .batch(
+                "Combine operators".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::CollapseProject,
+                    RuleImpl::CombineFilter
+                ]
+            )
     }
 }
 

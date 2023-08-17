@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use arrow::datatypes::{Schema, SchemaRef};
 
 use arrow::record_batch::RecordBatch;
 use parking_lot::Mutex;
 
 use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
+use crate::expression::ScalarExpression;
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
 use crate::types::{LogicalType, TableId};
 
@@ -139,10 +141,10 @@ impl Table for InMemoryTable {
 
     fn read(
         &self,
-        _bounds: Bounds,
-        _projection: Projections,
+        bounds: Bounds,
+        projection: Projections,
     ) -> Result<Self::TransactionType, StorageError> {
-        InMemoryTransaction::start(self)
+        InMemoryTransaction::start(self, bounds, projection)
     }
 
     fn append(&self, record_batch: RecordBatch) -> Result<(), StorageError> {
@@ -159,12 +161,83 @@ pub struct InMemoryTransaction {
 }
 
 impl InMemoryTransaction {
-    pub fn start(table: &InMemoryTable) -> Result<Self, StorageError> {
+    pub fn start(table: &InMemoryTable, bounds: Bounds, projection: Projections) -> Result<Self, StorageError> {
+        let inner = table.inner.lock();
+
+        let (offset, limit) = bounds;
+        let offset_val = offset.unwrap_or(0);
+        if limit.is_some() && limit.unwrap() == 0 {
+            return Ok(Self {
+                batch_cursor: 0,
+                data: inner.data.clone(),
+            })
+        }
+
+        let mut returned_count = 0;
+        let mut batches = Vec::new();
+
+        for batch in &inner.data {
+            let cardinality = batch.num_rows();
+            let limit_val = limit.unwrap_or(cardinality);
+
+            let start = returned_count.max(offset_val) - returned_count;
+            let end = {
+                // from total returned rows level, the total_end is end index of whole returned
+                // rows level.
+                let total_end = offset_val + limit_val;
+                let current_batch_end = returned_count + cardinality;
+                // we choose the min of total_end and current_batch_end as the end index of to
+                // match limit semantics.
+                let real_end = total_end.min(current_batch_end);
+                // to calculate the end index of current batch
+                real_end - returned_count
+            };
+            returned_count += cardinality;
+
+            // example: offset=1000, limit=2, cardinality=100
+            // when first loop:
+            // start = 0.max(1000)-0 = 1000
+            // end = (1000+2).min(0+100)-0 = 100
+            // so, start(1000) > end(100), we skip this loop batch.
+            if start >= end {
+                continue;
+            }
+
+            if (start..end) == (0..cardinality) {
+                batches.push(projection_batch(&projection, batch.clone())?);
+            } else {
+                let length = end - start;
+                batches.push(projection_batch(&projection, batch.slice(start, length))?);
+            }
+
+            // dut to returned_count is always += cardinality, and returned_batch maybe slsliced,
+            // so it will larger than real total_end.
+            // example: offset=1, limit=4, cardinality=6, data=[(0..6)]
+            // returned_count=6 > 1+4, meanwhile returned_batch size is 4 ([0..5])
+            if returned_count >= offset_val + limit_val {
+                break;
+            }
+        }
+
         Ok(Self {
             batch_cursor: 0,
-            data: table.inner.lock().data.clone(),
+            data: batches,
         })
     }
+}
+
+fn projection_batch(exprs: &Vec<ScalarExpression>, batch: RecordBatch) -> Result<RecordBatch, StorageError> {
+    let columns = exprs
+        .iter()
+        .map(|e| e.eval_column(&batch))
+        .try_collect()
+        .unwrap();
+    let fields = exprs.iter().map(|e| e.eval_field(&batch)).collect();
+    let schema = SchemaRef::new(Schema::new_with_metadata(
+        fields,
+        batch.schema().metadata().clone(),
+    ));
+    Ok(RecordBatch::try_new(schema, columns).unwrap())
 }
 
 impl Transaction for InMemoryTransaction {
@@ -183,7 +256,7 @@ impl Transaction for InMemoryTransaction {
 mod storage_test {
     use std::sync::Arc;
 
-    use arrow::array::Int32Array;
+    use arrow::array::{Array, Int32Array};
     use arrow::datatypes::{DataType, Field, Schema};
 
     use super::*;
@@ -216,11 +289,19 @@ mod storage_test {
         assert!(table_catalog.unwrap().get_column_id_by_name("a").is_some());
 
         let table = storage.get_table(&id)?;
-        let mut tx = table.read(None, None)?;
-        let batch = tx.next_batch()?;
+        let mut tx = table.read(
+            (Some(0), Some(1)),
+            vec![ScalarExpression::InputRef { index: 0, ty: LogicalType::Integer }]
+        )?;
+        let batch = tx.next_batch()?.unwrap();
         println!("{:?}", batch);
-        assert!(batch.is_some());
-        assert_eq!(batch.unwrap().num_rows(), 3);
+        assert_eq!(batch.num_rows(), 1);
+        assert_eq!(batch.num_columns(), 1);
+
+        assert_eq!(
+            batch.columns()[0].data(),
+            Arc::new(Int32Array::from(vec![1])).data()
+        );
 
         Ok(())
     }
