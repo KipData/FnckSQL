@@ -11,67 +11,42 @@ use crate::planner::operator::Operator;
 lazy_static! {
     static ref LIMIT_PROJECT_TRANSPOSE_RULE: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Limit(_) => true,
-                _ => false
-            },
+            predicate: |op| matches!(op, Operator::Limit(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Project(_) => true,
-                    _ => false
-                },
+                predicate: |op| matches!(op, Operator::Project(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
     };
     static ref ELIMINATE_LIMITS_RULE: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Limit(_) => true,
-                _ => false
-            },
+            predicate: |op| matches!(op, Operator::Limit(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Limit(_) => true,
-                    _ => false
-                },
+                predicate: |op| matches!(op, Operator::Limit(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
     };
     static ref PUSH_LIMIT_THROUGH_JOIN_RULE: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Limit(_) => true,
-                _ => false
-            },
+            predicate: |op| matches!(op, Operator::Limit(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Join(_) => true,
-                    _ => false
-                },
+                predicate: |op| matches!(op, Operator::Join(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
     };
     static ref PUSH_LIMIT_INTO_TABLE_SCAN_RULE: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Limit(_) => true,
-                _ => false
-            },
+            predicate: |op| matches!(op, Operator::Limit(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Scan(_) => true,
-                    _ => false
-                },
+                predicate: |op| matches!(op, Operator::Scan(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
     };
 }
 
-/// Push down `Limit` past a `Project`.
 pub struct LimitProjectTranspose;
 
 impl Rule for LimitProjectTranspose {
@@ -120,8 +95,9 @@ impl Rule for EliminateLimits {
 /// Add extra limits below JOIN:
 /// 1. For LEFT OUTER and RIGHT OUTER JOIN, we push limits to the left and right sides,
 /// respectively.
-/// 2. For INNER and CROSS JOIN, we push limits to both the left and right sides if join condition
-/// is empty.
+///
+/// TODO: 2. For INNER and CROSS JOIN, we push limits to both the left and right sides
+/// TODO: if join condition is empty.
 pub struct PushLimitThroughJoin;
 
 impl Rule for PushLimitThroughJoin {

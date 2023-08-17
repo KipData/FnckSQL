@@ -12,30 +12,18 @@ use crate::types::LogicalType;
 lazy_static! {
     static ref COLLAPSE_PROJECT_RULE: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Project(_) => true,
-                _ => false,
-            },
+            predicate: |op| matches!(op, Operator::Project(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Project(_) => true,
-                    _ => false,
-                },
+                predicate: |op| matches!(op, Operator::Project(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
     };
     static ref COMBINE_FILTERS_RULE: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Filter(_) => true,
-                _ => false,
-            },
+            predicate: |op| matches!(op, Operator::Filter(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Filter(_) => true,
-                    _ => false,
-                },
+                predicate: |op| matches!(op, Operator::Filter(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }

@@ -13,7 +13,7 @@ pub type HepNodeId = NodeIndex<OptExprNodeId>;
 #[derive(Debug, PartialEq, Clone)]
 pub struct HepNode {
     node: OptExprNode,
-    source_id: Option<HepNodeId>,
+    parent_id: Option<HepNodeId>,
 }
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ impl HepGraph {
         ) -> HepNodeId {
             let index = graph.add_node(HepNode {
                 node: OptExprNode::OperatorRef(operator),
-                source_id,
+                parent_id: source_id,
             });
             for (order, child) in childrens.into_iter().enumerate() {
                 let child_index = graph_filling(graph, child, Some(index));
@@ -62,12 +62,12 @@ impl HepGraph {
             &mut self.root_index,
             self.graph.add_node(HepNode {
                 node: new_node,
-                source_id: None,
+                parent_id: None,
             })
         );
         let old_root = self.graph.node_weight_mut(old_root_id).unwrap();
 
-        old_root.source_id = Some(self.root_index);
+        old_root.parent_id = Some(self.root_index);
 
         self.graph.add_edge(self.root_index, old_root_id, 0);
         self.version += 1;
@@ -76,7 +76,7 @@ impl HepGraph {
     pub fn add_node(&mut self, source_id: HepNodeId, children_option: Option<HepNodeId>, new_node: OptExprNode) {
         let new_index = self.graph.add_node(HepNode {
             node: new_node,
-            source_id: Some(source_id),
+            parent_id: Some(source_id),
         });
 
         let mut order = self.graph
@@ -90,7 +90,7 @@ impl HepGraph {
                         .remove_edge(old_edge_id)
                         .unwrap_or(0);
 
-                    self.graph[children_id].source_id = Some(new_index);
+                    self.graph[children_id].parent_id = Some(new_index);
                     self.graph.add_edge(new_index, children_id, 0);
                 });
         }
@@ -104,7 +104,7 @@ impl HepGraph {
 
         self.graph[source_id] = HepNode {
             node: new_node,
-            source_id: node.source_id,
+            parent_id: node.parent_id,
         };
         self.version += 1;
     }
@@ -127,7 +127,7 @@ impl HepGraph {
                     .map(|edge_ref| edge_ref.target())
                     .collect_vec();
 
-                if let Some(parent_id) = source_node.source_id {
+                if let Some(parent_id) = source_node.parent_id {
                     if let Some(edge) = self.graph.find_edge(parent_id, source_id) {
                         let weight = *self.graph.edge_weight(edge)
                             .unwrap_or(&0);
@@ -282,7 +282,7 @@ mod tests {
         assert_eq!(graph.graph.edge_weight(EdgeIndex::new(5)), Some(&1));
         assert_eq!(
             graph.graph.node_weight(NodeIndex::new(5)),
-            Some(&HepNode { node: OptExprNode::OptExpr(5), source_id: Some(NodeIndex::new(1)) })
+            Some(&HepNode { node: OptExprNode::OptExpr(5), parent_id: Some(NodeIndex::new(1)) })
         );
         assert_eq!(graph.root_index, NodeIndex::new(0));
 

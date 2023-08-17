@@ -11,17 +11,11 @@ use crate::planner::operator::project::ProjectOperator;
 use crate::types::ColumnId;
 
 lazy_static! {
-    static ref PUSH_PROJECT_INTO_TABLE_SCAN_RULE: Pattern = {
+    static ref PUSH_PROJECT_INTO_SCAN_RULE: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Project(_) => true,
-                _ => false
-            },
+            predicate: |op| matches!(op, Operator::Project(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Scan(_) => true,
-                    _ => false
-                },
+                predicate: |op| matches!(op, Operator::Scan(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
@@ -29,20 +23,11 @@ lazy_static! {
 
     static ref PUSH_PROJECT_THROUGH_CHILD_RULE: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Project(_) => true,
-                _ => false
-            },
+            predicate: |op| matches!(op, Operator::Project(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Project(_) | Operator::Scan(_) => false,
-                    _ => true
-                },
+                predicate: |op| !matches!(op, Operator::Scan(_) | Operator::Project(_)),
                 children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                    predicate: |op| match op {
-                        Operator::Project(_) => false,
-                        _ => true
-                    },
+                    predicate: |op| !matches!(op, Operator::Project(_)),
                     children: PatternChildrenPredicate::None,
                 }]),
             }]),
@@ -51,11 +36,11 @@ lazy_static! {
 }
 
 #[derive(Copy, Clone)]
-pub struct PushProjectIntoTableScan;
+pub struct PushProjectIntoScan;
 
-impl Rule for PushProjectIntoTableScan {
+impl Rule for PushProjectIntoScan {
     fn pattern(&self) -> &Pattern {
-        &PUSH_PROJECT_INTO_TABLE_SCAN_RULE
+        &PUSH_PROJECT_INTO_SCAN_RULE
     }
 
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
@@ -153,7 +138,7 @@ mod tests {
             .batch(
                 "test_project_into_table_scan".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushProjectIntoTableScan]
+                vec![RuleImpl::PushProjectIntoScan]
             )
             .find_best();
 
@@ -178,7 +163,7 @@ mod tests {
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::PushProjectThroughChild,
-                    RuleImpl::PushProjectIntoTableScan
+                    RuleImpl::PushProjectIntoScan
                 ]
             ).find_best();
 

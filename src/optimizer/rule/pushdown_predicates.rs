@@ -15,15 +15,9 @@ use crate::types::LogicalType;
 lazy_static! {
     static ref PUSH_PREDICATE_THROUGH_JOIN: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Filter(_) => true,
-                _ => false
-            },
+            predicate: |op| matches!(op, Operator::Filter(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Join(_) => true,
-                    _ => false
-                },
+                predicate: |op| matches!(op, Operator::Join(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
@@ -32,15 +26,9 @@ lazy_static! {
     // TODO
     static ref PUSH_PREDICATE_THROUGH_NON_JOIN: Pattern = {
         Pattern {
-            predicate: |op| match op {
-                Operator::Filter(_) => true,
-                _ => false
-            },
+            predicate: |op| matches!(op, Operator::Filter(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Project(_) => true,
-                    _ => false
-                },
+                predicate: |op| matches!(op, Operator::Project(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }

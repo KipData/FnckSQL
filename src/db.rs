@@ -90,7 +90,7 @@ impl Database {
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::PushProjectThroughChild,
-                    RuleImpl::PushProjectIntoTableScan
+                    RuleImpl::PushProjectIntoScan
                 ]
             )
             .batch(
