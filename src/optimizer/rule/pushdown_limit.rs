@@ -131,10 +131,10 @@ impl Rule for PushLimitThroughJoin {
     }
 }
 
-/// Push down `Limit` past a `Project`.
-pub struct PushLimitIntoTableScan;
+/// Push down `Limit` past a `Scan`.
+pub struct PushLimitIntoScan;
 
-impl Rule for PushLimitIntoTableScan {
+impl Rule for PushLimitIntoScan {
     fn pattern(&self) -> &Pattern {
         &PUSH_LIMIT_INTO_TABLE_SCAN_RULE
     }
