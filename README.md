@@ -68,4 +68,5 @@ print_batches(&vec_batch_full_join)?;
 - CreateTable
 
 ### Thanks For
-- [sqlrs](https://github.com/Fedomn/sqlrs): 主要参考资料，Optimizer、Executor均参考自sqlrs的设计
+- [Fedomn/sqlrs](https://github.com/Fedomn/sqlrs): 主要参考资料，Optimizer、Executor均参考自sqlrs的设计
+- [systemxlabs/tinysql](https://github.com/systemxlabs/tinysql)

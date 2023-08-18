@@ -10,15 +10,9 @@ use crate::planner::operator::Operator;
 /// HepNodeId is used in optimizer to identify a node.
 pub type HepNodeId = NodeIndex<OptExprNodeId>;
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct HepNode {
-    node: OptExprNode,
-    parent_id: Option<HepNodeId>,
-}
-
 #[derive(Debug)]
 pub struct HepGraph {
-    graph: StableDiGraph<HepNode, usize, usize>,
+    graph: StableDiGraph<OptExprNode, usize, usize>,
     root_index: HepNodeId,
     pub version: usize,
 }
@@ -26,28 +20,24 @@ pub struct HepGraph {
 impl HepGraph {
     pub fn new(root: LogicalPlan) -> Self {
         fn graph_filling(
-            graph: &mut StableDiGraph<HepNode, usize, usize>,
+            graph: &mut StableDiGraph<OptExprNode, usize, usize>,
             LogicalPlan{ operator, childrens }: LogicalPlan,
-            source_id: Option<HepNodeId>
         ) -> HepNodeId {
-            let index = graph.add_node(HepNode {
-                node: OptExprNode::OperatorRef(operator),
-                parent_id: source_id,
-            });
+            let index = graph.add_node(OptExprNode::OperatorRef(operator));
+
             for (order, child) in childrens.into_iter().enumerate() {
-                let child_index = graph_filling(graph, child, Some(index));
+                let child_index = graph_filling(graph, child);
                 let _ = graph.add_edge(index, child_index, order);
             }
 
             index
         }
 
-        let mut graph = StableDiGraph::<HepNode, usize, usize>::default();
+        let mut graph = StableDiGraph::<OptExprNode, usize, usize>::default();
 
         let root_index = graph_filling(
             &mut graph,
             root,
-            None
         );
 
         HepGraph {
@@ -57,27 +47,24 @@ impl HepGraph {
         }
     }
 
+    pub fn parent_id(&self, node_id: HepNodeId) -> Option<HepNodeId> {
+        self.graph
+            .neighbors_directed(node_id, petgraph::Direction::Incoming)
+            .next()
+    }
+
     pub fn add_root(&mut self, new_node: OptExprNode) {
         let old_root_id = mem::replace(
             &mut self.root_index,
-            self.graph.add_node(HepNode {
-                node: new_node,
-                parent_id: None,
-            })
+            self.graph.add_node(new_node)
         );
-        let old_root = self.graph.node_weight_mut(old_root_id).unwrap();
-
-        old_root.parent_id = Some(self.root_index);
 
         self.graph.add_edge(self.root_index, old_root_id, 0);
         self.version += 1;
     }
 
     pub fn add_node(&mut self, source_id: HepNodeId, children_option: Option<HepNodeId>, new_node: OptExprNode) {
-        let new_index = self.graph.add_node(HepNode {
-            node: new_node,
-            parent_id: Some(source_id),
-        });
+        let new_index = self.graph.add_node(new_node);
 
         let mut order = self.graph
             .edges(source_id)
@@ -90,7 +77,6 @@ impl HepGraph {
                         .remove_edge(old_edge_id)
                         .unwrap_or(0);
 
-                    self.graph[children_id].parent_id = Some(new_index);
                     self.graph.add_edge(new_index, children_id, 0);
                 });
         }
@@ -100,20 +86,15 @@ impl HepGraph {
     }
 
     pub fn replace_node(&mut self, source_id: HepNodeId, new_node: OptExprNode) {
-        let node = &self.graph[source_id];
-
-        self.graph[source_id] = HepNode {
-            node: new_node,
-            parent_id: node.parent_id,
-        };
+        self.graph[source_id] = new_node;
         self.version += 1;
     }
 
     pub fn swap_node(&mut self, a: HepNodeId, b: HepNodeId) {
-        let tmp = self.graph[a].node.clone();
+        let tmp = self.graph[a].clone();
 
-        self.graph[a].node = mem::replace(
-            &mut self.graph[b].node,
+        self.graph[a] = mem::replace(
+            &mut self.graph[b],
             tmp
         );
         self.version += 1;
@@ -127,7 +108,7 @@ impl HepGraph {
                     .map(|edge_ref| edge_ref.target())
                     .collect_vec();
 
-                if let Some(parent_id) = source_node.parent_id {
+                if let Some(parent_id) = self.parent_id(source_id) {
                     if let Some(edge) = self.graph.find_edge(parent_id, source_id) {
                         let weight = *self.graph.edge_weight(edge)
                             .unwrap_or(&0);
@@ -145,7 +126,6 @@ impl HepGraph {
 
         self.version += 1;
         self.graph.remove_node(source_id)
-            .map(|node| node.node)
     }
 
     /// Traverse the graph in BFS order.
@@ -167,12 +147,12 @@ impl HepGraph {
         }
     }
 
-    pub fn node(&self, node_id: HepNodeId) -> Option<&HepNode> {
+    pub fn node(&self, node_id: HepNodeId) -> Option<&OptExprNode> {
         self.graph.node_weight(node_id)
     }
 
     pub fn operator(&self, node_id: HepNodeId) -> &Operator {
-        match &self.graph[node_id].node {
+        match &self.graph[node_id] {
             OptExprNode::OperatorRef(op) => op,
             OptExprNode::OptExpr(node_id) => self.operator(HepNodeId::new(*node_id)),
         }
@@ -238,7 +218,7 @@ mod tests {
     use petgraph::stable_graph::{EdgeIndex, IndexType, NodeIndex};
     use crate::binder::test::select_sql_run;
     use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
-    use crate::optimizer::heuristic::graph::{HepGraph, HepNode, HepNodeId};
+    use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;
 
     #[test]
@@ -282,7 +262,7 @@ mod tests {
         assert_eq!(graph.graph.edge_weight(EdgeIndex::new(5)), Some(&1));
         assert_eq!(
             graph.graph.node_weight(NodeIndex::new(5)),
-            Some(&HepNode { node: OptExprNode::OptExpr(5), parent_id: Some(NodeIndex::new(1)) })
+            Some(&OptExprNode::OptExpr(5))
         );
         assert_eq!(graph.root_index, NodeIndex::new(0));
 
