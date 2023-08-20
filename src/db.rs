@@ -1,11 +1,11 @@
-use anyhow::Result;
 use arrow::error::ArrowError;
 use arrow::record_batch::RecordBatch;
 use sqlparser::parser::ParserError;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution_v1::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
-use crate::execution_v1::volcano_executor::VolcanoExecutor;
+use crate::execution::ExecutorError;
+use crate::execution::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
+use crate::execution::volcano_executor::VolcanoExecutor;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::RuleImpl;
@@ -33,7 +33,7 @@ impl Database {
     }
 
     /// Run SQL queries.
-    pub async fn run(&self, sql: &str) -> Result<Vec<RecordBatch>> {
+    pub async fn run(&self, sql: &str) -> Result<Vec<RecordBatch>, ExecutorError> {
         // parse
         let stmts = parse_sql(sql)?;
         // bind
@@ -145,6 +145,7 @@ mod test {
     use arrow::util::pretty::print_batches;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::Database;
+    use crate::execution::ExecutorError;
     use crate::storage::{Storage, StorageError};
     use crate::types::{LogicalType, TableId};
 
@@ -175,10 +176,10 @@ mod test {
     }
 
     #[test]
-    fn test_run_sql() -> anyhow::Result<()> {
-        let mut database = Database::new_on_mem();
+    fn test_run_sql() -> Result<(), ExecutorError> {
+        let database = Database::new_on_mem();
 
-        let i = build_table(&database.storage)?;
+        let _ = build_table(&database.storage)?;
 
         tokio_test::block_on(async move {
             let batch = database.run("select * from t1").await?;
@@ -189,7 +190,7 @@ mod test {
     }
 
     #[test]
-    fn test_crud_sql() -> anyhow::Result<()> {
+    fn test_crud_sql() -> Result<(), ExecutorError> {
         let kipsql = Database::new_on_mem();
 
         tokio_test::block_on(async move {

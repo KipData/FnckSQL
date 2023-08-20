@@ -1,9 +1,8 @@
 use std::collections::HashSet;
-use anyhow::Result;
 use sqlparser::ast::{ColumnDef, ObjectName};
 
 use super::Binder;
-use crate::binder::{lower_case_name, split_name};
+use crate::binder::{BindError, lower_case_name, split_name};
 use crate::catalog::ColumnCatalog;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::create_table::CreateTableOperator;
@@ -14,7 +13,7 @@ impl Binder {
         &mut self,
         name: &ObjectName,
         columns: &[ColumnDef],
-    ) -> Result<LogicalPlan> {
+    ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
         let (_, table_name) = split_name(&name)?;
 
@@ -23,10 +22,7 @@ impl Binder {
         for col in columns.iter() {
             let col_name = &col.name.value;
             if !set.insert(col_name.clone()) {
-                return Err(anyhow::Error::msg(format!(
-                    "bind duplicated column {}",
-                    col_name
-                )));
+                return Err(BindError::AmbiguousColumn(col_name.to_string()));
             }
         }
 

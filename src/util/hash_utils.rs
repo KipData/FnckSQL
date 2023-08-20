@@ -6,7 +6,7 @@ use arrow::array::{
 };
 use arrow::datatypes::DataType;
 
-use crate::execution_v1::ExecutorError;
+use crate::execution::ExecutorError;
 
 // Combines two hashes into one hash
 #[inline]

@@ -21,17 +21,6 @@ impl Debug for OptExprNode {
     }
 }
 
-impl OptExprNode {
-    pub fn get_operator(&self) -> &Operator {
-        match self {
-            OptExprNode::OperatorRef(op) => op,
-            OptExprNode::OptExpr(_) => {
-                panic!("OptExprNode::get_operator() called on OptExprNode::OptExpr")
-            }
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct OptExpr {
     /// The root of the tree.

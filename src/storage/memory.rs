@@ -279,7 +279,7 @@ mod storage_test {
 
     #[test]
     fn test_in_memory_storage_works_with_data() -> Result<(), StorageError> {
-        let mut storage = InMemoryStorage::new();
+        let storage = InMemoryStorage::new();
 
         let id = storage.create_table("test", build_record_batch()?)?;
         let catalog = storage.get_catalog();

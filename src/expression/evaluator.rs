@@ -2,7 +2,7 @@ use arrow::array::ArrayRef;
 use arrow::compute::cast;
 use arrow::datatypes::{DataType, Field};
 use arrow::record_batch::RecordBatch;
-use crate::execution_v1::ExecutorError;
+use crate::execution::ExecutorError;
 use crate::expression::array_compute::binary_op;
 use crate::expression::ScalarExpression;
 use crate::types::value::DataValue;

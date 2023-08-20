@@ -1,8 +1,7 @@
 use std::slice;
 use sqlparser::ast::{Expr, Ident, ObjectName};
-use anyhow::{Error, Result};
 use itertools::Itertools;
-use crate::binder::{Binder, lower_case_name, split_name};
+use crate::binder::{Binder, BindError, lower_case_name, split_name};
 use crate::catalog::ColumnCatalog;
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
@@ -14,13 +13,12 @@ use crate::types::value::DataValue;
 impl Binder {
 
     // TODO: 支持Project
-    // TODO: 检测多行Values对齐
     pub(crate) fn bind_insert(
         &mut self,
         name: ObjectName,
         idents: &[Ident],
         rows: &Vec<Vec<Expr>>
-    ) -> Result<LogicalPlan> {
+    ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
         let (_, table_name) = split_name(&name)?;
 
@@ -50,7 +48,7 @@ impl Binder {
                 .map(|row| {
                     row.into_iter()
                         .map(|expr| match self.bind_expr(expr)? {
-                            ScalarExpression::Constant(value) => Ok::<DataValue, Error>(value),
+                            ScalarExpression::Constant(value) => Ok::<DataValue, BindError>(value),
                             _ => unreachable!(),
                         })
                         .try_collect()
@@ -68,10 +66,7 @@ impl Binder {
                 childrens: vec![values_plan],
             })
         } else {
-            Err(anyhow::Error::msg(format!(
-                "not found table {}",
-                table_name
-            )))
+            Err(BindError::InvalidTable(format!("not found table {}", table_name)))
         }
     }
 

@@ -8,12 +8,11 @@
 pub mod binder;
 pub mod catalog;
 pub mod db;
-pub mod execution;
 pub mod expression;
 pub mod parser;
 pub mod planner;
 pub mod storage;
 pub mod types;
 pub mod util;
-mod execution_v1;
+mod execution;
 mod optimizer;

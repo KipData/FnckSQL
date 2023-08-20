@@ -199,8 +199,8 @@ impl Rule for PushPredicateThroughJoin {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
     use crate::binder::test::select_sql_run;
+    use crate::execution::ExecutorError;
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -209,7 +209,7 @@ mod tests {
     use crate::types::LogicalType;
 
     #[test]
-    fn test_push_predicate_through_join_in_left_join() -> Result<()> {
+    fn test_push_predicate_through_join_in_left_join() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
 
         let best_plan = HepOptimizer::new(plan)
@@ -250,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn test_push_predicate_through_join_in_right_join() -> Result<()> {
+    fn test_push_predicate_through_join_in_right_join() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
 
         let best_plan = HepOptimizer::new(plan)
@@ -291,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn test_push_predicate_through_join_in_inner_join() -> Result<()> {
+    fn test_push_predicate_through_join_in_inner_join() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
 
         let best_plan = HepOptimizer::new(plan)
@@ -302,7 +302,7 @@ mod tests {
             )
             .find_best();
 
-        if let Operator::Join(op) = &best_plan.childrens[0].operator {
+        if let Operator::Join(_) = &best_plan.childrens[0].operator {
 
         } else {
             unreachable!("Should be a filter operator")

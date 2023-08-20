@@ -1,6 +1,5 @@
 use sqlparser::{ast::Statement, dialect::PostgreSqlDialect, parser::Parser};
-
-use anyhow::Result;
+use sqlparser::parser::ParserError;
 
 /// Parse a string to a collection of statements.
 ///
@@ -14,7 +13,7 @@ use anyhow::Result;
 /// let ast = parse_sql(sql).unwrap();
 /// println!("{:?}", ast);
 /// ```
-pub fn parse_sql(sql: &str) -> Result<Vec<Statement>> {
+pub fn parse_sql(sql: &str) -> Result<Vec<Statement>, ParserError> {
     let dialect = PostgreSqlDialect {};
-    Ok(Parser::parse_sql(&dialect, sql)?)
+    Parser::parse_sql(&dialect, sql)
 }

@@ -1,4 +1,3 @@
-use anyhow::Result;
 use itertools::Itertools;
 use sqlparser::ast::{Expr, OrderByExpr};
 
@@ -8,6 +7,7 @@ use crate::{
         operator::{aggregate::AggregateOperator, sort::SortField},
     },
 };
+use crate::binder::BindError;
 use crate::planner::LogicalPlan;
 
 use super::Binder;
@@ -25,7 +25,7 @@ impl Binder {
     pub fn extract_select_aggregate(
         &mut self,
         select_items: &mut [ScalarExpression],
-    ) -> Result<()> {
+    ) -> Result<(), BindError> {
         for column in select_items {
             self.visit_column_agg_expr(column);
         }
@@ -36,7 +36,7 @@ impl Binder {
         &mut self,
         select_list: &mut [ScalarExpression],
         groupby: &[Expr],
-    ) -> Result<()> {
+    ) -> Result<(), BindError> {
         self.validate_groupby_illegal_column(select_list, groupby)?;
 
         for gb in groupby {
@@ -50,7 +50,7 @@ impl Binder {
         &mut self,
         having: &Option<Expr>,
         orderbys: &[OrderByExpr],
-    ) -> Result<(Option<ScalarExpression>, Option<Vec<SortField>>)> {
+    ) -> Result<(Option<ScalarExpression>, Option<Vec<SortField>>), BindError> {
         // Extract having expression.
         let return_having = if let Some(having) = having {
             let mut having = self.bind_expr(having)?;
@@ -139,7 +139,7 @@ impl Binder {
         &mut self,
         select_items: &[ScalarExpression],
         groupby: &[Expr],
-    ) -> Result<()> {
+    ) -> Result<(), BindError> {
         let mut group_raw_exprs = vec![];
         for expr in groupby {
             let expr = self.bind_expr(expr)?;
@@ -170,10 +170,12 @@ impl Binder {
             }
 
             if !group_raw_exprs.iter().contains(expr) {
-                return Err(anyhow::Error::msg(format!(
-                    "{} must appear in the GROUP BY clause or be used in an aggregate function",
-                    expr
-                )));
+                return Err(BindError::AggMiss(
+                    format!(
+                        "{} must appear in the GROUP BY clause or be used in an aggregate function",
+                        expr
+                    )
+                ));
             }
         }
         Ok(())
@@ -239,7 +241,7 @@ impl Binder {
     }
 
     /// Validate having or orderby clause is valid, if SQL has group by clause.
-    pub fn validate_having_orderby(&self, expr: &ScalarExpression) -> Result<()> {
+    pub fn validate_having_orderby(&self, expr: &ScalarExpression) -> Result<(), BindError> {
         if self.context.group_by_exprs.is_empty() {
             return Ok(());
         }
@@ -252,20 +254,24 @@ impl Binder {
                     return Ok(());
                 }
 
-                Err(anyhow::Error::msg(format!(
-                            "column {} must appear in the GROUP BY clause or be used in an aggregate function",
-                            expr
-                        )))
+                Err(BindError::AggMiss(
+                    format!(
+                        "column {} must appear in the GROUP BY clause or be used in an aggregate function",
+                        expr
+                    )
+                ))
             }
             ScalarExpression::ColumnRef { .. } | ScalarExpression::Alias { .. } => {
                 if self.context.group_by_exprs.contains(expr) {
                     return Ok(());
                 }
 
-                Err(anyhow::Error::msg(format!(
-                            "column {} must appear in the GROUP BY clause or be used in an aggregate function",
-                            expr
-                        )))
+                Err(BindError::AggMiss(
+                    format!(
+                        "column {} must appear in the GROUP BY clause or be used in an aggregate function",
+                        expr
+                    )
+                ))
             }
 
             ScalarExpression::TypeCast { expr, .. } => self.validate_having_orderby(expr),

@@ -1,5 +1,4 @@
 use crate::binder::BindError;
-use anyhow::Result;
 use itertools::Itertools;
 use sqlparser::ast::{BinaryOperator, Expr, Function, FunctionArg, FunctionArgExpr, Ident};
 use std::slice;
@@ -10,7 +9,7 @@ use crate::expression::ScalarExpression;
 use crate::types::LogicalType;
 
 impl Binder {
-    pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression> {
+    pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
         match expr {
             Expr::Identifier(ident) => {
                 self.bind_column_ref_from_identifiers(slice::from_ref(ident), None)
@@ -34,7 +33,7 @@ impl Binder {
         &mut self,
         idents: &[Ident],
         bind_table_name: Option<&String>,
-    ) -> Result<ScalarExpression> {
+    ) -> Result<ScalarExpression, BindError> {
         let idents = idents
             .iter()
             .map(|ident| Ident::new(ident.value.to_lowercase()))
@@ -93,7 +92,7 @@ impl Binder {
         left: &Expr,
         right: &Expr,
         op: &BinaryOperator,
-    ) -> Result<ScalarExpression> {
+    ) -> Result<ScalarExpression, BindError> {
         let left_expr = Box::new(self.bind_expr(left)?);
         let right_expr = Box::new(self.bind_expr(right)?);
 
@@ -121,7 +120,7 @@ impl Binder {
         })
     }
 
-    fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression> {
+    fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression, BindError> {
         let args: Vec<ScalarExpression> = func.args
             .iter()
             .map(|arg| {
