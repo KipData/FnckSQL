@@ -33,6 +33,12 @@ impl TableCatalog {
         self.columns.get(id)
     }
 
+    pub(crate) fn get_index_by_name(&self, name: &str) -> Option<usize> {
+        self.column_idxs
+            .keys()
+            .position(|key| key == name)
+    }
+
     pub(crate) fn contains_column(&self, name: &str) -> bool {
         self.column_idxs.contains_key(name)
     }

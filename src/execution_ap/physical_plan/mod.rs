@@ -1,12 +1,12 @@
-use crate::execution::physical_plan::physical_create_table::PhysicalCreateTable;
-use crate::execution::physical_plan::physical_filter::PhysicalFilter;
-use crate::execution::physical_plan::physical_hash_join::PhysicalHashJoin;
-use crate::execution::physical_plan::physical_insert::PhysicalInsert;
-use crate::execution::physical_plan::physical_limit::PhysicalLimit;
-use crate::execution::physical_plan::physical_projection::PhysicalProjection;
-use crate::execution::physical_plan::physical_sort::PhysicalSort;
-use crate::execution::physical_plan::physical_table_scan::PhysicalTableScan;
-use crate::execution::physical_plan::physical_values::PhysicalValues;
+use crate::execution_ap::physical_plan::physical_create_table::PhysicalCreateTable;
+use crate::execution_ap::physical_plan::physical_filter::PhysicalFilter;
+use crate::execution_ap::physical_plan::physical_hash_join::PhysicalHashJoin;
+use crate::execution_ap::physical_plan::physical_insert::PhysicalInsert;
+use crate::execution_ap::physical_plan::physical_limit::PhysicalLimit;
+use crate::execution_ap::physical_plan::physical_projection::PhysicalProjection;
+use crate::execution_ap::physical_plan::physical_sort::PhysicalSort;
+use crate::execution_ap::physical_plan::physical_table_scan::PhysicalTableScan;
+use crate::execution_ap::physical_plan::physical_values::PhysicalValues;
 
 pub(crate) mod physical_create_table;
 pub(crate) mod physical_plan_mapping;

@@ -202,7 +202,7 @@ impl HepGraph {
 mod tests {
     use petgraph::stable_graph::{EdgeIndex, NodeIndex};
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::execution_ap::ExecutorError;
     use crate::optimizer::core::opt_expr::OptExprNode;
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;

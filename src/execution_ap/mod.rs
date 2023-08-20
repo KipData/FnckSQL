@@ -7,7 +7,7 @@ use crate::catalog::CatalogError;
 use crate::storage::StorageError;
 use crate::types::errors::TypeError;
 use crate::binder::BindError;
-use crate::execution::physical_plan::MappingError;
+use crate::execution_ap::physical_plan::MappingError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ExecutorError {

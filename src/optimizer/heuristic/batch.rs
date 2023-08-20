@@ -20,8 +20,8 @@ impl HepBatch {
 
 #[derive(Clone)]
 pub struct HepBatchStrategy {
-    /// An execution strategy for rules that indicates the maximum number of executions. If the
-    /// execution reaches fix point (i.e. converge) before maxIterations, it will stop.
+    /// An execution_ap strategy for rules that indicates the maximum number of executions. If the
+    /// execution_ap reaches fix point (i.e. converge) before maxIterations, it will stop.
     ///
     /// Fix Point means that plan tree not changed after applying all rules.
     pub max_iteration: usize,

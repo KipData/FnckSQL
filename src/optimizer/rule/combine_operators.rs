@@ -84,7 +84,7 @@ impl Rule for CombineFilter {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::execution_ap::ExecutorError;
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::expression::ScalarExpression::Constant;
     use crate::optimizer::core::opt_expr::OptExprNode;

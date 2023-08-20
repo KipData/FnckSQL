@@ -2,9 +2,12 @@ use arrow::array::ArrayRef;
 use arrow::compute::cast;
 use arrow::datatypes::{DataType, Field};
 use arrow::record_batch::RecordBatch;
-use crate::execution::ExecutorError;
-use crate::expression::array_compute::binary_op;
+use crate::catalog::TableCatalog;
+use crate::execution_ap::ExecutorError;
+use crate::expression::array_compute::{binary_op, binary_op_tp};
 use crate::expression::ScalarExpression;
+use crate::types::LogicalType;
+use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 
 impl ScalarExpression {
@@ -69,6 +72,38 @@ impl ScalarExpression {
                 Field::new(new_name.as_str(), data_type, true)
             }
             ScalarExpression::Unary { .. } => todo!()
+        }
+    }
+
+    pub fn eval_column_tp(&self, schema: &TableCatalog, tuple: &Tuple) -> Result<DataValue, ExecutorError> {
+        match &self {
+            ScalarExpression::Constant(val) =>
+                Ok(val.clone()),
+            ScalarExpression::ColumnRef(col) => {
+                let index = schema.get_index_by_name(&col.name)
+                    .unwrap();
+
+                Ok(tuple.values[index].clone())
+            },
+            ScalarExpression::InputRef{ index, .. } =>
+                Ok(tuple.values[*index].clone()),
+            ScalarExpression::Alias{ expr, .. } =>
+                expr.eval_column_tp(schema, tuple),
+            ScalarExpression::TypeCast{ expr, ty, .. } => {
+                let value = expr.eval_column_tp(schema, tuple)?;
+
+                Ok(value.cast(ty))
+            }
+            ScalarExpression::Binary{ left_expr, right_expr, op, .. } => {
+                let left = left_expr.eval_column_tp(schema, tuple)?;
+                let right = right_expr.eval_column_tp(schema, tuple)?;
+                Ok(binary_op_tp(&left, &right, op))
+            }
+            ScalarExpression::IsNull{ expr } => {
+                Ok(DataValue::Boolean(Some(expr.nullable())))
+            }
+            ScalarExpression::Unary{ .. } => todo!(),
+            ScalarExpression::AggCall{ .. } => todo!()
         }
     }
 }

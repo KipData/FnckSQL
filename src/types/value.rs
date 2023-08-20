@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::hash::Hash;
 use std::iter::repeat;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use arrow::array::{
@@ -14,6 +15,7 @@ use arrow::array::{
     UInt8Builder,
 };
 use arrow::datatypes::{DataType, IntervalUnit};
+use chrono::DateTime;
 use ordered_float::OrderedFloat;
 
 use super::{LogicalType, TypeError};
@@ -33,13 +35,6 @@ pub enum DataValue {
     UInt32(Option<u32>),
     UInt64(Option<u64>),
     Utf8(Option<String>),
-    /// Date stored as a signed 32bit int days since UNIX epoch 1970-01-01
-    Date32(Option<i32>),
-    /// Number of elapsed whole months
-    IntervalYearMonth(Option<i32>),
-    /// Number of elapsed days and milliseconds (no leap seconds)
-    /// stored as 2 contiguous 32-bit signed integers
-    IntervalDayTime(Option<i64>),
 }
 
 impl PartialEq for DataValue {
@@ -80,12 +75,6 @@ impl PartialEq for DataValue {
             (Utf8(_), _) => false,
             (Null, Null) => true,
             (Null, _) => false,
-            (Date32(v1), Date32(v2)) => v1.eq(v2),
-            (Date32(_), _) => false,
-            (IntervalYearMonth(v1), IntervalYearMonth(v2)) => v1.eq(v2),
-            (IntervalYearMonth(_), _) => false,
-            (IntervalDayTime(v1), IntervalDayTime(v2)) => v1.eq(v2),
-            (IntervalDayTime(_), _) => false,
         }
     }
 }
@@ -128,12 +117,6 @@ impl PartialOrd for DataValue {
             (Utf8(_), _) => None,
             (Null, Null) => Some(Ordering::Equal),
             (Null, _) => None,
-            (Date32(v1), Date32(v2)) => v1.partial_cmp(v2),
-            (Date32(_), _) => None,
-            (IntervalYearMonth(v1), IntervalYearMonth(v2)) => v1.partial_cmp(v2),
-            (IntervalYearMonth(_), _) => None,
-            (IntervalDayTime(v1), IntervalDayTime(v2)) => v1.partial_cmp(v2),
-            (IntervalDayTime(_), _) => None,
         }
     }
 }
@@ -163,9 +146,6 @@ impl Hash for DataValue {
             UInt64(v) => v.hash(state),
             Utf8(v) => v.hash(state),
             Null => 1.hash(state),
-            Date32(v) => v.hash(state),
-            IntervalYearMonth(v) => v.hash(state),
-            IntervalDayTime(v) => v.hash(state),
         }
     }
 }
@@ -268,9 +248,6 @@ impl DataValue {
             DataValue::UInt32(_) => LogicalType::UInteger,
             DataValue::UInt64(_) => LogicalType::UBigint,
             DataValue::Utf8(_) => LogicalType::Varchar,
-            DataValue::Date32(_) => LogicalType::Date,
-            DataValue::IntervalYearMonth(_) => LogicalType::Interval(IntervalUnit::YearMonth),
-            DataValue::IntervalDayTime(_) => LogicalType::Interval(IntervalUnit::DayTime),
         }
     }
 
@@ -313,23 +290,6 @@ impl DataValue {
                 None => new_null_array(&DataType::Utf8, size),
             },
             DataValue::Null => new_null_array(&DataType::Null, size),
-            DataValue::Date32(e) => {
-                build_array_from_option!(Date32, Date32Array, e, size)
-            }
-            DataValue::IntervalDayTime(e) => build_array_from_option!(
-                Interval,
-                IntervalUnit::DayTime,
-                IntervalDayTimeArray,
-                e,
-                size
-            ),
-            DataValue::IntervalYearMonth(e) => build_array_from_option!(
-                Interval,
-                IntervalUnit::YearMonth,
-                IntervalYearMonthArray,
-                e,
-                size
-            ),
         }
     }
 
@@ -351,16 +311,6 @@ impl DataValue {
             LogicalType::Float => Ok(Box::new(Float32Builder::new())),
             LogicalType::Double => Ok(Box::new(Float64Builder::new())),
             LogicalType::Varchar => Ok(Box::new(StringBuilder::new())),
-            LogicalType::Date => Ok(Box::new(Date32Builder::new())),
-            LogicalType::Interval(IntervalUnit::DayTime) => {
-                Ok(Box::new(IntervalDayTimeBuilder::new()))
-            }
-            LogicalType::Interval(IntervalUnit::YearMonth) => {
-                Ok(Box::new(IntervalYearMonthBuilder::new()))
-            }
-            LogicalType::Interval(IntervalUnit::MonthDayNano) => {
-                Ok(Box::new(IntervalMonthDayNanoBuilder::new()))
-            }
         }
     }
 
@@ -434,21 +384,6 @@ impl DataValue {
                 .downcast_mut::<Float64Builder>()
                 .unwrap()
                 .append_option(*v),
-            DataValue::Date32(v) => builder
-                .as_any_mut()
-                .downcast_mut::<Date32Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::IntervalYearMonth(v) => builder
-                .as_any_mut()
-                .downcast_mut::<IntervalYearMonthBuilder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::IntervalDayTime(v) => builder
-                .as_any_mut()
-                .downcast_mut::<IntervalDayTimeBuilder>()
-                .unwrap()
-                .append_option(*v),
         }
         Ok(())
     }
@@ -468,9 +403,187 @@ impl DataValue {
             DataValue::Float64(_) => DataType::Float64,
             DataValue::Utf8(_) => DataType::Utf8,
             DataValue::Null => DataType::Null,
-            DataValue::Date32(_) => DataType::Date32,
-            DataValue::IntervalYearMonth(_) => DataType::Interval(IntervalUnit::YearMonth),
-            DataValue::IntervalDayTime(_) => DataType::Interval(IntervalUnit::DayTime),
+        }
+    }
+    
+    pub fn cast(self, to: &LogicalType) -> DataValue {
+        match self {
+            DataValue::Null => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Boolean => DataValue::Boolean(None),
+                    LogicalType::Tinyint => DataValue::Int8(None),
+                    LogicalType::UTinyint => DataValue::UInt8(None),
+                    LogicalType::Smallint => DataValue::Int16(None),
+                    LogicalType::USmallint => DataValue::UInt16(None),
+                    LogicalType::Integer => DataValue::Int32(None),
+                    LogicalType::UInteger => DataValue::UInt32(None),
+                    LogicalType::Bigint => DataValue::Int64(None),
+                    LogicalType::UBigint => DataValue::UInt64(None),
+                    LogicalType::Float => DataValue::Float32(None),
+                    LogicalType::Double => DataValue::Float64(None),
+                    LogicalType::Varchar => DataValue::Utf8(None),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::Boolean(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Boolean => DataValue::Boolean(value),
+                    LogicalType::Tinyint => DataValue::Int8(value.map(|v| v.into())),
+                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| v.into())),
+                    LogicalType::Smallint => DataValue::Int16(value.map(|v| v.into())),
+                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| v.into())),
+                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
+                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| v.into())),
+                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
+                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| v.into())),
+                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
+                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::Float32(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Float => DataValue::Float32(value),
+                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::Float64(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Double => DataValue::Float64(value),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::Int8(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Tinyint => DataValue::Int8(value),
+                    LogicalType::Smallint => DataValue::Int16(value.map(|v| v.into())),
+                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
+                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
+                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
+                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::Int16(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Smallint => DataValue::Int16(value),
+                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
+                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
+                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
+                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::Int32(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Integer => DataValue::Int32(value),
+                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
+                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::Int64(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Bigint => DataValue::Int64(value),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::UInt8(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::UTinyint => DataValue::UInt8(value),
+                    LogicalType::Smallint => DataValue::Int16(value.map(|v| v.into())),
+                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| v.into())),
+                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
+                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| v.into())),
+                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
+                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| v.into())),
+                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
+                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::UInt16(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::USmallint => DataValue::UInt16(value),
+                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
+                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| v.into())),
+                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
+                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| v.into())),
+                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
+                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                   _ => panic!("not support"),
+                }
+            }
+            DataValue::UInt32(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::UInteger => DataValue::UInt32(value),
+                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
+                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| v.into())),
+                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::UInt64(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::UBigint => DataValue::UInt64(value),
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    _ => panic!("not support"),
+                }
+            }
+            DataValue::Utf8(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Boolean => DataValue::Boolean(value.map(|v| bool::from_str(&v).unwrap())),
+                    LogicalType::Tinyint => DataValue::Int8(value.map(|v| i8::from_str(&v).unwrap())),
+                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::from_str(&v).unwrap())),
+                    LogicalType::Smallint => DataValue::Int16(value.map(|v| i16::from_str(&v).unwrap())),
+                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::from_str(&v).unwrap())),
+                    LogicalType::Integer => DataValue::Int32(value.map(|v| i32::from_str(&v).unwrap())),
+                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::from_str(&v).unwrap())),
+                    LogicalType::Bigint => DataValue::Int64(value.map(|v| i64::from_str(&v).unwrap())),
+                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::from_str(&v).unwrap())),
+                    LogicalType::Float => DataValue::Float32(value.map(|v| f32::from_str(&v).unwrap())),
+                    LogicalType::Double => DataValue::Float64(value.map(|v| f64::from_str(&v).unwrap())),
+                    LogicalType::Varchar => DataValue::Utf8(value),
+                    _ => panic!("not support"),
+                }
+            }
         }
     }
 }
@@ -555,9 +668,6 @@ impl fmt::Display for DataValue {
             DataValue::UInt64(e) => format_option!(f, e)?,
             DataValue::Utf8(e) => format_option!(f, e)?,
             DataValue::Null => write!(f, "NULL")?,
-            DataValue::Date32(e) => format_option!(f, e)?,
-            DataValue::IntervalDayTime(e) => format_option!(f, e)?,
-            DataValue::IntervalYearMonth(e) => format_option!(f, e)?,
         };
         Ok(())
     }
@@ -580,9 +690,6 @@ impl fmt::Debug for DataValue {
             DataValue::Utf8(None) => write!(f, "Utf8({})", self),
             DataValue::Utf8(Some(_)) => write!(f, "Utf8(\"{}\")", self),
             DataValue::Null => write!(f, "NULL"),
-            DataValue::Date32(_) => write!(f, "Date32({})", self),
-            DataValue::IntervalYearMonth(_) => write!(f, "IntervalYearMonth({})", self),
-            DataValue::IntervalDayTime(_) => write!(f, "IntervalDayTime({})", self),
         }
     }
 }

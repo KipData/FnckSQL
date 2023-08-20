@@ -126,7 +126,7 @@ pub mod test {
     use crate::planner::LogicalPlan;
     use crate::types::LogicalType::Integer;
     use crate::binder::{Binder, BinderContext};
-    use crate::execution::ExecutorError;
+    use crate::execution_ap::ExecutorError;
 
     fn test_root_catalog() -> Result<RootCatalog, CatalogError> {
         let mut root = RootCatalog::new();

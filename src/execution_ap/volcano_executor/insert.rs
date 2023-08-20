@@ -5,8 +5,8 @@ use arrow::record_batch::RecordBatch;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use crate::catalog::CatalogError;
-use crate::execution::ExecutorError;
-use crate::execution::volcano_executor::BoxedExecutor;
+use crate::execution_ap::ExecutorError;
+use crate::execution_ap::volcano_executor::BoxedExecutor;
 use crate::storage::{Storage, Table};
 
 pub struct Insert { }

@@ -3,9 +3,9 @@ use arrow::record_batch::RecordBatch;
 use sqlparser::parser::ParserError;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution::ExecutorError;
-use crate::execution::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
-use crate::execution::volcano_executor::VolcanoExecutor;
+use crate::execution_ap::ExecutorError;
+use crate::execution_ap::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
+use crate::execution_ap::volcano_executor::VolcanoExecutor;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::RuleImpl;
@@ -145,7 +145,7 @@ mod test {
     use arrow::util::pretty::print_batches;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::Database;
-    use crate::execution::ExecutorError;
+    use crate::execution_ap::ExecutorError;
     use crate::storage::{Storage, StorageError};
     use crate::types::{LogicalType, TableId};
 

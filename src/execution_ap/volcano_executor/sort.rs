@@ -1,8 +1,8 @@
 use arrow::compute::{concat_batches, lexsort_to_indices, SortColumn, SortOptions, take, TakeOptions};
 use arrow::record_batch::RecordBatch;
 use futures_async_stream::try_stream;
-use crate::execution::ExecutorError;
-use crate::execution::volcano_executor::BoxedExecutor;
+use crate::execution_ap::ExecutorError;
+use crate::execution_ap::volcano_executor::BoxedExecutor;
 use crate::planner::operator::sort::SortField;
 
 pub struct Sort { }
