@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 
 use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
 use crate::expression::ScalarExpression;
-use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
+use crate::storage_ap::{Bounds, Projections, Storage, StorageError, Table, Transaction};
 use crate::types::{LogicalType, TableId};
 
 #[derive(Debug)]

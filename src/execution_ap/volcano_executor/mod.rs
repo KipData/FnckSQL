@@ -14,7 +14,7 @@ use crate::execution_ap::volcano_executor::create_table::CreateTable;
 use crate::execution_ap::volcano_executor::projection::Projection;
 use crate::execution_ap::volcano_executor::table_scan::TableScan;
 use crate::execution_ap::ExecutorError;
-use crate::storage::StorageImpl;
+use crate::storage_ap::StorageImpl;
 use arrow::record_batch::RecordBatch;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;

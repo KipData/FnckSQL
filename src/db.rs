@@ -11,8 +11,8 @@ use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
-use crate::storage::memory::InMemoryStorage;
-use crate::storage::{Storage, StorageError, StorageImpl};
+use crate::storage_ap::memory::InMemoryStorage;
+use crate::storage_ap::{Storage, StorageError, StorageImpl};
 
 #[derive(Debug)]
 pub struct Database {
@@ -146,7 +146,7 @@ mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::Database;
     use crate::execution_ap::ExecutorError;
-    use crate::storage::{Storage, StorageError};
+    use crate::storage_ap::{Storage, StorageError};
     use crate::types::{LogicalType, TableId};
 
     fn build_table(storage: &impl Storage) -> Result<TableId, StorageError> {

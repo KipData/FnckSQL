@@ -5,7 +5,6 @@ pub mod tuple;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering::{Acquire, Release};
 
-use arrow::datatypes::IntervalUnit;
 use integer_encoding::FixedInt;
 use strum_macros::AsRefStr;
 

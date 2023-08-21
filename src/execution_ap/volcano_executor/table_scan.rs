@@ -4,7 +4,7 @@ use futures_async_stream::try_stream;
 use crate::execution_ap::ExecutorError;
 use crate::execution_ap::physical_plan::physical_table_scan::PhysicalTableScan;
 use crate::planner::operator::scan::ScanOperator;
-use crate::storage::{Storage, Table, Transaction};
+use crate::storage_ap::{Storage, Table, Transaction};
 
 pub struct TableScan { }
 

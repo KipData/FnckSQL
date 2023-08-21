@@ -7,7 +7,7 @@ use itertools::Itertools;
 use crate::catalog::CatalogError;
 use crate::execution_ap::ExecutorError;
 use crate::execution_ap::volcano_executor::BoxedExecutor;
-use crate::storage::{Storage, Table};
+use crate::storage_ap::{Storage, Table};
 
 pub struct Insert { }
 

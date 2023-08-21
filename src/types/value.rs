@@ -6,16 +6,14 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use arrow::array::{
-    new_null_array, ArrayBuilder, ArrayRef, BooleanArray, BooleanBuilder, Date32Array,
-    Date32Builder, Float32Array, Float32Builder, Float64Array, Float64Builder, Int16Array,
+    new_null_array, ArrayBuilder, ArrayRef, BooleanArray, BooleanBuilder,
+    Float32Array, Float32Builder, Float64Array, Float64Builder, Int16Array,
     Int16Builder, Int32Array, Int32Builder, Int64Array, Int64Builder, Int8Array, Int8Builder,
-    IntervalDayTimeArray, IntervalDayTimeBuilder, IntervalMonthDayNanoBuilder,
-    IntervalYearMonthArray, IntervalYearMonthBuilder, StringArray, StringBuilder, UInt16Array,
+    StringArray, StringBuilder, UInt16Array,
     UInt16Builder, UInt32Array, UInt32Builder, UInt64Array, UInt64Builder, UInt8Array,
     UInt8Builder,
 };
-use arrow::datatypes::{DataType, IntervalUnit};
-use chrono::DateTime;
+use arrow::datatypes::DataType;
 use ordered_float::OrderedFloat;
 
 use super::{LogicalType, TypeError};
