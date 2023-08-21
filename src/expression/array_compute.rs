@@ -466,6 +466,9 @@ pub fn binary_op_tp(
                 _ => todo!("unsupported operator")
             }
         },
+        LogicalType::SqlNull => {
+            DataValue::Boolean(None)
+        }
         _ => todo!("unsupported data type"),
     }
 }

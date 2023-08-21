@@ -3,7 +3,6 @@ use arrow::compute::cast;
 use arrow::datatypes::{DataType, Field};
 use arrow::record_batch::RecordBatch;
 use crate::execution_ap::ExecutorError;
-use crate::execution_tp;
 use crate::expression::array_compute::{binary_op, binary_op_tp};
 use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
@@ -74,34 +73,34 @@ impl ScalarExpression {
         }
     }
 
-    pub fn eval_column_tp(&self, tuple: &Tuple) -> Result<DataValue, execution_tp::ExecutorError> {
+    pub fn eval_column_tp(&self, tuple: &Tuple) -> DataValue {
         match &self {
             ScalarExpression::Constant(val) =>
-                Ok(val.clone()),
+                val.clone(),
             ScalarExpression::ColumnRef(col) => {
                 let index = tuple
                     .columns
                     .binary_search_by(|tul_col| tul_col.name.cmp(&col.name))
                     .unwrap();
 
-                Ok(tuple.values[index].clone())
+                tuple.values[index].clone()
             },
             ScalarExpression::InputRef{ index, .. } =>
-                Ok(tuple.values[*index].clone()),
+                tuple.values[*index].clone(),
             ScalarExpression::Alias{ expr, .. } =>
                 expr.eval_column_tp(tuple),
             ScalarExpression::TypeCast{ expr, ty, .. } => {
-                let value = expr.eval_column_tp(tuple)?;
+                let value = expr.eval_column_tp(tuple);
 
-                Ok(value.cast(ty))
+                value.cast(ty)
             }
             ScalarExpression::Binary{ left_expr, right_expr, op, .. } => {
-                let left = left_expr.eval_column_tp(tuple)?;
-                let right = right_expr.eval_column_tp(tuple)?;
-                Ok(binary_op_tp(&left, &right, op))
+                let left = left_expr.eval_column_tp(tuple);
+                let right = right_expr.eval_column_tp(tuple);
+                binary_op_tp(&left, &right, op)
             }
             ScalarExpression::IsNull{ expr } => {
-                Ok(DataValue::Boolean(Some(expr.nullable())))
+                DataValue::Boolean(Some(expr.nullable()))
             }
             ScalarExpression::Unary{ .. } => todo!(),
             ScalarExpression::AggCall{ .. } => todo!()

@@ -182,7 +182,7 @@ mod test {
         tokio_test::block_on(async move {
             let _ = kipsql.run("create table t1 (a int, b int)").await?;
             let _ = kipsql.run("create table t2 (c int, d int null)").await?;
-            let _ = kipsql.run("insert into t1 (a, b) values (1, 1), (3, 3), (5, 4)").await?;
+            let _ = kipsql.run("insert into t1 (a, b) values (1, 1), (5, 3), (5, 2)").await?;
             let _ = kipsql.run("insert into t2 (d, c) values (1, 2), (2, 3), (null, 6)").await?;
 
             println!("full t1:");
@@ -196,13 +196,13 @@ mod test {
             println!("projection_and_filter:");
             let tuples_projection_and_filter = kipsql.run("select a from t1 where a <= 1").await?;
             println!("{}", create_table(&tuples_projection_and_filter));
-            //
-            // println!("projection_and_sort:");
-            // let tuples_projection_and_sort = kipsql.run("select a from t1 order by a").await?;
-            // println!("{:#?}", tuples_projection_and_sort);
-            //
+
+            println!("projection_and_sort:");
+            let tuples_projection_and_sort = kipsql.run("select * from t1 order by a, b").await?;
+            println!("{}", create_table(&tuples_projection_and_sort));
+
             // println!("limit:");
-            // let tuples_limit=kipsql.run("select * from t1 limit 1 offset 1").await?;
+            // let tuples_limit = kipsql.run("select * from t1 limit 1 offset 1").await?;
             // println!("{:#?}", tuples_limit);
             //
             // println!("inner join:");

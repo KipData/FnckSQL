@@ -13,8 +13,8 @@ impl Filter {
         #[for_await]
         for tuple in input {
             let tuple = tuple?;
-            if let DataValue::Boolean(Some(is_save)) = predicate.eval_column_tp(&tuple)? {
-                if is_save {
+            if let DataValue::Boolean(option) = predicate.eval_column_tp(&tuple) {
+                if let Some(true) = option{
                     yield tuple;
                 } else {
                     continue

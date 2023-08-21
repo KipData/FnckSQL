@@ -185,6 +185,24 @@ macro_rules! build_array_from_option {
 }
 
 impl DataValue {
+    pub fn is_null(&self) -> bool {
+        match self {
+            DataValue::Null => true,
+            DataValue::Boolean(value) => value.is_none(),
+            DataValue::Float32(value) => value.is_none(),
+            DataValue::Float64(value) => value.is_none(),
+            DataValue::Int8(value) => value.is_none(),
+            DataValue::Int16(value) => value.is_none(),
+            DataValue::Int32(value) => value.is_none(),
+            DataValue::Int64(value) => value.is_none(),
+            DataValue::UInt8(value) => value.is_none(),
+            DataValue::UInt16(value) => value.is_none(),
+            DataValue::UInt32(value) => value.is_none(),
+            DataValue::UInt64(value) => value.is_none(),
+            DataValue::Utf8(value) => value.is_none(),
+        }
+    }
+
     pub fn new_none_value(data_type: &DataType) -> Result<Self, TypeError> {
         match data_type {
             DataType::Null => Ok(DataValue::Null),
