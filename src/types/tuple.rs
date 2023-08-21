@@ -1,4 +1,3 @@
-use arrow::util::pretty::print_batches;
 use comfy_table::{Cell, Table};
 use itertools::Itertools;
 use crate::catalog::ColumnCatalog;

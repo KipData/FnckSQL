@@ -182,7 +182,7 @@ mod test {
         tokio_test::block_on(async move {
             let _ = kipsql.run("create table t1 (a int, b int)").await?;
             let _ = kipsql.run("create table t2 (c int, d int null)").await?;
-            let _ = kipsql.run("insert into t1 (b, a) values (1, 1), (3, 3), (5, 4)").await?;
+            let _ = kipsql.run("insert into t1 (a, b) values (1, 1), (3, 3), (5, 4)").await?;
             let _ = kipsql.run("insert into t2 (d, c) values (1, 2), (2, 3), (null, 6)").await?;
 
             println!("full t1:");
@@ -193,9 +193,9 @@ mod test {
             let tuples_full_fields_t2 = kipsql.run("select * from t2").await?;
             println!("{}", create_table(&tuples_full_fields_t2));
 
-            // println!("projection_and_filter:");
-            // let tuples_projection_and_filter = kipsql.run("select a from t1 where a <= b").await?;
-            // println!("{:#?}", tuples_projection_and_filter);
+            println!("projection_and_filter:");
+            let tuples_projection_and_filter = kipsql.run("select a from t1 where a <= 1").await?;
+            println!("{}", create_table(&tuples_projection_and_filter));
             //
             // println!("projection_and_sort:");
             // let tuples_projection_and_sort = kipsql.run("select a from t1 order by a").await?;

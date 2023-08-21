@@ -3,10 +3,12 @@ mod ddl;
 
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
+use crate::execution_ap::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_ap::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_ap::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_ap::physical_plan::PhysicalPlan;
 use crate::execution_tp::executor::ddl::create::CreateTable;
+use crate::execution_tp::executor::dml::filter::Filter;
 use crate::execution_tp::executor::dml::insert::Insert;
 use crate::execution_tp::executor::dml::projection::Projection;
 use crate::execution_tp::executor::dml::seq_scan::SeqScan;
@@ -48,6 +50,11 @@ impl Executor {
             }
             PhysicalPlan::CreateTable(op) => {
                 CreateTable::execute(op, self.storage.clone())
+            }
+            PhysicalPlan::Filter(PhysicalFilter { predicate, input, .. }) => {
+                let input = self.build(*input);
+
+                Filter::execute(predicate, input)
             }
             _ => todo!()
         }
