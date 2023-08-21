@@ -22,6 +22,6 @@ impl CreateTable {
         let _ = storage.create_table(
             plan.op.table_name.as_str(),
             vec![RecordBatch::new_empty(schema)]
-        );
+        )?;
     }
 }

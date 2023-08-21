@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt;
+use std::fmt::Formatter;
 use std::hash::Hash;
 use std::iter::repeat;
 use std::str::FromStr;
@@ -200,6 +201,25 @@ impl DataValue {
             DataType::UInt64 => Ok(DataValue::UInt64(None)),
             DataType::Utf8 => Ok(DataValue::Utf8(None)),
             other => Err(TypeError::NotImplementedArrowDataType(other.to_string())),
+        }
+    }
+
+    pub fn none(logic_type: &LogicalType) -> DataValue {
+        match logic_type {
+            LogicalType::Invalid => panic!("invalid logical type"),
+            LogicalType::SqlNull => DataValue::Null,
+            LogicalType::Boolean => DataValue::Boolean(None),
+            LogicalType::Tinyint => DataValue::Int8(None),
+            LogicalType::UTinyint => DataValue::UInt8(None),
+            LogicalType::Smallint => DataValue::Int16(None),
+            LogicalType::USmallint => DataValue::UInt16(None),
+            LogicalType::Integer => DataValue::Int32(None),
+            LogicalType::UInteger => DataValue::UInt32(None),
+            LogicalType::Bigint => DataValue::Int64(None),
+            LogicalType::UBigint => DataValue::UInt64(None),
+            LogicalType::Float => DataValue::Float32(None),
+            LogicalType::Double => DataValue::Float64(None),
+            LogicalType::Varchar => DataValue::Utf8(None)
         }
     }
 
@@ -645,13 +665,13 @@ macro_rules! format_option {
     ($F:expr, $EXPR:expr) => {{
         match $EXPR {
             Some(e) => write!($F, "{}", e),
-            None => write!($F, "NULL"),
+            None => write!($F, "null"),
         }
     }};
 }
 
 impl fmt::Display for DataValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             DataValue::Boolean(e) => format_option!(f, e)?,
             DataValue::Float32(e) => format_option!(f, e)?,
@@ -665,7 +685,7 @@ impl fmt::Display for DataValue {
             DataValue::UInt32(e) => format_option!(f, e)?,
             DataValue::UInt64(e) => format_option!(f, e)?,
             DataValue::Utf8(e) => format_option!(f, e)?,
-            DataValue::Null => write!(f, "NULL")?,
+            DataValue::Null => write!(f, "null")?,
         };
         Ok(())
     }
@@ -687,7 +707,7 @@ impl fmt::Debug for DataValue {
             DataValue::UInt64(_) => write!(f, "UInt64({})", self),
             DataValue::Utf8(None) => write!(f, "Utf8({})", self),
             DataValue::Utf8(Some(_)) => write!(f, "Utf8(\"{}\")", self),
-            DataValue::Null => write!(f, "NULL"),
+            DataValue::Null => write!(f, "null"),
         }
     }
 }

@@ -8,13 +8,14 @@ use crate::catalog::CatalogError;
 use crate::execution_ap::ExecutorError;
 use crate::execution_ap::volcano_executor::BoxedExecutor;
 use crate::storage_ap::{Storage, Table};
+use crate::types::TableId;
 
 pub struct Insert { }
 
 impl Insert {
     #[try_stream(boxed, ok = RecordBatch, error = ExecutorError)]
-    pub async fn execute(table_name: String, input: BoxedExecutor, storage: impl Storage) {
-        if let Some(table) = storage.get_catalog().get_table_by_name(&table_name) {
+    pub async fn execute(table_id: TableId, input: BoxedExecutor, storage: impl Storage) {
+        if let Some(table) = storage.get_catalog().get_table(&table_id) {
             #[for_await]
             for batch in input {
                 let batch: RecordBatch = batch?;
@@ -42,7 +43,7 @@ impl Insert {
                 storage.get_table(&table.id)?.append(new_batch)?;
             }
         } else {
-            Err(CatalogError::NotFound("root", table_name.to_string()))?;
+            Err(CatalogError::NotFound("root", table_id.to_string()))?;
         }
     }
 }

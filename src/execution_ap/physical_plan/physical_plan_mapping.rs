@@ -79,7 +79,7 @@ impl PhysicalPlanMapping {
         let input = Self::build_plan(child)?;
 
         Ok(PhysicalPlan::Insert(PhysicalInsert {
-            table_name: op.table,
+            table_id: op.table_id,
             input: Box::new(input),
         }))
     }

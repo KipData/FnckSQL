@@ -23,6 +23,7 @@ impl Binder {
         let (_, table_name) = split_name(&name)?;
 
         if let Some(table) = self.context.catalog.get_table_by_name(table_name) {
+            let table_id = table.id;
             let mut col_catalogs = Vec::new();
 
             if idents.is_empty() {
@@ -60,7 +61,7 @@ impl Binder {
             Ok(LogicalPlan {
                 operator: Operator::Insert(
                     InsertOperator {
-                        table: table_name.to_string(),
+                        table_id,
                     }
                 ),
                 childrens: vec![values_plan],
@@ -78,7 +79,7 @@ impl Binder {
         LogicalPlan {
             operator: Operator::Values(ValuesOperator {
                 rows,
-                col_catalogs,
+                columns: col_catalogs,
             }),
             childrens: vec![],
         }

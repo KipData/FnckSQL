@@ -57,12 +57,12 @@ impl VolcanoExecutor {
             PhysicalPlan::CreateTable(op) => match &self.storage {
                 StorageImpl::InMemoryStorage(storage) => CreateTable::execute(op, storage.clone()),
             },
-            PhysicalPlan::Insert(PhysicalInsert { table_name, input}) => {
+            PhysicalPlan::Insert(PhysicalInsert { table_id, input}) => {
                 let input = self.build(*input);
 
                 match &self.storage {
                     StorageImpl::InMemoryStorage(storage) =>
-                        Insert::execute(table_name, input, storage.clone()),
+                        Insert::execute(table_id, input, storage.clone()),
                 }
             }
             PhysicalPlan::Values(op) => Values::execute(op),

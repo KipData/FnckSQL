@@ -10,7 +10,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = Database::new_on_mem();
     loop {
         println!("> ");
-        println!("RootCatalog: {:?}", db.storage.get_catalog());
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
         let ret = db.run(&input).await;

@@ -1,4 +1,4 @@
-mod memory;
+pub mod memory;
 
 use crate::catalog::{CatalogError, ColumnCatalog, RootCatalog, TableCatalog};
 use crate::expression::ScalarExpression;
@@ -9,7 +9,7 @@ use crate::types::tuple::Tuple;
 pub enum StorageImpl {
 }
 
-pub trait Storage: Sync + Send + 'static {
+pub trait Storage: Sync + Send + Clone + 'static {
     type TableType: Table;
 
     fn create_table(
@@ -42,7 +42,7 @@ pub trait Table: Sync + Send + Clone + 'static {
 }
 
 pub trait Transaction: Sync + Send {
-    fn next_tuple(&mut self) -> Result<Option<&Tuple>, StorageError>;
+    fn next_tuple(&mut self) -> Result<Option<Tuple>, StorageError>;
 }
 
 #[derive(thiserror::Error, Debug)]

@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
 use std::slice;
 use std::sync::Arc;
 use parking_lot::Mutex;
@@ -8,10 +9,28 @@ use crate::storage_tp::{Bounds, Projections, Storage, StorageError, Table, Trans
 use crate::types::TableId;
 use crate::types::tuple::Tuple;
 
-struct MemStorage {
-    inner: Mutex<StorageInner>
+// WARRING: Only single-threaded and tested using
+#[derive(Clone, Debug)]
+pub struct MemStorage {
+    inner: Arc<Mutex<StorageInner>>
 }
 
+impl MemStorage {
+    pub fn new() -> MemStorage {
+        Self {
+            inner: Arc::new(
+                Mutex::new(
+                    StorageInner {
+                        root: Default::default(),
+                        tables: Default::default(),
+                    }
+                )
+            ),
+        }
+    }
+}
+
+#[derive(Debug)]
 struct StorageInner {
     root: RootCatalog,
     tables: HashMap<TableId, MemTable>
@@ -64,8 +83,18 @@ unsafe impl Sync for MemTable {
 }
 
 #[derive(Clone)]
-struct MemTable {
+pub struct MemTable {
     tuples: Arc<Cell<Vec<Tuple>>>
+}
+
+impl Debug for MemTable {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        unsafe {
+            f.debug_struct("MemTable")
+                .field("{:?}", self.tuples.as_ptr().as_ref().unwrap())
+                .finish()
+        }
+    }
 }
 
 impl Table for MemTable {
@@ -94,12 +123,12 @@ impl Table for MemTable {
     }
 }
 
-struct MemTraction<'a> {
+pub struct MemTraction<'a> {
     iter: slice::Iter<'a, Tuple>
 }
 
 impl Transaction for MemTraction<'_> {
-    fn next_tuple(&mut self) -> Result<Option<&Tuple>, StorageError> {
-        Ok(self.iter.next())
+    fn next_tuple(&mut self) -> Result<Option<Tuple>, StorageError> {
+        Ok(self.iter.next().cloned())
     }
 }

@@ -1,11 +1,11 @@
-mod executor;
+pub mod executor;
 
 use arrow::error::ArrowError;
 use sqlparser::parser::ParserError;
 use crate::binder::BindError;
 use crate::catalog::CatalogError;
 use crate::execution_ap::physical_plan::MappingError;
-use crate::storage_ap::StorageError;
+use crate::storage_tp::StorageError;
 use crate::types::errors::TypeError;
 
 #[derive(thiserror::Error, Debug)]

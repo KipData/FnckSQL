@@ -88,7 +88,7 @@ impl Operator {
                     .collect_vec()
             }
             Operator::Values(op) => {
-                op.col_catalogs.clone()
+                op.columns.clone()
             }
             Operator::CreateTable(op) => {
                 op.columns.clone()
