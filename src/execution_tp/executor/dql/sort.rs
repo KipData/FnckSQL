@@ -1,11 +1,9 @@
 use std::cmp::Ordering;
 use futures_async_stream::try_stream;
-use itertools::Itertools;
 use crate::execution_tp::executor::BoxedExecutor;
 use crate::execution_tp::ExecutorError;
 use crate::planner::operator::sort::SortField;
 use crate::types::tuple::Tuple;
-use crate::types::value::DataValue;
 
 pub struct Sort { }
 

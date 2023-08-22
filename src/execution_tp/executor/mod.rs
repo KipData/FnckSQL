@@ -1,5 +1,6 @@
-mod dml;
+mod dql;
 mod ddl;
+mod dml;
 
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
@@ -10,13 +11,13 @@ use crate::execution_ap::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_ap::physical_plan::physical_sort::PhysicalSort;
 use crate::execution_ap::physical_plan::PhysicalPlan;
 use crate::execution_tp::executor::ddl::create::CreateTable;
-use crate::execution_tp::executor::dml::filter::Filter;
+use crate::execution_tp::executor::dql::filter::Filter;
 use crate::execution_tp::executor::dml::insert::Insert;
-use crate::execution_tp::executor::dml::limit::Limit;
-use crate::execution_tp::executor::dml::projection::Projection;
-use crate::execution_tp::executor::dml::seq_scan::SeqScan;
-use crate::execution_tp::executor::dml::sort::Sort;
-use crate::execution_tp::executor::dml::values::Values;
+use crate::execution_tp::executor::dql::limit::Limit;
+use crate::execution_tp::executor::dql::projection::Projection;
+use crate::execution_tp::executor::dql::seq_scan::SeqScan;
+use crate::execution_tp::executor::dql::sort::Sort;
+use crate::execution_tp::executor::dql::values::Values;
 use crate::execution_tp::ExecutorError;
 use crate::storage_tp::memory::MemStorage;
 use crate::types::tuple::Tuple;
