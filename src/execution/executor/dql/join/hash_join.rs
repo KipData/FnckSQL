@@ -37,7 +37,7 @@ impl HashJoin {
         let mut left_init_flag = false;
         #[for_await]
         for tuple in left_input {
-            let tuple:Tuple = tuple?;
+            let tuple: Tuple = tuple?;
             let hash = Self::hash_row(&on_left_keys, &hash_random_state, &tuple);
 
             if !left_init_flag {
@@ -121,6 +121,8 @@ impl HashJoin {
                                 }
                                 _ => ()
                             }
+                        } else {
+                            filter_tuples.push(tuple)
                         }
                     } else {
                         unreachable!("only bool");
