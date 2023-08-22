@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::{
     expression::ScalarExpression,
@@ -15,15 +16,15 @@ use crate::{
 
 use super::Binder;
 
-use crate::catalog::{DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog};
-use anyhow::Result;
+use crate::catalog::{ColumnCatalog, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog};
 use itertools::Itertools;
 use sqlparser::ast;
 use sqlparser::ast::{
     Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
-use crate::execution_v1::volcano_executor::join::joins_nullable;
+use crate::binder::BindError;
+use crate::execution::executor::dql::join::joins_nullable;
 use crate::expression::BinaryOperator;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinCondition;
@@ -31,7 +32,7 @@ use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::types::{LogicalType, TableId};
 
 impl Binder {
-    pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan> {
+    pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, BindError> {
         if let Some(_with) = &query.with {
             // TODO support with clause.
         }
@@ -56,7 +57,7 @@ impl Binder {
         &mut self,
         select: &Select,
         orderby: &[OrderByExpr],
-    ) -> Result<LogicalPlan> {
+    ) -> Result<LogicalPlan, BindError> {
         let mut plan = self.bind_table_ref(&select.from)?;
 
         // Resolve scalar function call.
@@ -107,7 +108,7 @@ impl Binder {
         Ok(plan)
     }
 
-    fn bind_table_ref(&mut self, from: &[TableWithJoins]) -> Result<LogicalPlan> {
+    fn bind_table_ref(&mut self, from: &[TableWithJoins]) -> Result<LogicalPlan, BindError> {
         assert!(from.len() < 2, "not support yet.");
         if from.is_empty() {
             return Ok(LogicalPlan {
@@ -128,7 +129,7 @@ impl Binder {
         Ok(plan)
     }
 
-    fn bind_single_table_ref(&mut self, table: &TableFactor, joint_type: Option<JoinType>) -> Result<(TableId, LogicalPlan)> {
+    fn bind_single_table_ref(&mut self, table: &TableFactor, joint_type: Option<JoinType>) -> Result<(TableId, LogicalPlan), BindError> {
         let plan_with_id = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
@@ -142,23 +143,20 @@ impl Binder {
                     [table] => (DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, &table.value),
                     [schema, table] => (DEFAULT_DATABASE_NAME, &schema.value, &table.value),
                     [database, schema, table] => (&database.value, &schema.value, &table.value),
-                    _ => return Err(anyhow::Error::msg(format!("table {:?}", obj_name))),
+                    _ => return Err(BindError::InvalidTableName(obj_name)),
                 };
                 if let Some(alias) = alias {
                     table = &alias.name.value;
                 }
 
                 if self.context.bind_table.contains_key(table) {
-                    return Err(anyhow::Error::msg(format!(
-                        "bind duplicated table {}",
-                        table
-                    )));
+                    return Err(BindError::InvalidTable(format!("{} duplicated", table)));
                 }
 
                 let table_catalog = self
                     .context
                     .catalog.get_table_by_name(table)
-                    .ok_or_else(|| anyhow::Error::msg(format!("bind table {}", table)))?;
+                    .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
                 let table_ref_id = table_catalog.id;
 
                 self.context.bind_table.insert(table.into(), (table_ref_id, joint_type));
@@ -177,7 +175,7 @@ impl Binder {
     /// - Qualified name with wildcard, e.g. `SELECT t.* FROM t,t1`
     /// - Scalar expression or aggregate expression, e.g. `SELECT COUNT(*) + 1 AS count FROM t`
     ///  
-    fn normalize_select_item(&mut self, items: &[SelectItem]) -> Result<Vec<ScalarExpression>> {
+    fn normalize_select_item(&mut self, items: &[SelectItem]) -> Result<Vec<ScalarExpression>, BindError> {
         let mut select_items = vec![];
 
         for item in items.iter().enumerate() {
@@ -205,7 +203,7 @@ impl Binder {
         Ok(select_items)
     }
 
-    fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>> {
+    fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>, BindError> {
         let mut exprs = vec![];
         for (table_id, _) in self.context.bind_table.values().cloned() {
             let table = self.context.catalog.get_table(&table_id).unwrap();
@@ -217,7 +215,7 @@ impl Binder {
         Ok(exprs)
     }
 
-    fn bind_join(&mut self, left_id: TableId, left: LogicalPlan, join: &Join) -> Result<LogicalPlan> {
+    fn bind_join(&mut self, left_id: TableId, left: LogicalPlan, join: &Join) -> Result<LogicalPlan, BindError> {
         let Join {
             relation,
             join_operator,
@@ -259,7 +257,7 @@ impl Binder {
         &mut self,
         children: LogicalPlan,
         predicate: &Expr,
-    ) -> Result<LogicalPlan> {
+    ) -> Result<LogicalPlan, BindError> {
         Ok(FilterOperator::new(
             self.bind_expr(predicate)?,
             children,
@@ -271,7 +269,7 @@ impl Binder {
         &mut self,
         children: LogicalPlan,
         having: ScalarExpression,
-    ) -> Result<LogicalPlan> {
+    ) -> Result<LogicalPlan, BindError> {
         self.validate_having_orderby(&having)?;
         Ok(FilterOperator::new(having, children, true))
     }
@@ -308,30 +306,30 @@ impl Binder {
         children: LogicalPlan,
         limit_expr: &Option<Expr>,
         offset_expr: &Option<Offset>,
-    ) -> Result<LogicalPlan> {
+    ) -> Result<LogicalPlan, BindError> {
         let mut limit = 0;
         let mut offset = 0;
         if let Some(expr) = limit_expr {
             let expr = self.bind_expr(expr)?;
             match expr {
-                ScalarExpression::Constant(dv) => match dv {
-                    DataValue::Int32(Some(v)) if v > 0 => limit = v as usize,
-                    DataValue::Int64(Some(v)) if v > 0 => limit = v as usize,
-                    _ => return Err(anyhow::Error::msg("invalid limit expression.".to_owned())),
+                ScalarExpression::Constant(dv) => match dv.as_ref() {
+                    DataValue::Int32(Some(v)) if *v > 0 => limit = *v as usize,
+                    DataValue::Int64(Some(v)) if *v > 0 => limit = *v as usize,
+                    _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
                 },
-                _ => return Err(anyhow::Error::msg("invalid limit expression.".to_owned())),
+                _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
             }
         }
 
         if let Some(expr) = offset_expr {
             let expr = self.bind_expr(&expr.value)?;
             match expr {
-                ScalarExpression::Constant(dv) => match dv {
-                    DataValue::Int32(Some(v)) if v > 0 => offset = v as usize,
-                    DataValue::Int64(Some(v)) if v > 0 => offset = v as usize,
-                    _ => return Err(anyhow::Error::msg("invalid limit expression.".to_owned())),
+                ScalarExpression::Constant(dv) => match dv.as_ref() {
+                    DataValue::Int32(Some(v)) if *v > 0 => offset = *v as usize,
+                    DataValue::Int64(Some(v)) if *v > 0 => offset = *v as usize,
+                    _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
                 },
-                _ => return Err(anyhow::Error::msg("invalid offset expression.".to_owned())),
+                _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
             }
         }
 
@@ -370,7 +368,10 @@ impl Binder {
         for column in select_items {
             if let ScalarExpression::ColumnRef(col) = column {
                 if let Some(nullable) = table_force_nullable.get(&col.table_id.unwrap()) {
-                    col.nullable = *nullable;
+                    let mut new_col = ColumnCatalog::clone(col);
+                    new_col.nullable = *nullable;
+
+                    *col = Arc::new(new_col)
                 }
             }
         }
@@ -381,7 +382,7 @@ impl Binder {
         left_table: &TableCatalog,
         right_table: &TableCatalog,
         constraint: &JoinConstraint,
-    ) -> Result<JoinCondition> {
+    ) -> Result<JoinCondition, BindError> {
         match constraint {
             JoinConstraint::On(expr) => {
                 // left and right columns that match equi-join pattern
@@ -428,7 +429,7 @@ impl Binder {
         accum_filter: &mut Vec<ScalarExpression>,
         left_schema: &TableCatalog,
         right_schema: &TableCatalog,
-    ) -> Result<()> {
+    ) -> Result<(), BindError> {
         match expr {
             Expr::BinaryOp { left, op, right } => match op {
                 ast::BinaryOperator::Eq => {
@@ -492,11 +493,11 @@ impl Binder {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::binder::test::select_sql_run;
+    use crate::execution::ExecutorError;
 
     #[test]
-    fn test_select_bind() -> Result<()> {
+    fn test_select_bind() -> Result<(), ExecutorError> {
         let plan_1 = select_sql_run("select * from t1")?;
         println!(
             "just_col:\n {:#?}",

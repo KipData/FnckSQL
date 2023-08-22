@@ -1,31 +1,25 @@
-pub(crate) mod memory;
+pub mod memory;
 
-use std::io;
-
-use arrow::error::ArrowError;
-use arrow::record_batch::RecordBatch;
-
-use crate::catalog::{CatalogError, RootCatalog};
+use crate::catalog::{CatalogError, ColumnRef, RootCatalog, TableCatalog};
 use crate::expression::ScalarExpression;
-use crate::storage::memory::InMemoryStorage;
 use crate::types::TableId;
+use crate::types::tuple::Tuple;
 
 #[derive(Debug)]
 pub enum StorageImpl {
-    InMemoryStorage(InMemoryStorage),
 }
 
-pub trait Storage: Sync + Send + 'static {
+pub trait Storage: Sync + Send + Clone + 'static {
     type TableType: Table;
 
     fn create_table(
         &self,
-        table_name: &str,
-        columns: Vec<RecordBatch>,
+        table_name: String,
+        columns: Vec<ColumnRef>
     ) -> Result<TableId, StorageError>;
     fn get_table(&self, id: &TableId) -> Result<Self::TableType, StorageError>;
     fn get_catalog(&self) -> RootCatalog;
-    fn show_tables(&self) -> Result<RecordBatch, StorageError>;
+    fn show_tables(&self) -> Result<Vec<TableCatalog>, StorageError>;
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).
@@ -33,7 +27,7 @@ pub(crate) type Bounds = (Option<usize>, Option<usize>);
 type Projections = Vec<ScalarExpression>;
 
 pub trait Table: Sync + Send + Clone + 'static {
-    type TransactionType: Transaction;
+    type TransactionType<'a>: Transaction;
 
     /// The bounds is applied to the whole data batches, not per batch.
     ///
@@ -42,24 +36,17 @@ pub trait Table: Sync + Send + Clone + 'static {
         &self,
         bounds: Bounds,
         projection: Projections,
-    ) -> Result<Self::TransactionType, StorageError>;
+    ) -> Result<Self::TransactionType<'_>, StorageError>;
 
-    fn append(&self, record_batch: RecordBatch) -> Result<(), StorageError>;
+    fn append(&self, tuple: Tuple) -> Result<(), StorageError>;
 }
 
-// currently we use a transaction to hold csv reader
-pub trait Transaction: Sync + Send + 'static {
-    fn next_batch(&mut self) -> Result<Option<RecordBatch>, StorageError>;
+pub trait Transaction: Sync + Send {
+    fn next_tuple(&mut self) -> Result<Option<Tuple>, StorageError>;
 }
 
 #[derive(thiserror::Error, Debug)]
 pub enum StorageError {
-    #[error("arrow error")]
-    ArrowError(#[from] ArrowError),
-
-    #[error("io error")]
-    IoError(#[from] io::Error),
-
     #[error("table not found: {0}")]
     TableNotFound(TableId),
 

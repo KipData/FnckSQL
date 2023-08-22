@@ -1,8 +1,8 @@
 use crate::binder::BindError;
-use anyhow::Result;
 use itertools::Itertools;
 use sqlparser::ast::{BinaryOperator, Expr, Function, FunctionArg, FunctionArgExpr, Ident};
 use std::slice;
+use std::sync::Arc;
 use crate::expression::agg::AggKind;
 
 use super::Binder;
@@ -10,7 +10,7 @@ use crate::expression::ScalarExpression;
 use crate::types::LogicalType;
 
 impl Binder {
-    pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression> {
+    pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
         match expr {
             Expr::Identifier(ident) => {
                 self.bind_column_ref_from_identifiers(slice::from_ref(ident), None)
@@ -21,7 +21,7 @@ impl Binder {
             Expr::BinaryOp { left, right, op} => {
                 self.bind_binary_op_internal(left, right, op)
             }
-            Expr::Value(v) => Ok(ScalarExpression::Constant(v.into())),
+            Expr::Value(v) => Ok(ScalarExpression::Constant(Arc::new(v.into()))),
             Expr::Function(func) => self.bind_agg_call(func),
             Expr::Nested(expr) => self.bind_expr(expr),
             _ => {
@@ -34,7 +34,7 @@ impl Binder {
         &mut self,
         idents: &[Ident],
         bind_table_name: Option<&String>,
-    ) -> Result<ScalarExpression> {
+    ) -> Result<ScalarExpression, BindError> {
         let idents = idents
             .iter()
             .map(|ident| Ident::new(ident.value.to_lowercase()))
@@ -93,7 +93,7 @@ impl Binder {
         left: &Expr,
         right: &Expr,
         op: &BinaryOperator,
-    ) -> Result<ScalarExpression> {
+    ) -> Result<ScalarExpression, BindError> {
         let left_expr = Box::new(self.bind_expr(left)?);
         let right_expr = Box::new(self.bind_expr(right)?);
 
@@ -121,7 +121,7 @@ impl Binder {
         })
     }
 
-    fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression> {
+    fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression, BindError> {
         let args: Vec<ScalarExpression> = func.args
             .iter()
             .map(|arg| {

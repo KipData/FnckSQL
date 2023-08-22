@@ -1,77 +1,64 @@
-use std::collections::BTreeMap;
+use std::cell::Cell;
+use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
+use std::slice;
 use std::sync::Arc;
-use arrow::datatypes::{Schema, SchemaRef};
-
-use arrow::record_batch::RecordBatch;
+use itertools::Itertools;
 use parking_lot::Mutex;
-
-use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
-use crate::expression::ScalarExpression;
+use crate::catalog::{ColumnCatalog, ColumnRef, RootCatalog, TableCatalog};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
-use crate::types::{LogicalType, TableId};
+use crate::types::TableId;
+use crate::types::tuple::Tuple;
 
-#[derive(Debug)]
-pub struct InMemoryStorage {
-    inner: Arc<Mutex<StorageInner>>,
+// WARRING: Only single-threaded and tested using
+#[derive(Clone, Debug)]
+pub struct MemStorage {
+    inner: Arc<Mutex<StorageInner>>
+}
+
+impl MemStorage {
+    pub fn new() -> MemStorage {
+        Self {
+            inner: Arc::new(
+                Mutex::new(
+                    StorageInner {
+                        root: Default::default(),
+                        tables: Default::default(),
+                    }
+                )
+            ),
+        }
+    }
 }
 
 #[derive(Debug)]
 struct StorageInner {
-    catalog: RootCatalog,
-    tables: BTreeMap<TableId, InMemoryTable>,
+    root: RootCatalog,
+    tables: HashMap<TableId, MemTable>
 }
 
-impl Default for InMemoryStorage {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+impl Storage for MemStorage {
+    type TableType = MemTable;
 
-impl InMemoryStorage {
-    pub fn new() -> Self {
-        InMemoryStorage {
-            inner: Arc::new(Mutex::new(
-                StorageInner {
-                    catalog: RootCatalog::default(),
-                    tables: BTreeMap::new(),
-                })
-            )
-        }
-    }
-}
+    fn create_table(&self, table_name: String, columns: Vec<ColumnRef>) -> Result<TableId, StorageError> {
+        let new_table = MemTable {
+            tuples: Arc::new(Cell::new(vec![])),
+        };
+        let de_columns = columns.iter()
+            .map(|col| ColumnCatalog::clone(col))
+            .collect_vec();
 
-impl Clone for InMemoryStorage {
-    fn clone(&self) -> Self {
-        InMemoryStorage {
-            inner: Arc::clone(&self.inner),
-        }
-    }
-}
-
-impl Storage for InMemoryStorage {
-    type TableType = InMemoryTable;
-
-    fn create_table(
-        &self,
-        table_name: &str,
-        data: Vec<RecordBatch>,
-    ) -> Result<TableId, StorageError> {
-        let mut table = InMemoryTable::new(table_name, data)?;
         let mut inner = self.inner.lock();
 
-        let table_id = inner.catalog.add_table(
-            table_name.to_string(),
-            table.inner.lock().columns.clone()
-        )?;
-
-        table.table_id = table_id;
-        inner.tables.insert(table_id, table);
+        let table_id = inner.root.add_table(table_name, de_columns)?;
+        inner.tables.insert(table_id, new_table);
 
         Ok(table_id)
     }
 
     fn get_table(&self, id: &TableId) -> Result<Self::TableType, StorageError> {
-        self.inner.lock()
+        self.inner
+            .lock()
             .tables
             .get(id)
             .cloned()
@@ -79,229 +66,182 @@ impl Storage for InMemoryStorage {
     }
 
     fn get_catalog(&self) -> RootCatalog {
-        self.inner.lock()
-            .catalog.clone()
+        self.inner
+            .lock()
+            .root
+            .clone()
     }
 
-    fn show_tables(&self) -> Result<RecordBatch, StorageError> {
+    fn show_tables(&self) -> Result<Vec<TableCatalog>, StorageError> {
         todo!()
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct InMemoryTable {
-    table_id: TableId,
-    table_name: String,
-    inner: Arc<Mutex<TableInner>>
+unsafe impl Send for MemTable {
+
 }
 
-#[derive(Debug)]
-struct TableInner {
-    data: Vec<RecordBatch>,
-    columns: Vec<ColumnCatalog>,
+unsafe impl Sync for MemTable {
+
 }
 
-impl InMemoryTable {
-    pub fn new(name: &str, data: Vec<RecordBatch>) -> Result<Self, StorageError> {
-        let columns = Self::infer_catalog(data.first().cloned());
-        Ok(Self {
-            table_id: 0,
-            table_name: name.to_string(),
+#[derive(Clone)]
+pub struct MemTable {
+    tuples: Arc<Cell<Vec<Tuple>>>
+}
 
-            inner: Arc::new(Mutex::new(
-                TableInner {
-                    data,
-                    columns,
-                }
-            )),
-        })
-    }
-
-    fn infer_catalog(batch: Option<RecordBatch>) -> Vec<ColumnCatalog> {
-        let mut columns = Vec::new();
-        if let Some(batch) = batch {
-            for f in batch.schema().fields().iter() {
-                let field_name = f.name().to_string();
-                let column_desc =
-                    ColumnDesc::new(LogicalType::try_from(f.data_type()).unwrap(), false);
-                let column_catalog = ColumnCatalog::new(
-                    field_name,
-                    f.is_nullable(),
-                    column_desc
-                );
-                columns.push(column_catalog)
-            }
+impl Debug for MemTable {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        unsafe {
+            f.debug_struct("MemTable")
+                .field("{:?}", self.tuples.as_ptr().as_ref().unwrap())
+                .finish()
         }
-        columns
     }
 }
 
-impl Table for InMemoryTable {
-    type TransactionType = InMemoryTransaction;
+impl Table for MemTable {
+    type TransactionType<'a> = MemTraction<'a>;
 
-    fn read(
-        &self,
-        bounds: Bounds,
-        projection: Projections,
-    ) -> Result<Self::TransactionType, StorageError> {
-        InMemoryTransaction::start(self, bounds, projection)
+    fn read(&self, bounds: Bounds, projection: Projections) -> Result<Self::TransactionType<'_>, StorageError> {
+        unsafe {
+            Ok(
+                MemTraction {
+                    offset: bounds.0.unwrap_or(0),
+                    limit: bounds.1,
+                    projections: projection,
+                    iter: self.tuples.as_ptr().as_ref().unwrap().iter(),
+                }
+            )
+        }
     }
 
-    fn append(&self, record_batch: RecordBatch) -> Result<(), StorageError> {
-        self.inner.lock()
-            .data.push(record_batch);
+    fn append(&self, tuple: Tuple) -> Result<(), StorageError> {
+        unsafe {
+            self.tuples
+                .as_ptr()
+                .as_mut()
+                .unwrap()
+                .push(tuple);
+        }
 
         Ok(())
     }
 }
 
-pub struct InMemoryTransaction {
-    batch_cursor: usize,
-    data: Vec<RecordBatch>,
+pub struct MemTraction<'a> {
+    offset: usize,
+    limit: Option<usize>,
+    projections: Projections,
+    iter: slice::Iter<'a, Tuple>
 }
 
-impl InMemoryTransaction {
-    pub fn start(table: &InMemoryTable, bounds: Bounds, projection: Projections) -> Result<Self, StorageError> {
-        let inner = table.inner.lock();
-
-        let (offset, limit) = bounds;
-        let offset_val = offset.unwrap_or(0);
-        if limit.is_some() && limit.unwrap() == 0 {
-            return Ok(Self {
-                batch_cursor: 0,
-                data: inner.data.clone(),
-            })
+impl Transaction for MemTraction<'_> {
+    fn next_tuple(&mut self) -> Result<Option<Tuple>, StorageError> {
+        while self.offset > 0 {
+            let _ = self.iter.next();
+            self.offset -= 1;
         }
 
-        let mut returned_count = 0;
-        let mut batches = Vec::new();
-
-        for batch in &inner.data {
-            let cardinality = batch.num_rows();
-            let limit_val = limit.unwrap_or(cardinality);
-
-            let start = returned_count.max(offset_val) - returned_count;
-            let end = {
-                // from total returned rows level, the total_end is end index of whole returned
-                // rows level.
-                let total_end = offset_val + limit_val;
-                let current_batch_end = returned_count + cardinality;
-                // we choose the min of total_end and current_batch_end as the end index of to
-                // match limit semantics.
-                let real_end = total_end.min(current_batch_end);
-                // to calculate the end index of current batch
-                real_end - returned_count
-            };
-            returned_count += cardinality;
-
-            // example: offset=1000, limit=2, cardinality=100
-            // when first loop:
-            // start = 0.max(1000)-0 = 1000
-            // end = (1000+2).min(0+100)-0 = 100
-            // so, start(1000) > end(100), we skip this loop batch.
-            if start >= end {
-                continue;
-            }
-
-            if (start..end) == (0..cardinality) {
-                batches.push(projection_batch(&projection, batch.clone())?);
-            } else {
-                let length = end - start;
-                batches.push(projection_batch(&projection, batch.slice(start, length))?);
-            }
-
-            // dut to returned_count is always += cardinality, and returned_batch maybe slsliced,
-            // so it will larger than real total_end.
-            // example: offset=1, limit=4, cardinality=6, data=[(0..6)]
-            // returned_count=6 > 1+4, meanwhile returned_batch size is 4 ([0..5])
-            if returned_count >= offset_val + limit_val {
-                break;
+        if let Some(num) = self.limit {
+            if num == 0 {
+                return Ok(None);
             }
         }
 
-        Ok(Self {
-            batch_cursor: 0,
-            data: batches,
-        })
-    }
-}
+        Ok(self.iter
+            .next()
+            .cloned()
+            .map(|tuple| {
+                let projection_len = self.projections.len();
 
-fn projection_batch(exprs: &Vec<ScalarExpression>, batch: RecordBatch) -> Result<RecordBatch, StorageError> {
-    let columns = exprs
-        .iter()
-        .map(|e| e.eval_column(&batch))
-        .try_collect()
-        .unwrap();
-    let fields = exprs.iter().map(|e| e.eval_field(&batch)).collect();
-    let schema = SchemaRef::new(Schema::new_with_metadata(
-        fields,
-        batch.schema().metadata().clone(),
-    ));
-    Ok(RecordBatch::try_new(schema, columns).unwrap())
-}
+                let mut columns = Vec::with_capacity(projection_len);
+                let mut values = Vec::with_capacity(projection_len);
 
-impl Transaction for InMemoryTransaction {
-    fn next_batch(&mut self) -> Result<Option<RecordBatch>, StorageError> {
-        self.data
-            .get(self.batch_cursor)
-            .map(|batch| {
-                self.batch_cursor += 1;
-                Ok(batch.clone())
-            })
-            .transpose()
+                for expr in self.projections.iter() {
+                    values.push(expr.eval_column(&tuple));
+                    columns.push(expr.output_column(&tuple));
+                }
+
+                self.limit = self.limit.map(|num| num - 1);
+
+                Tuple {
+                    id: tuple.id,
+                    columns,
+                    values,
+                }
+            }))
     }
 }
 
 #[cfg(test)]
-mod storage_test {
+mod test {
     use std::sync::Arc;
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
+    use crate::expression::ScalarExpression;
+    use crate::storage::memory::{MemStorage, MemTable};
+    use crate::storage::{Storage, StorageError, Table, Transaction};
+    use crate::types::LogicalType;
+    use crate::types::tuple::Tuple;
+    use crate::types::value::DataValue;
 
-    use arrow::array::{Array, Int32Array};
-    use arrow::datatypes::{DataType, Field, Schema};
-
-    use super::*;
-
-    fn build_record_batch() -> Result<Vec<RecordBatch>, StorageError> {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("a", DataType::Int32, false),
-            Field::new("b", DataType::Int32, false),
-        ]));
-
-        let batch = RecordBatch::try_new(
-            schema,
-            vec![
-                Arc::new(Int32Array::from(vec![1, 2, 3])),
-                Arc::new(Int32Array::from(vec![4, 5, 6])),
+    fn data_filling(columns: Vec<ColumnRef>, table: &MemTable) -> Result<(), StorageError> {
+        table.append(Tuple {
+            id: Some(0),
+            columns: columns.clone(),
+            values: vec![
+                Arc::new(DataValue::Int32(Some(1))),
+                Arc::new(DataValue::Boolean(Some(true)))
             ],
-        )?;
-        Ok(vec![batch])
+        })?;
+        table.append(Tuple {
+            id: Some(1),
+            columns: columns.clone(),
+            values: vec![
+                Arc::new(DataValue::Int32(Some(2))),
+                Arc::new(DataValue::Boolean(Some(false)))
+            ],
+        })?;
+
+        Ok(())
     }
 
     #[test]
     fn test_in_memory_storage_works_with_data() -> Result<(), StorageError> {
-        let mut storage = InMemoryStorage::new();
+        let storage = MemStorage::new();
+        let columns = vec![
+            Arc::new(ColumnCatalog::new(
+                "c1".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Integer, true)
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c2".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Boolean, false)
+            )),
+        ];
 
-        let id = storage.create_table("test", build_record_batch()?)?;
+        let table_id = storage.create_table("test".to_string(), columns.clone())?;
+
         let catalog = storage.get_catalog();
-        println!("{:?}", catalog);
         let table_catalog = catalog.get_table_by_name("test");
         assert!(table_catalog.is_some());
-        assert!(table_catalog.unwrap().get_column_id_by_name("a").is_some());
+        assert!(table_catalog.unwrap().get_column_id_by_name("c1").is_some());
 
-        let table = storage.get_table(&id)?;
+        let table = storage.get_table(&table_id)?;
+        data_filling(columns, &table)?;
+
         let mut tx = table.read(
-            (Some(0), Some(1)),
+            (Some(1), Some(1)),
             vec![ScalarExpression::InputRef { index: 0, ty: LogicalType::Integer }]
         )?;
-        let batch = tx.next_batch()?.unwrap();
-        println!("{:?}", batch);
-        assert_eq!(batch.num_rows(), 1);
-        assert_eq!(batch.num_columns(), 1);
 
-        assert_eq!(
-            batch.columns()[0].data(),
-            Arc::new(Int32Array::from(vec![1])).data()
-        );
+        let option_1 = tx.next_tuple()?;
+        assert_eq!(option_1.unwrap().id, Some(1));
+
+        let option_2 = tx.next_tuple()?;
+        assert_eq!(option_2, None);
 
         Ok(())
     }

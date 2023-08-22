@@ -2,7 +2,7 @@ use std::mem;
 use itertools::Itertools;
 use petgraph::stable_graph::{NodeIndex, StableDiGraph};
 use petgraph::visit::{Bfs, EdgeRef};
-use crate::optimizer::core::opt_expr::{OptExpr, OptExprNode, OptExprNodeId};
+use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
 use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::Operator;
@@ -102,25 +102,23 @@ impl HepGraph {
 
     pub fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) -> Option<OptExprNode> {
         if !with_childrens {
-            if let Some(source_node) = self.graph.node_weight(source_id) {
-                let children_ids = self.graph.edges(source_id)
-                    .sorted_by_key(|edge_ref| edge_ref.weight())
-                    .map(|edge_ref| edge_ref.target())
-                    .collect_vec();
+            let children_ids = self.graph.edges(source_id)
+                .sorted_by_key(|edge_ref| edge_ref.weight())
+                .map(|edge_ref| edge_ref.target())
+                .collect_vec();
 
-                if let Some(parent_id) = self.parent_id(source_id) {
-                    if let Some(edge) = self.graph.find_edge(parent_id, source_id) {
-                        let weight = *self.graph.edge_weight(edge)
-                            .unwrap_or(&0);
+            if let Some(parent_id) = self.parent_id(source_id) {
+                if let Some(edge) = self.graph.find_edge(parent_id, source_id) {
+                    let weight = *self.graph.edge_weight(edge)
+                        .unwrap_or(&0);
 
-                        for (order, children_id) in children_ids.into_iter().enumerate() {
-                            let _ = self.graph.add_edge(parent_id, children_id, weight + order);
-                        }
+                    for (order, children_id) in children_ids.into_iter().enumerate() {
+                        let _ = self.graph.add_edge(parent_id, children_id, weight + order);
                     }
-                } else {
-                    assert!(children_ids.len() < 2);
-                    self.root_index = children_ids[0];
                 }
+            } else {
+                assert!(children_ids.len() < 2);
+                self.root_index = children_ids[0];
             }
         }
 
@@ -202,15 +200,15 @@ impl HepGraph {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
-    use petgraph::stable_graph::{EdgeIndex, IndexType, NodeIndex};
+    use petgraph::stable_graph::{EdgeIndex, NodeIndex};
     use crate::binder::test::select_sql_run;
-    use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
+    use crate::execution::ExecutorError;
+    use crate::optimizer::core::opt_expr::OptExprNode;
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;
 
     #[test]
-    fn test_graph_for_plan() -> Result<()> {
+    fn test_graph_for_plan() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let graph = HepGraph::new(plan);
 
@@ -226,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_add_node() -> Result<()> {
+    fn test_graph_add_node() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
@@ -260,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_replace_node() -> Result<()> {
+    fn test_graph_replace_node() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
@@ -272,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_remove_middle_node_by_single() -> Result<()> {
+    fn test_graph_remove_middle_node_by_single() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
@@ -287,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_remove_middle_node_with_childrens() -> Result<()> {
+    fn test_graph_remove_middle_node_with_childrens() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
@@ -299,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_swap_node() -> Result<()> {
+    fn test_graph_swap_node() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
@@ -318,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_add_root() -> Result<()> {
+    fn test_graph_add_root() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
@@ -332,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_to_plan() -> Result<()> {
+    fn test_graph_to_plan() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let graph = HepGraph::new(plan.clone());
 

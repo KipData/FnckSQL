@@ -1,4 +1,6 @@
+use crate::types::TableId;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct InsertOperator {
-    pub table: String,
+    pub table_id: TableId,
 }

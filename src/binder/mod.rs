@@ -5,15 +5,15 @@ mod select;
 mod insert;
 
 use std::collections::BTreeMap;
-
-use anyhow::Result;
 use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
 
 use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME, CatalogError};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinType;
+use crate::types::errors::TypeError;
 use crate::types::TableId;
+
 #[derive(Debug, Clone)]
 pub struct BinderContext {
     pub(crate) catalog: RootCatalog,
@@ -60,7 +60,7 @@ impl Binder {
         Binder { context }
     }
 
-    pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan> {
+    pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query)?,
             Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
@@ -88,11 +88,11 @@ fn lower_case_name(name: &ObjectName) -> ObjectName {
 }
 
 /// Split an object name into `(schema name, table name)`.
-fn split_name(name: &ObjectName) -> Result<(&str, &str)> {
+fn split_name(name: &ObjectName) -> Result<(&str, &str), BindError> {
     Ok(match name.0.as_slice() {
         [table] => (DEFAULT_SCHEMA_NAME, &table.value),
         [schema, table] => (&schema.value, &table.value),
-        _ => return Err(anyhow::anyhow!("Invalid table name: {:?}", name)),
+        _ => return Err(BindError::InvalidTableName(name.0.clone())),
     })
 }
 
@@ -112,19 +112,23 @@ pub enum BindError {
     BinaryOpTypeMismatch(String, String),
     #[error("subquery in FROM must have an alias")]
     SubqueryMustHaveAlias,
+    #[error("agg miss: {0}")]
+    AggMiss(String),
     #[error("catalog error")]
     CatalogError(#[from] CatalogError),
+    #[error("type error")]
+    TypeError(#[from] TypeError)
 }
 
 #[cfg(test)]
 pub mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, RootCatalog};
+    use crate::catalog::{CatalogError, ColumnCatalog, ColumnDesc, RootCatalog};
     use crate::planner::LogicalPlan;
     use crate::types::LogicalType::Integer;
-    use anyhow::Result;
     use crate::binder::{Binder, BinderContext};
+    use crate::execution::ExecutorError;
 
-    fn test_root_catalog() -> Result<RootCatalog> {
+    fn test_root_catalog() -> Result<RootCatalog, CatalogError> {
         let mut root = RootCatalog::new();
 
         let cols_t1 = vec![
@@ -141,11 +145,11 @@ pub mod test {
         Ok(root)
     }
 
-    pub fn select_sql_run(sql: &str) -> Result<LogicalPlan> {
+    pub fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
         let root = test_root_catalog()?;
 
         let binder = Binder::new(BinderContext::new(root));
-        let stmt = crate::parser::parse_sql(sql).unwrap();
+        let stmt = crate::parser::parse_sql(sql)?;
 
         Ok(binder.bind(&stmt[0])?)
     }

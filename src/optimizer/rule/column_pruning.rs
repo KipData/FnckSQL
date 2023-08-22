@@ -64,12 +64,6 @@ impl Rule for PushProjectIntoScan {
 #[derive(Clone)]
 pub struct PushProjectThroughChild;
 
-/// Return true when left is superset of right.
-/// If left equals right, return false.
-pub fn is_superset_cols(left: &HashSet<ColumnId>, right: &HashSet<ColumnId>) -> bool {
-    right.iter().all(|r| left.contains(r)) && left.len() > right.len()
-}
-
 impl Rule for PushProjectThroughChild {
     fn pattern(&self) -> &Pattern {
         &PUSH_PROJECT_THROUGH_CHILD_RULE
@@ -122,8 +116,8 @@ impl Rule for PushProjectThroughChild {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
     use crate::binder::test::select_sql_run;
+    use crate::execution::ExecutorError;
     use crate::optimizer::heuristic::batch::{HepBatchStrategy};
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::RuleImpl;
@@ -131,7 +125,7 @@ mod tests {
     use crate::planner::operator::Operator;
 
     #[test]
-    fn test_project_into_table_scan() -> Result<()> {
+    fn test_project_into_table_scan() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
@@ -154,7 +148,7 @@ mod tests {
     }
 
     #[test]
-    fn test_project_through_child_on_join() -> Result<()> {
+    fn test_project_through_child_on_join() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select c1, c3 from t1 left join t2 on c1 = c3")?;
 
         let best_plan = HepOptimizer::new(plan.clone())

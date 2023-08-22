@@ -2,46 +2,33 @@
 
 [package]
 name = "kip-sql"
-version = "0.1.0"
+version = "0.0.1-alpha.0"
 edition = "2021"
 
 [lib]
 doctest = false
 
 [dependencies]
-log = "^0.4"
 sqlparser = "0.34.0"
 thiserror = "1"
 parking_lot = "0.12.1"
 itertools = "0.10"
 sqllogictest = "0.11.1"
-rust_decimal = "1"
-paste = "1.0.11"
 tracing = "0.1.37"
-pin-project = "1.1.0"
 chrono = "0.4.26"
-roaring = "0.10.1"
-educe = "0.4"
-num-traits = "0.2"
-num-derive = "0.3"
-anyhow = "1.0.71"
 tokio = { version = "1.28.2", features = ["full"] }
-tokio-process = "0.2.5"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 async-trait = "0.1.68"
 integer-encoding = "3.0.4"
-arrow = { version = "28", features = ["prettyprint", "simd"] }
 strum_macros = "0.24"
 ordered-float = "3.0"
 petgraph = "0.6.3"
 futures-async-stream = "0.2.6"
-async-channel = "1.8.0"
-async-backtrace = "0.2.6"
 futures = "0.3.25"
-futures-lite = "1.12.0"
 ahash = "0.8.3"
 lazy_static = "1.4.0"
+comfy-table = "7.0.1"
 
 [dev-dependencies]
 tokio-test = "0.4.2"

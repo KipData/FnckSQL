@@ -54,8 +54,8 @@ impl PatternMatcher for HepMatcher<'_, '_> {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
     use crate::binder::test::select_sql_run;
+    use crate::execution::ExecutorError;
     use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate, PatternMatcher};
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::optimizer::heuristic::matcher::HepMatcher;
@@ -63,7 +63,7 @@ mod tests {
     use crate::planner::operator::Operator;
 
     #[test]
-    fn test_predicate() -> Result<()> {
+    fn test_predicate() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1")?;
         let graph = HepGraph::new(plan.clone());
 
@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[test]
-    fn test_recursive() -> Result<()> {
+    fn test_recursive() {
         let all_dummy_plan = LogicalPlan {
             operator: Operator::Dummy,
             childrens: vec![
@@ -123,7 +123,5 @@ mod tests {
             HepMatcher::new(&only_dummy_pattern, HepNodeId::new(0), &graph)
                 .match_opt_expr()
         );
-
-        Ok(())
     }
 }

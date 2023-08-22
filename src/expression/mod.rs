@@ -1,17 +1,18 @@
 use std::fmt::Display;
+use std::sync::Arc;
 use itertools::Itertools;
 
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
 
 use self::agg::AggKind;
-use crate::catalog::{ColumnCatalog, ColumnDesc};
-use crate::types::value::DataValue;
+use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
+use crate::types::value::ValueRef;
 use crate::types::LogicalType;
+use crate::types::tuple::Tuple;
 
 pub mod agg;
 mod evaluator;
 mod array_compute;
-mod cast;
 
 /// ScalarExpression represnet all scalar expression in SQL.
 /// SELECT a+1, b FROM t1.
@@ -19,8 +20,8 @@ mod cast;
 /// b   -> ScalarExpression::ColumnRef()
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ScalarExpression {
-    Constant(DataValue),
-    ColumnRef(ColumnCatalog),
+    Constant(ValueRef),
+    ColumnRef(ColumnRef),
     InputRef {
         index: usize,
         ty: LogicalType,
@@ -95,8 +96,8 @@ impl ScalarExpression {
         }
     }
 
-    pub fn referenced_columns(&self) -> Vec<ColumnCatalog> {
-        fn columns_collect(expr: &ScalarExpression, vec: &mut Vec<ColumnCatalog>) {
+    pub fn referenced_columns(&self) -> Vec<ColumnRef> {
+        fn columns_collect(expr: &ScalarExpression, vec: &mut Vec<ColumnRef>) {
             match expr {
                 ScalarExpression::ColumnRef(col) => {
                     vec.push(col.clone());
@@ -137,35 +138,38 @@ impl ScalarExpression {
         todo!()
     }
 
-    pub fn output_column(&self) -> ColumnCatalog {
+    pub fn output_column(&self, tuple: &Tuple) -> ColumnRef {
         match self {
             ScalarExpression::ColumnRef(col) => {
                 col.clone()
             }
             ScalarExpression::Constant(value) => {
-                ColumnCatalog::new(
+                Arc::new(ColumnCatalog::new(
                     String::new(),
                     true,
                     ColumnDesc::new(value.logical_type(), false)
-                )
+                ))
             }
             ScalarExpression::Alias { expr, alias } => {
-                ColumnCatalog::new(
+                Arc::new(ColumnCatalog::new(
                     alias.to_string(),
                     true,
                     ColumnDesc::new(expr.return_type(), false)
-                )
+                ))
             }
             ScalarExpression::AggCall { kind, args, ty } => {
                 let args_str = args.iter()
-                    .map(|expr| expr.output_column().name)
+                    .map(|expr| expr.output_column(tuple).name.clone())
                     .join(", ");
 
-                ColumnCatalog::new(
+                Arc::new(ColumnCatalog::new(
                     format!("{:?}({})", kind, args_str),
                     true,
                     ColumnDesc::new(ty.clone(), false)
-                )
+                ))
+            }
+            ScalarExpression::InputRef { index, .. } => {
+                tuple.columns[*index].clone()
             }
             _ => unreachable!()
         }

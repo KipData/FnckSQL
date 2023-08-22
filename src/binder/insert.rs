@@ -1,30 +1,29 @@
 use std::slice;
 use sqlparser::ast::{Expr, Ident, ObjectName};
-use anyhow::{Error, Result};
 use itertools::Itertools;
-use crate::binder::{Binder, lower_case_name, split_name};
-use crate::catalog::ColumnCatalog;
+use crate::binder::{Binder, BindError, lower_case_name, split_name};
+use crate::catalog::ColumnRef;
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::Operator;
 use crate::planner::operator::values::ValuesOperator;
-use crate::types::value::DataValue;
+use crate::types::value::ValueRef;
 
 impl Binder {
 
     // TODO: 支持Project
-    // TODO: 检测多行Values对齐
     pub(crate) fn bind_insert(
         &mut self,
         name: ObjectName,
         idents: &[Ident],
         rows: &Vec<Vec<Expr>>
-    ) -> Result<LogicalPlan> {
+    ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
         let (_, table_name) = split_name(&name)?;
 
         if let Some(table) = self.context.catalog.get_table_by_name(table_name) {
+            let table_id = table.id;
             let mut col_catalogs = Vec::new();
 
             if idents.is_empty() {
@@ -50,7 +49,7 @@ impl Binder {
                 .map(|row| {
                     row.into_iter()
                         .map(|expr| match self.bind_expr(expr)? {
-                            ScalarExpression::Constant(value) => Ok::<DataValue, Error>(value),
+                            ScalarExpression::Constant(value) => Ok::<ValueRef, BindError>(value),
                             _ => unreachable!(),
                         })
                         .try_collect()
@@ -62,28 +61,25 @@ impl Binder {
             Ok(LogicalPlan {
                 operator: Operator::Insert(
                     InsertOperator {
-                        table: table_name.to_string(),
+                        table_id,
                     }
                 ),
                 childrens: vec![values_plan],
             })
         } else {
-            Err(anyhow::Error::msg(format!(
-                "not found table {}",
-                table_name
-            )))
+            Err(BindError::InvalidTable(format!("not found table {}", table_name)))
         }
     }
 
     fn bind_values(
         &mut self,
-        rows: Vec<Vec<DataValue>>,
-        col_catalogs: Vec<ColumnCatalog>
+        rows: Vec<Vec<ValueRef>>,
+        col_catalogs: Vec<ColumnRef>
     ) -> LogicalPlan {
         LogicalPlan {
             operator: Operator::Values(ValuesOperator {
                 rows,
-                col_catalogs,
+                columns: col_catalogs,
             }),
             childrens: vec![],
         }

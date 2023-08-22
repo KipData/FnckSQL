@@ -1,10 +1,10 @@
 pub mod errors;
 pub mod value;
+pub mod tuple;
 
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering::{Acquire, Release};
 
-use arrow::datatypes::IntervalUnit;
 use integer_encoding::FixedInt;
 use strum_macros::AsRefStr;
 
@@ -55,8 +55,6 @@ pub enum LogicalType {
     Float,
     Double,
     Varchar,
-    Date,
-    Interval(IntervalUnit),
 }
 
 impl LogicalType {
@@ -228,8 +226,6 @@ impl LogicalType {
             LogicalType::Float => matches!(to, LogicalType::Double),
             LogicalType::Double => false,
             LogicalType::Varchar => false,
-            LogicalType::Date => false,
-            LogicalType::Interval(_) => false,
         }
     }
 }
@@ -259,83 +255,10 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
             sqlparser::ast::DataType::BigInt(_) => Ok(LogicalType::Bigint),
             sqlparser::ast::DataType::UnsignedBigInt(_) => Ok(LogicalType::UBigint),
             sqlparser::ast::DataType::Boolean => Ok(LogicalType::Boolean),
-            sqlparser::ast::DataType::Date => Ok(LogicalType::Date),
-            // use day time interval for default interval value
-            sqlparser::ast::DataType::Interval => Ok(LogicalType::Interval(IntervalUnit::DayTime)),
             other => Err(TypeError::NotImplementedSqlparserDataType(
                 other.to_string(),
             )),
         }
-    }
-}
-
-impl From<LogicalType> for arrow::datatypes::DataType {
-    fn from(value: LogicalType) -> Self {
-        use arrow::datatypes::DataType;
-        match value {
-            LogicalType::Invalid => panic!("invalid logical type"),
-            LogicalType::SqlNull => DataType::Null,
-            LogicalType::Boolean => DataType::Boolean,
-            LogicalType::Tinyint => DataType::Int8,
-            LogicalType::UTinyint => DataType::UInt8,
-            LogicalType::Smallint => DataType::Int16,
-            LogicalType::USmallint => DataType::UInt16,
-            LogicalType::Integer => DataType::Int32,
-            LogicalType::UInteger => DataType::UInt32,
-            LogicalType::Bigint => DataType::Int64,
-            LogicalType::UBigint => DataType::UInt64,
-            LogicalType::Float => DataType::Float32,
-            LogicalType::Double => DataType::Float64,
-            LogicalType::Varchar => DataType::Utf8,
-            LogicalType::Date => DataType::Date32,
-            LogicalType::Interval(u) => DataType::Interval(u),
-        }
-    }
-}
-
-impl TryFrom<&arrow::datatypes::DataType> for LogicalType {
-    type Error = TypeError;
-
-    fn try_from(value: &arrow::datatypes::DataType) -> Result<Self, Self::Error> {
-        use arrow::datatypes::DataType;
-        Ok(match value {
-            DataType::Null => LogicalType::SqlNull,
-            DataType::Boolean => LogicalType::Boolean,
-            DataType::Int8 => LogicalType::Tinyint,
-            DataType::Int16 => LogicalType::Smallint,
-            DataType::Int32 => LogicalType::Integer,
-            DataType::Int64 => LogicalType::Bigint,
-            DataType::UInt8 => LogicalType::UTinyint,
-            DataType::UInt16 => LogicalType::USmallint,
-            DataType::UInt32 => LogicalType::UInteger,
-            DataType::UInt64 => LogicalType::UBigint,
-            DataType::Float16 => LogicalType::Float,
-            DataType::Float32 => LogicalType::Float,
-            DataType::Float64 => LogicalType::Double,
-            DataType::Utf8 => LogicalType::Varchar,
-            DataType::LargeUtf8 => LogicalType::Varchar,
-            DataType::Date32 => LogicalType::Date,
-            DataType::Interval(u) => LogicalType::Interval(u.clone()),
-            DataType::Timestamp(_, _)
-            | DataType::Date64
-            | DataType::Time32(_)
-            | DataType::Time64(_)
-            | DataType::Duration(_)
-            | DataType::Binary
-            | DataType::FixedSizeBinary(_)
-            | DataType::LargeBinary
-            | DataType::List(_)
-            | DataType::FixedSizeList(_, _)
-            | DataType::LargeList(_)
-            | DataType::Struct(_)
-            | DataType::Union(_, _, _)
-            | DataType::Dictionary(_, _)
-            | DataType::Decimal128(_, _)
-            | DataType::Decimal256(_, _)
-            | DataType::Map(_, _) => {
-                return Err(TypeError::NotImplementedArrowDataType(value.to_string()))
-            }
-        })
     }
 }
 
