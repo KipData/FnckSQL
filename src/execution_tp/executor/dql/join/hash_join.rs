@@ -54,6 +54,7 @@ impl HashJoin {
         #[for_await]
         for tuple in right_input {
             let mut tuple: Tuple = tuple?;
+            let right_cols_len = tuple.columns.len();
             let hash = Self::hash_row(&on_right_keys, &hash_random_state, &tuple);
 
             if !right_init_flag {
@@ -61,25 +62,58 @@ impl HashJoin {
                 right_init_flag = true;
             }
 
-            //TODO: On Filter
             //TODO: Repeat Join
-            if let Some(Tuple { mut values, .. }) = left_map.get_mut(&hash)
+            let mut tuple_option = if let Some(Tuple { mut values, .. }) = left_map
+                .get_mut(&hash)
                 .map(|tuples| tuples.remove(0))
             {
                 values.append(&mut tuple.values);
 
-                yield Tuple { id: None, columns: join_columns.clone(), values }
+                Some(Tuple { id: None, columns: join_columns.clone(), values })
             } else if matches!(ty, JoinType::Right | JoinType::Full) {
-                let empty_len = join_columns.len() - tuple.columns.len();
+                let empty_len = join_columns.len() - right_cols_len;
                 let values = join_columns[..empty_len]
                     .iter()
                     .map(|col| DataValue::none(col.datatype()))
                     .chain(tuple.values)
                     .collect_vec();
 
-                yield Tuple { id: None, columns: join_columns.clone(), values }
+                Some(Tuple { id: None, columns: join_columns.clone(), values })
             } else {
-                continue;
+                None
+            };
+
+            if let (Some(expr), Some(tuple), true) = (&filter, &mut tuple_option, !matches!(ty, JoinType::Full | JoinType::Cross)) {
+                if let DataValue::Boolean(option) = expr.eval_column_tp(tuple) {
+                    if let Some(false) | None = option {
+                        let full_cols_len = tuple.columns.len();
+                        let left_cols_len = full_cols_len - right_cols_len;
+
+                        match ty {
+                            JoinType::Left => {
+                                for i in left_cols_len..full_cols_len {
+                                    tuple.values[i] = DataValue::none(tuple.columns[i].datatype())
+                                }
+                            }
+                            JoinType::Right => {
+                                for i in 0..left_cols_len {
+                                    tuple.values[i] = DataValue::none(tuple.columns[i].datatype())
+                                }
+                            }
+                            _ => {
+                                tuple_option = None;
+                            }
+                        }
+                    }
+                } else {
+                    unreachable!("only bool");
+                }
+            }
+
+            if let Some(tuple) = tuple_option {
+                yield tuple;
+            } else {
+                continue
             }
         }
 
