@@ -10,7 +10,7 @@ pub mod insert;
 pub mod values;
 
 use itertools::Itertools;
-use crate::catalog::ColumnCatalog;
+use crate::catalog::ColumnRef;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
@@ -37,7 +37,7 @@ pub enum Operator {
 }
 
 impl Operator {
-    pub fn referenced_columns(&self) -> Vec<ColumnCatalog> {
+    pub fn referenced_columns(&self) -> Vec<ColumnRef> {
         match self {
             Operator::Aggregate(op) => {
                 op.agg_calls

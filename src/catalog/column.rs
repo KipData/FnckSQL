@@ -1,6 +1,9 @@
+use std::sync::Arc;
 use sqlparser::ast::{ColumnDef, ColumnOption};
 
 use crate::types::{ColumnId, IdGenerator, LogicalType, TableId};
+
+pub type ColumnRef = Arc<ColumnCatalog>;
 
 #[derive(Debug, Clone)]
 pub struct ColumnCatalog {

@@ -2,6 +2,7 @@ use crate::binder::BindError;
 use itertools::Itertools;
 use sqlparser::ast::{BinaryOperator, Expr, Function, FunctionArg, FunctionArgExpr, Ident};
 use std::slice;
+use std::sync::Arc;
 use crate::expression::agg::AggKind;
 
 use super::Binder;
@@ -20,7 +21,7 @@ impl Binder {
             Expr::BinaryOp { left, right, op} => {
                 self.bind_binary_op_internal(left, right, op)
             }
-            Expr::Value(v) => Ok(ScalarExpression::Constant(v.into())),
+            Expr::Value(v) => Ok(ScalarExpression::Constant(Arc::new(v.into()))),
             Expr::Function(func) => self.bind_agg_call(func),
             Expr::Nested(expr) => self.bind_expr(expr),
             _ => {

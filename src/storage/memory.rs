@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::slice;
 use std::sync::Arc;
+use itertools::Itertools;
 use parking_lot::Mutex;
-use crate::catalog::{ColumnCatalog, RootCatalog, TableCatalog};
+use crate::catalog::{ColumnCatalog, ColumnRef, RootCatalog, TableCatalog};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
 use crate::types::TableId;
 use crate::types::tuple::Tuple;
@@ -39,14 +40,17 @@ struct StorageInner {
 impl Storage for MemStorage {
     type TableType = MemTable;
 
-    fn create_table(&self, table_name: String, columns: Vec<ColumnCatalog>) -> Result<TableId, StorageError> {
+    fn create_table(&self, table_name: String, columns: Vec<ColumnRef>) -> Result<TableId, StorageError> {
         let new_table = MemTable {
             tuples: Arc::new(Cell::new(vec![])),
         };
+        let de_columns = columns.iter()
+            .map(|col| ColumnCatalog::clone(col))
+            .collect_vec();
 
         let mut inner = self.inner.lock();
 
-        let table_id = inner.root.add_table(table_name, columns)?;
+        let table_id = inner.root.add_table(table_name, de_columns)?;
         inner.tables.insert(table_id, new_table);
 
         Ok(table_id)
@@ -172,7 +176,8 @@ impl Transaction for MemTraction<'_> {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use std::sync::Arc;
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::expression::ScalarExpression;
     use crate::storage::memory::{MemStorage, MemTable};
     use crate::storage::{Storage, StorageError, Table, Transaction};
@@ -180,21 +185,21 @@ mod test {
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
 
-    fn data_filling(columns: Vec<ColumnCatalog>, table: &MemTable) -> Result<(), StorageError> {
+    fn data_filling(columns: Vec<ColumnRef>, table: &MemTable) -> Result<(), StorageError> {
         table.append(Tuple {
             id: Some(0),
             columns: columns.clone(),
             values: vec![
-                DataValue::Int32(Some(1)),
-                DataValue::Boolean(Some(true))
+                Arc::new(DataValue::Int32(Some(1))),
+                Arc::new(DataValue::Boolean(Some(true)))
             ],
         })?;
         table.append(Tuple {
             id: Some(1),
             columns: columns.clone(),
             values: vec![
-                DataValue::Int32(Some(2)),
-                DataValue::Boolean(Some(false))
+                Arc::new(DataValue::Int32(Some(2))),
+                Arc::new(DataValue::Boolean(Some(false)))
             ],
         })?;
 
@@ -205,16 +210,16 @@ mod test {
     fn test_in_memory_storage_works_with_data() -> Result<(), StorageError> {
         let storage = MemStorage::new();
         let columns = vec![
-            ColumnCatalog::new(
+            Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true)
-            ),
-            ColumnCatalog::new(
+            )),
+            Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Boolean, false)
-            ),
+            )),
         ];
 
         let table_id = storage.create_table("test".to_string(), columns.clone())?;

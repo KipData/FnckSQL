@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use crate::catalog::ColumnCatalog;
+use crate::catalog::ColumnRef;
 use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::Pattern;
@@ -72,7 +72,7 @@ fn reduce_filters(filters: Vec<ScalarExpression>, having: bool) -> Option<Filter
 /// Return true when left is subset of right, only compare table_id and column_id, so it's safe to
 /// used for join output cols with nullable columns.
 /// If left equals right, return true.
-pub fn is_subset_cols(left: &[ColumnCatalog], right: &[ColumnCatalog]) -> bool {
+pub fn is_subset_cols(left: &[ColumnRef], right: &[ColumnRef]) -> bool {
     left.iter().all(|l| right.contains(l))
 }
 

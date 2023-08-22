@@ -2,13 +2,13 @@ use std::slice;
 use sqlparser::ast::{Expr, Ident, ObjectName};
 use itertools::Itertools;
 use crate::binder::{Binder, BindError, lower_case_name, split_name};
-use crate::catalog::ColumnCatalog;
+use crate::catalog::ColumnRef;
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::Operator;
 use crate::planner::operator::values::ValuesOperator;
-use crate::types::value::DataValue;
+use crate::types::value::ValueRef;
 
 impl Binder {
 
@@ -49,7 +49,7 @@ impl Binder {
                 .map(|row| {
                     row.into_iter()
                         .map(|expr| match self.bind_expr(expr)? {
-                            ScalarExpression::Constant(value) => Ok::<DataValue, BindError>(value),
+                            ScalarExpression::Constant(value) => Ok::<ValueRef, BindError>(value),
                             _ => unreachable!(),
                         })
                         .try_collect()
@@ -73,8 +73,8 @@ impl Binder {
 
     fn bind_values(
         &mut self,
-        rows: Vec<Vec<DataValue>>,
-        col_catalogs: Vec<ColumnCatalog>
+        rows: Vec<Vec<ValueRef>>,
+        col_catalogs: Vec<ColumnRef>
     ) -> LogicalPlan {
         LogicalPlan {
             operator: Operator::Values(ValuesOperator {

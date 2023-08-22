@@ -1,6 +1,6 @@
 pub mod memory;
 
-use crate::catalog::{CatalogError, ColumnCatalog, RootCatalog, TableCatalog};
+use crate::catalog::{CatalogError, ColumnRef, RootCatalog, TableCatalog};
 use crate::expression::ScalarExpression;
 use crate::types::TableId;
 use crate::types::tuple::Tuple;
@@ -15,7 +15,7 @@ pub trait Storage: Sync + Send + Clone + 'static {
     fn create_table(
         &self,
         table_name: String,
-        columns: Vec<ColumnCatalog>
+        columns: Vec<ColumnRef>
     ) -> Result<TableId, StorageError>;
     fn get_table(&self, id: &TableId) -> Result<Self::TableType, StorageError>;
     fn get_catalog(&self) -> RootCatalog;

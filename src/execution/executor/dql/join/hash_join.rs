@@ -1,8 +1,9 @@
+use std::sync::Arc;
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt, RandomState};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use crate::execution::executor::dql::join::joins_nullable;
-use crate::catalog::ColumnCatalog;
+use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::execution::executor::BoxedExecutor;
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
@@ -63,7 +64,6 @@ impl HashJoin {
                 right_init_flag = true;
             }
 
-            //TODO: Repeat Join(√ but need to perf clone)
             let mut join_tuples = if let Some(tuples) = left_map.get(&hash) {
                 let _ = used_set.insert(hash);
 
@@ -83,7 +83,7 @@ impl HashJoin {
                 let empty_len = join_columns.len() - right_cols_len;
                 let values = join_columns[..empty_len]
                     .iter()
-                    .map(|col| DataValue::none(col.datatype()))
+                    .map(|col| Arc::new(DataValue::none(col.datatype())))
                     .chain(tuple.values)
                     .collect_vec();
 
@@ -97,7 +97,7 @@ impl HashJoin {
                 let mut filter_tuples = Vec::with_capacity(join_tuples.len());
 
                 for mut tuple in join_tuples {
-                    if let DataValue::Boolean(option) = expr.eval_column(&tuple) {
+                    if let DataValue::Boolean(option) = expr.eval_column(&tuple).as_ref() {
                         if let Some(false) | None = option {
                             let full_cols_len = tuple.columns.len();
                             let left_cols_len = full_cols_len - right_cols_len;
@@ -107,7 +107,7 @@ impl HashJoin {
                                     for i in left_cols_len..full_cols_len {
                                         let value_type = tuple.columns[i].datatype();
 
-                                        tuple.values[i] = DataValue::none(value_type)
+                                        tuple.values[i] = Arc::new(DataValue::none(value_type))
                                     }
                                     filter_tuples.push(tuple)
                                 }
@@ -115,7 +115,7 @@ impl HashJoin {
                                     for i in 0..left_cols_len {
                                         let value_type = tuple.columns[i].datatype();
 
-                                        tuple.values[i] = DataValue::none(value_type)
+                                        tuple.values[i] = Arc::new(DataValue::none(value_type))
                                     }
                                     filter_tuples.push(tuple)
                                 }
@@ -144,7 +144,7 @@ impl HashJoin {
                 for Tuple { mut values, columns, ..} in tuples {
                     let mut right_empties = join_columns[columns.len()..]
                         .iter()
-                        .map(|col| DataValue::none(col.datatype()))
+                        .map(|col| Arc::new(DataValue::none(col.datatype())))
                         .collect_vec();
 
                     values.append(&mut right_empties);
@@ -155,12 +155,14 @@ impl HashJoin {
         }
     }
 
-    fn columns_filling(tuple: &Tuple, join_columns: &mut Vec<ColumnCatalog>, force_nullable: bool) {
+    fn columns_filling(tuple: &Tuple, join_columns: &mut Vec<ColumnRef>, force_nullable: bool) {
         let mut new_columns = tuple.columns.iter()
             .cloned()
-            .map(|mut col| {
-                col.nullable = force_nullable;
-                col
+            .map(|col| {
+                let mut new_catalog = ColumnCatalog::clone(&col);
+                new_catalog.nullable = force_nullable;
+
+                Arc::new(new_catalog)
             })
             .collect_vec();
 

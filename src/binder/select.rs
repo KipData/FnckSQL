@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::{
     expression::ScalarExpression,
@@ -15,7 +16,7 @@ use crate::{
 
 use super::Binder;
 
-use crate::catalog::{DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog};
+use crate::catalog::{ColumnCatalog, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog};
 use itertools::Itertools;
 use sqlparser::ast;
 use sqlparser::ast::{
@@ -311,9 +312,9 @@ impl Binder {
         if let Some(expr) = limit_expr {
             let expr = self.bind_expr(expr)?;
             match expr {
-                ScalarExpression::Constant(dv) => match dv {
-                    DataValue::Int32(Some(v)) if v > 0 => limit = v as usize,
-                    DataValue::Int64(Some(v)) if v > 0 => limit = v as usize,
+                ScalarExpression::Constant(dv) => match dv.as_ref() {
+                    DataValue::Int32(Some(v)) if *v > 0 => limit = *v as usize,
+                    DataValue::Int64(Some(v)) if *v > 0 => limit = *v as usize,
                     _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
                 },
                 _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
@@ -323,9 +324,9 @@ impl Binder {
         if let Some(expr) = offset_expr {
             let expr = self.bind_expr(&expr.value)?;
             match expr {
-                ScalarExpression::Constant(dv) => match dv {
-                    DataValue::Int32(Some(v)) if v > 0 => offset = v as usize,
-                    DataValue::Int64(Some(v)) if v > 0 => offset = v as usize,
+                ScalarExpression::Constant(dv) => match dv.as_ref() {
+                    DataValue::Int32(Some(v)) if *v > 0 => offset = *v as usize,
+                    DataValue::Int64(Some(v)) if *v > 0 => offset = *v as usize,
                     _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
                 },
                 _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
@@ -367,7 +368,10 @@ impl Binder {
         for column in select_items {
             if let ScalarExpression::ColumnRef(col) = column {
                 if let Some(nullable) = table_force_nullable.get(&col.table_id.unwrap()) {
-                    col.nullable = *nullable;
+                    let mut new_col = ColumnCatalog::clone(col);
+                    new_col.nullable = *nullable;
+
+                    *col = Arc::new(new_col)
                 }
             }
         }

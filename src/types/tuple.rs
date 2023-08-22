@@ -1,15 +1,15 @@
 use comfy_table::{Cell, Table};
 use itertools::Itertools;
-use crate::catalog::ColumnCatalog;
-use crate::types::value::DataValue;
+use crate::catalog::ColumnRef;
+use crate::types::value::ValueRef;
 
 pub type TupleId = usize;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
     pub id: Option<TupleId>,
-    pub columns: Vec<ColumnCatalog>,
-    pub values: Vec<DataValue>
+    pub columns: Vec<ColumnRef>,
+    pub values: Vec<ValueRef>
 }
 
 pub fn create_table(tuples: &[Tuple]) -> Table {

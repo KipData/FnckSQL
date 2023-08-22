@@ -83,6 +83,7 @@ impl Rule for CombineFilter {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use crate::binder::test::select_sql_run;
     use crate::execution::ExecutorError;
     use crate::expression::{BinaryOperator, ScalarExpression};
@@ -154,8 +155,8 @@ mod tests {
         if let Operator::Filter(op) = &mut new_filter_op {
             op.predicate = ScalarExpression::Binary {
                 op: BinaryOperator::Eq,
-                left_expr: Box::new(Constant(DataValue::Int8(Some(1)))),
-                right_expr: Box::new(Constant(DataValue::Int8(Some(1)))),
+                left_expr: Box::new(Constant(Arc::new(DataValue::Int8(Some(1))))),
+                right_expr: Box::new(Constant(Arc::new(DataValue::Int8(Some(1))))),
                 ty: LogicalType::Boolean,
             }
         } else {

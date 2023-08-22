@@ -1,10 +1,11 @@
+use std::sync::Arc;
 use crate::expression::array_compute::binary_op_tp;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
-use crate::types::value::DataValue;
+use crate::types::value::{DataValue, ValueRef};
 
 impl ScalarExpression {
-    pub fn eval_column(&self, tuple: &Tuple) -> DataValue {
+    pub fn eval_column(&self, tuple: &Tuple) -> ValueRef {
         match &self {
             ScalarExpression::Constant(val) =>
                 val.clone(),
@@ -23,15 +24,15 @@ impl ScalarExpression {
             ScalarExpression::TypeCast{ expr, ty, .. } => {
                 let value = expr.eval_column(tuple);
 
-                value.cast(ty)
+                Arc::new(DataValue::clone(&value).cast(ty))
             }
             ScalarExpression::Binary{ left_expr, right_expr, op, .. } => {
                 let left = left_expr.eval_column(tuple);
                 let right = right_expr.eval_column(tuple);
-                binary_op_tp(&left, &right, op)
+                Arc::new(binary_op_tp(&left, &right, op))
             }
             ScalarExpression::IsNull{ expr } => {
-                DataValue::Boolean(Some(expr.nullable()))
+                Arc::new(DataValue::Boolean(Some(expr.nullable())))
             }
             ScalarExpression::Unary{ .. } => todo!(),
             ScalarExpression::AggCall{ .. } => todo!()

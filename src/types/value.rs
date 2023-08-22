@@ -3,10 +3,13 @@ use std::fmt;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use ordered_float::OrderedFloat;
 
 use super::LogicalType;
+
+pub type ValueRef = Arc<DataValue>;
 
 #[derive(Clone)]
 pub enum DataValue {

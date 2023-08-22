@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use crate::catalog::{CatalogError, ColumnCatalog};
+use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::{ColumnId, IdGenerator, TableId};
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableCatalog {
@@ -8,7 +9,7 @@ pub struct TableCatalog {
     pub name: String,
     /// Mapping from column names to column ids
     column_idxs: BTreeMap<String, ColumnId>,
-    columns: BTreeMap<ColumnId, ColumnCatalog>,
+    columns: BTreeMap<ColumnId, ColumnRef>,
 }
 
 impl TableCatalog {
@@ -16,7 +17,7 @@ impl TableCatalog {
         self.columns.len()
     }
 
-    pub(crate) fn get_column_by_id(&self, id: &ColumnId) -> Option<&ColumnCatalog> {
+    pub(crate) fn get_column_by_id(&self, id: &ColumnId) -> Option<&ColumnRef> {
         self.columns.get(id)
     }
 
@@ -24,7 +25,7 @@ impl TableCatalog {
         self.column_idxs.get(name).cloned()
     }
 
-    pub(crate) fn get_column_by_name(&self, name: &str) -> Option<&ColumnCatalog> {
+    pub(crate) fn get_column_by_name(&self, name: &str) -> Option<&ColumnRef> {
         let id = self.column_idxs.get(name)?;
         self.columns.get(id)
     }
@@ -39,7 +40,7 @@ impl TableCatalog {
         self.column_idxs.contains_key(name)
     }
 
-    pub(crate) fn all_columns(&self) -> Vec<(&ColumnId, &ColumnCatalog)> {
+    pub(crate) fn all_columns(&self) -> Vec<(&ColumnId, &ColumnRef)> {
         self.columns
             .iter()
             .collect()
@@ -58,7 +59,7 @@ impl TableCatalog {
 
         col_catalog.table_id = Some(self.id);
         self.column_idxs.insert(col_catalog.name.to_owned(), col_id);
-        self.columns.insert(col_id, col_catalog);
+        self.columns.insert(col_id, Arc::new(col_catalog));
 
         Ok(col_id)
     }

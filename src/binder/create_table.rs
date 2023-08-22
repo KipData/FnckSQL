@@ -1,9 +1,10 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 use sqlparser::ast::{ColumnDef, ObjectName};
 
 use super::Binder;
 use crate::binder::{BindError, lower_case_name, split_name};
-use crate::catalog::ColumnCatalog;
+use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::planner::LogicalPlan;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
@@ -26,9 +27,9 @@ impl Binder {
             }
         }
 
-        let columns: Vec<ColumnCatalog> = columns
+        let columns: Vec<ColumnRef> = columns
             .iter()
-            .map(|col| ColumnCatalog::from(col.clone()))
+            .map(|col| Arc::new(ColumnCatalog::from(col.clone())))
             .collect();
 
         let plan = LogicalPlan {

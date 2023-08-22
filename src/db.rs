@@ -142,24 +142,28 @@ pub enum DatabaseError {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::db::Database;
-    use crate::execution::ExecutorError;
+    use crate::db::{Database, DatabaseError};
     use crate::storage::{Storage, StorageError};
     use crate::types::{LogicalType, TableId};
     use crate::types::tuple::create_table;
 
     fn build_table(storage: &impl Storage) -> Result<TableId, StorageError> {
         let columns = vec![
-            ColumnCatalog::new(
-                "c1".to_string(),
-                false,
-                ColumnDesc::new(LogicalType::Integer, true)
+            Arc::new(
+                ColumnCatalog::new(
+                    "c1".to_string(),
+                    false,
+                    ColumnDesc::new(LogicalType::Integer, true)
+                )
             ),
-            ColumnCatalog::new(
-                "c2".to_string(),
-                false,
-                ColumnDesc::new(LogicalType::Boolean, false)
+            Arc::new(
+                ColumnCatalog::new(
+                    "c2".to_string(),
+                    false,
+                    ColumnDesc::new(LogicalType::Boolean, false)
+                )
             ),
         ];
 
@@ -167,7 +171,7 @@ mod test {
     }
 
     #[test]
-    fn test_run_sql() -> Result<(), ExecutorError> {
+    fn test_run_sql() -> Result<(), DatabaseError> {
         let database = Database::new_on_mem();
 
         let _ = build_table(&database.storage)?;
@@ -181,7 +185,7 @@ mod test {
     }
 
     #[test]
-    fn test_crud_sql() -> Result<(), ExecutorError> {
+    fn test_crud_sql() -> Result<(), DatabaseError> {
         let kipsql = Database::new_on_mem();
 
         tokio_test::block_on(async move {
