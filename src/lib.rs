@@ -4,7 +4,6 @@
 #![feature(result_flattening)]
 #![feature(generators)]
 #![feature(iterator_try_collect)]
-#![allow(cast_ref_to_mut)]
 pub mod binder;
 pub mod catalog;
 pub mod db;
