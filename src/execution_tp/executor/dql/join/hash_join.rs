@@ -1,4 +1,4 @@
-use ahash::{HashMap, HashMapExt, RandomState};
+use ahash::{HashMap, HashMapExt, HashSet, HashSetExt, RandomState};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use crate::catalog::ColumnCatalog;
@@ -24,10 +24,11 @@ impl HashJoin {
         };
 
         let mut join_columns = Vec::new();
+        let mut used_set = HashSet::<u64>::new();
+        let mut left_map = HashMap::new();
+
         let hash_random_state = RandomState::with_seeds(0, 0, 0, 0);
         let (left_force_nullable, right_force_nullable) = joins_nullable(&ty);
-
-        let mut left_map = HashMap::new();
 
         // build phase:
         // 1.construct hashtable, one hash key may contains multiple rows indices.
@@ -62,14 +63,22 @@ impl HashJoin {
                 right_init_flag = true;
             }
 
-            //TODO: Repeat Join
-            let mut tuple_option = if let Some(Tuple { mut values, .. }) = left_map
-                .get_mut(&hash)
-                .map(|tuples| tuples.remove(0))
-            {
-                values.append(&mut tuple.values);
+            //TODO: Repeat Join(√ but need to perf clone)
+            let mut join_tuples = if let Some(tuples) = left_map.get(&hash) {
+                let _ = used_set.insert(hash);
 
-                Some(Tuple { id: None, columns: join_columns.clone(), values })
+                tuples
+                    .iter()
+                    .map(|Tuple { values, .. }| {
+                        let full_values = values
+                            .iter()
+                            .cloned()
+                            .chain(tuple.values.clone())
+                            .collect_vec();
+
+                        Tuple { id: None, columns: join_columns.clone(), values: full_values }
+                    })
+                    .collect_vec()
             } else if matches!(ty, JoinType::Right | JoinType::Full) {
                 let empty_len = join_columns.len() - right_cols_len;
                 let values = join_columns[..empty_len]
@@ -78,47 +87,60 @@ impl HashJoin {
                     .chain(tuple.values)
                     .collect_vec();
 
-                Some(Tuple { id: None, columns: join_columns.clone(), values })
+                vec![Tuple { id: None, columns: join_columns.clone(), values }]
             } else {
-                None
+                vec![]
             };
 
-            if let (Some(expr), Some(tuple), true) = (&filter, &mut tuple_option, !matches!(ty, JoinType::Full | JoinType::Cross)) {
-                if let DataValue::Boolean(option) = expr.eval_column_tp(tuple) {
-                    if let Some(false) | None = option {
-                        let full_cols_len = tuple.columns.len();
-                        let left_cols_len = full_cols_len - right_cols_len;
+            // on filter
+            if let (Some(expr), false) = (&filter, join_tuples.is_empty() || matches!(ty, JoinType::Full | JoinType::Cross)) {
+                let mut filter_tuples = Vec::with_capacity(join_tuples.len());
 
-                        match ty {
-                            JoinType::Left => {
-                                for i in left_cols_len..full_cols_len {
-                                    tuple.values[i] = DataValue::none(tuple.columns[i].datatype())
+                for mut tuple in join_tuples {
+                    if let DataValue::Boolean(option) = expr.eval_column_tp(&tuple) {
+                        if let Some(false) | None = option {
+                            let full_cols_len = tuple.columns.len();
+                            let left_cols_len = full_cols_len - right_cols_len;
+
+                            match ty {
+                                JoinType::Left => {
+                                    for i in left_cols_len..full_cols_len {
+                                        let value_type = tuple.columns[i].datatype();
+
+                                        tuple.values[i] = DataValue::none(value_type)
+                                    }
+                                    filter_tuples.push(tuple)
                                 }
-                            }
-                            JoinType::Right => {
-                                for i in 0..left_cols_len {
-                                    tuple.values[i] = DataValue::none(tuple.columns[i].datatype())
+                                JoinType::Right => {
+                                    for i in 0..left_cols_len {
+                                        let value_type = tuple.columns[i].datatype();
+
+                                        tuple.values[i] = DataValue::none(value_type)
+                                    }
+                                    filter_tuples.push(tuple)
                                 }
-                            }
-                            _ => {
-                                tuple_option = None;
+                                _ => ()
                             }
                         }
+                    } else {
+                        unreachable!("only bool");
                     }
-                } else {
-                    unreachable!("only bool");
                 }
+
+                join_tuples = filter_tuples;
             }
 
-            if let Some(tuple) = tuple_option {
-                yield tuple;
-            } else {
-                continue
+            for tuple in join_tuples {
+                yield tuple
             }
         }
 
         if matches!(ty, JoinType::Left | JoinType::Full) {
-            for (_, tuples) in left_map {
+            for (hash, tuples) in left_map {
+                if used_set.contains(&hash) {
+                    continue
+                }
+
                 for Tuple { mut values, columns, ..} in tuples {
                     let mut right_empties = join_columns[columns.len()..]
                         .iter()
