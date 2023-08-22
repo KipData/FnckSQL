@@ -55,7 +55,7 @@ impl PatternMatcher for HepMatcher<'_, '_> {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution_ap::ExecutorError;
+    use crate::execution::ExecutorError;
     use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate, PatternMatcher};
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::optimizer::heuristic::matcher::HepMatcher;

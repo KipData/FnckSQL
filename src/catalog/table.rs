@@ -1,8 +1,4 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
-use arrow::datatypes::{Schema, SchemaRef};
-
-use itertools::Itertools;
 
 use crate::catalog::{CatalogError, ColumnCatalog};
 use crate::types::{ColumnId, IdGenerator, TableId};
@@ -47,14 +43,6 @@ impl TableCatalog {
         self.columns
             .iter()
             .collect()
-    }
-
-    // TODO: 缓存schema
-    pub(crate) fn schema(&self) -> SchemaRef {
-        let fields = self.columns.iter()
-            .map(|(_, col)| col.to_field())
-            .collect_vec();
-        Arc::new(Schema::new(fields))
     }
 
     /// Add a column to the table catalog.

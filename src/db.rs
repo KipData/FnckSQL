@@ -1,17 +1,17 @@
-use arrow::error::ArrowError;
 use sqlparser::parser::ParserError;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution_tp::ExecutorError;
-use crate::execution_ap::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
-use crate::execution_tp::executor::{Executor, try_collect};
+use crate::execution::ExecutorError;
+use crate::execution::executor::{Executor, try_collect};
+use crate::execution::physical_plan::MappingError;
+use crate::execution::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
-use crate::storage_tp::memory::MemStorage;
-use crate::storage_tp::{Storage, StorageError};
+use crate::storage::memory::MemStorage;
+use crate::storage::{Storage, StorageError};
 use crate::types::tuple::Tuple;
 
 #[derive(Debug)]
@@ -33,7 +33,7 @@ impl Database {
     }
 
     /// Run SQL queries.
-    pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, ExecutorError> {
+    pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
         // parse
         let stmts = parse_sql(sql)?;
         // bind
@@ -124,12 +124,17 @@ pub enum DatabaseError {
         #[backtrace]
         StorageError,
     ),
-    #[error("Arrow error: {0}")]
-    ArrowError(
+    #[error("mapping error: {0}")]
+    MappingError(
         #[source]
         #[from]
-        #[backtrace]
-        ArrowError,
+        MappingError
+    ),
+    #[error("executor error: {0}")]
+    ExecutorError(
+        #[source]
+        #[from]
+        ExecutorError
     ),
     #[error("Internal error: {0}")]
     InternalError(String),
@@ -139,8 +144,8 @@ pub enum DatabaseError {
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::Database;
-    use crate::execution_tp::ExecutorError;
-    use crate::storage_tp::{Storage, StorageError};
+    use crate::execution::ExecutorError;
+    use crate::storage::{Storage, StorageError};
     use crate::types::{LogicalType, TableId};
     use crate::types::tuple::create_table;
 
@@ -183,7 +188,7 @@ mod test {
             let _ = kipsql.run("create table t1 (a int, b int)").await?;
             let _ = kipsql.run("create table t2 (c int, d int null)").await?;
             let _ = kipsql.run("insert into t1 (a, b) values (1, 1), (5, 3), (5, 2)").await?;
-            let _ = kipsql.run("insert into t2 (d, c) values (2, 1), (2, 3), (null, 6)").await?;
+            let _ = kipsql.run("insert into t2 (d, c) values (2, 1), (3, 1), (null, 6)").await?;
 
             println!("full t1:");
             let tuples_full_fields_t1 = kipsql.run("select * from t1").await?;

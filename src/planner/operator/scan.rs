@@ -3,7 +3,7 @@ use crate::catalog::TableCatalog;
 use crate::types::TableId;
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
-use crate::storage_ap::Bounds;
+use crate::storage::Bounds;
 
 use super::{sort::SortField, Operator};
 

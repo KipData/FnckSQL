@@ -1,7 +1,6 @@
 use std::io;
 
 use kip_sql::db::Database;
-use kip_sql::storage_ap::Storage;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

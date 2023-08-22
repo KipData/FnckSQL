@@ -262,56 +262,6 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
     }
 }
 
-impl From<LogicalType> for arrow::datatypes::DataType {
-    fn from(value: LogicalType) -> Self {
-        use arrow::datatypes::DataType;
-        match value {
-            LogicalType::Invalid => panic!("invalid logical type"),
-            LogicalType::SqlNull => DataType::Null,
-            LogicalType::Boolean => DataType::Boolean,
-            LogicalType::Tinyint => DataType::Int8,
-            LogicalType::UTinyint => DataType::UInt8,
-            LogicalType::Smallint => DataType::Int16,
-            LogicalType::USmallint => DataType::UInt16,
-            LogicalType::Integer => DataType::Int32,
-            LogicalType::UInteger => DataType::UInt32,
-            LogicalType::Bigint => DataType::Int64,
-            LogicalType::UBigint => DataType::UInt64,
-            LogicalType::Float => DataType::Float32,
-            LogicalType::Double => DataType::Float64,
-            LogicalType::Varchar => DataType::Utf8,
-        }
-    }
-}
-
-impl TryFrom<&arrow::datatypes::DataType> for LogicalType {
-    type Error = TypeError;
-
-    fn try_from(value: &arrow::datatypes::DataType) -> Result<Self, Self::Error> {
-        use arrow::datatypes::DataType;
-        Ok(match value {
-            DataType::Null => LogicalType::SqlNull,
-            DataType::Boolean => LogicalType::Boolean,
-            DataType::Int8 => LogicalType::Tinyint,
-            DataType::Int16 => LogicalType::Smallint,
-            DataType::Int32 => LogicalType::Integer,
-            DataType::Int64 => LogicalType::Bigint,
-            DataType::UInt8 => LogicalType::UTinyint,
-            DataType::UInt16 => LogicalType::USmallint,
-            DataType::UInt32 => LogicalType::UInteger,
-            DataType::UInt64 => LogicalType::UBigint,
-            DataType::Float16 => LogicalType::Float,
-            DataType::Float32 => LogicalType::Float,
-            DataType::Float64 => LogicalType::Double,
-            DataType::Utf8 => LogicalType::Varchar,
-            DataType::LargeUtf8 => LogicalType::Varchar,
-            _ => {
-                return Err(TypeError::NotImplementedArrowDataType(value.to_string()))
-            }
-        })
-    }
-}
-
 impl std::fmt::Display for LogicalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_ref())

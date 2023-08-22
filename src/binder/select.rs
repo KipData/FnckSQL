@@ -23,7 +23,7 @@ use sqlparser::ast::{
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
 use crate::binder::BindError;
-use crate::execution_ap::volcano_executor::join::joins_nullable;
+use crate::execution::executor::dql::join::joins_nullable;
 use crate::expression::BinaryOperator;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinCondition;
@@ -490,7 +490,7 @@ impl Binder {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution_ap::ExecutorError;
+    use crate::execution::ExecutorError;
 
     #[test]
     fn test_select_bind() -> Result<(), ExecutorError> {

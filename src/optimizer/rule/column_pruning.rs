@@ -117,7 +117,7 @@ impl Rule for PushProjectThroughChild {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution_ap::ExecutorError;
+    use crate::execution::ExecutorError;
     use crate::optimizer::heuristic::batch::{HepBatchStrategy};
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::RuleImpl;

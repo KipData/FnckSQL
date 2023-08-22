@@ -160,7 +160,7 @@ impl Rule for PushLimitIntoScan {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution_ap::ExecutorError;
+    use crate::execution::ExecutorError;
     use crate::optimizer::core::opt_expr::OptExprNode;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;

@@ -2,22 +2,11 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Formatter;
 use std::hash::Hash;
-use std::iter::repeat;
 use std::str::FromStr;
-use std::sync::Arc;
 
-use arrow::array::{
-    new_null_array, ArrayBuilder, ArrayRef, BooleanArray, BooleanBuilder,
-    Float32Array, Float32Builder, Float64Array, Float64Builder, Int16Array,
-    Int16Builder, Int32Array, Int32Builder, Int64Array, Int64Builder, Int8Array, Int8Builder,
-    StringArray, StringBuilder, UInt16Array,
-    UInt16Builder, UInt32Array, UInt32Builder, UInt64Array, UInt64Builder, UInt8Array,
-    UInt8Builder,
-};
-use arrow::datatypes::DataType;
 use ordered_float::OrderedFloat;
 
-use super::{LogicalType, TypeError};
+use super::LogicalType;
 
 #[derive(Clone)]
 pub enum DataValue {
@@ -149,41 +138,6 @@ impl Hash for DataValue {
     }
 }
 
-macro_rules! typed_cast {
-    ($array:expr, $index:expr, $ARRAYTYPE:ident, $SCALAR:ident) => {{
-        let array = $array.as_any().downcast_ref::<$ARRAYTYPE>().unwrap();
-        DataValue::$SCALAR(match array.is_null($index) {
-            true => None,
-            false => Some(array.value($index).into()),
-        })
-    }};
-}
-
-macro_rules! build_array_from_option {
-    ($DATA_TYPE:ident, $ARRAY_TYPE:ident, $EXPR:expr, $SIZE:expr) => {{
-        match $EXPR {
-            Some(value) => Arc::new($ARRAY_TYPE::from_value(*value, $SIZE)),
-            None => new_null_array(&DataType::$DATA_TYPE, $SIZE),
-        }
-    }};
-    ($DATA_TYPE:ident, $ENUM:expr, $ARRAY_TYPE:ident, $EXPR:expr, $SIZE:expr) => {{
-        match $EXPR {
-            Some(value) => Arc::new($ARRAY_TYPE::from_value(*value, $SIZE)),
-            None => new_null_array(&DataType::$DATA_TYPE($ENUM), $SIZE),
-        }
-    }};
-    ($DATA_TYPE:ident, $ENUM:expr, $ENUM2:expr, $ARRAY_TYPE:ident, $EXPR:expr, $SIZE:expr) => {{
-        match $EXPR {
-            Some(value) => {
-                let array: ArrayRef = Arc::new($ARRAY_TYPE::from_value(*value, $SIZE));
-                // Need to call cast to cast to final data type with timezone/extra param
-                cast(&array, &DataType::$DATA_TYPE($ENUM, $ENUM2)).expect("cannot do temporal cast")
-            }
-            None => new_null_array(&DataType::$DATA_TYPE($ENUM, $ENUM2), $SIZE),
-        }
-    }};
-}
-
 impl DataValue {
     pub fn is_null(&self) -> bool {
         match self {
@@ -200,25 +154,6 @@ impl DataValue {
             DataValue::UInt32(value) => value.is_none(),
             DataValue::UInt64(value) => value.is_none(),
             DataValue::Utf8(value) => value.is_none(),
-        }
-    }
-
-    pub fn new_none_value(data_type: &DataType) -> Result<Self, TypeError> {
-        match data_type {
-            DataType::Null => Ok(DataValue::Null),
-            DataType::Boolean => Ok(DataValue::Boolean(None)),
-            DataType::Float32 => Ok(DataValue::Float32(None)),
-            DataType::Float64 => Ok(DataValue::Float64(None)),
-            DataType::Int8 => Ok(DataValue::Int8(None)),
-            DataType::Int16 => Ok(DataValue::Int16(None)),
-            DataType::Int32 => Ok(DataValue::Int32(None)),
-            DataType::Int64 => Ok(DataValue::Int64(None)),
-            DataType::UInt8 => Ok(DataValue::UInt8(None)),
-            DataType::UInt16 => Ok(DataValue::UInt16(None)),
-            DataType::UInt32 => Ok(DataValue::UInt32(None)),
-            DataType::UInt64 => Ok(DataValue::UInt64(None)),
-            DataType::Utf8 => Ok(DataValue::Utf8(None)),
-            other => Err(TypeError::NotImplementedArrowDataType(other.to_string())),
         }
     }
 
@@ -241,34 +176,6 @@ impl DataValue {
         }
     }
 
-    /// Converts a value in `array` at `index` into a DataValue
-    pub fn try_from_array(array: &ArrayRef, index: usize) -> Result<Self, TypeError> {
-        if !array.is_valid(index) {
-            return Self::new_none_value(array.data_type());
-        }
-
-        use arrow::array::*;
-
-        Ok(match array.data_type() {
-            DataType::Null => DataValue::Null,
-            DataType::Boolean => typed_cast!(array, index, BooleanArray, Boolean),
-            DataType::Float64 => typed_cast!(array, index, Float64Array, Float64),
-            DataType::Float32 => typed_cast!(array, index, Float32Array, Float32),
-            DataType::UInt64 => typed_cast!(array, index, UInt64Array, UInt64),
-            DataType::UInt32 => typed_cast!(array, index, UInt32Array, UInt32),
-            DataType::UInt16 => typed_cast!(array, index, UInt16Array, UInt16),
-            DataType::UInt8 => typed_cast!(array, index, UInt8Array, UInt8),
-            DataType::Int64 => typed_cast!(array, index, Int64Array, Int64),
-            DataType::Int32 => typed_cast!(array, index, Int32Array, Int32),
-            DataType::Int16 => typed_cast!(array, index, Int16Array, Int16),
-            DataType::Int8 => typed_cast!(array, index, Int8Array, Int8),
-            DataType::Utf8 => typed_cast!(array, index, StringArray, Utf8),
-            other => {
-                return Err(TypeError::NotImplementedArrowDataType(other.to_string()));
-            }
-        })
-    }
-
     pub fn logical_type(&self) -> LogicalType {
         match self {
             DataValue::Null => LogicalType::SqlNull,
@@ -284,161 +191,6 @@ impl DataValue {
             DataValue::UInt32(_) => LogicalType::UInteger,
             DataValue::UInt64(_) => LogicalType::UBigint,
             DataValue::Utf8(_) => LogicalType::Varchar,
-        }
-    }
-
-    /// Converts a scalar value into an 1-row array.
-    pub fn to_array(&self) -> ArrayRef {
-        self.to_array_of_size(1)
-    }
-
-    pub fn bool_array(size: usize, e: &Option<bool>) -> ArrayRef {
-        Arc::new(BooleanArray::from(vec![*e; size])) as ArrayRef
-    }
-
-    /// Converts a scalar value into an array of `size` rows.
-    pub fn to_array_of_size(&self, size: usize) -> ArrayRef {
-        match self {
-            DataValue::Boolean(e) => Self::bool_array(size, e),
-            DataValue::Float64(e) => {
-                build_array_from_option!(Float64, Float64Array, e, size)
-            }
-            DataValue::Float32(e) => {
-                build_array_from_option!(Float32, Float32Array, e, size)
-            }
-            DataValue::Int8(e) => build_array_from_option!(Int8, Int8Array, e, size),
-            DataValue::Int16(e) => build_array_from_option!(Int16, Int16Array, e, size),
-            DataValue::Int32(e) => build_array_from_option!(Int32, Int32Array, e, size),
-            DataValue::Int64(e) => build_array_from_option!(Int64, Int64Array, e, size),
-            DataValue::UInt8(e) => build_array_from_option!(UInt8, UInt8Array, e, size),
-            DataValue::UInt16(e) => {
-                build_array_from_option!(UInt16, UInt16Array, e, size)
-            }
-            DataValue::UInt32(e) => {
-                build_array_from_option!(UInt32, UInt32Array, e, size)
-            }
-            DataValue::UInt64(e) => {
-                build_array_from_option!(UInt64, UInt64Array, e, size)
-            }
-
-            DataValue::Utf8(e) => match e {
-                Some(value) => Arc::new(StringArray::from_iter_values(repeat(value).take(size))),
-                None => new_null_array(&DataType::Utf8, size),
-            },
-            DataValue::Null => new_null_array(&DataType::Null, size),
-        }
-    }
-
-    pub fn new_builder(data_type: &LogicalType) -> Result<Box<dyn ArrayBuilder>, TypeError> {
-        match data_type {
-            LogicalType::Invalid | LogicalType::SqlNull => Err(TypeError::InternalError(format!(
-                "Unsupported type {:?} for builder",
-                data_type
-            ))),
-            LogicalType::Boolean => Ok(Box::new(BooleanBuilder::new())),
-            LogicalType::Tinyint => Ok(Box::new(Int8Builder::new())),
-            LogicalType::UTinyint => Ok(Box::new(UInt8Builder::new())),
-            LogicalType::Smallint => Ok(Box::new(Int16Builder::new())),
-            LogicalType::USmallint => Ok(Box::new(UInt16Builder::new())),
-            LogicalType::Integer => Ok(Box::new(Int32Builder::new())),
-            LogicalType::UInteger => Ok(Box::new(UInt32Builder::new())),
-            LogicalType::Bigint => Ok(Box::new(Int64Builder::new())),
-            LogicalType::UBigint => Ok(Box::new(UInt64Builder::new())),
-            LogicalType::Float => Ok(Box::new(Float32Builder::new())),
-            LogicalType::Double => Ok(Box::new(Float64Builder::new())),
-            LogicalType::Varchar => Ok(Box::new(StringBuilder::new())),
-        }
-    }
-
-    pub fn append_for_builder(
-        value: &DataValue,
-        builder: &mut Box<dyn ArrayBuilder>,
-    ) -> Result<(), TypeError> {
-        match value {
-            DataValue::Null => {
-                return Err(TypeError::InternalError(
-                    "Unsupported type: Null for builder".to_string(),
-                ))
-            }
-            DataValue::Boolean(v) => builder
-                .as_any_mut()
-                .downcast_mut::<BooleanBuilder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::Utf8(v) => builder
-                .as_any_mut()
-                .downcast_mut::<StringBuilder>()
-                .unwrap()
-                .append_option(v.as_ref()),
-            DataValue::Int8(v) => builder
-                .as_any_mut()
-                .downcast_mut::<Int8Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::Int16(v) => builder
-                .as_any_mut()
-                .downcast_mut::<Int16Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::Int32(v) => builder
-                .as_any_mut()
-                .downcast_mut::<Int32Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::Int64(v) => builder
-                .as_any_mut()
-                .downcast_mut::<Int64Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::UInt8(v) => builder
-                .as_any_mut()
-                .downcast_mut::<UInt8Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::UInt16(v) => builder
-                .as_any_mut()
-                .downcast_mut::<UInt16Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::UInt32(v) => builder
-                .as_any_mut()
-                .downcast_mut::<UInt32Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::UInt64(v) => builder
-                .as_any_mut()
-                .downcast_mut::<UInt64Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::Float32(v) => builder
-                .as_any_mut()
-                .downcast_mut::<Float32Builder>()
-                .unwrap()
-                .append_option(*v),
-            DataValue::Float64(v) => builder
-                .as_any_mut()
-                .downcast_mut::<Float64Builder>()
-                .unwrap()
-                .append_option(*v),
-        }
-        Ok(())
-    }
-
-    pub fn datatype(&self) -> DataType {
-        match self {
-            DataValue::Boolean(_) => DataType::Boolean,
-            DataValue::UInt8(_) => DataType::UInt8,
-            DataValue::UInt16(_) => DataType::UInt16,
-            DataValue::UInt32(_) => DataType::UInt32,
-            DataValue::UInt64(_) => DataType::UInt64,
-            DataValue::Int8(_) => DataType::Int8,
-            DataValue::Int16(_) => DataType::Int16,
-            DataValue::Int32(_) => DataType::Int32,
-            DataValue::Int64(_) => DataType::Int64,
-            DataValue::Float32(_) => DataType::Float32,
-            DataValue::Float64(_) => DataType::Float64,
-            DataValue::Utf8(_) => DataType::Utf8,
-            DataValue::Null => DataType::Null,
         }
     }
     
@@ -460,7 +212,6 @@ impl DataValue {
                     LogicalType::Float => DataValue::Float32(None),
                     LogicalType::Double => DataValue::Float64(None),
                     LogicalType::Varchar => DataValue::Utf8(None),
-                    _ => panic!("not support"),
                 }
             }
             DataValue::Boolean(value) => {
@@ -479,7 +230,6 @@ impl DataValue {
                     LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
                     LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
                     LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
                 }
             }
             DataValue::Float32(value) => {
@@ -617,7 +367,6 @@ impl DataValue {
                     LogicalType::Float => DataValue::Float32(value.map(|v| f32::from_str(&v).unwrap())),
                     LogicalType::Double => DataValue::Float64(value.map(|v| f64::from_str(&v).unwrap())),
                     LogicalType::Varchar => DataValue::Utf8(value),
-                    _ => panic!("not support"),
                 }
             }
         }

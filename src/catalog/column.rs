@@ -1,4 +1,3 @@
-use arrow::datatypes::{DataType, Field};
 use sqlparser::ast::{ColumnDef, ColumnOption};
 
 use crate::types::{ColumnId, IdGenerator, LogicalType, TableId};
@@ -42,14 +41,6 @@ impl ColumnCatalog {
 
     pub fn desc(&self) -> &ColumnDesc {
         &self.desc
-    }
-
-    pub fn to_field(&self) -> Field {
-        Field::new(
-            self.name.as_str(),
-            DataType::from(self.datatype().clone()),
-            self.nullable,
-        )
     }
 }
 

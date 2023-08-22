@@ -1,4 +1,3 @@
-pub mod display;
 pub mod operator;
 
 use crate::planner::operator::Operator;
