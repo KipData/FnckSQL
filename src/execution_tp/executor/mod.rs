@@ -5,6 +5,7 @@ mod dml;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use crate::execution_ap::physical_plan::physical_filter::PhysicalFilter;
+use crate::execution_ap::physical_plan::physical_hash_join::PhysicalHashJoin;
 use crate::execution_ap::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution_ap::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_ap::physical_plan::physical_projection::PhysicalProjection;
@@ -13,12 +14,14 @@ use crate::execution_ap::physical_plan::PhysicalPlan;
 use crate::execution_tp::executor::ddl::create::CreateTable;
 use crate::execution_tp::executor::dql::filter::Filter;
 use crate::execution_tp::executor::dml::insert::Insert;
+use crate::execution_tp::executor::dql::join::hash_join::HashJoin;
 use crate::execution_tp::executor::dql::limit::Limit;
 use crate::execution_tp::executor::dql::projection::Projection;
 use crate::execution_tp::executor::dql::seq_scan::SeqScan;
 use crate::execution_tp::executor::dql::sort::Sort;
 use crate::execution_tp::executor::dql::values::Values;
 use crate::execution_tp::ExecutorError;
+use crate::planner::operator::join::JoinOperator;
 use crate::storage_tp::memory::MemStorage;
 use crate::types::tuple::Tuple;
 
@@ -70,6 +73,14 @@ impl Executor {
                 let input = self.build(*input);
 
                 Limit::execute(Some(op.offset), Some(op.limit), input)
+            }
+            PhysicalPlan::HashJoin(PhysicalHashJoin { op, left_input, right_input}) => {
+                let left_input = self.build(*left_input);
+                let right_input = self.build(*right_input);
+
+                let JoinOperator { on, join_type } = op;
+
+                HashJoin::execute(on, join_type, left_input, right_input)
             }
             _ => todo!()
         }
