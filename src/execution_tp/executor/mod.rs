@@ -5,12 +5,14 @@ use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use crate::execution_ap::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution_ap::physical_plan::physical_insert::PhysicalInsert;
+use crate::execution_ap::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution_ap::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution_ap::physical_plan::physical_sort::PhysicalSort;
 use crate::execution_ap::physical_plan::PhysicalPlan;
 use crate::execution_tp::executor::ddl::create::CreateTable;
 use crate::execution_tp::executor::dml::filter::Filter;
 use crate::execution_tp::executor::dml::insert::Insert;
+use crate::execution_tp::executor::dml::limit::Limit;
 use crate::execution_tp::executor::dml::projection::Projection;
 use crate::execution_tp::executor::dml::seq_scan::SeqScan;
 use crate::execution_tp::executor::dml::sort::Sort;
@@ -62,6 +64,11 @@ impl Executor {
                 let input = self.build(*input);
 
                 Sort::execute(op.sort_fields, op.limit, input)
+            }
+            PhysicalPlan::Limit(PhysicalLimit {op, input, ..}) => {
+                let input = self.build(*input);
+
+                Limit::execute(Some(op.offset), Some(op.limit), input)
             }
             _ => todo!()
         }
