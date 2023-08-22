@@ -67,40 +67,39 @@ impl Database {
 
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
-           // TODO: SeqScan supports Project and Limit pushdown
-            // .batch(
-            //     "Predicate pushdown".to_string(),
-            //     HepBatchStrategy::fix_point_topdown(10),
-            //     vec![
-            //         RuleImpl::PushPredicateThroughJoin
-            //     ]
-            // )
-            // .batch(
-            //     "Limit pushdown".to_string(),
-            //     HepBatchStrategy::fix_point_topdown(10),
-            //     vec![
-            //         RuleImpl::LimitProjectTranspose,
-            //         RuleImpl::PushLimitThroughJoin,
-            //         RuleImpl::PushLimitIntoTableScan,
-            //         RuleImpl::EliminateLimits,
-            //     ],
-            // )
-            // .batch(
-            //     "Column pruning".to_string(),
-            //     HepBatchStrategy::fix_point_topdown(10),
-            //     vec![
-            //         RuleImpl::PushProjectThroughChild,
-            //         RuleImpl::PushProjectIntoScan
-            //     ]
-            // )
-            // .batch(
-            //     "Combine operators".to_string(),
-            //     HepBatchStrategy::fix_point_topdown(10),
-            //     vec![
-            //         RuleImpl::CollapseProject,
-            //         RuleImpl::CombineFilter
-            //     ]
-            // )
+            .batch(
+                "Predicate pushdown".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::PushPredicateThroughJoin
+                ]
+            )
+            .batch(
+                "Limit pushdown".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::LimitProjectTranspose,
+                    RuleImpl::PushLimitThroughJoin,
+                    RuleImpl::PushLimitIntoTableScan,
+                    RuleImpl::EliminateLimits,
+                ],
+            )
+            .batch(
+                "Column pruning".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::PushProjectThroughChild,
+                    RuleImpl::PushProjectIntoScan
+                ]
+            )
+            .batch(
+                "Combine operators".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::CollapseProject,
+                    RuleImpl::CombineFilter
+                ]
+            )
     }
 }
 
@@ -203,7 +202,7 @@ mod test {
             println!("{}", create_table(&tuples_projection_and_sort));
 
             println!("limit:");
-            let tuples_limit = kipsql.run("select * from t1 limit 1 offset 2").await?;
+            let tuples_limit = kipsql.run("select * from t1 limit 1 offset 1").await?;
             println!("{}", create_table(&tuples_limit));
             //
             // println!("inner join:");

@@ -5,7 +5,7 @@ use crate::types::value::DataValue;
 
 pub type TupleId = usize;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
     pub id: Option<TupleId>,
     pub columns: Vec<ColumnCatalog>,

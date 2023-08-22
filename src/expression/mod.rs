@@ -7,6 +7,7 @@ use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
+use crate::types::tuple::Tuple;
 
 pub mod agg;
 mod evaluator;
@@ -136,7 +137,7 @@ impl ScalarExpression {
         todo!()
     }
 
-    pub fn output_column(&self) -> ColumnCatalog {
+    pub fn output_column(&self, tuple: &Tuple) -> ColumnCatalog {
         match self {
             ScalarExpression::ColumnRef(col) => {
                 col.clone()
@@ -157,7 +158,7 @@ impl ScalarExpression {
             }
             ScalarExpression::AggCall { kind, args, ty } => {
                 let args_str = args.iter()
-                    .map(|expr| expr.output_column().name)
+                    .map(|expr| expr.output_column(tuple).name)
                     .join(", ");
 
                 ColumnCatalog::new(
@@ -165,6 +166,9 @@ impl ScalarExpression {
                     true,
                     ColumnDesc::new(ty.clone(), false)
                 )
+            }
+            ScalarExpression::InputRef { index, .. } => {
+                tuple.columns[*index].clone()
             }
             _ => unreachable!()
         }
