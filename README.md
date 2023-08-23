@@ -42,7 +42,7 @@ select * from t1 order by a asc nulls first
   - [x] Limit
 - DML
   - [x] Insert
-  - [ ] Update
+  - [x] Update
   - [ ] Delete
 - DataTypes
   - Invalid

@@ -8,12 +8,14 @@ pub mod scan;
 pub mod sort;
 pub mod insert;
 pub mod values;
+pub mod update;
 
 use itertools::Itertools;
 use crate::catalog::ColumnRef;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
+use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
 
 use self::{
@@ -32,6 +34,7 @@ pub enum Operator {
     Sort(SortOperator),
     Limit(LimitOperator),
     Insert(InsertOperator),
+    Update(UpdateOperator),
     Values(ValuesOperator),
     CreateTable(CreateTableOperator)
 }

@@ -14,6 +14,7 @@ use crate::execution::physical_plan::PhysicalPlan;
 use crate::execution::executor::ddl::create::CreateTable;
 use crate::execution::executor::dql::filter::Filter;
 use crate::execution::executor::dml::insert::Insert;
+use crate::execution::executor::dml::update::Update;
 use crate::execution::executor::dql::join::hash_join::HashJoin;
 use crate::execution::executor::dql::limit::Limit;
 use crate::execution::executor::dql::projection::Projection;
@@ -21,6 +22,7 @@ use crate::execution::executor::dql::seq_scan::SeqScan;
 use crate::execution::executor::dql::sort::Sort;
 use crate::execution::executor::dql::values::Values;
 use crate::execution::ExecutorError;
+use crate::execution::physical_plan::physical_update::PhysicalUpdate;
 use crate::planner::operator::join::JoinOperator;
 use crate::storage::memory::MemStorage;
 use crate::types::tuple::Tuple;
@@ -52,6 +54,12 @@ impl Executor {
                 let input = self.build(*input);
 
                 Insert::execute(table_id, input, self.storage.clone())
+            }
+            PhysicalPlan::Update(PhysicalUpdate { table_id, input, values}) => {
+                let input = self.build(*input);
+                let values = self.build(*values);
+
+                Update::execute(table_id, input, values, self.storage.clone())
             }
             PhysicalPlan::Values(op) => {
                 Values::execute(op)

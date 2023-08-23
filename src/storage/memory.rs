@@ -117,12 +117,16 @@ impl Table for MemTable {
     }
 
     fn append(&self, tuple: Tuple) -> Result<(), StorageError> {
-        unsafe {
+        let tuples = unsafe {
             self.tuples
                 .as_ptr()
                 .as_mut()
-                .unwrap()
-                .push(tuple);
+        }.unwrap();
+
+        if let Some(original_tuple) = tuples.iter_mut().find(|t| t.id == tuple.id) {
+            *original_tuple = tuple;
+        } else {
+            tuples.push(tuple);
         }
 
         Ok(())
