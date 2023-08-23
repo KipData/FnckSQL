@@ -77,7 +77,7 @@ select * from t1 order by a asc nulls first
   - [x] Hash Join
   - [x] Insert
   - [x] Values
-  - [ ] Update
+  - [x] Update
   - [ ] Delete
 
 ### Thanks For
