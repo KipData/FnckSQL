@@ -51,12 +51,17 @@ async fn server_run() -> Result<(), Box<dyn Error>> {
             break
         }
 
-        let tuples = db.run(&input).await?;
-
-        if tuples.is_empty() {
-            println!("\nEmpty!");
-        } else {
-            println!("\n{}", create_table(&tuples));
+        match db.run(&input).await {
+            Ok(tuples) => {
+                if tuples.is_empty() {
+                    println!("\nEmpty!");
+                } else {
+                    println!("\n{}", create_table(&tuples));
+                }
+            }
+            Err(err) => {
+                println!("{}", err);
+            }
         }
     }
 
