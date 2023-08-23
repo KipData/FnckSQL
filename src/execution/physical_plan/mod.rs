@@ -6,6 +6,7 @@ use crate::execution::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution::physical_plan::physical_sort::PhysicalSort;
 use crate::execution::physical_plan::physical_table_scan::PhysicalTableScan;
+use crate::execution::physical_plan::physical_update::PhysicalUpdate;
 use crate::execution::physical_plan::physical_values::PhysicalValues;
 
 pub(crate) mod physical_create_table;
@@ -18,10 +19,12 @@ pub(crate) mod physical_filter;
 pub(crate) mod physical_sort;
 pub(crate) mod physical_limit;
 pub(crate) mod physical_hash_join;
+pub(crate) mod physical_update;
 
 #[derive(Debug)]
 pub enum PhysicalPlan {
     Insert(PhysicalInsert),
+    Update(PhysicalUpdate),
     CreateTable(PhysicalCreateTable),
     TableScan(PhysicalTableScan),
     Projection(PhysicalProjection),

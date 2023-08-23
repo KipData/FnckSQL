@@ -3,6 +3,7 @@ mod create_table;
 pub mod expr;
 mod select;
 mod insert;
+mod update;
 
 use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
@@ -69,6 +70,13 @@ impl Binder {
                     self.bind_insert(table_name.to_owned(), columns, &values.rows)?
                 } else {
                     todo!()
+                }
+            }
+            Statement::Update { table, selection, assignments, .. } => {
+                if !table.joins.is_empty() {
+                    unimplemented!()
+                } else {
+                    self.bind_update(table, selection, assignments)?
                 }
             }
             _ => unimplemented!(),

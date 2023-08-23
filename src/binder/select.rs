@@ -108,7 +108,7 @@ impl Binder {
         Ok(plan)
     }
 
-    fn bind_table_ref(&mut self, from: &[TableWithJoins]) -> Result<LogicalPlan, BindError> {
+    pub(crate) fn bind_table_ref(&mut self, from: &[TableWithJoins]) -> Result<LogicalPlan, BindError> {
         assert!(from.len() < 2, "not support yet.");
         if from.is_empty() {
             return Ok(LogicalPlan {
@@ -253,7 +253,7 @@ impl Binder {
         Ok(LJoinOperator::new(left, right, on, join_type))
     }
 
-    fn bind_where(
+    pub(crate) fn bind_where(
         &mut self,
         children: LogicalPlan,
         predicate: &Expr,

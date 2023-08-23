@@ -11,8 +11,6 @@ use crate::planner::operator::values::ValuesOperator;
 use crate::types::value::ValueRef;
 
 impl Binder {
-
-    // TODO: 支持Project
     pub(crate) fn bind_insert(
         &mut self,
         name: ObjectName,
@@ -24,21 +22,21 @@ impl Binder {
 
         if let Some(table) = self.context.catalog.get_table_by_name(table_name) {
             let table_id = table.id;
-            let mut col_catalogs = Vec::new();
+            let mut columns = Vec::new();
 
             if idents.is_empty() {
-                col_catalogs = table.all_columns()
+                columns = table.all_columns()
                     .into_iter()
                     .map(|(_, catalog)| catalog.clone())
                     .collect_vec();
             } else {
-                let bind_table_name = Some(table.name.to_string());
+                let bind_table_name = Some(table_name.to_string());
                 for ident in idents {
                     match self.bind_column_ref_from_identifiers(
                         slice::from_ref(ident),
                         bind_table_name.as_ref()
                     )? {
-                        ScalarExpression::ColumnRef(catalog) => col_catalogs.push(catalog),
+                        ScalarExpression::ColumnRef(catalog) => columns.push(catalog),
                         _ => unreachable!()
                     }
                 }
@@ -56,7 +54,7 @@ impl Binder {
                 })
                 .try_collect()?;
 
-            let values_plan = self.bind_values(rows, col_catalogs.clone());
+            let values_plan = self.bind_values(rows, columns);
 
             Ok(LogicalPlan {
                 operator: Operator::Insert(
@@ -71,15 +69,15 @@ impl Binder {
         }
     }
 
-    fn bind_values(
+    pub(crate) fn bind_values(
         &mut self,
         rows: Vec<Vec<ValueRef>>,
-        col_catalogs: Vec<ColumnRef>
+        columns: Vec<ColumnRef>
     ) -> LogicalPlan {
         LogicalPlan {
             operator: Operator::Values(ValuesOperator {
                 rows,
-                columns: col_catalogs,
+                columns,
             }),
             childrens: vec![],
         }

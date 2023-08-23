@@ -10,6 +10,7 @@ use crate::execution::physical_plan::physical_hash_join::PhysicalHashJoin;
 use crate::execution::physical_plan::physical_insert::PhysicalInsert;
 use crate::execution::physical_plan::physical_limit::PhysicalLimit;
 use crate::execution::physical_plan::physical_sort::PhysicalSort;
+use crate::execution::physical_plan::physical_update::PhysicalUpdate;
 use crate::execution::physical_plan::physical_values::PhysicalValues;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::filter::FilterOperator;
@@ -18,6 +19,7 @@ use crate::planner::operator::join::{JoinOperator, JoinType};
 use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::project::ProjectOperator;
 use crate::planner::operator::sort::SortOperator;
+use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
 
 pub struct PhysicalPlanMapping;
@@ -64,6 +66,12 @@ impl PhysicalPlanMapping {
                 let right_child = plan.childrens.remove(0);
 
                 Self::build_physical_join(left_child, right_child, op)?
+            }
+            Operator::Update(op) => {
+                let input = plan.childrens.remove(0);
+                let values = plan.childrens.remove(0);
+
+                Self::build_physical_update(input, values, op)?
             }
             _ => return Err(MappingError::Unsupported(format!("{:?}", plan.operator))),
         };
@@ -145,5 +153,16 @@ impl PhysicalPlanMapping {
                 right_input,
             }))
         }
+    }
+
+    fn build_physical_update(input: LogicalPlan, values: LogicalPlan, op: UpdateOperator) -> Result<PhysicalPlan, MappingError> {
+        let input = Box::new(Self::build_plan(input)?);
+        let values = Box::new(Self::build_plan(values)?);
+
+        Ok(PhysicalPlan::Update(PhysicalUpdate {
+            table_id: op.table_id,
+            input,
+            values,
+        }))
     }
 }

@@ -5,7 +5,7 @@ use crate::catalog::CatalogError;
 use crate::execution::executor::BoxedExecutor;
 use crate::execution::ExecutorError;
 use crate::storage::{Storage, Table};
-use crate::types::{ColumnId, TableId};
+use crate::types::{ColumnId, IdGenerator, TableId};
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 
@@ -29,7 +29,7 @@ impl Insert {
                 let all_columns = table_catalog.all_columns();
 
                 let mut tuple = Tuple {
-                    id: None,
+                    id: Some(IdGenerator::build() as usize),
                     columns: Vec::with_capacity(all_columns.len()),
                     values: Vec::with_capacity(all_columns.len()),
                 };
