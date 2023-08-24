@@ -41,10 +41,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 async fn server_run() -> Result<(), Box<dyn Error>> {
     let db = Database::new_on_mem();
+    let _ = db.run("create table t1 (a int, b int)").await?;
+    let _ = db.run("create table t2 (c int, d int null)").await?;
+    let _ = db.run("insert into t1 (a, b) values (1, 1), (5, 3), (5, 2)").await?;
+    let _ = db.run("insert into t2 (d, c) values (2, 1), (3, 1), (null, 6)").await?;
+
     loop {
         println!("> type👇 plz");
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
+
+        if input.eq("\n") {
+            continue
+        }
 
         if input.to_lowercase()[..4].eq("quit") {
             println!("{}", BLOOM);
