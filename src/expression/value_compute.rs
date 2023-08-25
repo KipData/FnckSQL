@@ -151,7 +151,7 @@ pub fn binary_op_tp(
                 }
                 _ => todo!("unsupported operator")
             }
-        },
+        }
         LogicalType::Bigint => {
             let left_value = unpack_i64(left.clone());
             let right_value = unpack_i64(right.clone().cast(&main_type));
@@ -256,7 +256,7 @@ pub fn binary_op_tp(
                 }
                 _ => todo!("unsupported operator")
             }
-        },
+        }
         LogicalType::Double => {
             let left_value = unpack_f64(left.clone());
             let right_value = unpack_f64(right.clone().cast(&main_type));
@@ -361,7 +361,7 @@ pub fn binary_op_tp(
                 }
                 _ => todo!("unsupported operator")
             }
-        },
+        }
         LogicalType::Boolean => {
             let left_value = unpack_bool(left.clone());
             let right_value = unpack_bool(right.clone().cast(&main_type));
@@ -387,7 +387,7 @@ pub fn binary_op_tp(
                 }
                 _ => todo!("unsupported operator")
             }
-        },
+        }
         LogicalType::Float => {
             let left_value = unpack_f32(left.clone());
             let right_value = unpack_f32(right.clone().cast(&main_type));
@@ -702,24 +702,21 @@ mod test {
 
     #[test]
     fn test_binary_op_tp_f32_compare() {
-        #[test]
-        fn test_binary_op_tp_f32_compare() {
-            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(0.0)), &BinaryOperator::Gt), DataValue::Boolean(Some(true)));
-            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(0.0)), &BinaryOperator::Lt), DataValue::Boolean(Some(false)));
-            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::GtEq), DataValue::Boolean(Some(true)));
-            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::LtEq), DataValue::Boolean(Some(true)));
-            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::NotEq), DataValue::Boolean(Some(false)));
-            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::Eq), DataValue::Boolean(Some(true)));
+        assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(0.0)), &BinaryOperator::Gt), DataValue::Boolean(Some(true)));
+        assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(0.0)), &BinaryOperator::Lt), DataValue::Boolean(Some(false)));
+        assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::GtEq), DataValue::Boolean(Some(true)));
+        assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::LtEq), DataValue::Boolean(Some(true)));
+        assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::NotEq), DataValue::Boolean(Some(false)));
+        assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::Eq), DataValue::Boolean(Some(true)));
 
-            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(0.0)), &BinaryOperator::Gt), DataValue::Boolean(None));
-            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(0.0)), &BinaryOperator::Lt), DataValue::Boolean(None));
-            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::GtEq), DataValue::Boolean(None));
-            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::LtEq), DataValue::Boolean(None));
-            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::NotEq), DataValue::Boolean(None));
+        assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(0.0)), &BinaryOperator::Gt), DataValue::Boolean(None));
+        assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(0.0)), &BinaryOperator::Lt), DataValue::Boolean(None));
+        assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::GtEq), DataValue::Boolean(None));
+        assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::LtEq), DataValue::Boolean(None));
+        assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::NotEq), DataValue::Boolean(None));
 
-            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::Eq), DataValue::Boolean(None));
-            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(None), &BinaryOperator::Eq), DataValue::Boolean(Some(true)));
-        }
+        assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::Eq), DataValue::Boolean(None));
+        assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(None), &BinaryOperator::Eq), DataValue::Boolean(Some(true)));
     }
 
     #[test]
