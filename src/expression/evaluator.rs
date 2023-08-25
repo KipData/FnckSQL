@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::expression::array_compute::binary_op_tp;
+use crate::expression::value_compute::binary_op_tp;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};

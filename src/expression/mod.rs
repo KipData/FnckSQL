@@ -12,7 +12,7 @@ use crate::types::tuple::Tuple;
 
 pub mod agg;
 mod evaluator;
-mod array_compute;
+mod value_compute;
 
 /// ScalarExpression represnet all scalar expression in SQL.
 /// SELECT a+1, b FROM t1.

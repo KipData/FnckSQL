@@ -23,6 +23,13 @@ fn unpack_f64(value: DataValue) -> Option<f64> {
     }
 }
 
+fn unpack_f32(value: DataValue) -> Option<f32> {
+    match value {
+        DataValue::Float32(inner) => inner,
+        _ => None
+    }
+}
+
 fn unpack_bool(value: DataValue) -> Option<bool> {
     match value {
         DataValue::Boolean(inner) => inner,
@@ -381,6 +388,110 @@ pub fn binary_op_tp(
                 _ => todo!("unsupported operator")
             }
         },
+        LogicalType::Float => {
+            let left_value = unpack_f32(left.clone());
+            let right_value = unpack_f32(right.clone().cast(&main_type));
+
+            match op {
+                BinaryOperator::Plus => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 + v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Float32(value)
+                }
+                BinaryOperator::Minus => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 - v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Float32(value)
+                }
+                BinaryOperator::Multiply => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 * v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Float32(value)
+                }
+                BinaryOperator::Divide => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 / v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Float32(value)
+                }
+                BinaryOperator::Gt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 > v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Lt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 < v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::GtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 >= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::LtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 <= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Eq => {
+                    let value = match (left_value, right_value) {
+                        (Some(v1), Some(v2)) => {
+                            Some(v1 == v2)
+                        }
+                        (None, None) => {
+                            Some(true)
+                        }
+                        (_, _) => {
+                            None
+                        }
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::NotEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 != v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                _ => todo!("unsupported operator")
+            }
+        }
         LogicalType::SqlNull => {
             DataValue::Boolean(None)
         }
@@ -390,7 +501,7 @@ pub fn binary_op_tp(
 
 #[cfg(test)]
 mod test {
-    use crate::expression::array_compute::binary_op_tp;
+    use crate::expression::value_compute::binary_op_tp;
     use crate::expression::BinaryOperator;
     use crate::types::value::DataValue;
 
@@ -587,6 +698,28 @@ mod test {
 
         assert_eq!(binary_op_tp(&DataValue::Float64(None), &DataValue::Float64(Some(1.0)), &BinaryOperator::Eq), DataValue::Boolean(None));
         assert_eq!(binary_op_tp(&DataValue::Float64(None), &DataValue::Float64(None), &BinaryOperator::Eq), DataValue::Boolean(Some(true)));
+    }
+
+    #[test]
+    fn test_binary_op_tp_f32_compare() {
+        #[test]
+        fn test_binary_op_tp_f32_compare() {
+            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(0.0)), &BinaryOperator::Gt), DataValue::Boolean(Some(true)));
+            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(0.0)), &BinaryOperator::Lt), DataValue::Boolean(Some(false)));
+            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::GtEq), DataValue::Boolean(Some(true)));
+            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::LtEq), DataValue::Boolean(Some(true)));
+            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::NotEq), DataValue::Boolean(Some(false)));
+            assert_eq!(binary_op_tp(&DataValue::Float32(Some(1.0)), &DataValue::Float32(Some(1.0)), &BinaryOperator::Eq), DataValue::Boolean(Some(true)));
+
+            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(0.0)), &BinaryOperator::Gt), DataValue::Boolean(None));
+            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(0.0)), &BinaryOperator::Lt), DataValue::Boolean(None));
+            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::GtEq), DataValue::Boolean(None));
+            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::LtEq), DataValue::Boolean(None));
+            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::NotEq), DataValue::Boolean(None));
+
+            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(Some(1.0)), &BinaryOperator::Eq), DataValue::Boolean(None));
+            assert_eq!(binary_op_tp(&DataValue::Float32(None), &DataValue::Float32(None), &BinaryOperator::Eq), DataValue::Boolean(Some(true)));
+        }
     }
 
     #[test]
