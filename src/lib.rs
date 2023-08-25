@@ -4,6 +4,7 @@
 #![feature(result_flattening)]
 #![feature(generators)]
 #![feature(iterator_try_collect)]
+#![feature(is_terminal)]
 pub mod binder;
 pub mod catalog;
 pub mod db;

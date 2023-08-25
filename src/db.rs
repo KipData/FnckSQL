@@ -121,7 +121,6 @@ pub enum DatabaseError {
     StorageError(
         #[source]
         #[from]
-        #[backtrace]
         StorageError,
     ),
     #[error("mapping error: {0}")]

@@ -19,14 +19,8 @@ jobs:
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2023-04-07
           override: true
-
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
 
       - name: Run tests
         uses: actions-rs/cargo@v1
