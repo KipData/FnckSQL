@@ -734,6 +734,6 @@ mod test {
         assert_eq!(binary_op_tp(&DataValue::Boolean(Some(false)), &DataValue::Boolean(Some(true)), &BinaryOperator::Or), DataValue::Boolean(Some(true)));
         assert_eq!(binary_op_tp(&DataValue::Boolean(Some(false)), &DataValue::Boolean(Some(false)), &BinaryOperator::Or), DataValue::Boolean(Some(false)));
 
-        assert_eq!(binary_op_tp(&DataValue::Boolean(None), &DataValue::Boolean(Some(true)), &BinaryOperator::And), DataValue::Boolean(None));
+        assert_eq!(binary_op_tp(&DataValue::Boolean(None), &DataValue::Boolean(Some(true)), &BinaryOperator::Or), DataValue::Boolean(None));
     }
 }
