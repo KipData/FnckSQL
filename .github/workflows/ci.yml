@@ -35,6 +35,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
+          toolchain: nightly
+          components: rustfmt, clippy
       - uses: actions/cache@v3
         with:
           path: |
