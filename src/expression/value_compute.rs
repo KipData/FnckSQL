@@ -44,12 +44,12 @@ pub fn binary_op_tp(
     right: &DataValue,
     op: &BinaryOperator,
 ) -> DataValue {
-    let main_type = left.logical_type();
+    let unified_type = LogicalType::max_logical_type(&left.logical_type(), &right.logical_type()).unwrap();
 
-    match &main_type {
+    match &unified_type {
         LogicalType::Integer => {
-            let left_value = unpack_i32(left.clone());
-            let right_value = unpack_i32(right.clone().cast(&main_type));
+            let left_value = unpack_i32(left.clone().cast(&unified_type));
+            let right_value = unpack_i32(right.clone().cast(&unified_type));
 
             match op {
                 BinaryOperator::Plus => {
@@ -153,8 +153,8 @@ pub fn binary_op_tp(
             }
         }
         LogicalType::Bigint => {
-            let left_value = unpack_i64(left.clone());
-            let right_value = unpack_i64(right.clone().cast(&main_type));
+            let left_value = unpack_i64(left.clone().cast(&unified_type));
+            let right_value = unpack_i64(right.clone().cast(&unified_type));
 
             match op {
                 BinaryOperator::Plus => {
@@ -258,8 +258,8 @@ pub fn binary_op_tp(
             }
         }
         LogicalType::Double => {
-            let left_value = unpack_f64(left.clone());
-            let right_value = unpack_f64(right.clone().cast(&main_type));
+            let left_value = unpack_f64(left.clone().cast(&unified_type));
+            let right_value = unpack_f64(right.clone().cast(&unified_type));
 
             match op {
                 BinaryOperator::Plus => {
@@ -363,8 +363,8 @@ pub fn binary_op_tp(
             }
         }
         LogicalType::Boolean => {
-            let left_value = unpack_bool(left.clone());
-            let right_value = unpack_bool(right.clone().cast(&main_type));
+            let left_value = unpack_bool(left.clone().cast(&unified_type));
+            let right_value = unpack_bool(right.clone().cast(&unified_type));
 
             match op {
                 BinaryOperator::And => {
@@ -389,8 +389,8 @@ pub fn binary_op_tp(
             }
         }
         LogicalType::Float => {
-            let left_value = unpack_f32(left.clone());
-            let right_value = unpack_f32(right.clone().cast(&main_type));
+            let left_value = unpack_f32(left.clone().cast(&unified_type));
+            let right_value = unpack_f32(right.clone().cast(&unified_type));
 
             match op {
                 BinaryOperator::Plus => {
@@ -631,6 +631,8 @@ mod test {
         let i32_cast_2 = binary_op_tp(&DataValue::Int32(Some(1)), &DataValue::Int16(Some(1)), &BinaryOperator::Plus);
 
         assert_eq!(i32_cast_1, i32_cast_2);
+
+        let i32_cast_2 = binary_op_tp(&DataValue::Int16(Some(1)), &DataValue::Int32(Some(1)), &BinaryOperator::Plus);
 
         let i64_cast_1 = binary_op_tp(&DataValue::Int64(Some(1)), &DataValue::Int8(Some(1)), &BinaryOperator::Plus);
         let i64_cast_2 = binary_op_tp(&DataValue::Int64(Some(1)), &DataValue::Int16(Some(1)), &BinaryOperator::Plus);
