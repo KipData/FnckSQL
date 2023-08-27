@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::expression::value_compute::binary_op_tp;
+use crate::expression::value_compute::binary_op;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
@@ -29,7 +29,7 @@ impl ScalarExpression {
             ScalarExpression::Binary{ left_expr, right_expr, op, .. } => {
                 let left = left_expr.eval_column(tuple);
                 let right = right_expr.eval_column(tuple);
-                Arc::new(binary_op_tp(&left, &right, op))
+                Arc::new(binary_op(&left, &right, op))
             }
             ScalarExpression::IsNull{ expr } => {
                 Arc::new(DataValue::Boolean(Some(expr.nullable())))
