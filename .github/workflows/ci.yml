@@ -1,47 +1,28 @@
-name: CI
+name: Rust
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  fmt:
+  build:
+
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v2
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
-          components: rustfmt, clippy
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Check code format
-        run: cargo fmt --all -- --check
+          toolchain: nightly-2023-04-07
+          override: true
 
-
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - name: Run tests
+        uses: actions-rs/cargo@v1
         with:
-          profile: minimal
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: taiki-e/install-action@nextest
-      - name: Test
-        run: cargo nextest run --no-fail-fast --all-features
+          command: test
