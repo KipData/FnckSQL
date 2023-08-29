@@ -36,6 +36,10 @@ impl Database {
     pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
         // parse
         let stmts = parse_sql(sql)?;
+        if stmts.is_empty() {
+            return Ok(vec![]);
+        }
+
         // bind
         let catalog = self.storage.get_catalog();
 

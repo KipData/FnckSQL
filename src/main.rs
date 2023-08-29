@@ -50,12 +50,7 @@ async fn server_run() -> Result<(), Box<dyn Error>> {
         println!("> type👇 plz");
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
-
-        if input.eq("\n") {
-            continue
-        }
-
-        if input.to_lowercase()[..4].eq("quit") {
+        if input.to_lowercase().eq("quit\n") {
             println!("{}", BLOOM);
             break
         }
@@ -63,9 +58,9 @@ async fn server_run() -> Result<(), Box<dyn Error>> {
         match db.run(&input).await {
             Ok(tuples) => {
                 if tuples.is_empty() {
-                    println!("\nEmpty!");
+                    println!("\nEmpty\n");
                 } else {
-                    println!("\n{}", create_table(&tuples));
+                    println!("\n{}\n", create_table(&tuples));
                 }
             }
             Err(err) => {
