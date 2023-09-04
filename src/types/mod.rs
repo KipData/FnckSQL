@@ -58,6 +58,25 @@ pub enum LogicalType {
 }
 
 impl LogicalType {
+    pub fn raw_len(&self) -> Option<usize> {
+        match self {
+            LogicalType::Invalid => Some(0),
+            LogicalType::SqlNull => Some(0),
+            LogicalType::Boolean => Some(1),
+            LogicalType::Tinyint => Some(1),
+            LogicalType::UTinyint => Some(1),
+            LogicalType::Smallint => Some(2),
+            LogicalType::USmallint => Some(2),
+            LogicalType::Integer => Some(4),
+            LogicalType::UInteger => Some(4),
+            LogicalType::Bigint => Some(8),
+            LogicalType::UBigint => Some(8),
+            LogicalType::Float => Some(4),
+            LogicalType::Double => Some(8),
+            LogicalType::Varchar => None
+        }
+    }
+
     pub fn numeric() -> Vec<LogicalType> {
         vec![
             LogicalType::Tinyint,
