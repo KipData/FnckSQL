@@ -1,4 +1,5 @@
 pub mod memory;
+mod table_codec;
 
 use crate::catalog::{CatalogError, ColumnRef, RootCatalog, TableCatalog};
 use crate::expression::ScalarExpression;

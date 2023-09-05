@@ -24,7 +24,7 @@ impl ScanOperator {
         let columns = table_catalog
             .all_columns()
             .into_iter()
-            .map(|(_, col)| ScalarExpression::ColumnRef(col.clone()))
+            .map(|col| ScalarExpression::ColumnRef(col))
             .collect_vec();
 
         LogicalPlan {

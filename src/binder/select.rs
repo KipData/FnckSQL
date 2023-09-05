@@ -207,8 +207,8 @@ impl Binder {
         let mut exprs = vec![];
         for (table_id, _) in self.context.bind_table.values().cloned() {
             let table = self.context.catalog.get_table(&table_id).unwrap();
-            for (_, col) in table.all_columns() {
-                exprs.push(ScalarExpression::ColumnRef(col.clone()));
+            for col in table.all_columns() {
+                exprs.push(ScalarExpression::ColumnRef(col));
             }
         }
 

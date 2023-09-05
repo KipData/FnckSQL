@@ -40,9 +40,16 @@ impl TableCatalog {
         self.column_idxs.contains_key(name)
     }
 
-    pub(crate) fn all_columns(&self) -> Vec<(&ColumnId, &ColumnRef)> {
+    pub(crate) fn all_columns_with_id(&self) -> Vec<(&ColumnId, &ColumnRef)> {
         self.columns
             .iter()
+            .collect()
+    }
+
+    pub(crate) fn all_columns(&self) -> Vec<ColumnRef> {
+        self.columns
+            .iter()
+            .map(|(_, col)| Arc::clone(col))
             .collect()
     }
 

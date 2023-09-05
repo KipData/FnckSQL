@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ColumnDef, ColumnOption};
 
 use crate::types::{ColumnId, IdGenerator, LogicalType, TableId};
@@ -70,7 +71,7 @@ impl From<ColumnDef> for ColumnCatalog {
 }
 
 /// The descriptor of a column.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
     pub(crate) is_primary: bool,

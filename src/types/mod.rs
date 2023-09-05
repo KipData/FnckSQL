@@ -4,6 +4,7 @@ pub mod tuple;
 
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering::{Acquire, Release};
+use serde::{Deserialize, Serialize};
 
 use integer_encoding::FixedInt;
 use strum_macros::AsRefStr;
@@ -39,7 +40,7 @@ pub type ColumnId = u32;
 
 /// Sqlrs type conversion:
 /// sqlparser::ast::DataType -> LogicalType -> arrow::datatypes::DataType
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, AsRefStr)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, AsRefStr, Serialize, Deserialize)]
 pub enum LogicalType {
     Invalid,
     SqlNull,

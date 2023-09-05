@@ -26,7 +26,7 @@ impl Insert {
                     .map(|(i, value)| (columns[i].id, value))
                     .collect();
 
-                let all_columns = table_catalog.all_columns();
+                let all_columns = table_catalog.all_columns_with_id();
 
                 let mut tuple = Tuple {
                     id: Some(IdGenerator::build() as usize),

@@ -25,10 +25,7 @@ impl Binder {
             let mut columns = Vec::new();
 
             if idents.is_empty() {
-                columns = table.all_columns()
-                    .into_iter()
-                    .map(|(_, catalog)| catalog.clone())
-                    .collect_vec();
+                columns = table.all_columns();
             } else {
                 let bind_table_name = Some(table_name.to_string());
                 for ident in idents {
