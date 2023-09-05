@@ -50,16 +50,16 @@ impl Executor {
 
                 Projection::execute(exprs, input)
             }
-            PhysicalPlan::Insert(PhysicalInsert { table_id, input}) => {
+            PhysicalPlan::Insert(PhysicalInsert { table_name, input}) => {
                 let input = self.build(*input);
 
-                Insert::execute(table_id, input, self.storage.clone())
+                Insert::execute(table_name, input, self.storage.clone())
             }
-            PhysicalPlan::Update(PhysicalUpdate { table_id, input, values}) => {
+            PhysicalPlan::Update(PhysicalUpdate { table_name, input, values}) => {
                 let input = self.build(*input);
                 let values = self.build(*values);
 
-                Update::execute(table_id, input, values, self.storage.clone())
+                Update::execute(table_name, input, values, self.storage.clone())
             }
             PhysicalPlan::Values(op) => {
                 Values::execute(op)

@@ -1,16 +1,17 @@
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ColumnDef, ColumnOption};
+use crate::catalog::TableName;
 
-use crate::types::{ColumnId, IdGenerator, LogicalType, TableId};
+use crate::types::{ColumnId, IdGenerator, LogicalType};
 
 pub type ColumnRef = Arc<ColumnCatalog>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnCatalog {
     pub id: ColumnId,
     pub name: String,
-    pub table_id: Option<TableId>,
+    pub table_name: Option<TableName>,
     pub nullable: bool,
     pub desc: ColumnDesc,
 }
@@ -33,7 +34,7 @@ impl ColumnCatalog {
         ColumnCatalog {
             id: IdGenerator::build(),
             name: column_name,
-            table_id: None,
+            table_name: None,
             nullable,
             desc: column_desc,
         }

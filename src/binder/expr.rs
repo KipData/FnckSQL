@@ -7,6 +7,7 @@ use crate::expression::agg::AggKind;
 
 use super::Binder;
 use crate::expression::ScalarExpression;
+use crate::storage::Storage;
 use crate::types::LogicalType;
 
 impl Binder {
@@ -58,8 +59,8 @@ impl Binder {
         if let Some(table) = table_name.or(bind_table_name) {
             let table_catalog = self
                 .context
-                .catalog
-                .get_table_by_name(table)
+                .storage
+                .table_catalog(table)
                 .ok_or_else(|| BindError::InvalidTable(table.to_string()))?;
 
             let column_catalog = table_catalog
@@ -69,7 +70,7 @@ impl Binder {
         } else {
             // handle col syntax
             let mut got_column = None;
-            for (_, table_catalog) in self.context.catalog.tables() {
+            for table_catalog in self.context.storage.tables() {
                 if let Some(column_catalog) = table_catalog.get_column_by_name(column_name) {
                     if got_column.is_some() {
                         return Err(BindError::InvalidColumn(column_name.to_string()).into());

@@ -16,7 +16,8 @@ impl Binder {
         columns: &[ColumnDef],
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
-        let (_, table_name) = split_name(&name)?;
+        let (_, name) = split_name(&name)?;
+        let table_name = Arc::new(name.to_string());
 
         // check duplicated column names
         let mut set = HashSet::new();
@@ -35,7 +36,7 @@ impl Binder {
         let plan = LogicalPlan {
             operator: Operator::CreateTable(
                 CreateTableOperator {
-                    table_name: table_name.to_string(),
+                    table_name,
                     columns
                 }
             ),
@@ -49,19 +50,20 @@ impl Binder {
 mod tests {
     use super::*;
     use crate::binder::BinderContext;
-    use crate::catalog::{ColumnDesc, RootCatalog};
+    use crate::catalog::ColumnDesc;
+    use crate::storage::memory::MemStorage;
     use crate::types::LogicalType;
 
     #[test]
     fn test_create_bind() {
         let sql = "create table t1 (id int , name varchar(10) null)";
-        let binder = Binder::new(BinderContext::new(RootCatalog::new()));
+        let binder = Binder::new(BinderContext::new(MemStorage::new()));
         let stmt = crate::parser::parse_sql(sql).unwrap();
         let plan1 = binder.bind(&stmt[0]).unwrap();
 
         match plan1.operator {
             Operator::CreateTable(op) => {
-                assert_eq!(op.table_name, "t1".to_string());
+                assert_eq!(op.table_name, Arc::new("t1".to_string()));
                 assert_eq!(op.columns[0].name, "id".to_string());
                 assert_eq!(op.columns[0].nullable, false);
                 assert_eq!(op.columns[0].desc, ColumnDesc::new(LogicalType::Integer, false));

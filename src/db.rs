@@ -11,10 +11,9 @@ use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
 use crate::storage::memory::MemStorage;
-use crate::storage::{Storage, StorageError};
+use crate::storage::StorageError;
 use crate::types::tuple::Tuple;
 
-#[derive(Debug)]
 pub struct Database {
     pub storage: MemStorage,
 }
@@ -36,10 +35,8 @@ impl Database {
     pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
         // parse
         let stmts = parse_sql(sql)?;
-        // bind
-        let catalog = self.storage.get_catalog();
 
-        let binder = Binder::new(BinderContext::new(catalog.clone()));
+        let binder = Binder::new(BinderContext::new(self.storage.clone()));
 
         /// Build a logical plan.
         ///
@@ -143,13 +140,13 @@ pub enum DatabaseError {
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, TableName};
     use crate::db::{Database, DatabaseError};
     use crate::storage::{Storage, StorageError};
-    use crate::types::{LogicalType, TableId};
+    use crate::types::LogicalType;
     use crate::types::tuple::create_table;
 
-    fn build_table(storage: &impl Storage) -> Result<TableId, StorageError> {
+    fn build_table(storage: &impl Storage) -> Result<TableName, StorageError> {
         let columns = vec![
             Arc::new(
                 ColumnCatalog::new(
@@ -167,7 +164,7 @@ mod test {
             ),
         ];
 
-        Ok(storage.create_table("t1".to_string(), columns)?)
+        Ok(storage.create_table(Arc::new("t1".to_string()), columns)?)
     }
 
     #[test]

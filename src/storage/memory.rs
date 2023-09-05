@@ -1,26 +1,31 @@
 use std::cell::Cell;
-use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::slice;
 use std::sync::Arc;
 use itertools::Itertools;
-use parking_lot::Mutex;
-use crate::catalog::{ColumnCatalog, ColumnRef, RootCatalog, TableCatalog};
+use crate::catalog::{ColumnCatalog, ColumnRef, RootCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
-use crate::types::TableId;
 use crate::types::tuple::Tuple;
 
 // WARRING: Only single-threaded and tested using
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MemStorage {
-    inner: Arc<Mutex<StorageInner>>
+    inner: Arc<Cell<StorageInner>>
+}
+
+unsafe impl Send for MemStorage {
+
+}
+
+unsafe impl Sync for MemStorage {
+
 }
 
 impl MemStorage {
     pub fn new() -> MemStorage {
         Self {
             inner: Arc::new(
-                Mutex::new(
+                Cell::new(
                     StorageInner {
                         root: Default::default(),
                         tables: Default::default(),
@@ -29,18 +34,25 @@ impl MemStorage {
             ),
         }
     }
+
+    pub fn root(self, root: RootCatalog) -> Self {
+        unsafe {
+            self.inner.as_ptr().as_mut().unwrap().root = root;
+        }
+        self
+    }
 }
 
 #[derive(Debug)]
 struct StorageInner {
     root: RootCatalog,
-    tables: HashMap<TableId, MemTable>
+    tables: Vec<(TableName, MemTable)>
 }
 
 impl Storage for MemStorage {
     type TableType = MemTable;
 
-    fn create_table(&self, table_name: String, columns: Vec<ColumnRef>) -> Result<TableId, StorageError> {
+    fn create_table(&self, table_name: TableName, columns: Vec<ColumnRef>) -> Result<TableName, StorageError> {
         let new_table = MemTable {
             tuples: Arc::new(Cell::new(vec![])),
         };
@@ -48,32 +60,47 @@ impl Storage for MemStorage {
             .map(|col| ColumnCatalog::clone(col))
             .collect_vec();
 
-        let mut inner = self.inner.lock();
+        let inner = unsafe { self.inner.as_ptr().as_mut() }.unwrap();
 
-        let table_id = inner.root.add_table(table_name, de_columns)?;
-        inner.tables.insert(table_id, new_table);
+        let table_id = inner.root.add_table(table_name.clone(), de_columns)?;
+        inner.tables.push((table_name, new_table));
 
         Ok(table_id)
     }
 
-    fn get_table(&self, id: &TableId) -> Result<Self::TableType, StorageError> {
-        self.inner
-            .lock()
-            .tables
-            .get(id)
-            .cloned()
-            .ok_or(StorageError::TableNotFound(*id))
+    fn table(&self, name: &String) -> Option<Self::TableType> {
+        unsafe {
+            self.inner
+                .as_ptr()
+                .as_ref()
+                .unwrap()
+                .tables
+                .iter()
+                .find(|(tname, _)| tname.as_str() == name)
+                .map(|(_, table)| table.clone())
+        }
     }
 
-    fn get_catalog(&self) -> RootCatalog {
-        self.inner
-            .lock()
-            .root
-            .clone()
+    fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
+        unsafe {
+            self.inner
+                .as_ptr()
+                .as_ref()
+                .unwrap()
+                .root
+                .get_table(name)
+        }
     }
 
-    fn show_tables(&self) -> Result<Vec<TableCatalog>, StorageError> {
-        todo!()
+    fn tables(&self) -> Vec<&TableCatalog> {
+        unsafe {
+            self.inner
+                .as_ptr()
+                .as_ref()
+                .unwrap()
+                .root
+                .tables()
+        }
     }
 }
 
@@ -116,7 +143,7 @@ impl Table for MemTable {
         }
     }
 
-    fn append(&self, tuple: Tuple) -> Result<(), StorageError> {
+    fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {
         let tuples = unsafe {
             self.tuples
                 .as_ptr()
@@ -189,7 +216,7 @@ mod test {
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
 
-    fn data_filling(columns: Vec<ColumnRef>, table: &MemTable) -> Result<(), StorageError> {
+    fn data_filling(columns: Vec<ColumnRef>, table: &mut MemTable) -> Result<(), StorageError> {
         table.append(Tuple {
             id: Some(0),
             columns: columns.clone(),
@@ -226,15 +253,14 @@ mod test {
             )),
         ];
 
-        let table_id = storage.create_table("test".to_string(), columns.clone())?;
+        let table_id = storage.create_table(Arc::new("test".to_string()), columns.clone())?;
 
-        let catalog = storage.get_catalog();
-        let table_catalog = catalog.get_table_by_name("test");
+        let table_catalog = storage.table_catalog(&"test".to_string());
         assert!(table_catalog.is_some());
-        assert!(table_catalog.unwrap().get_column_id_by_name("c1").is_some());
+        assert!(table_catalog.unwrap().get_column_id_by_name(&"c1".to_string()).is_some());
 
-        let table = storage.get_table(&table_id)?;
-        data_filling(columns, &table)?;
+        let mut table = storage.table(&table_id).unwrap();
+        data_filling(columns, &mut table)?;
 
         let mut tx = table.read(
             (Some(1), Some(1)),

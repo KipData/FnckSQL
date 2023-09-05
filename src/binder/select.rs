@@ -16,7 +16,7 @@ use crate::{
 
 use super::Binder;
 
-use crate::catalog::{ColumnCatalog, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog};
+use crate::catalog::{ColumnCatalog, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog, TableName};
 use itertools::Itertools;
 use sqlparser::ast;
 use sqlparser::ast::{
@@ -29,7 +29,8 @@ use crate::expression::BinaryOperator;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
-use crate::types::{LogicalType, TableId};
+use crate::storage::Storage;
+use crate::types::LogicalType;
 
 impl Binder {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, BindError> {
@@ -119,18 +120,18 @@ impl Binder {
 
         let TableWithJoins { relation, joins } = &from[0];
 
-        let (left_id, mut plan) = self.bind_single_table_ref(relation, None)?;
+        let (left_name, mut plan) = self.bind_single_table_ref(relation, None)?;
 
         if !joins.is_empty() {
             for join in joins {
-                plan = self.bind_join(left_id, plan, join)?;
+                plan = self.bind_join(left_name.clone(), plan, join)?;
             }
         }
         Ok(plan)
     }
 
-    fn bind_single_table_ref(&mut self, table: &TableFactor, joint_type: Option<JoinType>) -> Result<(TableId, LogicalPlan), BindError> {
-        let plan_with_id = match table {
+    fn bind_single_table_ref(&mut self, table: &TableFactor, joint_type: Option<JoinType>) -> Result<(TableName, LogicalPlan), BindError> {
+        let plan_with_name = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
                     .0
@@ -149,24 +150,26 @@ impl Binder {
                     table = &alias.name.value;
                 }
 
-                if self.context.bind_table.contains_key(table) {
+                let table_name = Arc::new(table.to_string());
+
+                if self.context.bind_table.contains_key(&table_name) {
                     return Err(BindError::InvalidTable(format!("{} duplicated", table)));
                 }
 
                 let table_catalog = self
                     .context
-                    .catalog.get_table_by_name(table)
+                    .storage
+                    .table_catalog(&table_name)
                     .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
-                let table_ref_id = table_catalog.id;
 
-                self.context.bind_table.insert(table.into(), (table_ref_id, joint_type));
+                self.context.bind_table.insert(table_name.clone(), joint_type);
 
-                (table_ref_id, ScanOperator::new(table_ref_id, &table_catalog))
+                (table_name.clone(), ScanOperator::new(table_name, &table_catalog))
             }
             _ => unimplemented!(),
         };
 
-        Ok(plan_with_id)
+        Ok(plan_with_name)
     }
 
     /// Normalize select item.
@@ -205,8 +208,8 @@ impl Binder {
 
     fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>, BindError> {
         let mut exprs = vec![];
-        for (table_id, _) in self.context.bind_table.values().cloned() {
-            let table = self.context.catalog.get_table(&table_id).unwrap();
+        for table_name in self.context.bind_table.keys().cloned() {
+            let table = self.context.storage.table_catalog(&table_name).unwrap();
             for col in table.all_columns() {
                 exprs.push(ScalarExpression::ColumnRef(col));
             }
@@ -215,7 +218,7 @@ impl Binder {
         Ok(exprs)
     }
 
-    fn bind_join(&mut self, left_id: TableId, left: LogicalPlan, join: &Join) -> Result<LogicalPlan, BindError> {
+    fn bind_join(&mut self, left_table: TableName, left: LogicalPlan, join: &Join) -> Result<LogicalPlan, BindError> {
         let Join {
             relation,
             join_operator,
@@ -230,14 +233,14 @@ impl Binder {
             _ => unimplemented!(),
         };
 
-        let (right_id, right) = self.bind_single_table_ref(relation, Some(join_type))?;
+        let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type))?;
 
-        let left_table = self.context.catalog
-            .get_table(&left_id)
+        let left_table = self.context.storage
+            .table_catalog(&left_table)
             .cloned()
             .expect("Left table not found");
-        let right_table = self.context.catalog
-            .get_table(&right_id)
+        let right_table = self.context.storage
+            .table_catalog(&right_table)
             .cloned()
             .expect("Right table not found");
 
@@ -349,25 +352,25 @@ impl Binder {
 
         let mut table_force_nullable = HashMap::new();
         let mut left_table_force_nullable = false;
-        let mut left_table_id = None;
+        let mut left_table = None;
 
-        for (table_id, join_option) in bind_tables.values() {
+        for (table_name, join_option) in bind_tables {
             if let Some(join_type) = join_option {
                 let (left_force_nullable, right_force_nullable) = joins_nullable(join_type);
-                table_force_nullable.insert(*table_id, right_force_nullable);
+                table_force_nullable.insert(table_name.clone(), right_force_nullable);
                 left_table_force_nullable = left_force_nullable;
             } else {
-                left_table_id = Some(*table_id);
+                left_table = Some(table_name.clone());
             }
         }
 
-        if let Some(id) = left_table_id {
+        if let Some(id) = left_table {
             table_force_nullable.insert(id, left_table_force_nullable);
         }
 
         for column in select_items {
             if let ScalarExpression::ColumnRef(col) = column {
-                if let Some(nullable) = table_force_nullable.get(&col.table_id.unwrap()) {
+                if let Some(nullable) = table_force_nullable.get(col.table_name.as_ref().unwrap()) {
                     let mut new_col = ColumnCatalog::clone(col);
                     new_col.nullable = *nullable;
 

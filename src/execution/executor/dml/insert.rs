@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use futures_async_stream::try_stream;
-use crate::catalog::CatalogError;
+use crate::catalog::TableName;
 use crate::execution::executor::BoxedExecutor;
 use crate::execution::ExecutorError;
 use crate::storage::{Storage, Table};
-use crate::types::{ColumnId, IdGenerator, TableId};
+use crate::types::{ColumnId, IdGenerator};
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 
@@ -13,10 +13,10 @@ pub struct Insert { }
 
 impl Insert {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(table_id: TableId, input: BoxedExecutor, storage: impl Storage) {
-        if let Some(table_catalog) = storage.get_catalog().get_table(&table_id) {
-            let table = storage.get_table(&table_catalog.id)?;
-
+    pub async fn execute(table_name: TableName, input: BoxedExecutor, storage: impl Storage) {
+        if let (Some(table_catalog), Some(mut table)) =
+            (storage.table_catalog(&table_name), storage.table(&table_name))
+        {
             #[for_await]
             for tuple in input {
                 let Tuple { columns, values, .. } = tuple?;
@@ -44,8 +44,6 @@ impl Insert {
 
                 table.append(tuple)?;
             }
-        } else {
-            Err(CatalogError::NotFound("root", table_id.to_string()))?;
         }
     }
 }

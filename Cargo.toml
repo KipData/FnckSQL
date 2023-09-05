@@ -31,6 +31,7 @@ ahash = "0.8.3"
 lazy_static = "1.4.0"
 comfy-table = "7.0.1"
 bytes = "*"
+kip_db = "0.1.2-alpha.4"
 
 [dev-dependencies]
 tokio-test = "0.4.2"

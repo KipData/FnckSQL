@@ -35,7 +35,6 @@ impl IdGenerator {
     }
 }
 
-pub type TableId = u32;
 pub type ColumnId = u32;
 
 /// Sqlrs type conversion:

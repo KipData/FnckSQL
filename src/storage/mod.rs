@@ -1,33 +1,31 @@
 pub mod memory;
 mod table_codec;
+mod kip;
 
-use crate::catalog::{CatalogError, ColumnRef, RootCatalog, TableCatalog};
+use kip_db::KernelError;
+use crate::catalog::{CatalogError, ColumnRef, TableCatalog, TableName};
 use crate::expression::ScalarExpression;
-use crate::types::TableId;
 use crate::types::tuple::Tuple;
-
-#[derive(Debug)]
-pub enum StorageImpl {
-}
 
 pub trait Storage: Sync + Send + Clone + 'static {
     type TableType: Table;
 
     fn create_table(
         &self,
-        table_name: String,
+        table_name: TableName,
         columns: Vec<ColumnRef>
-    ) -> Result<TableId, StorageError>;
-    fn get_table(&self, id: &TableId) -> Result<Self::TableType, StorageError>;
-    fn get_catalog(&self) -> RootCatalog;
-    fn show_tables(&self) -> Result<Vec<TableCatalog>, StorageError>;
+    ) -> Result<TableName, StorageError>;
+
+    fn table(&self, name: &String) -> Option<Self::TableType>;
+    fn table_catalog(&self, name: &String) -> Option<&TableCatalog>;
+    fn tables(&self) -> Vec<&TableCatalog>;
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).
 pub(crate) type Bounds = (Option<usize>, Option<usize>);
 type Projections = Vec<ScalarExpression>;
 
-pub trait Table: Sync + Send + Clone + 'static {
+pub trait Table: Sync + Send + 'static {
     type TransactionType<'a>: Transaction;
 
     /// The bounds is applied to the whole data batches, not per batch.
@@ -39,7 +37,7 @@ pub trait Table: Sync + Send + Clone + 'static {
         projection: Projections,
     ) -> Result<Self::TransactionType<'_>, StorageError>;
 
-    fn append(&self, tuple: Tuple) -> Result<(), StorageError>;
+    fn append(&mut self, tuple: Tuple) -> Result<(), StorageError>;
 }
 
 pub trait Transaction: Sync + Send {
@@ -48,9 +46,15 @@ pub trait Transaction: Sync + Send {
 
 #[derive(thiserror::Error, Debug)]
 pub enum StorageError {
-    #[error("table not found: {0}")]
-    TableNotFound(TableId),
-
     #[error("catalog error")]
     CatalogError(#[from] CatalogError),
+
+    #[error("kipdb error")]
+    KipDBError(KernelError),
+}
+
+impl From<KernelError> for StorageError {
+    fn from(value: KernelError) -> Self {
+        StorageError::KipDBError(value)
+    }
 }

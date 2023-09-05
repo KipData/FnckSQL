@@ -8,17 +8,17 @@ mod update;
 use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
 
-use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME, CatalogError};
+use crate::catalog::{DEFAULT_SCHEMA_NAME, CatalogError, TableName};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinType;
+use crate::storage::memory::MemStorage;
 use crate::types::errors::TypeError;
-use crate::types::TableId;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BinderContext {
-    pub(crate) catalog: RootCatalog,
-    pub(crate) bind_table: BTreeMap<String, (TableId, Option<JoinType>)>,
+    pub(crate) storage: MemStorage,
+    pub(crate) bind_table: BTreeMap<TableName, Option<JoinType>>,
     aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
     agg_calls: Vec<ScalarExpression>,
@@ -26,9 +26,9 @@ pub struct BinderContext {
 }
 
 impl BinderContext {
-    pub fn new(catalog: RootCatalog) -> Self {
+    pub fn new(storage: MemStorage) -> Self {
         BinderContext {
-            catalog,
+            storage,
             bind_table: Default::default(),
             aliases: Default::default(),
             group_by_exprs: vec![],
@@ -130,11 +130,13 @@ pub enum BindError {
 
 #[cfg(test)]
 pub mod test {
+    use std::sync::Arc;
     use crate::catalog::{CatalogError, ColumnCatalog, ColumnDesc, RootCatalog};
     use crate::planner::LogicalPlan;
     use crate::types::LogicalType::Integer;
     use crate::binder::{Binder, BinderContext};
     use crate::execution::ExecutorError;
+    use crate::storage::memory::MemStorage;
 
     fn test_root_catalog() -> Result<RootCatalog, CatalogError> {
         let mut root = RootCatalog::new();
@@ -143,20 +145,21 @@ pub mod test {
             ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
             ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
         ];
-        let _ = root.add_table("t1".to_string(), cols_t1)?;
+        let _ = root.add_table(Arc::new("t1".to_string()), cols_t1)?;
 
         let cols_t2 = vec![
             ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
             ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
         ];
-        let _ = root.add_table("t2".to_string(), cols_t2)?;
+        let _ = root.add_table(Arc::new("t2".to_string()), cols_t2)?;
         Ok(root)
     }
 
     pub fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
         let root = test_root_catalog()?;
 
-        let binder = Binder::new(BinderContext::new(root));
+        let storage = MemStorage::new().root(root);
+        let binder = Binder::new(BinderContext::new(storage));
         let stmt = crate::parser::parse_sql(sql)?;
 
         Ok(binder.bind(&stmt[0])?)

@@ -1,4 +1,5 @@
 use std::slice;
+use std::sync::Arc;
 use sqlparser::ast::{Expr, Ident, ObjectName};
 use itertools::Itertools;
 use crate::binder::{Binder, BindError, lower_case_name, split_name};
@@ -8,6 +9,7 @@ use crate::planner::LogicalPlan;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::Operator;
 use crate::planner::operator::values::ValuesOperator;
+use crate::storage::Storage;
 use crate::types::value::ValueRef;
 
 impl Binder {
@@ -18,10 +20,10 @@ impl Binder {
         rows: &Vec<Vec<Expr>>
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
-        let (_, table_name) = split_name(&name)?;
+        let (_, name) = split_name(&name)?;
+        let table_name = Arc::new(name.to_string());
 
-        if let Some(table) = self.context.catalog.get_table_by_name(table_name) {
-            let table_id = table.id;
+        if let Some(table) = self.context.storage.table_catalog(&table_name) {
             let mut columns = Vec::new();
 
             if idents.is_empty() {
@@ -56,7 +58,7 @@ impl Binder {
             Ok(LogicalPlan {
                 operator: Operator::Insert(
                     InsertOperator {
-                        table_id,
+                        table_name,
                     }
                 ),
                 childrens: vec![values_plan],
