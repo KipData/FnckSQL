@@ -91,17 +91,6 @@ impl Storage for MemStorage {
                 .get_table(name)
         }
     }
-
-    fn tables(&self) -> Vec<&TableCatalog> {
-        unsafe {
-            self.inner
-                .as_ptr()
-                .as_ref()
-                .unwrap()
-                .root
-                .tables()
-        }
-    }
 }
 
 unsafe impl Send for MemTable {

@@ -8,7 +8,7 @@ mod update;
 use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
 
-use crate::catalog::{DEFAULT_SCHEMA_NAME, CatalogError, TableName};
+use crate::catalog::{DEFAULT_SCHEMA_NAME, CatalogError, TableName, TableCatalog};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinType;
@@ -18,7 +18,7 @@ use crate::types::errors::TypeError;
 #[derive(Clone)]
 pub struct BinderContext {
     pub(crate) storage: MemStorage,
-    pub(crate) bind_table: BTreeMap<TableName, Option<JoinType>>,
+    pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
     agg_calls: Vec<ScalarExpression>,

@@ -162,7 +162,7 @@ impl Binder {
                     .table_catalog(&table_name)
                     .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
 
-                self.context.bind_table.insert(table_name.clone(), joint_type);
+                self.context.bind_table.insert(table_name.clone(), (table_catalog.clone(), joint_type));
 
                 (table_name.clone(), ScanOperator::new(table_name, &table_catalog))
             }
@@ -354,7 +354,7 @@ impl Binder {
         let mut left_table_force_nullable = false;
         let mut left_table = None;
 
-        for (table_name, join_option) in bind_tables {
+        for (table_name, (_, join_option)) in bind_tables {
             if let Some(join_type) = join_option {
                 let (left_force_nullable, right_force_nullable) = joins_nullable(join_type);
                 table_force_nullable.insert(table_name.clone(), right_force_nullable);

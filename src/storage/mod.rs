@@ -18,7 +18,6 @@ pub trait Storage: Sync + Send + Clone + 'static {
 
     fn table(&self, name: &String) -> Option<Self::TableType>;
     fn table_catalog(&self, name: &String) -> Option<&TableCatalog>;
-    fn tables(&self) -> Vec<&TableCatalog>;
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).

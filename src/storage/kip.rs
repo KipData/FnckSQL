@@ -29,10 +29,6 @@ impl Storage for KipStorage {
     fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
         todo!()
     }
-
-    fn tables(&self) -> Vec<&TableCatalog> {
-        todo!()
-    }
 }
 
 pub struct KipTable {
@@ -47,15 +43,13 @@ impl Table for KipTable {
         let (min, max) = self.table_codec.tuple_bound();
         let iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
 
-        Ok(
-            KipTraction {
-                offset: bounds.0.unwrap_or(0),
-                limit: bounds.1,
-                projections,
-                table_codec: &self.table_codec,
-                iter,
-            }
-        )
+        Ok(KipTraction {
+            offset: bounds.0.unwrap_or(0),
+            limit: bounds.1,
+            projections,
+            table_codec: &self.table_codec,
+            iter,
+        })
     }
 
     fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {

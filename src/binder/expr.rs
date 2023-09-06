@@ -70,7 +70,7 @@ impl Binder {
         } else {
             // handle col syntax
             let mut got_column = None;
-            for table_catalog in self.context.storage.tables() {
+            for (_, (table_catalog, _)) in &self.context.bind_table {
                 if let Some(column_catalog) = table_catalog.get_column_by_name(column_name) {
                     if got_column.is_some() {
                         return Err(BindError::InvalidColumn(column_name.to_string()).into());
