@@ -44,7 +44,8 @@ async fn server_run() -> Result<(), Box<dyn Error>> {
         println!("> type👇 plz");
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
-        if input.to_lowercase().eq("quit\n") {
+
+        if input.len() >= 4 && input.to_lowercase()[..4].eq("quit") {
             println!("{}", BLOOM);
             break
         }
