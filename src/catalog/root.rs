@@ -42,13 +42,6 @@ impl RootCatalog {
 
         Ok(table_name)
     }
-
-    pub(crate) fn tables(&self) -> Vec<&TableCatalog> {
-        self.table_idxs
-            .iter()
-            .map(|(_, table)| table)
-            .collect()
-    }
 }
 
 #[cfg(test)]

@@ -1,10 +1,13 @@
 use core::slice::SlicePattern;
 use std::collections::Bound;
+use std::collections::hash_map::RandomState;
+use std::path::PathBuf;
 use std::sync::Arc;
 use async_trait::async_trait;
 use kip_db::kernel::lsm::mvcc::TransactionIter;
 use kip_db::kernel::lsm::{mvcc, storage};
 use kip_db::kernel::lsm::iterator::Iter;
+use kip_db::kernel::lsm::storage::Config;
 use kip_db::kernel::Storage as Kip_Storage;
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
@@ -14,8 +17,24 @@ use crate::types::tuple::Tuple;
 
 #[derive(Clone)]
 pub struct KipStorage {
-    cache: Arc<ShardingLruCache<TableName, TableCatalog>>,
-    inner: Arc<storage::KipStorage>
+    cache: Arc<ShardingLruCache<String, TableCatalog>>,
+    pub inner: Arc<storage::KipStorage>
+}
+
+impl KipStorage {
+    pub async fn new(path: impl Into<PathBuf> + Send) -> Result<Self, StorageError> {
+        let config = Config::new(path);
+        let storage = storage::KipStorage::open_with_config(config).await?;
+
+        Ok(KipStorage {
+            cache: Arc::new(ShardingLruCache::new(
+                128,
+                16,
+                RandomState::default(),
+            )?),
+            inner: Arc::new(storage),
+        })
+    }
 }
 
 #[async_trait]
@@ -24,24 +43,55 @@ impl Storage for KipStorage {
 
     async fn create_table(&self, table_name: TableName, columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
         let table = TableCatalog::new(table_name.clone(), columns)?;
+
         for (key, value) in table.columns
             .iter()
             .filter_map(|(_, col)| TableCodec::encode_column(col))
         {
             self.inner.set(key.as_slice(), value).await?;
         }
-
-        self.cache.put(table_name.clone(), table);
+        self.cache.put(table_name.to_string(), table);
 
         Ok(table_name)
     }
 
     async fn table(&self, name: &String) -> Option<Self::TableType> {
-        todo!()
+        let table_codec = self.table_catalog(name)
+            .await
+            .map(|catalog| TableCodec { table: catalog.clone() })?;
+        let tx = self.inner.new_transaction().await;
+
+        Some(KipTable { table_codec, tx, })
     }
 
     async fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
-        todo!()
+        let mut option = self.cache.get(name);
+
+        if option.is_none() {
+            let (min, max) = TableCodec::columns_bound(name);
+            let tx = self.inner.new_transaction().await;
+            let mut iter = tx.iter(Bound::Included(&min), Bound::Included(&max)).ok()?;
+
+            let mut columns = vec![];
+            let mut name_option = None;
+
+            while let Some((key, value_option))  = iter.try_next().ok()? {
+                if let Some(value) = value_option {
+                    if let Some((table_name, column)) = TableCodec::decode_column(&key, &value) {
+                        if name != table_name.as_str() { return None; }
+                        let _ = name_option.insert(table_name);
+
+                        columns.push(column);
+                    }
+                }
+            }
+
+            if let Some(catalog) = name_option.and_then(|table_name| TableCatalog::new(table_name, columns).ok()) {
+                option = self.cache.get_or_insert(name.to_string(), |_| Ok(catalog)).ok();
+            }
+        }
+
+        option
     }
 }
 
@@ -50,6 +100,7 @@ pub struct KipTable {
     tx: mvcc::Transaction
 }
 
+#[async_trait]
 impl Table for KipTable {
     type TransactionType<'a> = KipTraction<'a>;
 
@@ -69,6 +120,12 @@ impl Table for KipTable {
     fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {
         let (key, value) = self.table_codec.encode_tuple(&tuple);
         self.tx.set(key.as_slice(), value);
+
+        Ok(())
+    }
+
+    async fn commit(self) -> Result<(), StorageError> {
+        self.tx.commit().await?;
 
         Ok(())
     }
@@ -121,5 +178,61 @@ impl Transaction for KipTraction<'_> {
                         })
                 })
             }))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+    use itertools::Itertools;
+    use tempfile::TempDir;
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::expression::ScalarExpression;
+    use crate::storage::kip::KipStorage;
+    use crate::storage::{Storage, StorageError, Transaction, Table};
+    use crate::storage::memory::test::data_filling;
+    use crate::types::LogicalType;
+
+    #[tokio::test]
+    async fn test_in_kipdb_storage_works_with_data() -> Result<(), StorageError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = KipStorage::new(temp_dir.path()).await?;
+        let columns = vec![
+            Arc::new(ColumnCatalog::new(
+                "c1".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Integer, true)
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c2".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Boolean, false)
+            )),
+        ];
+
+        let source_columns = columns.iter()
+            .map(|col_ref| ColumnCatalog::clone(&col_ref))
+            .collect_vec();
+        let table_id = storage.create_table(Arc::new("test".to_string()), source_columns).await?;
+
+        let table_catalog = storage.table_catalog(&"test".to_string()).await;
+        assert!(table_catalog.is_some());
+        assert!(table_catalog.unwrap().get_column_id_by_name(&"c1".to_string()).is_some());
+
+        let mut table = storage.table(&table_id).await.unwrap();
+        data_filling(columns, &mut table)?;
+
+        let mut tx = table.read(
+            (Some(1), Some(1)),
+            vec![ScalarExpression::InputRef { index: 0, ty: LogicalType::Integer }]
+        )?;
+
+        let option_1 = tx.next_tuple()?;
+        assert_eq!(option_1.unwrap().id, Some(1));
+
+        let option_2 = tx.next_tuple()?;
+        assert_eq!(option_2, None);
+
+        Ok(())
     }
 }

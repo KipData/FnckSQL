@@ -44,6 +44,7 @@ impl Insert {
 
                 table.append(tuple)?;
             }
+            table.commit().await?;
         }
     }
 }

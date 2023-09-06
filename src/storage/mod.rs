@@ -1,8 +1,9 @@
 pub mod memory;
 mod table_codec;
-mod kip;
+pub mod kip;
 
 use async_trait::async_trait;
+use kip_db::error::CacheError;
 use kip_db::KernelError;
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 use crate::expression::ScalarExpression;
@@ -26,6 +27,7 @@ pub trait Storage: Sync + Send + Clone + 'static {
 pub(crate) type Bounds = (Option<usize>, Option<usize>);
 type Projections = Vec<ScalarExpression>;
 
+#[async_trait]
 pub trait Table: Sync + Send + 'static {
     type TransactionType<'a>: Transaction;
 
@@ -39,6 +41,8 @@ pub trait Table: Sync + Send + 'static {
     ) -> Result<Self::TransactionType<'_>, StorageError>;
 
     fn append(&mut self, tuple: Tuple) -> Result<(), StorageError>;
+
+    async fn commit(self) -> Result<(), StorageError>;
 }
 
 pub trait Transaction: Sync + Send {
@@ -52,10 +56,19 @@ pub enum StorageError {
 
     #[error("kipdb error")]
     KipDBError(KernelError),
+
+    #[error("cache error")]
+    CacheError(CacheError),
 }
 
 impl From<KernelError> for StorageError {
     fn from(value: KernelError) -> Self {
         StorageError::KipDBError(value)
+    }
+}
+
+impl From<CacheError> for StorageError {
+    fn from(value: CacheError) -> Self {
+        StorageError::CacheError(value)
     }
 }

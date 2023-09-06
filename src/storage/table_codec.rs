@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use bytes::Bytes;
-use crate::catalog::{ColumnRef, TableCatalog, TableName};
+use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
 use crate::types::tuple::Tuple;
 
 const COLUMNS_MIN: u8 = 0;
@@ -25,7 +25,7 @@ impl TableCodec {
         (op(0_u32).into_bytes(), op(u32::MAX).into_bytes())
     }
 
-    pub fn columns_bound(name: &TableName) -> (Vec<u8>, Vec<u8>) {
+    pub fn columns_bound(name: &String) -> (Vec<u8>, Vec<u8>) {
         let op = |bound_id| {
             format!(
                 "Catalog_{}_{}",
@@ -85,12 +85,12 @@ impl TableCodec {
             })
     }
 
-    pub fn decode_column(key: &[u8], bytes: &[u8]) -> Option<(TableName, ColumnRef)> {
+    pub fn decode_column(key: &[u8], bytes: &[u8]) -> Option<(TableName, ColumnCatalog)> {
         String::from_utf8(key.to_owned()).ok()?
             .split("_")
             .nth(1)
             .and_then(|table_name| {
-                bincode::deserialize::<ColumnRef>(bytes).ok()
+                bincode::deserialize::<ColumnCatalog>(bytes).ok()
                     .and_then(|col| {
                         Some((Arc::new(table_name.to_string()), col))
                     })
@@ -168,7 +168,7 @@ mod tests {
 
         let (table_name, decode_col) = TableCodec::decode_column(&key, &bytes).unwrap();
 
-        assert_eq!(decode_col, col);
+        assert_eq!(&decode_col, col.as_ref());
         assert_eq!(table_name, table_catalog.name);
     }
 

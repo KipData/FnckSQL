@@ -49,16 +49,20 @@ impl Binder {
 
 #[cfg(test)]
 mod tests {
+    use tempfile::TempDir;
     use super::*;
     use crate::binder::BinderContext;
     use crate::catalog::ColumnDesc;
-    use crate::storage::memory::MemStorage;
+    use crate::storage::kip::KipStorage;
     use crate::types::LogicalType;
 
     #[tokio::test]
     async fn test_create_bind() {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = KipStorage::new(temp_dir.path()).await.unwrap();
+
         let sql = "create table t1 (id int , name varchar(10) null)";
-        let binder = Binder::new(BinderContext::new(MemStorage::new()));
+        let binder = Binder::new(BinderContext::new(storage));
         let stmt = crate::parser::parse_sql(sql).unwrap();
         let plan1 = binder.bind(&stmt[0]).await.unwrap();
 

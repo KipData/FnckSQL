@@ -35,6 +35,7 @@ impl Update {
 
                 table.append(tuple)?;
             }
+            table.commit().await?;
         }
     }
 }

@@ -12,12 +12,12 @@ use crate::catalog::{DEFAULT_SCHEMA_NAME, CatalogError, TableName, TableCatalog}
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinType;
-use crate::storage::memory::MemStorage;
+use crate::storage::kip::KipStorage;
 use crate::types::errors::TypeError;
 
 #[derive(Clone)]
 pub struct BinderContext {
-    pub(crate) storage: MemStorage,
+    pub(crate) storage: KipStorage,
     pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
@@ -26,7 +26,7 @@ pub struct BinderContext {
 }
 
 impl BinderContext {
-    pub fn new(storage: MemStorage) -> Self {
+    pub fn new(storage: KipStorage) -> Self {
         BinderContext {
             storage,
             bind_table: Default::default(),
@@ -130,35 +130,43 @@ pub enum BindError {
 
 #[cfg(test)]
 pub mod test {
+    use std::path::PathBuf;
     use std::sync::Arc;
-    use crate::catalog::{CatalogError, ColumnCatalog, ColumnDesc, RootCatalog};
+    use tempfile::TempDir;
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::planner::LogicalPlan;
     use crate::types::LogicalType::Integer;
     use crate::binder::{Binder, BinderContext};
     use crate::execution::ExecutorError;
-    use crate::storage::memory::MemStorage;
+    use crate::storage::kip::KipStorage;
+    use crate::storage::{Storage, StorageError};
 
-    fn test_root_catalog() -> Result<RootCatalog, CatalogError> {
-        let mut root = RootCatalog::new();
+    async fn build_test_catalog(path: impl Into<PathBuf> + Send) -> Result<KipStorage, StorageError> {
+        let storage = KipStorage::new(path).await?;
 
-        let cols_t1 = vec![
-            ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
-            ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
-        ];
-        let _ = root.add_table(Arc::new("t1".to_string()), cols_t1)?;
+        let _ = storage.create_table(
+            Arc::new("t1".to_string()),
+            vec![
+                ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
+                ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
+            ]
+        ).await?;
 
-        let cols_t2 = vec![
-            ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
-            ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
-        ];
-        let _ = root.add_table(Arc::new("t2".to_string()), cols_t2)?;
-        Ok(root)
+        let _ = storage.create_table(
+            Arc::new("t2".to_string()),
+            vec![
+                ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
+                ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
+            ]
+        ).await?;
+
+        Ok(storage)
     }
 
     pub async fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
-        let root = test_root_catalog()?;
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
 
-        let storage = MemStorage::new().root(root);
+        let storage = build_test_catalog(temp_dir.path()).await?;
         let binder = Binder::new(BinderContext::new(storage));
         let stmt = crate::parser::parse_sql(sql)?;
 

@@ -113,6 +113,7 @@ impl Debug for MemTable {
     }
 }
 
+#[async_trait]
 impl Table for MemTable {
     type TransactionType<'a> = MemTraction<'a>;
 
@@ -142,6 +143,10 @@ impl Table for MemTable {
             tuples.push(tuple);
         }
 
+        Ok(())
+    }
+
+    async fn commit(self) -> Result<(), StorageError> {
         Ok(())
     }
 }
@@ -192,18 +197,18 @@ impl Transaction for MemTraction<'_> {
 }
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
     use std::sync::Arc;
     use itertools::Itertools;
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::expression::ScalarExpression;
-    use crate::storage::memory::{MemStorage, MemTable};
+    use crate::storage::memory::MemStorage;
     use crate::storage::{Storage, StorageError, Table, Transaction};
     use crate::types::LogicalType;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
 
-    fn data_filling(columns: Vec<ColumnRef>, table: &mut MemTable) -> Result<(), StorageError> {
+    pub fn data_filling(columns: Vec<ColumnRef>, table: &mut impl Table) -> Result<(), StorageError> {
         table.append(Tuple {
             id: Some(0),
             columns: columns.clone(),

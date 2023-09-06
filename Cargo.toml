@@ -31,7 +31,7 @@ ahash = "0.8.3"
 lazy_static = "1.4.0"
 comfy-table = "7.0.1"
 bytes = "*"
-kip_db = "0.1.2-alpha.5"
+kip_db = "0.1.2-alpha.10"
 async-recursion = "1.0.5"
 
 [dev-dependencies]
@@ -40,6 +40,7 @@ ctor = "0.2.0"
 env_logger = "0.10"
 paste = "^1.0"
 rstest = "0.17"
+tempfile = "3.0.7"
 
 [workspace]
 members = [

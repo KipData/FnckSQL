@@ -22,8 +22,6 @@ pub const BLOOM: &str ="
               ;   ;
               /   \\
 _____________/_ __ \\_____________
-
-Bloom!!!! say goodbye to your data :)
 ";
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -32,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!(":) Welcome to the KipSQL, Please input sql.\n");
     println!("Tips: ");
     println!("1. input \"quit\" to shutdown");
-    println!("2. shutdown will let you say goodbye to your data\n");
+    println!("2. no support \"delete\", so if u want remove data, you can delete the \'data\' folder");
 
     server_run().await?;
 
@@ -40,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn server_run() -> Result<(), Box<dyn Error>> {
-    let db = Database::new_on_mem();
+    let db = Database::new("./data").await?;
     loop {
         println!("> type👇 plz");
         let mut input = String::new();

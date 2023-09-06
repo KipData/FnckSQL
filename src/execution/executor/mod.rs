@@ -24,17 +24,17 @@ use crate::execution::executor::dql::values::Values;
 use crate::execution::ExecutorError;
 use crate::execution::physical_plan::physical_update::PhysicalUpdate;
 use crate::planner::operator::join::JoinOperator;
-use crate::storage::memory::MemStorage;
+use crate::storage::kip::KipStorage;
 use crate::types::tuple::Tuple;
 
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
 pub struct Executor {
-    storage: MemStorage
+    storage: KipStorage
 }
 
 impl Executor {
-    pub fn new(storage: MemStorage) -> Executor {
+    pub fn new(storage: KipStorage) -> Executor {
         Executor {
             storage
         }
