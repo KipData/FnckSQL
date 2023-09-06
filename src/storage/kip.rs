@@ -1,32 +1,46 @@
 use core::slice::SlicePattern;
 use std::collections::Bound;
 use std::sync::Arc;
+use async_trait::async_trait;
 use kip_db::kernel::lsm::mvcc::TransactionIter;
 use kip_db::kernel::lsm::{mvcc, storage};
 use kip_db::kernel::lsm::iterator::Iter;
-use crate::catalog::{ColumnRef, TableCatalog, TableName};
+use kip_db::kernel::Storage as Kip_Storage;
+use kip_db::kernel::utils::lru_cache::ShardingLruCache;
+use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
 use crate::storage::table_codec::TableCodec;
 use crate::types::tuple::Tuple;
 
 #[derive(Clone)]
 pub struct KipStorage {
-    table_codec: TableCodec,
+    cache: Arc<ShardingLruCache<TableName, TableCatalog>>,
     inner: Arc<storage::KipStorage>
 }
 
+#[async_trait]
 impl Storage for KipStorage {
     type TableType = KipTable;
 
-    fn create_table(&self, table_name: TableName, columns: Vec<ColumnRef>) -> Result<TableName, StorageError> {
+    async fn create_table(&self, table_name: TableName, columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
+        let table = TableCatalog::new(table_name.clone(), columns)?;
+        for (key, value) in table.columns
+            .iter()
+            .filter_map(|(_, col)| TableCodec::encode_column(col))
+        {
+            self.inner.set(key.as_slice(), value).await?;
+        }
+
+        self.cache.put(table_name.clone(), table);
+
+        Ok(table_name)
+    }
+
+    async fn table(&self, name: &String) -> Option<Self::TableType> {
         todo!()
     }
 
-    fn table(&self, name: &String) -> Option<Self::TableType> {
-        todo!()
-    }
-
-    fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
+    async fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
         todo!()
     }
 }

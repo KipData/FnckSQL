@@ -11,7 +11,7 @@ pub struct Update { }
 impl Update {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn execute(table_name: TableName, input: BoxedExecutor, values: BoxedExecutor, storage: impl Storage) {
-        if let Some(mut table) = storage.table(&table_name) {
+        if let Some(mut table) = storage.table(&table_name).await {
             let mut value_map = HashMap::new();
 
             // only once

@@ -15,7 +15,7 @@ impl Insert {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn execute(table_name: TableName, input: BoxedExecutor, storage: impl Storage) {
         if let (Some(table_catalog), Some(mut table)) =
-            (storage.table_catalog(&table_name), storage.table(&table_name))
+            (storage.table_catalog(&table_name).await, storage.table(&table_name).await)
         {
             #[for_await]
             for tuple in input {

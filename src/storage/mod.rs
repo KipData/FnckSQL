@@ -2,22 +2,24 @@ pub mod memory;
 mod table_codec;
 mod kip;
 
+use async_trait::async_trait;
 use kip_db::KernelError;
-use crate::catalog::{CatalogError, ColumnRef, TableCatalog, TableName};
+use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
 
+#[async_trait]
 pub trait Storage: Sync + Send + Clone + 'static {
     type TableType: Table;
 
-    fn create_table(
+    async fn create_table(
         &self,
         table_name: TableName,
-        columns: Vec<ColumnRef>
+        columns: Vec<ColumnCatalog>
     ) -> Result<TableName, StorageError>;
 
-    fn table(&self, name: &String) -> Option<Self::TableType>;
-    fn table_catalog(&self, name: &String) -> Option<&TableCatalog>;
+    async fn table(&self, name: &String) -> Option<Self::TableType>;
+    async fn table_catalog(&self, name: &String) -> Option<&TableCatalog>;
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).

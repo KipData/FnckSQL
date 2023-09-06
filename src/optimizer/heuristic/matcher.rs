@@ -62,9 +62,9 @@ mod tests {
     use crate::planner::LogicalPlan;
     use crate::planner::operator::Operator;
 
-    #[test]
-    fn test_predicate() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1")?;
+    #[tokio::test]
+    async fn test_predicate() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1").await?;
         let graph = HepGraph::new(plan.clone());
 
         let project_into_table_scan_pattern = Pattern {

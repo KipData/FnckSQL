@@ -32,28 +32,28 @@ impl Binder {
         Ok(())
     }
 
-    pub fn extract_group_by_aggregate(
+    pub async fn extract_group_by_aggregate(
         &mut self,
         select_list: &mut [ScalarExpression],
         groupby: &[Expr],
     ) -> Result<(), BindError> {
-        self.validate_groupby_illegal_column(select_list, groupby)?;
+        self.validate_groupby_illegal_column(select_list, groupby).await?;
 
         for gb in groupby {
-            let mut expr = self.bind_expr(gb)?;
+            let mut expr = self.bind_expr(gb).await?;
             self.visit_group_by_expr(select_list, &mut expr);
         }
         Ok(())
     }
 
-    pub fn extract_having_orderby_aggregate(
+    pub async fn extract_having_orderby_aggregate(
         &mut self,
         having: &Option<Expr>,
         orderbys: &[OrderByExpr],
     ) -> Result<(Option<ScalarExpression>, Option<Vec<SortField>>), BindError> {
         // Extract having expression.
         let return_having = if let Some(having) = having {
-            let mut having = self.bind_expr(having)?;
+            let mut having = self.bind_expr(having).await?;
             self.visit_column_agg_expr(&mut having);
             Some(having)
         } else {
@@ -69,7 +69,7 @@ impl Binder {
                     asc,
                     nulls_first,
                 } = orderby;
-                let mut expr = self.bind_expr(expr)?;
+                let mut expr = self.bind_expr(expr).await?;
                 self.visit_column_agg_expr(&mut expr);
 
                 return_orderby.push(SortField::new(
@@ -135,14 +135,14 @@ impl Binder {
     /// e.g. SELECT a,count(b) FROM t GROUP BY a. it's ok.
     ///      SELECT a,b FROM t GROUP BY a.        it's error.
     ///      SELECT a,count(b) FROM t GROUP BY b. it's error.
-    fn validate_groupby_illegal_column(
+    async fn validate_groupby_illegal_column(
         &mut self,
         select_items: &[ScalarExpression],
         groupby: &[Expr],
     ) -> Result<(), BindError> {
         let mut group_raw_exprs = vec![];
         for expr in groupby {
-            let expr = self.bind_expr(expr)?;
+            let expr = self.bind_expr(expr).await?;
             if let ScalarExpression::Alias { alias, .. } = expr {
                 let alias_expr = select_items.iter().find(|column| {
                     if let ScalarExpression::Alias {

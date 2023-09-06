@@ -10,6 +10,7 @@ pub mod insert;
 pub mod values;
 pub mod update;
 
+use std::sync::Arc;
 use itertools::Itertools;
 use crate::catalog::ColumnRef;
 use crate::planner::operator::create_table::CreateTableOperator;
@@ -94,7 +95,11 @@ impl Operator {
                 op.columns.clone()
             }
             Operator::CreateTable(op) => {
-                op.columns.clone()
+                op.columns
+                    .iter()
+                    .cloned()
+                    .map(|col| Arc::new(col))
+                    .collect_vec()
             }
             _ => vec![],
 

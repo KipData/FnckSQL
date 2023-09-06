@@ -9,7 +9,7 @@ use crate::planner::operator::update::UpdateOperator;
 use crate::types::value::ValueRef;
 
 impl Binder {
-    pub(crate) fn bind_update(
+    pub(crate) async fn bind_update(
         &mut self,
         to: &TableWithJoins,
         selection: &Option<Expr>,
@@ -20,10 +20,10 @@ impl Binder {
             let (_, name) = split_name(&name)?;
             let table_name = Arc::new(name.to_string());
 
-            let mut plan = self.bind_table_ref(slice::from_ref(to))?;
+            let mut plan = self.bind_table_ref(slice::from_ref(to)).await?;
 
             if let Some(predicate) = selection {
-                plan = self.bind_where(plan, predicate)?;
+                plan = self.bind_where(plan, predicate).await?;
             }
 
             let bind_table_name = Some(table_name.to_string());
@@ -32,7 +32,7 @@ impl Binder {
             let mut row = Vec::with_capacity(assignments.len());
 
             for assignment in assignments {
-                let value = match self.bind_expr(&assignment.value)? {
+                let value = match self.bind_expr(&assignment.value).await? {
                     ScalarExpression::Constant(value) => Ok::<ValueRef, BindError>(value),
                     _ => unreachable!(),
                 }?;
@@ -41,7 +41,7 @@ impl Binder {
                     match self.bind_column_ref_from_identifiers(
                         slice::from_ref(&ident),
                         bind_table_name.as_ref()
-                    )? {
+                    ).await? {
                         ScalarExpression::ColumnRef(catalog) => {
                             columns.push(catalog);
                             row.push(value.clone());

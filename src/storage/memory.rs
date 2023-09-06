@@ -2,8 +2,8 @@ use std::cell::Cell;
 use std::fmt::{Debug, Formatter};
 use std::slice;
 use std::sync::Arc;
-use itertools::Itertools;
-use crate::catalog::{ColumnCatalog, ColumnRef, RootCatalog, TableCatalog, TableName};
+use async_trait::async_trait;
+use crate::catalog::{ColumnCatalog, RootCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
 use crate::types::tuple::Tuple;
 
@@ -49,26 +49,23 @@ struct StorageInner {
     tables: Vec<(TableName, MemTable)>
 }
 
+#[async_trait]
 impl Storage for MemStorage {
     type TableType = MemTable;
 
-    fn create_table(&self, table_name: TableName, columns: Vec<ColumnRef>) -> Result<TableName, StorageError> {
+    async fn create_table(&self, table_name: TableName, columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
         let new_table = MemTable {
             tuples: Arc::new(Cell::new(vec![])),
         };
-        let de_columns = columns.iter()
-            .map(|col| ColumnCatalog::clone(col))
-            .collect_vec();
-
         let inner = unsafe { self.inner.as_ptr().as_mut() }.unwrap();
 
-        let table_id = inner.root.add_table(table_name.clone(), de_columns)?;
+        let table_id = inner.root.add_table(table_name.clone(), columns)?;
         inner.tables.push((table_name, new_table));
 
         Ok(table_id)
     }
 
-    fn table(&self, name: &String) -> Option<Self::TableType> {
+    async fn table(&self, name: &String) -> Option<Self::TableType> {
         unsafe {
             self.inner
                 .as_ptr()
@@ -81,7 +78,7 @@ impl Storage for MemStorage {
         }
     }
 
-    fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
+    async fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
         unsafe {
             self.inner
                 .as_ptr()
@@ -197,6 +194,7 @@ impl Transaction for MemTraction<'_> {
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
+    use itertools::Itertools;
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::expression::ScalarExpression;
     use crate::storage::memory::{MemStorage, MemTable};
@@ -226,8 +224,8 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn test_in_memory_storage_works_with_data() -> Result<(), StorageError> {
+    #[tokio::test]
+    async fn test_in_memory_storage_works_with_data() -> Result<(), StorageError> {
         let storage = MemStorage::new();
         let columns = vec![
             Arc::new(ColumnCatalog::new(
@@ -242,13 +240,17 @@ mod test {
             )),
         ];
 
-        let table_id = storage.create_table(Arc::new("test".to_string()), columns.clone())?;
+        let source_columns = columns.iter()
+            .map(|col_ref| ColumnCatalog::clone(&col_ref))
+            .collect_vec();
 
-        let table_catalog = storage.table_catalog(&"test".to_string());
+        let table_id = storage.create_table(Arc::new("test".to_string()), source_columns).await?;
+
+        let table_catalog = storage.table_catalog(&"test".to_string()).await;
         assert!(table_catalog.is_some());
         assert!(table_catalog.unwrap().get_column_id_by_name(&"c1".to_string()).is_some());
 
-        let mut table = storage.table(&table_id).unwrap();
+        let mut table = storage.table(&table_id).await.unwrap();
         data_filling(columns, &mut table)?;
 
         let mut tx = table.read(

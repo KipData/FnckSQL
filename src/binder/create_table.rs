@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 use std::sync::Arc;
+use itertools::Itertools;
 use sqlparser::ast::{ColumnDef, ObjectName};
 
 use super::Binder;
 use crate::binder::{BindError, lower_case_name, split_name};
-use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::catalog::ColumnCatalog;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
@@ -28,10 +29,10 @@ impl Binder {
             }
         }
 
-        let columns: Vec<ColumnRef> = columns
+        let columns = columns
             .iter()
-            .map(|col| Arc::new(ColumnCatalog::from(col.clone())))
-            .collect();
+            .map(|col| ColumnCatalog::from(col.clone()))
+            .collect_vec();
 
         let plan = LogicalPlan {
             operator: Operator::CreateTable(
@@ -54,12 +55,12 @@ mod tests {
     use crate::storage::memory::MemStorage;
     use crate::types::LogicalType;
 
-    #[test]
-    fn test_create_bind() {
+    #[tokio::test]
+    async fn test_create_bind() {
         let sql = "create table t1 (id int , name varchar(10) null)";
         let binder = Binder::new(BinderContext::new(MemStorage::new()));
         let stmt = crate::parser::parse_sql(sql).unwrap();
-        let plan1 = binder.bind(&stmt[0]).unwrap();
+        let plan1 = binder.bind(&stmt[0]).await.unwrap();
 
         match plan1.operator {
             Operator::CreateTable(op) => {

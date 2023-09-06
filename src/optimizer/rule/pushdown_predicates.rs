@@ -208,9 +208,9 @@ mod tests {
     use crate::planner::operator::Operator;
     use crate::types::LogicalType;
 
-    #[test]
-    fn test_push_predicate_through_join_in_left_join() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
+    #[tokio::test]
+    async fn test_push_predicate_through_join_in_left_join() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -249,9 +249,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_push_predicate_through_join_in_right_join() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
+    #[tokio::test]
+    async fn test_push_predicate_through_join_in_right_join() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -290,9 +290,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_push_predicate_through_join_in_inner_join() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
+    #[tokio::test]
+    async fn test_push_predicate_through_join_in_inner_join() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(

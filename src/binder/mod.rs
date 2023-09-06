@@ -61,13 +61,13 @@ impl Binder {
         Binder { context }
     }
 
-    pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
+    pub async fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
-            Statement::Query(query) => self.bind_query(query)?,
+            Statement::Query(query) => self.bind_query(query).await?,
             Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
             Statement::Insert { table_name, columns, source, .. } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
-                    self.bind_insert(table_name.to_owned(), columns, &values.rows)?
+                    self.bind_insert(table_name.to_owned(), columns, &values.rows).await?
                 } else {
                     todo!()
                 }
@@ -76,7 +76,7 @@ impl Binder {
                 if !table.joins.is_empty() {
                     unimplemented!()
                 } else {
-                    self.bind_update(table, selection, assignments)?
+                    self.bind_update(table, selection, assignments).await?
                 }
             }
             _ => unimplemented!(),
@@ -155,13 +155,13 @@ pub mod test {
         Ok(root)
     }
 
-    pub fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
+    pub async fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
         let root = test_root_catalog()?;
 
         let storage = MemStorage::new().root(root);
         let binder = Binder::new(BinderContext::new(storage));
         let stmt = crate::parser::parse_sql(sql)?;
 
-        Ok(binder.bind(&stmt[0])?)
+        Ok(binder.bind(&stmt[0]).await?)
     }
 }

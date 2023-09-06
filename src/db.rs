@@ -45,7 +45,7 @@ impl Database {
         ///   Sort(a)
         ///     Limit(1)
         ///       Project(a,b)
-        let source_plan = binder.bind(&stmts[0])?;
+        let source_plan = binder.bind(&stmts[0]).await?;
         // println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan = Self::default_optimizer(source_plan)
@@ -146,39 +146,33 @@ mod test {
     use crate::types::LogicalType;
     use crate::types::tuple::create_table;
 
-    fn build_table(storage: &impl Storage) -> Result<TableName, StorageError> {
+    async fn build_table(storage: &impl Storage) -> Result<TableName, StorageError> {
         let columns = vec![
-            Arc::new(
-                ColumnCatalog::new(
-                    "c1".to_string(),
-                    false,
-                    ColumnDesc::new(LogicalType::Integer, true)
-                )
+            ColumnCatalog::new(
+                "c1".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Integer, true)
             ),
-            Arc::new(
-                ColumnCatalog::new(
-                    "c2".to_string(),
-                    false,
-                    ColumnDesc::new(LogicalType::Boolean, false)
-                )
+            ColumnCatalog::new(
+                "c2".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Boolean, false)
             ),
         ];
 
-        Ok(storage.create_table(Arc::new("t1".to_string()), columns)?)
+        Ok(storage.create_table(Arc::new("t1".to_string()), columns).await?)
     }
 
-    #[test]
-    fn test_run_sql() -> Result<(), DatabaseError> {
+    #[tokio::test]
+    async fn test_run_sql() -> Result<(), DatabaseError> {
         let database = Database::new_on_mem();
 
-        let _ = build_table(&database.storage)?;
+        let _ = build_table(&database.storage).await?;
 
-        tokio_test::block_on(async move {
-            let batch = database.run("select * from t1").await?;
-            println!("{:#?}", batch);
+        let batch = database.run("select * from t1").await?;
+        println!("{:#?}", batch);
 
-            Ok(())
-        })
+        Ok(())
     }
 
     #[test]

@@ -12,6 +12,6 @@ impl CreateTable {
         let _ = storage.create_table(
             plan.op.table_name,
             plan.op.columns
-        )?;
+        ).await?;
     }
 }

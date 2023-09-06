@@ -11,7 +11,7 @@ pub struct TableCatalog {
     pub name: TableName,
     /// Mapping from column names to column ids
     column_idxs: BTreeMap<String, ColumnId>,
-    columns: BTreeMap<ColumnId, ColumnRef>,
+    pub(crate) columns: BTreeMap<ColumnId, ColumnRef>,
 }
 
 impl TableCatalog {
@@ -58,17 +58,17 @@ impl TableCatalog {
     /// Add a column to the table catalog.
     pub(crate) fn add_column(
         &mut self,
-        mut col_catalog: ColumnCatalog,
+        mut col: ColumnCatalog,
     ) -> Result<ColumnId, CatalogError> {
-        if self.column_idxs.contains_key(&col_catalog.name) {
-            return Err(CatalogError::Duplicated("column", col_catalog.name.into()));
+        if self.column_idxs.contains_key(&col.name) {
+            return Err(CatalogError::Duplicated("column", col.name.clone()));
         }
 
-        let col_id = col_catalog.id;
+        let col_id = col.id;
 
-        col_catalog.table_name = Some(self.name.clone());
-        self.column_idxs.insert(col_catalog.name.clone(), col_id);
-        self.columns.insert(col_id, Arc::new(col_catalog));
+        col.table_name = Some(self.name.clone());
+        self.column_idxs.insert(col.name.clone(), col_id);
+        self.columns.insert(col_id, Arc::new(col));
 
         Ok(col_id)
     }
