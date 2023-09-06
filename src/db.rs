@@ -32,6 +32,10 @@ impl Database {
         // parse
         let stmts = parse_sql(sql)?;
 
+        if stmts.is_empty() {
+            return Ok(vec![]);
+        }
+
         let binder = Binder::new(BinderContext::new(self.storage.clone()));
 
         /// Build a logical plan.
@@ -114,7 +118,6 @@ pub enum DatabaseError {
     StorageError(
         #[source]
         #[from]
-        #[backtrace]
         StorageError,
     ),
     #[error("mapping error: {0}")]
