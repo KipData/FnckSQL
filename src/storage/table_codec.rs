@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
-use crate::types::tuple::Tuple;
+use crate::types::tuple::{Tuple, TupleId};
 
 const COLUMNS_MIN: u8 = 0;
 const COLUMNS_MAX: u8 = 1;
@@ -40,13 +40,17 @@ impl TableCodec {
     /// Key: Data_TableName_RowID(Sorted)
     /// Value: Tuple
     pub fn encode_tuple(&self, tuple: &Tuple) -> (Bytes, Bytes) {
-        let key = format!(
+        let key = self.encode_tuple_key(&tuple.id.unwrap());
+        (Bytes::from(key), Bytes::from(tuple.serialize_to()))
+    }
+
+    pub fn encode_tuple_key(&self, tuple_id: &TupleId) -> Vec<u8> {
+        format!(
             "Data_{}_{:0width$}",
             self.table.name,
-            tuple.id.unwrap(),
+            tuple_id,
             width = std::mem::size_of::<usize>() * 2 - 6
-        );
-        (Bytes::from(key.into_bytes()), Bytes::from(tuple.serialize_to()))
+        ).into_bytes()
     }
 
     pub fn decode_tuple(&self, key: &[u8], bytes: &[u8]) -> Option<Tuple> {

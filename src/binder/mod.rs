@@ -4,6 +4,7 @@ pub mod expr;
 mod select;
 mod insert;
 mod update;
+mod delete;
 
 use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
@@ -77,6 +78,15 @@ impl Binder {
                     unimplemented!()
                 } else {
                     self.bind_update(table, selection, assignments).await?
+                }
+            }
+            Statement::Delete { from, selection, .. } => {
+                let table = &from[0];
+
+                if !table.joins.is_empty() {
+                    unimplemented!()
+                } else {
+                    self.bind_delete(table, selection).await?
                 }
             }
             _ => unimplemented!(),

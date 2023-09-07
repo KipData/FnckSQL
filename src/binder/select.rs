@@ -152,27 +152,31 @@ impl Binder {
                     table = &alias.name.value;
                 }
 
-                let table_name = Arc::new(table.to_string());
-
-                if self.context.bind_table.contains_key(&table_name) {
-                    return Err(BindError::InvalidTable(format!("{} duplicated", table)));
-                }
-
-                let table_catalog = self
-                    .context
-                    .storage
-                    .table_catalog(&table_name)
-                    .await
-                    .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
-
-                self.context.bind_table.insert(table_name.clone(), (table_catalog.clone(), joint_type));
-
-                (table_name.clone(), ScanOperator::new(table_name, &table_catalog))
+                self._bind_single_table_ref(joint_type, table).await?
             }
             _ => unimplemented!(),
         };
 
         Ok(plan_with_name)
+    }
+
+    pub(crate) async fn _bind_single_table_ref(&mut self, joint_type: Option<JoinType>, table: &str) -> Result<(Arc<String>, LogicalPlan), BindError> {
+        let table_name = Arc::new(table.to_string());
+
+        if self.context.bind_table.contains_key(&table_name) {
+            return Err(BindError::InvalidTable(format!("{} duplicated", table)));
+        }
+
+        let table_catalog = self
+            .context
+            .storage
+            .table_catalog(&table_name)
+            .await
+            .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
+
+        self.context.bind_table.insert(table_name.clone(), (table_catalog.clone(), joint_type));
+
+        Ok((table_name.clone(), ScanOperator::new(table_name, &table_catalog)))
     }
 
     /// Normalize select item.
