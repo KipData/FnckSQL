@@ -1,4 +1,5 @@
 use crate::execution::physical_plan::physical_create_table::PhysicalCreateTable;
+use crate::execution::physical_plan::physical_delete::PhysicalDelete;
 use crate::execution::physical_plan::physical_filter::PhysicalFilter;
 use crate::execution::physical_plan::physical_hash_join::PhysicalHashJoin;
 use crate::execution::physical_plan::physical_insert::PhysicalInsert;
@@ -20,11 +21,13 @@ pub(crate) mod physical_sort;
 pub(crate) mod physical_limit;
 pub(crate) mod physical_hash_join;
 pub(crate) mod physical_update;
+pub(crate) mod physical_delete;
 
 #[derive(Debug)]
 pub enum PhysicalPlan {
     Insert(PhysicalInsert),
     Update(PhysicalUpdate),
+    Delete(PhysicalDelete),
     CreateTable(PhysicalCreateTable),
     TableScan(PhysicalTableScan),
     Projection(PhysicalProjection),

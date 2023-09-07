@@ -2,6 +2,7 @@ use crate::execution::physical_plan::physical_create_table::PhysicalCreateTable;
 use crate::execution::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution::physical_plan::physical_table_scan::PhysicalTableScan;
 use crate::execution::physical_plan::{MappingError, PhysicalPlan};
+use crate::execution::physical_plan::physical_delete::PhysicalDelete;
 use crate::planner::operator::scan::ScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
@@ -13,6 +14,7 @@ use crate::execution::physical_plan::physical_sort::PhysicalSort;
 use crate::execution::physical_plan::physical_update::PhysicalUpdate;
 use crate::execution::physical_plan::physical_values::PhysicalValues;
 use crate::planner::operator::create_table::CreateTableOperator;
+use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::{JoinOperator, JoinType};
@@ -72,6 +74,11 @@ impl PhysicalPlanMapping {
                 let values = plan.childrens.remove(0);
 
                 Self::build_physical_update(input, values, op)?
+            }
+            Operator::Delete(op) => {
+                let input = plan.childrens.remove(0);
+
+                Self::build_physical_delete(input, op)?
             }
             _ => return Err(MappingError::Unsupported(format!("{:?}", plan.operator))),
         };
@@ -163,6 +170,15 @@ impl PhysicalPlanMapping {
             table_name: op.table_name,
             input,
             values,
+        }))
+    }
+
+    fn build_physical_delete(input: LogicalPlan, op: DeleteOperator) -> Result<PhysicalPlan, MappingError> {
+        let input = Box::new(Self::build_plan(input)?);
+
+        Ok(PhysicalPlan::Delete(PhysicalDelete {
+            table_name: op.table_name,
+            input,
         }))
     }
 }

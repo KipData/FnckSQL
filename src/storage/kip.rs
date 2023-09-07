@@ -13,7 +13,7 @@ use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
 use crate::storage::table_codec::TableCodec;
-use crate::types::tuple::Tuple;
+use crate::types::tuple::{Tuple, TupleId};
 
 #[derive(Clone)]
 pub struct KipStorage {
@@ -120,6 +120,13 @@ impl Table for KipTable {
     fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {
         let (key, value) = self.table_codec.encode_tuple(&tuple);
         self.tx.set(key.as_slice(), value);
+
+        Ok(())
+    }
+
+    fn delete(&mut self, tuple_id: TupleId) -> Result<(), StorageError> {
+        let key = self.table_codec.encode_tuple_key(&tuple_id);
+        self.tx.remove(&key)?;
 
         Ok(())
     }

@@ -12,6 +12,7 @@ use crate::execution::physical_plan::physical_projection::PhysicalProjection;
 use crate::execution::physical_plan::physical_sort::PhysicalSort;
 use crate::execution::physical_plan::PhysicalPlan;
 use crate::execution::executor::ddl::create::CreateTable;
+use crate::execution::executor::dml::delete::Delete;
 use crate::execution::executor::dql::filter::Filter;
 use crate::execution::executor::dml::insert::Insert;
 use crate::execution::executor::dml::update::Update;
@@ -22,6 +23,7 @@ use crate::execution::executor::dql::seq_scan::SeqScan;
 use crate::execution::executor::dql::sort::Sort;
 use crate::execution::executor::dql::values::Values;
 use crate::execution::ExecutorError;
+use crate::execution::physical_plan::physical_delete::PhysicalDelete;
 use crate::execution::physical_plan::physical_update::PhysicalUpdate;
 use crate::planner::operator::join::JoinOperator;
 use crate::storage::kip::KipStorage;
@@ -60,6 +62,11 @@ impl Executor {
                 let values = self.build(*values);
 
                 Update::execute(table_name, input, values, self.storage.clone())
+            }
+            PhysicalPlan::Delete(PhysicalDelete { table_name, input }) => {
+                let input = self.build(*input);
+
+                Delete::execute(table_name, input, self.storage.clone())
             }
             PhysicalPlan::Values(op) => {
                 Values::execute(op)
