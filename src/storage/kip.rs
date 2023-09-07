@@ -1,4 +1,3 @@
-use core::slice::SlicePattern;
 use std::collections::Bound;
 use std::collections::hash_map::RandomState;
 use std::path::PathBuf;
@@ -48,7 +47,7 @@ impl Storage for KipStorage {
             .iter()
             .filter_map(|(_, col)| TableCodec::encode_column(col))
         {
-            self.inner.set(key.as_slice(), value).await?;
+            self.inner.set(key, value).await?;
         }
         self.cache.put(table_name.to_string(), table);
 
@@ -119,7 +118,7 @@ impl Table for KipTable {
 
     fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {
         let (key, value) = self.table_codec.encode_tuple(&tuple);
-        self.tx.set(key.as_slice(), value);
+        self.tx.set(key, value);
 
         Ok(())
     }
