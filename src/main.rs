@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!(":) Welcome to the KipSQL, Please input sql.\n");
     println!("Tips: ");
     println!("1. input \"quit\" to shutdown");
-    println!("2. no support \"delete\", so if u want remove data, you can delete the \'data\' folder");
+    println!("2. all data is in the \'data\' folder in the directory where the application is run");
 
     server_run().await?;
 
