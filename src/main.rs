@@ -1,7 +1,9 @@
 use std::error::Error;
 use std::io;
 
+
 use kip_sql::db::Database;
+use kip_sql::storage::kip::KipStorage;
 use kip_sql::types::tuple::create_table;
 
 pub(crate) const BANNER: &str = "
@@ -38,7 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn server_run() -> Result<(), Box<dyn Error>> {
-    let db = Database::new("./data").await?;
+    let db = Database::with_kipdb("./data").await?;
 
     loop {
         println!("> type👇 plz");

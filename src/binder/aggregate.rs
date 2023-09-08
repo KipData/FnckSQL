@@ -9,10 +9,11 @@ use crate::{
 };
 use crate::binder::BindError;
 use crate::planner::LogicalPlan;
+use crate::storage::Storage;
 
 use super::Binder;
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     pub fn bind_aggregate(
         &mut self,
         children: LogicalPlan,

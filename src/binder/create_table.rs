@@ -9,8 +9,9 @@ use crate::catalog::ColumnCatalog;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
+use crate::storage::Storage;
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     pub(crate) fn bind_create_table(
         &mut self,
         name: &ObjectName,

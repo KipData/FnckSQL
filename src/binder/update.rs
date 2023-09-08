@@ -6,9 +6,10 @@ use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::Operator;
 use crate::planner::operator::update::UpdateOperator;
+use crate::storage::Storage;
 use crate::types::value::ValueRef;
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     pub(crate) async fn bind_update(
         &mut self,
         to: &TableWithJoins,

@@ -33,7 +33,7 @@ use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::storage::Storage;
 use crate::types::LogicalType;
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     #[async_recursion]
     pub(crate) async fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, BindError> {
         if let Some(_with) = &query.with {

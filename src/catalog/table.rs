@@ -15,10 +15,6 @@ pub struct TableCatalog {
 }
 
 impl TableCatalog {
-    pub(crate) fn columns_len(&self) -> usize {
-        self.columns.len()
-    }
-
     pub(crate) fn get_column_by_id(&self, id: &ColumnId) -> Option<&ColumnRef> {
         self.columns.get(id)
     }
@@ -30,12 +26,6 @@ impl TableCatalog {
     pub(crate) fn get_column_by_name(&self, name: &String) -> Option<&ColumnRef> {
         let id = self.column_idxs.get(name)?;
         self.columns.get(id)
-    }
-
-    pub(crate) fn get_index_by_name(&self, name: &String) -> Option<usize> {
-        self.column_idxs
-            .keys()
-            .position(|key| key == name)
     }
 
     pub(crate) fn contains_column(&self, name: &String) -> bool {

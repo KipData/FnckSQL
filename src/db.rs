@@ -9,19 +9,36 @@ use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
+use crate::storage::{Storage, StorageError};
 use crate::storage::kip::KipStorage;
-use crate::storage::StorageError;
+use crate::storage::memory::MemStorage;
 use crate::types::tuple::Tuple;
 
-pub struct Database {
-    pub storage: KipStorage,
+pub struct Database<S: Storage> {
+    pub storage: S,
 }
 
-impl Database {
-    /// Create a new Database instance.
-    pub async fn new(path: impl Into<PathBuf> + Send) -> Result<Self, DatabaseError> {
+impl Database<MemStorage> {
+    /// Create a new Database instance With Memory.
+    pub async fn with_mem() -> Self {
+        let storage = MemStorage::new();
+
+        Database { storage }
+    }
+}
+
+impl Database<KipStorage> {
+    /// Create a new Database instance With KipDB.
+    pub async fn with_kipdb(path: impl Into<PathBuf> + Send) -> Result<Self, DatabaseError> {
         let storage = KipStorage::new(path).await?;
 
+        Ok(Database { storage })
+    }
+}
+
+impl<S: Storage> Database<S> {
+    /// Create a new Database instance.
+    pub fn new(storage: S) -> Result<Self, DatabaseError> {
         Ok(Database { storage })
     }
 
@@ -153,7 +170,7 @@ mod test {
     #[tokio::test]
     async fn test_run_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let database = Database::new(temp_dir.path()).await?;
+        let database = Database::with_kipdb(temp_dir.path()).await?;
         let _ = build_table(&database.storage).await?;
         let batch = database.run("select * from t1").await?;
 
@@ -164,7 +181,7 @@ mod test {
     #[tokio::test]
     async fn test_crud_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let kipsql = Database::new(temp_dir.path()).await?;
+        let kipsql = Database::with_kipdb(temp_dir.path()).await?;
         let _ = kipsql.run("create table t1 (a int, b int)").await?;
         let _ = kipsql.run("create table t2 (c int, d int null)").await?;
         let _ = kipsql.run("insert into t1 (a, b) values (1, 1), (5, 3), (5, 2)").await?;

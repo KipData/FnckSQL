@@ -3,8 +3,9 @@ use crate::binder::{Binder, BindError, lower_case_name, split_name};
 use crate::planner::LogicalPlan;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::Operator;
+use crate::storage::Storage;
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     pub(crate) async fn bind_delete(
         &mut self,
         from: &TableWithJoins,

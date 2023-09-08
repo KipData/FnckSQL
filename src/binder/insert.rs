@@ -11,7 +11,7 @@ use crate::planner::operator::values::ValuesOperator;
 use crate::storage::Storage;
 use crate::types::value::ValueRef;
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     pub(crate) async fn bind_insert(
         &mut self,
         name: ObjectName,
