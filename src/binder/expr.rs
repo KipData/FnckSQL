@@ -11,7 +11,7 @@ use crate::expression::ScalarExpression;
 use crate::storage::Storage;
 use crate::types::LogicalType;
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     #[async_recursion]
     pub(crate) async fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
         match expr {

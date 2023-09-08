@@ -13,12 +13,12 @@ use crate::catalog::{DEFAULT_SCHEMA_NAME, CatalogError, TableName, TableCatalog}
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinType;
-use crate::storage::kip::KipStorage;
+use crate::storage::Storage;
 use crate::types::errors::TypeError;
 
 #[derive(Clone)]
-pub struct BinderContext {
-    pub(crate) storage: KipStorage,
+pub struct BinderContext<S: Storage> {
+    pub(crate) storage: S,
     pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
@@ -26,8 +26,8 @@ pub struct BinderContext {
     index: u16,
 }
 
-impl BinderContext {
-    pub fn new(storage: KipStorage) -> Self {
+impl<S: Storage> BinderContext<S> {
+    pub fn new(storage: S) -> Self {
         BinderContext {
             storage,
             bind_table: Default::default(),
@@ -53,12 +53,12 @@ impl BinderContext {
     }
 }
 
-pub struct Binder {
-    context: BinderContext,
+pub struct Binder<S: Storage> {
+    context: BinderContext<S>,
 }
 
-impl Binder {
-    pub fn new(context: BinderContext) -> Self {
+impl<S: Storage> Binder<S> {
+    pub fn new(context: BinderContext<S>) -> Self {
         Binder { context }
     }
 
