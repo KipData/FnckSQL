@@ -39,9 +39,12 @@ Storage Support:
 ### Features
 - DDL
   - Create
-    - [x] CreateTable
-    - [ ] CreateIndex
+    - [x] Table
+    - [ ] Index
   - Drop
+    - [x] Table
+    - [ ] Index
+  - [x] Truncate
 - DQL
   - [x] Select
   - [x] Where

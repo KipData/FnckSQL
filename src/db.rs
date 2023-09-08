@@ -235,6 +235,9 @@ mod test {
         let update_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&update_after_full_t1));
 
+        println!(truncate t1:);
+        let _ = kipsql.run("truncate t1").await?;
+
         println!("drop t1:");
         let _ = kipsql.run("drop table t1").await?;
 

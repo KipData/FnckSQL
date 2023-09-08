@@ -6,6 +6,7 @@ mod insert;
 mod update;
 mod delete;
 mod drop_table;
+mod truncate;
 
 use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
@@ -97,6 +98,9 @@ impl<S: Storage> Binder<S> {
                 } else {
                     self.bind_delete(table, selection).await?
                 }
+            }
+            Statement::Truncate { table_name, .. } => {
+                self.bind_truncate(table_name).await?
             }
             _ => unimplemented!(),
         };

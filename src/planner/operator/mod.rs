@@ -11,6 +11,7 @@ pub mod values;
 pub mod update;
 pub mod delete;
 pub mod drop_table;
+pub mod truncate;
 
 use std::sync::Arc;
 use itertools::Itertools;
@@ -20,6 +21,7 @@ use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
+use crate::planner::operator::truncate::TruncateOperator;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
 
@@ -30,6 +32,7 @@ use self::{
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Operator {
+    // DQL
     Dummy,
     Aggregate(AggregateOperator),
     Filter(FilterOperator),
@@ -38,12 +41,15 @@ pub enum Operator {
     Scan(ScanOperator),
     Sort(SortOperator),
     Limit(LimitOperator),
+    Values(ValuesOperator),
+    // DML
     Insert(InsertOperator),
     Update(UpdateOperator),
     Delete(DeleteOperator),
-    Values(ValuesOperator),
+    // DDL
     CreateTable(CreateTableOperator),
-    DropTable(DropTableOperator)
+    DropTable(DropTableOperator),
+    Truncate(TruncateOperator),
 }
 
 impl Operator {
