@@ -2,18 +2,39 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use futures_async_stream::try_stream;
 use crate::catalog::TableName;
-use crate::execution::executor::BoxedExecutor;
+use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
+use crate::planner::operator::insert::InsertOperator;
 use crate::storage::{Storage, Table};
 use crate::types::{ColumnId, IdGenerator};
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 
-pub struct Insert { }
+pub struct Insert {
+    table_name: TableName,
+    input: BoxedExecutor,
+}
+
+impl From<(InsertOperator, BoxedExecutor)> for Insert {
+    fn from((InsertOperator { table_name }, input): (InsertOperator, BoxedExecutor)) -> Self {
+        Insert {
+            table_name,
+            input
+        }
+    }
+}
+
+impl<S: Storage> Executor<S> for Insert {
+    fn execute(self, storage: &S) -> BoxedExecutor {
+        self._execute(storage.clone())
+    }
+}
 
 impl Insert {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(table_name: TableName, input: BoxedExecutor, storage: impl Storage) {
+    pub async fn _execute<S: Storage>(self, storage: S) {
+        let Insert { table_name, input } = self;
+
         if let (Some(table_catalog), Some(mut table)) =
             (storage.table_catalog(&table_name).await, storage.table(&table_name).await)
         {

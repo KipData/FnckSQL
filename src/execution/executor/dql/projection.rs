@@ -1,14 +1,36 @@
 use futures_async_stream::try_stream;
-use crate::execution::executor::BoxedExecutor;
+use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
+use crate::planner::operator::project::ProjectOperator;
+use crate::storage::Storage;
 use crate::types::tuple::Tuple;
 
-pub struct Projection { }
+pub struct Projection {
+    exprs: Vec<ScalarExpression>,
+    input: BoxedExecutor
+}
+
+impl From<(ProjectOperator, BoxedExecutor)> for Projection {
+    fn from((ProjectOperator { columns }, input): (ProjectOperator, BoxedExecutor)) -> Self {
+        Projection {
+            exprs: columns,
+            input,
+        }
+    }
+}
+
+impl<S: Storage> Executor<S> for Projection {
+    fn execute(self, _: &S) -> BoxedExecutor {
+        self._execute()
+    }
+}
 
 impl Projection {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(exprs: Vec<ScalarExpression>, input: BoxedExecutor) {
+    pub async fn _execute(self) {
+        let Projection { exprs, input } = self;
+
         #[for_await]
         for tuple in input {
             let tuple = tuple?;

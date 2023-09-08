@@ -1,10 +1,8 @@
 pub mod executor;
-pub(crate) mod physical_plan;
 
 use sqlparser::parser::ParserError;
 use crate::binder::BindError;
 use crate::catalog::CatalogError;
-use crate::execution::physical_plan::MappingError;
 use crate::storage::StorageError;
 use crate::types::errors::TypeError;
 
@@ -39,12 +37,6 @@ pub enum ExecutorError {
         #[source]
         #[from]
         ParserError
-    ),
-    #[error("mapping error: {0}")]
-    MappingError(
-        #[source]
-        #[from]
-        MappingError
     ),
     #[error("Internal error: {0}")]
     InternalError(String),

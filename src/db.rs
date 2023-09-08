@@ -3,9 +3,7 @@ use sqlparser::parser::ParserError;
 
 use crate::binder::{BindError, Binder, BinderContext};
 use crate::execution::ExecutorError;
-use crate::execution::executor::{Executor, try_collect};
-use crate::execution::physical_plan::MappingError;
-use crate::execution::physical_plan::physical_plan_mapping::PhysicalPlanMapping;
+use crate::execution::executor::{build, try_collect};
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::RuleImpl;
@@ -52,12 +50,7 @@ impl Database {
             .find_best();
         // println!("best_plan plan: {:#?}", best_plan);
 
-        let physical_plan = PhysicalPlanMapping::build_plan(best_plan)?;
-        // println!("physical_plan: {:#?}", physical_plan);
-
-        let executor = Executor::new(self.storage.clone());
-
-        let mut stream = executor.build(physical_plan);
+        let mut stream = build(best_plan, &self.storage);
 
         Ok(try_collect(&mut stream).await?)
     }
@@ -119,12 +112,6 @@ pub enum DatabaseError {
         #[source]
         #[from]
         StorageError,
-    ),
-    #[error("mapping error: {0}")]
-    MappingError(
-        #[source]
-        #[from]
-        MappingError
     ),
     #[error("executor error: {0}")]
     ExecutorError(

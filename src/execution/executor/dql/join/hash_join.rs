@@ -4,18 +4,43 @@ use futures_async_stream::try_stream;
 use itertools::Itertools;
 use crate::execution::executor::dql::join::joins_nullable;
 use crate::catalog::{ColumnCatalog, ColumnRef};
-use crate::execution::executor::BoxedExecutor;
+use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
-use crate::planner::operator::join::{JoinCondition, JoinType};
+use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
+use crate::storage::Storage;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 
-pub struct HashJoin { }
+pub struct HashJoin {
+    on: JoinCondition,
+    ty: JoinType,
+    left_input: BoxedExecutor,
+    right_input: BoxedExecutor
+}
+
+impl From<(JoinOperator, BoxedExecutor, BoxedExecutor)> for HashJoin {
+    fn from((JoinOperator { on, join_type }, left_input, right_input): (JoinOperator, BoxedExecutor, BoxedExecutor)) -> Self {
+        HashJoin {
+            on,
+            ty: join_type,
+            left_input,
+            right_input,
+        }
+    }
+}
+
+impl<S: Storage> Executor<S> for HashJoin {
+    fn execute(self, _: &S) -> BoxedExecutor {
+        self._execute()
+    }
+}
 
 impl HashJoin {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(on: JoinCondition, ty: JoinType, left_input: BoxedExecutor, right_input: BoxedExecutor) {
+    pub async fn _execute(self) {
+        let HashJoin { on, ty, left_input, right_input } = self;
+
         if ty == JoinType::Cross {
             unreachable!("Cross join should not be in HashJoinExecutor");
         }

@@ -1,17 +1,33 @@
 use futures_async_stream::try_stream;
+use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
-use crate::execution::physical_plan::physical_table_scan::PhysicalTableScan;
 use crate::planner::operator::scan::ScanOperator;
 use crate::storage::{Table, Transaction, Storage};
 use crate::types::tuple::Tuple;
 
-pub(crate) struct SeqScan { }
+pub(crate) struct SeqScan {
+    op: ScanOperator
+}
+
+impl From<ScanOperator> for SeqScan {
+    fn from(op: ScanOperator) -> Self {
+        SeqScan {
+            op,
+        }
+    }
+}
+
+impl<S: Storage> Executor<S> for SeqScan {
+    fn execute(self, storage: &S) -> BoxedExecutor {
+        self._execute(storage.clone())
+    }
+}
 
 impl SeqScan {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(plan: PhysicalTableScan, storage: impl Storage) {
+    pub async fn _execute<S: Storage>(self, storage: S) {
         // TODO: sort_fields, pre_where, limit
-        let ScanOperator { table_name,  columns, limit, .. } = plan.op;
+        let ScanOperator { table_name,  columns, limit, .. } = self.op;
 
         if let Some(table) = storage.table(&table_name).await {
             let mut transaction = table.read(
