@@ -1,15 +1,37 @@
 use std::cmp::Ordering;
 use futures_async_stream::try_stream;
-use crate::execution::executor::BoxedExecutor;
+use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
-use crate::planner::operator::sort::SortField;
+use crate::planner::operator::sort::{SortField, SortOperator};
+use crate::storage::Storage;
 use crate::types::tuple::Tuple;
 
-pub struct Sort { }
+pub struct Sort {
+    sort_fields: Vec<SortField>,
+    limit: Option<usize>,
+    input: BoxedExecutor
+}
+
+impl From<(SortOperator, BoxedExecutor)> for Sort {
+    fn from((SortOperator { sort_fields, limit }, input): (SortOperator, BoxedExecutor)) -> Self {
+        Sort {
+            sort_fields,
+            limit,
+            input,
+        }
+    }
+}
+
+impl<S: Storage> Executor<S> for Sort {
+    fn execute(self, _: &S) -> BoxedExecutor {
+        self._execute()
+    }
+}
 
 impl Sort {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(sort_fields: Vec<SortField>, limit: Option<usize>, input: BoxedExecutor) {
+    pub async fn _execute(self) {
+        let Sort { sort_fields, limit, input } = self;
         let mut tuples: Vec<Tuple> = vec![];
 
         #[for_await]

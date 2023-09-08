@@ -68,7 +68,7 @@ impl TableCodec {
     }
 
     /// Key: Catalog_TableName_0_ColumnName_ColumnId
-    /// Value: TableCatalog
+    /// Value: ColumnCatalog
     ///
     /// Tips: the `0` for bound range
     pub fn encode_column(col: &ColumnRef) -> Option<(Bytes, Bytes)> {

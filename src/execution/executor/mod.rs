@@ -4,18 +4,12 @@ pub(crate)mod dml;
 
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
-use crate::execution::physical_plan::physical_filter::PhysicalFilter;
-use crate::execution::physical_plan::physical_hash_join::PhysicalHashJoin;
-use crate::execution::physical_plan::physical_insert::PhysicalInsert;
-use crate::execution::physical_plan::physical_limit::PhysicalLimit;
-use crate::execution::physical_plan::physical_projection::PhysicalProjection;
-use crate::execution::physical_plan::physical_sort::PhysicalSort;
-use crate::execution::physical_plan::PhysicalPlan;
 use crate::execution::executor::ddl::create::CreateTable;
 use crate::execution::executor::dml::delete::Delete;
-use crate::execution::executor::dql::filter::Filter;
 use crate::execution::executor::dml::insert::Insert;
 use crate::execution::executor::dml::update::Update;
+use crate::execution::executor::dql::dummy::Dummy;
+use crate::execution::executor::dql::filter::Filter;
 use crate::execution::executor::dql::join::hash_join::HashJoin;
 use crate::execution::executor::dql::limit::Limit;
 use crate::execution::executor::dql::projection::Projection;
@@ -23,80 +17,144 @@ use crate::execution::executor::dql::seq_scan::SeqScan;
 use crate::execution::executor::dql::sort::Sort;
 use crate::execution::executor::dql::values::Values;
 use crate::execution::ExecutorError;
-use crate::execution::physical_plan::physical_delete::PhysicalDelete;
-use crate::execution::physical_plan::physical_update::PhysicalUpdate;
-use crate::planner::operator::join::JoinOperator;
-use crate::storage::kip::KipStorage;
+use crate::planner::LogicalPlan;
+use crate::planner::operator::Operator;
+use crate::storage::Storage;
 use crate::types::tuple::Tuple;
 
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
-pub struct Executor {
-    storage: KipStorage
+pub trait Executor<S: Storage> {
+    fn execute(self, storage: &S) -> BoxedExecutor;
 }
 
-impl Executor {
-    pub fn new(storage: KipStorage) -> Executor {
-        Executor {
-            storage
+
+
+//
+// impl Executor {
+//     pub fn new(storage: KipStorage) -> Executor {
+//         Executor {
+//             storage
+//         }
+//     }
+//
+//     pub fn build(&self, plan: PhysicalPlan) -> BoxedExecutor {
+//         match plan {
+//             PhysicalPlan::TableScan(op) => {
+//                 SeqScan::execute(op, self.storage.clone())
+//             }
+//             PhysicalPlan::Projection(PhysicalProjection { input, exprs, .. }) => {
+//                 let input = self.build(*input);
+//
+//                 Projection::execute(exprs, input)
+//             }
+//             PhysicalPlan::Insert(PhysicalInsert { table_name, input}) => {
+//                 let input = self.build(*input);
+//
+//                 Insert::execute(table_name, input, self.storage.clone())
+//             }
+//             PhysicalPlan::Update(PhysicalUpdate { table_name, input, values}) => {
+//                 let input = self.build(*input);
+//                 let values = self.build(*values);
+//
+//                 Update::execute(table_name, input, values, self.storage.clone())
+//             }
+//             PhysicalPlan::Delete(PhysicalDelete { table_name, input }) => {
+//                 let input = self.build(*input);
+//
+//                 Delete::execute(table_name, input, self.storage.clone())
+//             }
+//             PhysicalPlan::Values(op) => {
+//                 Values::execute(op)
+//             }
+//             PhysicalPlan::CreateTable(op) => {
+//                 CreateTable::execute(op, self.storage.clone())
+//             }
+//             PhysicalPlan::Filter(PhysicalFilter { predicate, input, .. }) => {
+//                 let input = self.build(*input);
+//
+//                 Filter::execute(predicate, input)
+//             }
+//             PhysicalPlan::Sort(PhysicalSort {op, input, ..}) => {
+//                 let input = self.build(*input);
+//
+//                 Sort::execute(op.sort_fields, op.limit, input)
+//             }
+//             PhysicalPlan::Limit(PhysicalLimit {op, input, ..}) => {
+//                 let input = self.build(*input);
+//
+//                 Limit::execute(Some(op.offset), Some(op.limit), input)
+//             }
+//             PhysicalPlan::HashJoin(PhysicalHashJoin { op, left_input, right_input}) => {
+//                 let left_input = self.build(*left_input);
+//                 let right_input = self.build(*right_input);
+//
+//                 let JoinOperator { on, join_type } = op;
+//
+//                 HashJoin::execute(on, join_type, left_input, right_input)
+//             }
+//         }
+//     }
+// }
+
+pub fn build<S: Storage>(plan: LogicalPlan, storage: &S) -> BoxedExecutor {
+    let LogicalPlan { operator, mut childrens } = plan;
+
+    match operator {
+        Operator::Dummy => Dummy{ }.execute(storage),
+        Operator::Aggregate(op) => {
+            todo!()
         }
-    }
+        Operator::Filter(op) => {
+            let input = build(childrens.remove(0), storage);
 
-    pub fn build(&self, plan: PhysicalPlan) -> BoxedExecutor {
-        match plan {
-            PhysicalPlan::TableScan(op) => {
-                SeqScan::execute(op, self.storage.clone())
-            }
-            PhysicalPlan::Projection(PhysicalProjection { input, exprs, .. }) => {
-                let input = self.build(*input);
+            Filter::from((op, input)).execute(storage)
+        }
+        Operator::Join(op) => {
+            let left_input = build(childrens.remove(0), storage);
+            let right_input = build(childrens.remove(0), storage);
 
-                Projection::execute(exprs, input)
-            }
-            PhysicalPlan::Insert(PhysicalInsert { table_name, input}) => {
-                let input = self.build(*input);
+            HashJoin::from((op, left_input, right_input)).execute(storage)
+        }
+        Operator::Project(op) => {
+            let input = build(childrens.remove(0), storage);
 
-                Insert::execute(table_name, input, self.storage.clone())
-            }
-            PhysicalPlan::Update(PhysicalUpdate { table_name, input, values}) => {
-                let input = self.build(*input);
-                let values = self.build(*values);
+            Projection::from((op, input)).execute(storage)
+        }
+        Operator::Scan(op) => {
+            SeqScan::from(op).execute(storage)
+        }
+        Operator::Sort(op) => {
+            let input = build(childrens.remove(0), storage);
 
-                Update::execute(table_name, input, values, self.storage.clone())
-            }
-            PhysicalPlan::Delete(PhysicalDelete { table_name, input }) => {
-                let input = self.build(*input);
+            Sort::from((op, input)).execute(storage)
+        }
+        Operator::Limit(op) => {
+            let input = build(childrens.remove(0), storage);
 
-                Delete::execute(table_name, input, self.storage.clone())
-            }
-            PhysicalPlan::Values(op) => {
-                Values::execute(op)
-            }
-            PhysicalPlan::CreateTable(op) => {
-                CreateTable::execute(op, self.storage.clone())
-            }
-            PhysicalPlan::Filter(PhysicalFilter { predicate, input, .. }) => {
-                let input = self.build(*input);
+            Limit::from((op, input)).execute(storage)
+        }
+        Operator::Insert(op) => {
+            let input = build(childrens.remove(0), storage);
 
-                Filter::execute(predicate, input)
-            }
-            PhysicalPlan::Sort(PhysicalSort {op, input, ..}) => {
-                let input = self.build(*input);
+            Insert::from((op, input)).execute(storage)
+        }
+        Operator::Update(op) => {
+            let input = build(childrens.remove(0), storage);
+            let values = build(childrens.remove(0), storage);
 
-                Sort::execute(op.sort_fields, op.limit, input)
-            }
-            PhysicalPlan::Limit(PhysicalLimit {op, input, ..}) => {
-                let input = self.build(*input);
+            Update::from((op, input, values)).execute(storage)
+        }
+        Operator::Delete(op) => {
+            let input = build(childrens.remove(0), storage);
 
-                Limit::execute(Some(op.offset), Some(op.limit), input)
-            }
-            PhysicalPlan::HashJoin(PhysicalHashJoin { op, left_input, right_input}) => {
-                let left_input = self.build(*left_input);
-                let right_input = self.build(*right_input);
-
-                let JoinOperator { on, join_type } = op;
-
-                HashJoin::execute(on, join_type, left_input, right_input)
-            }
+            Delete::from((op, input)).execute(storage)
+        }
+        Operator::Values(op) => {
+            Values::from(op).execute(storage)
+        }
+        Operator::CreateTable(op) => {
+            CreateTable::from(op).execute(storage)
         }
     }
 }

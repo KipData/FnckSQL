@@ -1,14 +1,38 @@
 use futures::StreamExt;
 use futures_async_stream::try_stream;
-use crate::execution::executor::BoxedExecutor;
+use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
+use crate::planner::operator::limit::LimitOperator;
+use crate::storage::Storage;
 use crate::types::tuple::Tuple;
 
-pub struct Limit {}
+pub struct Limit {
+    offset: Option<usize>,
+    limit: Option<usize>,
+    input: BoxedExecutor
+}
+
+impl From<(LimitOperator, BoxedExecutor)> for Limit {
+    fn from((LimitOperator { offset, limit }, input): (LimitOperator, BoxedExecutor)) -> Self {
+        Limit {
+            offset: Some(offset),
+            limit: Some(limit),
+            input,
+        }
+    }
+}
+
+impl<S: Storage> Executor<S> for Limit {
+    fn execute(self, _: &S) -> BoxedExecutor {
+        self._execute()
+    }
+}
 
 impl Limit {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(offset: Option<usize>, limit: Option<usize>, input: BoxedExecutor) {
+    pub async fn _execute(self) {
+        let Limit { offset, limit, input } = self;
+
         if limit.is_some() && limit.unwrap() == 0 {
             return Ok(());
         }
