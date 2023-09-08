@@ -1,9 +1,7 @@
 use std::error::Error;
 use std::io;
 
-
 use kip_sql::db::Database;
-use kip_sql::storage::kip::KipStorage;
 use kip_sql::types::tuple::create_table;
 
 pub(crate) const BANNER: &str = "
@@ -30,7 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("{} \nVersion: {}\n", BANNER, env!("CARGO_PKG_VERSION"));
 
     println!(":) Welcome to the KipSQL, Please input sql.\n");
-    println!("Tips: ");
+    println!("Tips🔞: ");
     println!("1. input \"quit\" to shutdown");
     println!("2. all data is in the \'data\' folder in the directory where the application is run");
 
@@ -43,7 +41,7 @@ async fn server_run() -> Result<(), Box<dyn Error>> {
     let db = Database::with_kipdb("./data").await?;
 
     loop {
-        println!("> type👇 plz");
+        println!("> 👇👇🏻👇🏼👇🏽👇🏾👇🏿 <");
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
 
@@ -61,7 +59,7 @@ async fn server_run() -> Result<(), Box<dyn Error>> {
                 }
             }
             Err(err) => {
-                println!("{}", err);
+                println!("Oops!: {}", err);
             }
         }
     }

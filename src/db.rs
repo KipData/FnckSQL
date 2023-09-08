@@ -229,6 +229,12 @@ mod test {
         let update_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&update_after_full_t1));
 
+        println!("delete t1 and filter:");
+        let _ = kipsql.run("delete from t1 where b > 1").await?;
+        println!("after t1:");
+        let update_after_full_t1 = kipsql.run("select * from t1").await?;
+        println!("{}", create_table(&update_after_full_t1));
+
         Ok(())
     }
 }
