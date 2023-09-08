@@ -54,6 +54,53 @@ impl Storage for KipStorage {
         Ok(table_name)
     }
 
+    async fn drop_table(&self, name: &String) -> Result<(), StorageError> {
+        self.drop_data(name).await?;
+
+        let (min, max) = TableCodec::columns_bound(name);
+        let mut tx = self.inner.new_transaction().await;
+        let mut iter = tx.iter(Bound::Included(&min), Bound::Included(&max))?;
+        let mut col_keys = vec![];
+
+        while let Some((key, value_option))  = iter.try_next()? {
+            if value_option.is_some() {
+                col_keys.push(key);
+            }
+        }
+        drop(iter);
+
+        for col_key in col_keys {
+            tx.remove(&col_key)?
+        }
+        tx.commit().await?;
+
+        let _ = self.cache.remove(name);
+
+        Ok(())
+    }
+
+    async fn drop_data(&self, name: &String) -> Result<(), StorageError> {
+        if let Some(mut table) = self.table(name).await {
+            let (min, max) = table.table_codec.tuple_bound();
+            let mut iter = table.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
+            let mut data_keys = vec![];
+
+            while let Some((key, value_option))  = iter.try_next()? {
+                if value_option.is_some() {
+                    data_keys.push(key);
+                }
+            }
+            drop(iter);
+
+            for col_key in data_keys {
+                table.tx.remove(&col_key)?
+            }
+            table.tx.commit().await?;
+        }
+
+        Ok(())
+    }
+
     async fn table(&self, name: &String) -> Option<Self::TableType> {
         let table_codec = self.table_catalog(name)
             .await
@@ -74,7 +121,7 @@ impl Storage for KipStorage {
             let mut columns = vec![];
             let mut name_option = None;
 
-            while let Some((key, value_option))  = iter.try_next().ok()? {
+            while let Some((key, value_option))  = iter.try_next().ok().flatten() {
                 if let Some(value) = value_option {
                     if let Some((table_name, column)) = TableCodec::decode_column(&key, &value) {
                         if name != table_name.as_str() { return None; }

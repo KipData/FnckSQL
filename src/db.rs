@@ -223,17 +223,20 @@ mod test {
         let tuples_full_join = kipsql.run("select * from t1 full join t2 on a = c").await?;
         println!("{}", create_table(&tuples_full_join));
 
-        println!("update t1 and filter:");
+        println!("update t1 with filter:");
         let _ = kipsql.run("update t1 set a = 0 where b > 1").await?;
         println!("after t1:");
         let update_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&update_after_full_t1));
 
-        println!("delete t1 and filter:");
+        println!("delete t1 with filter:");
         let _ = kipsql.run("delete from t1 where b > 1").await?;
         println!("after t1:");
         let update_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&update_after_full_t1));
+
+        println!("drop t1:");
+        let _ = kipsql.run("drop table t1").await?;
 
         Ok(())
     }

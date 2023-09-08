@@ -42,6 +42,15 @@ impl RootCatalog {
 
         Ok(table_name)
     }
+
+    pub(crate) fn drop_table(
+        &mut self,
+        table_name: &String,
+    ) -> Result<(), CatalogError> {
+        self.table_idxs.retain(|name, _| name.as_str() != table_name);
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

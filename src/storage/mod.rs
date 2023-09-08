@@ -19,6 +19,9 @@ pub trait Storage: Sync + Send + Clone + 'static {
         columns: Vec<ColumnCatalog>
     ) -> Result<TableName, StorageError>;
 
+    async fn drop_table(&self, name: &String) -> Result<(), StorageError>;
+    async fn drop_data(&self, name: &String) -> Result<(), StorageError>;
+
     async fn table(&self, name: &String) -> Option<Self::TableType>;
     async fn table_catalog(&self, name: &String) -> Option<&TableCatalog>;
 }

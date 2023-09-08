@@ -65,6 +65,32 @@ impl Storage for MemStorage {
         Ok(table_id)
     }
 
+    async fn drop_table(&self, name: &String) -> Result<(), StorageError> {
+        let inner = unsafe {
+            self.inner
+                .as_ptr()
+                .as_mut()
+                .unwrap()
+        };
+
+        inner.root.drop_table(&name)?;
+
+        Ok(())
+    }
+
+    async fn drop_data(&self, name: &String) -> Result<(), StorageError> {
+        let inner = unsafe {
+            self.inner
+                .as_ptr()
+                .as_mut()
+                .unwrap()
+        };
+
+        inner.tables.retain(|(t_name, _)| t_name.as_str() != name);
+
+        Ok(())
+    }
+
     async fn table(&self, name: &String) -> Option<Self::TableType> {
         unsafe {
             self.inner

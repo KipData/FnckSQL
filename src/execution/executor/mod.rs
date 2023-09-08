@@ -4,7 +4,8 @@ pub(crate)mod dml;
 
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
-use crate::execution::executor::ddl::create::CreateTable;
+use crate::execution::executor::ddl::create_table::CreateTable;
+use crate::execution::executor::ddl::drop_table::DropTable;
 use crate::execution::executor::dml::delete::Delete;
 use crate::execution::executor::dml::insert::Insert;
 use crate::execution::executor::dml::update::Update;
@@ -155,6 +156,9 @@ pub fn build<S: Storage>(plan: LogicalPlan, storage: &S) -> BoxedExecutor {
         }
         Operator::CreateTable(op) => {
             CreateTable::from(op).execute(storage)
+        }
+        Operator::DropTable(op) => {
+            DropTable::from(op).execute(storage)
         }
     }
 }

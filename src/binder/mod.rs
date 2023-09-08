@@ -5,9 +5,10 @@ mod select;
 mod insert;
 mod update;
 mod delete;
+mod drop_table;
 
 use std::collections::BTreeMap;
-use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
+use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
 
 use crate::catalog::{DEFAULT_SCHEMA_NAME, CatalogError, TableName, TableCatalog};
 use crate::expression::ScalarExpression;
@@ -66,6 +67,14 @@ impl<S: Storage> Binder<S> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query).await?,
             Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
+            Statement::Drop { object_type, names, .. } => {
+                match object_type {
+                    ObjectType::Table => {
+                        self.bind_drop_table(&names[0])?
+                    }
+                    _ => todo!()
+                }
+            }
             Statement::Insert { table_name, columns, source, .. } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
                     self.bind_insert(table_name.to_owned(), columns, &values.rows).await?
