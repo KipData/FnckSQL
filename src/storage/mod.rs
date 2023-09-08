@@ -1,32 +1,34 @@
 pub mod memory;
+mod table_codec;
+pub mod kip;
 
-use crate::catalog::{CatalogError, ColumnRef, RootCatalog, TableCatalog};
+use async_trait::async_trait;
+use kip_db::error::CacheError;
+use kip_db::KernelError;
+use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 use crate::expression::ScalarExpression;
-use crate::types::TableId;
 use crate::types::tuple::Tuple;
 
-#[derive(Debug)]
-pub enum StorageImpl {
-}
-
+#[async_trait]
 pub trait Storage: Sync + Send + Clone + 'static {
     type TableType: Table;
 
-    fn create_table(
+    async fn create_table(
         &self,
-        table_name: String,
-        columns: Vec<ColumnRef>
-    ) -> Result<TableId, StorageError>;
-    fn get_table(&self, id: &TableId) -> Result<Self::TableType, StorageError>;
-    fn get_catalog(&self) -> RootCatalog;
-    fn show_tables(&self) -> Result<Vec<TableCatalog>, StorageError>;
+        table_name: TableName,
+        columns: Vec<ColumnCatalog>
+    ) -> Result<TableName, StorageError>;
+
+    async fn table(&self, name: &String) -> Option<Self::TableType>;
+    async fn table_catalog(&self, name: &String) -> Option<&TableCatalog>;
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).
 pub(crate) type Bounds = (Option<usize>, Option<usize>);
 type Projections = Vec<ScalarExpression>;
 
-pub trait Table: Sync + Send + Clone + 'static {
+#[async_trait]
+pub trait Table: Sync + Send + 'static {
     type TransactionType<'a>: Transaction;
 
     /// The bounds is applied to the whole data batches, not per batch.
@@ -38,7 +40,9 @@ pub trait Table: Sync + Send + Clone + 'static {
         projection: Projections,
     ) -> Result<Self::TransactionType<'_>, StorageError>;
 
-    fn append(&self, tuple: Tuple) -> Result<(), StorageError>;
+    fn append(&mut self, tuple: Tuple) -> Result<(), StorageError>;
+
+    async fn commit(self) -> Result<(), StorageError>;
 }
 
 pub trait Transaction: Sync + Send {
@@ -47,9 +51,24 @@ pub trait Transaction: Sync + Send {
 
 #[derive(thiserror::Error, Debug)]
 pub enum StorageError {
-    #[error("table not found: {0}")]
-    TableNotFound(TableId),
-
     #[error("catalog error")]
     CatalogError(#[from] CatalogError),
+
+    #[error("kipdb error")]
+    KipDBError(KernelError),
+
+    #[error("cache error")]
+    CacheError(CacheError),
+}
+
+impl From<KernelError> for StorageError {
+    fn from(value: KernelError) -> Self {
+        StorageError::KipDBError(value)
+    }
+}
+
+impl From<CacheError> for StorageError {
+    fn from(value: CacheError) -> Self {
+        StorageError::CacheError(value)
+    }
 }

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use sqlparser::parser::ParserError;
 
 use crate::binder::{BindError, Binder, BinderContext};
@@ -10,40 +11,32 @@ use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
-use crate::storage::memory::MemStorage;
-use crate::storage::{Storage, StorageError};
+use crate::storage::kip::KipStorage;
+use crate::storage::StorageError;
 use crate::types::tuple::Tuple;
 
-#[derive(Debug)]
 pub struct Database {
-    pub storage: MemStorage,
-}
-
-impl Default for Database {
-    fn default() -> Self {
-        Self::new_on_mem()
-    }
+    pub storage: KipStorage,
 }
 
 impl Database {
     /// Create a new Database instance.
-    pub fn new_on_mem() -> Self {
-        let storage = MemStorage::new();
-        Database { storage }
+    pub async fn new(path: impl Into<PathBuf> + Send) -> Result<Self, DatabaseError> {
+        let storage = KipStorage::new(path).await?;
+
+        Ok(Database { storage })
     }
 
     /// Run SQL queries.
     pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
         // parse
         let stmts = parse_sql(sql)?;
+
         if stmts.is_empty() {
             return Ok(vec![]);
         }
 
-        // bind
-        let catalog = self.storage.get_catalog();
-
-        let binder = Binder::new(BinderContext::new(catalog.clone()));
+        let binder = Binder::new(BinderContext::new(self.storage.clone()));
 
         /// Build a logical plan.
         ///
@@ -52,7 +45,7 @@ impl Database {
         ///   Sort(a)
         ///     Limit(1)
         ///       Project(a,b)
-        let source_plan = binder.bind(&stmts[0])?;
+        let source_plan = binder.bind(&stmts[0]).await?;
         // println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan = Self::default_optimizer(source_plan)
@@ -146,101 +139,92 @@ pub enum DatabaseError {
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use tempfile::TempDir;
+    use crate::catalog::{ColumnCatalog, ColumnDesc, TableName};
     use crate::db::{Database, DatabaseError};
     use crate::storage::{Storage, StorageError};
-    use crate::types::{LogicalType, TableId};
+    use crate::types::LogicalType;
     use crate::types::tuple::create_table;
 
-    fn build_table(storage: &impl Storage) -> Result<TableId, StorageError> {
+    async fn build_table(storage: &impl Storage) -> Result<TableName, StorageError> {
         let columns = vec![
-            Arc::new(
-                ColumnCatalog::new(
-                    "c1".to_string(),
-                    false,
-                    ColumnDesc::new(LogicalType::Integer, true)
-                )
+            ColumnCatalog::new(
+                "c1".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Integer, true)
             ),
-            Arc::new(
-                ColumnCatalog::new(
-                    "c2".to_string(),
-                    false,
-                    ColumnDesc::new(LogicalType::Boolean, false)
-                )
+            ColumnCatalog::new(
+                "c2".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Boolean, false)
             ),
         ];
 
-        Ok(storage.create_table("t1".to_string(), columns)?)
+        Ok(storage.create_table(Arc::new("t1".to_string()), columns).await?)
     }
 
-    #[test]
-    fn test_run_sql() -> Result<(), DatabaseError> {
-        let database = Database::new_on_mem();
+    #[tokio::test]
+    async fn test_run_sql() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let database = Database::new(temp_dir.path()).await?;
+        let _ = build_table(&database.storage).await?;
+        let batch = database.run("select * from t1").await?;
 
-        let _ = build_table(&database.storage)?;
-
-        tokio_test::block_on(async move {
-            let batch = database.run("select * from t1").await?;
-            println!("{:#?}", batch);
-
-            Ok(())
-        })
+        println!("{:#?}", batch);
+        Ok(())
     }
 
-    #[test]
-    fn test_crud_sql() -> Result<(), DatabaseError> {
-        let kipsql = Database::new_on_mem();
+    #[tokio::test]
+    async fn test_crud_sql() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let kipsql = Database::new(temp_dir.path()).await?;
+        let _ = kipsql.run("create table t1 (a int, b int)").await?;
+        let _ = kipsql.run("create table t2 (c int, d int null)").await?;
+        let _ = kipsql.run("insert into t1 (a, b) values (1, 1), (5, 3), (5, 2)").await?;
+        let _ = kipsql.run("insert into t2 (d, c) values (2, 1), (3, 1), (null, 6)").await?;
 
-        tokio_test::block_on(async move {
-            let _ = kipsql.run("create table t1 (a int, b int)").await?;
-            let _ = kipsql.run("create table t2 (c int, d int null)").await?;
-            let _ = kipsql.run("insert into t1 (a, b) values (1, 1), (5, 3), (5, 2)").await?;
-            let _ = kipsql.run("insert into t2 (d, c) values (2, 1), (3, 1), (null, 6)").await?;
+        println!("full t1:");
+        let tuples_full_fields_t1 = kipsql.run("select * from t1").await?;
+        println!("{}", create_table(&tuples_full_fields_t1));
 
-            println!("full t1:");
-            let tuples_full_fields_t1 = kipsql.run("select * from t1").await?;
-            println!("{}", create_table(&tuples_full_fields_t1));
+        println!("full t2:");
+        let tuples_full_fields_t2 = kipsql.run("select * from t2").await?;
+        println!("{}", create_table(&tuples_full_fields_t2));
 
-            println!("full t2:");
-            let tuples_full_fields_t2 = kipsql.run("select * from t2").await?;
-            println!("{}", create_table(&tuples_full_fields_t2));
+        println!("projection_and_filter:");
+        let tuples_projection_and_filter = kipsql.run("select a from t1 where a <= 1").await?;
+        println!("{}", create_table(&tuples_projection_and_filter));
 
-            println!("projection_and_filter:");
-            let tuples_projection_and_filter = kipsql.run("select a from t1 where a <= 1").await?;
-            println!("{}", create_table(&tuples_projection_and_filter));
+        println!("projection_and_sort:");
+        let tuples_projection_and_sort = kipsql.run("select * from t1 order by a, b").await?;
+        println!("{}", create_table(&tuples_projection_and_sort));
 
-            println!("projection_and_sort:");
-            let tuples_projection_and_sort = kipsql.run("select * from t1 order by a, b").await?;
-            println!("{}", create_table(&tuples_projection_and_sort));
+        println!("limit:");
+        let tuples_limit = kipsql.run("select * from t1 limit 1 offset 1").await?;
+        println!("{}", create_table(&tuples_limit));
 
-            println!("limit:");
-            let tuples_limit = kipsql.run("select * from t1 limit 1 offset 1").await?;
-            println!("{}", create_table(&tuples_limit));
+        println!("inner join:");
+        let tuples_inner_join = kipsql.run("select * from t1 inner join t2 on a = c").await?;
+        println!("{}", create_table(&tuples_inner_join));
 
-            println!("inner join:");
-            let tuples_inner_join = kipsql.run("select * from t1 inner join t2 on a = c").await?;
-            println!("{}", create_table(&tuples_inner_join));
+        println!("left join:");
+        let tuples_left_join = kipsql.run("select * from t1 left join t2 on a = c").await?;
+        println!("{}", create_table(&tuples_left_join));
 
-            println!("left join:");
-            let tuples_left_join = kipsql.run("select * from t1 left join t2 on a = c").await?;
-            println!("{}", create_table(&tuples_left_join));
+        println!("right join:");
+        let tuples_right_join = kipsql.run("select * from t1 right join t2 on a = c").await?;
+        println!("{}", create_table(&tuples_right_join));
 
-            println!("right join:");
-            let tuples_right_join = kipsql.run("select * from t1 right join t2 on a = c").await?;
-            println!("{}", create_table(&tuples_right_join));
+        println!("full join:");
+        let tuples_full_join = kipsql.run("select * from t1 full join t2 on a = c").await?;
+        println!("{}", create_table(&tuples_full_join));
 
-            println!("full join:");
-            let tuples_full_join = kipsql.run("select * from t1 full join t2 on a = c").await?;
-            println!("{}", create_table(&tuples_full_join));
+        println!("update t1 and filter:");
+        let _ = kipsql.run("update t1 set a = 0 where b > 1").await?;
+        println!("after t1:");
+        let update_after_full_t1 = kipsql.run("select * from t1").await?;
+        println!("{}", create_table(&update_after_full_t1));
 
-            println!("update t1 and filter:");
-            let _ = kipsql.run("update t1 set a = 0 where b > 1").await?;
-            println!("after t1:");
-            let update_after_full_t1 = kipsql.run("select * from t1").await?;
-            println!("{}", create_table(&update_after_full_t1));
-
-
-            Ok(())
-        })
+        Ok(())
     }
 }

@@ -8,17 +8,17 @@ mod update;
 use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
 
-use crate::catalog::{RootCatalog, DEFAULT_SCHEMA_NAME, CatalogError};
+use crate::catalog::{DEFAULT_SCHEMA_NAME, CatalogError, TableName, TableCatalog};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinType;
+use crate::storage::kip::KipStorage;
 use crate::types::errors::TypeError;
-use crate::types::TableId;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BinderContext {
-    pub(crate) catalog: RootCatalog,
-    pub(crate) bind_table: BTreeMap<String, (TableId, Option<JoinType>)>,
+    pub(crate) storage: KipStorage,
+    pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
     agg_calls: Vec<ScalarExpression>,
@@ -26,9 +26,9 @@ pub struct BinderContext {
 }
 
 impl BinderContext {
-    pub fn new(catalog: RootCatalog) -> Self {
+    pub fn new(storage: KipStorage) -> Self {
         BinderContext {
-            catalog,
+            storage,
             bind_table: Default::default(),
             aliases: Default::default(),
             group_by_exprs: vec![],
@@ -61,13 +61,13 @@ impl Binder {
         Binder { context }
     }
 
-    pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
+    pub async fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
-            Statement::Query(query) => self.bind_query(query)?,
+            Statement::Query(query) => self.bind_query(query).await?,
             Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
             Statement::Insert { table_name, columns, source, .. } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
-                    self.bind_insert(table_name.to_owned(), columns, &values.rows)?
+                    self.bind_insert(table_name.to_owned(), columns, &values.rows).await?
                 } else {
                     todo!()
                 }
@@ -76,7 +76,7 @@ impl Binder {
                 if !table.joins.is_empty() {
                     unimplemented!()
                 } else {
-                    self.bind_update(table, selection, assignments)?
+                    self.bind_update(table, selection, assignments).await?
                 }
             }
             _ => unimplemented!(),
@@ -130,35 +130,46 @@ pub enum BindError {
 
 #[cfg(test)]
 pub mod test {
-    use crate::catalog::{CatalogError, ColumnCatalog, ColumnDesc, RootCatalog};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::planner::LogicalPlan;
     use crate::types::LogicalType::Integer;
     use crate::binder::{Binder, BinderContext};
     use crate::execution::ExecutorError;
+    use crate::storage::kip::KipStorage;
+    use crate::storage::{Storage, StorageError};
 
-    fn test_root_catalog() -> Result<RootCatalog, CatalogError> {
-        let mut root = RootCatalog::new();
+    async fn build_test_catalog(path: impl Into<PathBuf> + Send) -> Result<KipStorage, StorageError> {
+        let storage = KipStorage::new(path).await?;
 
-        let cols_t1 = vec![
-            ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
-            ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
-        ];
-        let _ = root.add_table("t1".to_string(), cols_t1)?;
+        let _ = storage.create_table(
+            Arc::new("t1".to_string()),
+            vec![
+                ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
+                ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
+            ]
+        ).await?;
 
-        let cols_t2 = vec![
-            ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
-            ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
-        ];
-        let _ = root.add_table("t2".to_string(), cols_t2)?;
-        Ok(root)
+        let _ = storage.create_table(
+            Arc::new("t2".to_string()),
+            vec![
+                ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
+                ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
+            ]
+        ).await?;
+
+        Ok(storage)
     }
 
-    pub fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
-        let root = test_root_catalog()?;
+    pub async fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
 
-        let binder = Binder::new(BinderContext::new(root));
+        let storage = build_test_catalog(temp_dir.path()).await?;
+        let binder = Binder::new(BinderContext::new(storage));
         let stmt = crate::parser::parse_sql(sql)?;
 
-        Ok(binder.bind(&stmt[0])?)
+        Ok(binder.bind(&stmt[0]).await?)
     }
 }

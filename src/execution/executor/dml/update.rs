@@ -1,18 +1,17 @@
 use std::collections::HashMap;
 use futures_async_stream::try_stream;
-use crate::catalog::CatalogError;
+use crate::catalog::TableName;
 use crate::execution::executor::BoxedExecutor;
 use crate::execution::ExecutorError;
 use crate::storage::{Storage, Table};
-use crate::types::TableId;
 use crate::types::tuple::Tuple;
 
 pub struct Update { }
 
 impl Update {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(table_id: TableId, input: BoxedExecutor, values: BoxedExecutor, storage: impl Storage) {
-        if let Some(table_catalog) = storage.get_catalog().get_table(&table_id) {
+    pub async fn execute(table_name: TableName, input: BoxedExecutor, values: BoxedExecutor, storage: impl Storage) {
+        if let Some(mut table) = storage.table(&table_name).await {
             let mut value_map = HashMap::new();
 
             // only once
@@ -23,8 +22,6 @@ impl Update {
                     value_map.insert(columns[i].id, values[i].clone());
                 }
             }
-
-            let table = storage.get_table(&table_catalog.id)?;
 
             #[for_await]
             for tuple in input {
@@ -38,8 +35,7 @@ impl Update {
 
                 table.append(tuple)?;
             }
-        } else {
-            Err(CatalogError::NotFound("root", table_id.to_string()))?;
+            table.commit().await?;
         }
     }
 }

@@ -207,9 +207,9 @@ mod tests {
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;
 
-    #[test]
-    fn test_graph_for_plan() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+    #[tokio::test]
+    async fn test_graph_for_plan() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let graph = HepGraph::new(plan);
 
         assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(2)));
@@ -223,9 +223,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_graph_add_node() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+    #[tokio::test]
+    async fn test_graph_add_node() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
         graph.add_node(
@@ -257,9 +257,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_graph_replace_node() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+    #[tokio::test]
+    async fn test_graph_replace_node() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
         graph.replace_node(HepNodeId::new(1), OptExprNode::OperatorRef(Operator::Dummy));
@@ -269,9 +269,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_graph_remove_middle_node_by_single() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+    #[tokio::test]
+    async fn test_graph_remove_middle_node_by_single() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
         graph.remove_node(HepNodeId::new(1), false);
@@ -284,9 +284,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_graph_remove_middle_node_with_childrens() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+    #[tokio::test]
+    async fn test_graph_remove_middle_node_with_childrens() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
         graph.remove_node(HepNodeId::new(1), true);
@@ -296,9 +296,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_graph_swap_node() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+    #[tokio::test]
+    async fn test_graph_swap_node() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
         let before_op_0 = graph.operator(HepNodeId::new(0)).clone();
@@ -315,9 +315,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_graph_add_root() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+    #[tokio::test]
+    async fn test_graph_add_root() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
         graph.add_root(OptExprNode::OperatorRef(Operator::Dummy));
@@ -329,9 +329,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_graph_to_plan() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+    #[tokio::test]
+    async fn test_graph_to_plan() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let graph = HepGraph::new(plan.clone());
 
         let plan_for_graph = graph.to_plan();

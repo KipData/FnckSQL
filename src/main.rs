@@ -22,8 +22,6 @@ pub const BLOOM: &str ="
               ;   ;
               /   \\
 _____________/_ __ \\_____________
-
-Bloom!!!! say goodbye to your data :)
 ";
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -32,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!(":) Welcome to the KipSQL, Please input sql.\n");
     println!("Tips: ");
     println!("1. input \"quit\" to shutdown");
-    println!("2. shutdown will let you say goodbye to your data\n");
+    println!("2. no support \"delete\", so if u want remove data, you can delete the \'data\' folder");
 
     server_run().await?;
 
@@ -40,17 +38,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn server_run() -> Result<(), Box<dyn Error>> {
-    let db = Database::new_on_mem();
-    let _ = db.run("create table t1 (a int, b int)").await?;
-    let _ = db.run("create table t2 (c int, d int null)").await?;
-    let _ = db.run("insert into t1 (a, b) values (1, 1), (5, 3), (5, 2)").await?;
-    let _ = db.run("insert into t2 (d, c) values (2, 1), (3, 1), (null, 6)").await?;
+    let db = Database::new("./data").await?;
 
     loop {
         println!("> type👇 plz");
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
-        if input.to_lowercase().eq("quit\n") {
+
+        if input.len() >= 4 && input.to_lowercase()[..4].eq("quit") {
             println!("{}", BLOOM);
             break
         }

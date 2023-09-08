@@ -97,9 +97,9 @@ mod tests {
     use crate::types::LogicalType;
     use crate::types::value::DataValue;
 
-    #[test]
-    fn test_collapse_project() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select c1, c2 from t1")?;
+    #[tokio::test]
+    async fn test_collapse_project() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select c1, c2 from t1").await?;
 
         let mut optimizer = HepOptimizer::new(plan.clone())
             .batch(
@@ -137,9 +137,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_combine_filter() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 where c1 > 1")?;
+    #[tokio::test]
+    async fn test_combine_filter() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 where c1 > 1").await?;
 
         let mut optimizer = HepOptimizer::new(plan.clone())
             .batch(

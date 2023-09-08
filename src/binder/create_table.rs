@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 use std::sync::Arc;
+use itertools::Itertools;
 use sqlparser::ast::{ColumnDef, ObjectName};
 
 use super::Binder;
 use crate::binder::{BindError, lower_case_name, split_name};
-use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::catalog::ColumnCatalog;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
@@ -16,7 +17,8 @@ impl Binder {
         columns: &[ColumnDef],
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
-        let (_, table_name) = split_name(&name)?;
+        let (_, name) = split_name(&name)?;
+        let table_name = Arc::new(name.to_string());
 
         // check duplicated column names
         let mut set = HashSet::new();
@@ -27,15 +29,15 @@ impl Binder {
             }
         }
 
-        let columns: Vec<ColumnRef> = columns
+        let columns = columns
             .iter()
-            .map(|col| Arc::new(ColumnCatalog::from(col.clone())))
-            .collect();
+            .map(|col| ColumnCatalog::from(col.clone()))
+            .collect_vec();
 
         let plan = LogicalPlan {
             operator: Operator::CreateTable(
                 CreateTableOperator {
-                    table_name: table_name.to_string(),
+                    table_name,
                     columns
                 }
             ),
@@ -47,21 +49,26 @@ impl Binder {
 
 #[cfg(test)]
 mod tests {
+    use tempfile::TempDir;
     use super::*;
     use crate::binder::BinderContext;
-    use crate::catalog::{ColumnDesc, RootCatalog};
+    use crate::catalog::ColumnDesc;
+    use crate::storage::kip::KipStorage;
     use crate::types::LogicalType;
 
-    #[test]
-    fn test_create_bind() {
+    #[tokio::test]
+    async fn test_create_bind() {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = KipStorage::new(temp_dir.path()).await.unwrap();
+
         let sql = "create table t1 (id int , name varchar(10) null)";
-        let binder = Binder::new(BinderContext::new(RootCatalog::new()));
+        let binder = Binder::new(BinderContext::new(storage));
         let stmt = crate::parser::parse_sql(sql).unwrap();
-        let plan1 = binder.bind(&stmt[0]).unwrap();
+        let plan1 = binder.bind(&stmt[0]).await.unwrap();
 
         match plan1.operator {
             Operator::CreateTable(op) => {
-                assert_eq!(op.table_name, "t1".to_string());
+                assert_eq!(op.table_name, Arc::new("t1".to_string()));
                 assert_eq!(op.columns[0].name, "id".to_string());
                 assert_eq!(op.columns[0].nullable, false);
                 assert_eq!(op.columns[0].desc, ColumnDesc::new(LogicalType::Integer, false));

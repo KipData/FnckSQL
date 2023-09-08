@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use futures_async_stream::try_stream;
-use crate::catalog::CatalogError;
+use crate::catalog::TableName;
 use crate::execution::executor::BoxedExecutor;
 use crate::execution::ExecutorError;
 use crate::storage::{Storage, Table};
-use crate::types::{ColumnId, IdGenerator, TableId};
+use crate::types::{ColumnId, IdGenerator};
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 
@@ -13,10 +13,10 @@ pub struct Insert { }
 
 impl Insert {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(table_id: TableId, input: BoxedExecutor, storage: impl Storage) {
-        if let Some(table_catalog) = storage.get_catalog().get_table(&table_id) {
-            let table = storage.get_table(&table_catalog.id)?;
-
+    pub async fn execute(table_name: TableName, input: BoxedExecutor, storage: impl Storage) {
+        if let (Some(table_catalog), Some(mut table)) =
+            (storage.table_catalog(&table_name).await, storage.table(&table_name).await)
+        {
             #[for_await]
             for tuple in input {
                 let Tuple { columns, values, .. } = tuple?;
@@ -26,7 +26,7 @@ impl Insert {
                     .map(|(i, value)| (columns[i].id, value))
                     .collect();
 
-                let all_columns = table_catalog.all_columns();
+                let all_columns = table_catalog.all_columns_with_id();
 
                 let mut tuple = Tuple {
                     id: Some(IdGenerator::build() as usize),
@@ -44,8 +44,7 @@ impl Insert {
 
                 table.append(tuple)?;
             }
-        } else {
-            Err(CatalogError::NotFound("root", table_id.to_string()))?;
+            table.commit().await?;
         }
     }
 }

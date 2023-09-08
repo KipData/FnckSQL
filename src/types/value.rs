@@ -4,6 +4,7 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::sync::Arc;
+use integer_encoding::FixedInt;
 
 use ordered_float::OrderedFloat;
 
@@ -142,6 +143,13 @@ impl Hash for DataValue {
 }
 
 impl DataValue {
+    pub fn is_variable(&self) -> bool {
+        match self {
+            DataValue::Utf8(_) => true,
+            _ => false
+        }
+    }
+
     pub fn is_null(&self) -> bool {
         match self {
             DataValue::Null => true,
@@ -176,6 +184,51 @@ impl DataValue {
             LogicalType::Float => DataValue::Float32(None),
             LogicalType::Double => DataValue::Float64(None),
             LogicalType::Varchar => DataValue::Utf8(None)
+        }
+    }
+
+    pub fn to_raw(&self) -> Vec<u8> {
+        match self {
+            DataValue::Null => None,
+            DataValue::Boolean(v) => v.map(|v| vec![v as u8]),
+            DataValue::Float32(v) => v.map(|v| v.to_ne_bytes().to_vec()),
+            DataValue::Float64(v) => v.map(|v| v.to_ne_bytes().to_vec()),
+            DataValue::Int8(v) => v.map(|v| v.encode_fixed_vec()),
+            DataValue::Int16(v) => v.map(|v| v.encode_fixed_vec()),
+            DataValue::Int32(v) => v.map(|v| v.encode_fixed_vec()),
+            DataValue::Int64(v) => v.map(|v| v.encode_fixed_vec()),
+            DataValue::UInt8(v) => v.map(|v| v.encode_fixed_vec()),
+            DataValue::UInt16(v) => v.map(|v| v.encode_fixed_vec()),
+            DataValue::UInt32(v) => v.map(|v| v.encode_fixed_vec()),
+            DataValue::UInt64(v) => v.map(|v| v.encode_fixed_vec()),
+            DataValue::Utf8(v) => v.clone().map(|v| v.into_bytes()),
+        }.unwrap_or(vec![])
+    }
+
+    pub fn from_raw(bytes: &[u8], ty: &LogicalType) -> Self {
+        match ty {
+            LogicalType::Invalid => panic!("invalid logical type"),
+            LogicalType::SqlNull => DataValue::Null,
+            LogicalType::Boolean => DataValue::Boolean(bytes.get(0).map(|v| *v != 0)),
+            LogicalType::Tinyint => DataValue::Int8((!bytes.is_empty()).then(|| i8::decode_fixed(bytes))),
+            LogicalType::UTinyint => DataValue::UInt8((!bytes.is_empty()).then(|| u8::decode_fixed(bytes))),
+            LogicalType::Smallint => DataValue::Int16((!bytes.is_empty()).then(|| i16::decode_fixed(bytes))),
+            LogicalType::USmallint => DataValue::UInt16((!bytes.is_empty()).then(|| u16::decode_fixed(bytes))),
+            LogicalType::Integer => DataValue::Int32((!bytes.is_empty()).then(|| i32::decode_fixed(bytes))),
+            LogicalType::UInteger => DataValue::UInt32((!bytes.is_empty()).then(|| u32::decode_fixed(bytes))),
+            LogicalType::Bigint => DataValue::Int64((!bytes.is_empty()).then(|| i64::decode_fixed(bytes))),
+            LogicalType::UBigint => DataValue::UInt64((!bytes.is_empty()).then(|| u64::decode_fixed(bytes))),
+            LogicalType::Float => DataValue::Float32((!bytes.is_empty()).then(|| {
+                let mut buf = [0; 4];
+                buf.copy_from_slice(bytes);
+                f32::from_ne_bytes(buf)
+            })),
+            LogicalType::Double => DataValue::Float64((!bytes.is_empty()).then(|| {
+                let mut buf = [0; 8];
+                buf.copy_from_slice(bytes);
+                f64::from_ne_bytes(buf)
+            })),
+            LogicalType::Varchar => DataValue::Utf8((!bytes.is_empty()).then(|| String::from_utf8(bytes.to_owned()).unwrap())),
         }
     }
 

@@ -1,26 +1,31 @@
 use std::cell::Cell;
-use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::slice;
 use std::sync::Arc;
-use itertools::Itertools;
-use parking_lot::Mutex;
-use crate::catalog::{ColumnCatalog, ColumnRef, RootCatalog, TableCatalog};
+use async_trait::async_trait;
+use crate::catalog::{ColumnCatalog, RootCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
-use crate::types::TableId;
 use crate::types::tuple::Tuple;
 
 // WARRING: Only single-threaded and tested using
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MemStorage {
-    inner: Arc<Mutex<StorageInner>>
+    inner: Arc<Cell<StorageInner>>
+}
+
+unsafe impl Send for MemStorage {
+
+}
+
+unsafe impl Sync for MemStorage {
+
 }
 
 impl MemStorage {
     pub fn new() -> MemStorage {
         Self {
             inner: Arc::new(
-                Mutex::new(
+                Cell::new(
                     StorageInner {
                         root: Default::default(),
                         tables: Default::default(),
@@ -29,51 +34,59 @@ impl MemStorage {
             ),
         }
     }
+
+    pub fn root(self, root: RootCatalog) -> Self {
+        unsafe {
+            self.inner.as_ptr().as_mut().unwrap().root = root;
+        }
+        self
+    }
 }
 
 #[derive(Debug)]
 struct StorageInner {
     root: RootCatalog,
-    tables: HashMap<TableId, MemTable>
+    tables: Vec<(TableName, MemTable)>
 }
 
+#[async_trait]
 impl Storage for MemStorage {
     type TableType = MemTable;
 
-    fn create_table(&self, table_name: String, columns: Vec<ColumnRef>) -> Result<TableId, StorageError> {
+    async fn create_table(&self, table_name: TableName, columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
         let new_table = MemTable {
             tuples: Arc::new(Cell::new(vec![])),
         };
-        let de_columns = columns.iter()
-            .map(|col| ColumnCatalog::clone(col))
-            .collect_vec();
+        let inner = unsafe { self.inner.as_ptr().as_mut() }.unwrap();
 
-        let mut inner = self.inner.lock();
-
-        let table_id = inner.root.add_table(table_name, de_columns)?;
-        inner.tables.insert(table_id, new_table);
+        let table_id = inner.root.add_table(table_name.clone(), columns)?;
+        inner.tables.push((table_name, new_table));
 
         Ok(table_id)
     }
 
-    fn get_table(&self, id: &TableId) -> Result<Self::TableType, StorageError> {
-        self.inner
-            .lock()
-            .tables
-            .get(id)
-            .cloned()
-            .ok_or(StorageError::TableNotFound(*id))
+    async fn table(&self, name: &String) -> Option<Self::TableType> {
+        unsafe {
+            self.inner
+                .as_ptr()
+                .as_ref()
+                .unwrap()
+                .tables
+                .iter()
+                .find(|(tname, _)| tname.as_str() == name)
+                .map(|(_, table)| table.clone())
+        }
     }
 
-    fn get_catalog(&self) -> RootCatalog {
-        self.inner
-            .lock()
-            .root
-            .clone()
-    }
-
-    fn show_tables(&self) -> Result<Vec<TableCatalog>, StorageError> {
-        todo!()
+    async fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
+        unsafe {
+            self.inner
+                .as_ptr()
+                .as_ref()
+                .unwrap()
+                .root
+                .get_table(name)
+        }
     }
 }
 
@@ -100,6 +113,7 @@ impl Debug for MemTable {
     }
 }
 
+#[async_trait]
 impl Table for MemTable {
     type TransactionType<'a> = MemTraction<'a>;
 
@@ -116,7 +130,7 @@ impl Table for MemTable {
         }
     }
 
-    fn append(&self, tuple: Tuple) -> Result<(), StorageError> {
+    fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {
         let tuples = unsafe {
             self.tuples
                 .as_ptr()
@@ -129,6 +143,10 @@ impl Table for MemTable {
             tuples.push(tuple);
         }
 
+        Ok(())
+    }
+
+    async fn commit(self) -> Result<(), StorageError> {
         Ok(())
     }
 }
@@ -179,17 +197,18 @@ impl Transaction for MemTraction<'_> {
 }
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
     use std::sync::Arc;
+    use itertools::Itertools;
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::expression::ScalarExpression;
-    use crate::storage::memory::{MemStorage, MemTable};
+    use crate::storage::memory::MemStorage;
     use crate::storage::{Storage, StorageError, Table, Transaction};
     use crate::types::LogicalType;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
 
-    fn data_filling(columns: Vec<ColumnRef>, table: &MemTable) -> Result<(), StorageError> {
+    pub fn data_filling(columns: Vec<ColumnRef>, table: &mut impl Table) -> Result<(), StorageError> {
         table.append(Tuple {
             id: Some(0),
             columns: columns.clone(),
@@ -210,8 +229,8 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn test_in_memory_storage_works_with_data() -> Result<(), StorageError> {
+    #[tokio::test]
+    async fn test_in_memory_storage_works_with_data() -> Result<(), StorageError> {
         let storage = MemStorage::new();
         let columns = vec![
             Arc::new(ColumnCatalog::new(
@@ -226,15 +245,18 @@ mod test {
             )),
         ];
 
-        let table_id = storage.create_table("test".to_string(), columns.clone())?;
+        let source_columns = columns.iter()
+            .map(|col_ref| ColumnCatalog::clone(&col_ref))
+            .collect_vec();
 
-        let catalog = storage.get_catalog();
-        let table_catalog = catalog.get_table_by_name("test");
+        let table_id = storage.create_table(Arc::new("test".to_string()), source_columns).await?;
+
+        let table_catalog = storage.table_catalog(&"test".to_string()).await;
         assert!(table_catalog.is_some());
-        assert!(table_catalog.unwrap().get_column_id_by_name("c1").is_some());
+        assert!(table_catalog.unwrap().get_column_id_by_name(&"c1".to_string()).is_some());
 
-        let table = storage.get_table(&table_id)?;
-        data_filling(columns, &table)?;
+        let mut table = storage.table(&table_id).await.unwrap();
+        data_filling(columns, &mut table)?;
 
         let mut tx = table.read(
             (Some(1), Some(1)),

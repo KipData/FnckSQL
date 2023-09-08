@@ -6,7 +6,7 @@ use sqllogictest::{AsyncDB, Runner};
 use kip_sql::types::tuple::create_table;
 
 pub fn test_run(sqlfile: &str) {
-    let db = Arc::new(Database::new_on_mem());
+    let db = Arc::new(Database::new("./test"));
     let mut tester = Runner::new(DatabaseWrapper { db });
     tester.run_file(sqlfile).unwrap()
 }

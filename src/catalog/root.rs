@@ -1,12 +1,10 @@
 use std::collections::BTreeMap;
 
-use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog};
-use crate::types::TableId;
+use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 
 #[derive(Debug, Clone)]
 pub struct RootCatalog {
-    table_idxs: BTreeMap<String, TableId>,
-    tables: BTreeMap<TableId, TableCatalog>,
+    table_idxs: BTreeMap<TableName, TableCatalog>,
 }
 
 impl Default for RootCatalog {
@@ -20,52 +18,35 @@ impl RootCatalog {
     pub fn new() -> Self {
         RootCatalog {
             table_idxs: Default::default(),
-            tables: Default::default(),
         }
     }
 
-    pub(crate) fn get_table_id_by_name(&self, name: &str) -> Option<TableId> {
-        self.table_idxs.get(name).cloned()
-    }
-
-    pub(crate) fn get_table(&self, table_id: &TableId) -> Option<&TableCatalog> {
-        self.tables.get(table_id)
-    }
-
-    pub(crate) fn get_table_by_name(&self, name: &str) -> Option<&TableCatalog> {
-        let id = self.table_idxs.get(name)?;
-        self.tables.get(id)
+    pub(crate) fn get_table(&self, name: &String) -> Option<&TableCatalog> {
+        self.table_idxs.get(name)
     }
 
     pub(crate) fn add_table(
         &mut self,
-        table_name: String,
+        table_name: TableName,
         columns: Vec<ColumnCatalog>,
-    ) -> Result<TableId, CatalogError> {
+    ) -> Result<TableName, CatalogError> {
         if self.table_idxs.contains_key(&table_name) {
-            return Err(CatalogError::Duplicated("column", table_name));
+            return Err(CatalogError::Duplicated("column", table_name.to_string()));
         }
         let table = TableCatalog::new(
-            table_name.to_owned(),
+            table_name.clone(),
             columns
         )?;
-        let table_id = table.id;
 
-        self.table_idxs.insert(table_name, table_id);
-        self.tables.insert(table_id, table);
+        self.table_idxs.insert(table_name.clone(), table);
 
-        Ok(table_id)
-    }
-
-    pub(crate) fn tables(&self) -> Vec<(&TableId, &TableCatalog)> {
-        self.tables
-            .iter()
-            .collect()
+        Ok(table_name)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use super::*;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::types::LogicalType;
@@ -87,11 +68,11 @@ mod tests {
         let col_catalogs = vec![col0, col1];
 
         let table_id_1 = root_catalog
-            .add_table("test_table_1".into(), col_catalogs.clone())
+            .add_table(Arc::new("test_table_1".to_string()), col_catalogs.clone())
             .unwrap();
 
         let table_id_2 = root_catalog
-            .add_table("test_table_2".into(), col_catalogs)
+            .add_table(Arc::new("test_table_2".to_string()), col_catalogs)
             .unwrap();
 
         assert_ne!(table_id_1, table_id_2);

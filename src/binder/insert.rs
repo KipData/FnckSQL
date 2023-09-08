@@ -1,6 +1,6 @@
 use std::slice;
+use std::sync::Arc;
 use sqlparser::ast::{Expr, Ident, ObjectName};
-use itertools::Itertools;
 use crate::binder::{Binder, BindError, lower_case_name, split_name};
 use crate::catalog::ColumnRef;
 use crate::expression::ScalarExpression;
@@ -8,58 +8,57 @@ use crate::planner::LogicalPlan;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::Operator;
 use crate::planner::operator::values::ValuesOperator;
+use crate::storage::Storage;
 use crate::types::value::ValueRef;
 
 impl Binder {
-    pub(crate) fn bind_insert(
+    pub(crate) async fn bind_insert(
         &mut self,
         name: ObjectName,
         idents: &[Ident],
-        rows: &Vec<Vec<Expr>>
+        expr_rows: &Vec<Vec<Expr>>
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
-        let (_, table_name) = split_name(&name)?;
+        let (_, name) = split_name(&name)?;
+        let table_name = Arc::new(name.to_string());
 
-        if let Some(table) = self.context.catalog.get_table_by_name(table_name) {
-            let table_id = table.id;
+        if let Some(table) = self.context.storage.table_catalog(&table_name).await {
             let mut columns = Vec::new();
 
             if idents.is_empty() {
-                columns = table.all_columns()
-                    .into_iter()
-                    .map(|(_, catalog)| catalog.clone())
-                    .collect_vec();
+                columns = table.all_columns();
             } else {
                 let bind_table_name = Some(table_name.to_string());
                 for ident in idents {
                     match self.bind_column_ref_from_identifiers(
                         slice::from_ref(ident),
                         bind_table_name.as_ref()
-                    )? {
+                    ).await? {
                         ScalarExpression::ColumnRef(catalog) => columns.push(catalog),
                         _ => unreachable!()
                     }
                 }
             }
+            let mut rows = Vec::with_capacity(expr_rows.len());
 
-            let rows = rows
-                .into_iter()
-                .map(|row| {
-                    row.into_iter()
-                        .map(|expr| match self.bind_expr(expr)? {
-                            ScalarExpression::Constant(value) => Ok::<ValueRef, BindError>(value),
-                            _ => unreachable!(),
-                        })
-                        .try_collect()
-                })
-                .try_collect()?;
+            for expr_row in expr_rows {
+                let mut row = Vec::with_capacity(expr_row.len());
 
+                for expr in expr_row {
+                    match self.bind_expr(expr).await? {
+                        ScalarExpression::Constant(value) => row.push(value),
+                        _ => unreachable!(),
+                    }
+                }
+
+                rows.push(row);
+            }
             let values_plan = self.bind_values(rows, columns);
 
             Ok(LogicalPlan {
                 operator: Operator::Insert(
                     InsertOperator {
-                        table_id,
+                        table_name,
                     }
                 ),
                 childrens: vec![values_plan],

@@ -168,9 +168,9 @@ mod tests {
     use crate::planner::operator::limit::LimitOperator;
     use crate::planner::operator::Operator;
 
-    #[test]
-    fn test_limit_project_transpose() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select c1, c2 from t1 limit 1")?;
+    #[tokio::test]
+    async fn test_limit_project_transpose() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select c1, c2 from t1 limit 1").await?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -195,9 +195,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_eliminate_limits() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select c1, c2 from t1 limit 1 offset 1")?;
+    #[tokio::test]
+    async fn test_eliminate_limits() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select c1, c2 from t1 limit 1 offset 1").await?;
 
         let mut optimizer = HepOptimizer::new(plan.clone())
             .batch(
@@ -231,9 +231,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_push_limit_through_join() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 limit 1")?;
+    #[tokio::test]
+    async fn test_push_limit_through_join() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 limit 1").await?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -260,9 +260,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_push_limit_into_table_scan() -> Result<(), ExecutorError> {
-        let plan = select_sql_run("select * from t1 limit 1 offset 1")?;
+    #[tokio::test]
+    async fn test_push_limit_into_table_scan() -> Result<(), ExecutorError> {
+        let plan = select_sql_run("select * from t1 limit 1 offset 1").await?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(

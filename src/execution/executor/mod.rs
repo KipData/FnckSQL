@@ -24,17 +24,17 @@ use crate::execution::executor::dql::values::Values;
 use crate::execution::ExecutorError;
 use crate::execution::physical_plan::physical_update::PhysicalUpdate;
 use crate::planner::operator::join::JoinOperator;
-use crate::storage::memory::MemStorage;
+use crate::storage::kip::KipStorage;
 use crate::types::tuple::Tuple;
 
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
 pub struct Executor {
-    storage: MemStorage
+    storage: KipStorage
 }
 
 impl Executor {
-    pub fn new(storage: MemStorage) -> Executor {
+    pub fn new(storage: KipStorage) -> Executor {
         Executor {
             storage
         }
@@ -50,16 +50,16 @@ impl Executor {
 
                 Projection::execute(exprs, input)
             }
-            PhysicalPlan::Insert(PhysicalInsert { table_id, input}) => {
+            PhysicalPlan::Insert(PhysicalInsert { table_name, input}) => {
                 let input = self.build(*input);
 
-                Insert::execute(table_id, input, self.storage.clone())
+                Insert::execute(table_name, input, self.storage.clone())
             }
-            PhysicalPlan::Update(PhysicalUpdate { table_id, input, values}) => {
+            PhysicalPlan::Update(PhysicalUpdate { table_name, input, values}) => {
                 let input = self.build(*input);
                 let values = self.build(*values);
 
-                Update::execute(table_id, input, values, self.storage.clone())
+                Update::execute(table_name, input, values, self.storage.clone())
             }
             PhysicalPlan::Values(op) => {
                 Values::execute(op)

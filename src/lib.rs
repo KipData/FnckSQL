@@ -4,6 +4,9 @@
 #![feature(result_flattening)]
 #![feature(generators)]
 #![feature(iterator_try_collect)]
+#![feature(slice_pattern)]
+extern crate core;
+
 pub mod binder;
 pub mod catalog;
 pub mod db;
