@@ -248,7 +248,7 @@ mod test {
         println!("{}", create_table(&tuples_min_max_agg));
 
         println!("group agg:");
-        let tuples_group_agg = kipsql.run("select c, max(d) from t2 group by c").await?;
+        let tuples_group_agg = kipsql.run("select c, max(d) from t2 group by c having c = 1").await?;
         println!("{}", create_table(&tuples_group_agg));
 
         assert!(kipsql.run("select max(d) from t2 group by c").await.is_err());

@@ -59,7 +59,7 @@ Storage Support:
   - [ ] Subquery
   - [x] Join: Inner/Left/Right/Full Cross(x)
   - [x] Group By
-  - [ ] Having
+  - [x] Having
   - [x] Order By
   - [x] Limit
 - DML

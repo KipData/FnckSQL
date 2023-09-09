@@ -13,9 +13,9 @@ pub mod delete;
 pub mod drop_table;
 pub mod truncate;
 
-use std::sync::Arc;
 use itertools::Itertools;
 use crate::catalog::ColumnRef;
+use crate::expression::ScalarExpression;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
@@ -53,6 +53,19 @@ pub enum Operator {
 }
 
 impl Operator {
+    pub fn project_input_refs(&self) -> Vec<ScalarExpression> {
+        match self {
+            Operator::Project(op) => {
+                op.columns
+                    .iter()
+                    .filter(|expr| matches!(expr, ScalarExpression::InputRef { .. }))
+                    .cloned()
+                    .collect_vec()
+            }
+            _ => vec![],
+        }
+    }
+
     pub fn referenced_columns(&self) -> Vec<ColumnRef> {
         match self {
             Operator::Aggregate(op) => {
@@ -106,15 +119,7 @@ impl Operator {
             Operator::Values(op) => {
                 op.columns.clone()
             }
-            Operator::CreateTable(op) => {
-                op.columns
-                    .iter()
-                    .cloned()
-                    .map(|col| Arc::new(col))
-                    .collect_vec()
-            }
             _ => vec![],
-
         }
     }
 }

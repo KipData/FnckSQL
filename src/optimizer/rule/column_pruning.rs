@@ -49,7 +49,11 @@ impl Rule for PushProjectIntoScan {
             if let Operator::Scan(scan_op) = graph.operator(child_index) {
                 let mut new_scan_op = scan_op.clone();
 
-                new_scan_op.columns = project_op.columns.clone();
+                new_scan_op.columns = project_op.columns
+                    .iter()
+                    .filter(|expr| matches!(expr, ScalarExpression::ColumnRef(_)))
+                    .cloned()
+                    .collect_vec();
 
                 graph.remove_node(node_id, false);
                 graph.replace_node(
@@ -71,6 +75,8 @@ impl Rule for PushProjectThroughChild {
 
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
         let node_operator = graph.operator(node_id);
+        let input_refs = node_operator.project_input_refs();
+
         if let Operator::Project(_) = node_operator {
             let child_index = graph.children_at(node_id)[0];
             let node_referenced_columns = node_operator.referenced_columns();
@@ -99,13 +105,18 @@ impl Rule for PushProjectThroughChild {
                     .filter(|u| intersection_columns_ids.contains(&u.id))
                     .map(|col| ScalarExpression::ColumnRef(col))
                     .collect_vec();
+                // Tips: Aggregation fields take precedence
+                let full_columns = input_refs.iter()
+                    .cloned()
+                    .chain(columns)
+                    .collect_vec();
 
-                if !columns.is_empty() {
+                if !full_columns.is_empty() {
                     graph.add_node(
                         child_index,
                         Some(grandson_id),
                         OptExprNode::OperatorRef(
-                            Operator::Project(ProjectOperator { columns })
+                            Operator::Project(ProjectOperator { columns: full_columns })
                         )
                     );
                 }
