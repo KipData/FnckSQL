@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::sync::Arc;
 use itertools::Itertools;
 
@@ -50,6 +49,7 @@ pub enum ScalarExpression {
         ty: LogicalType,
     },
     AggCall {
+        distinct: bool,
         kind: AggKind,
         args: Vec<ScalarExpression>,
         ty: LogicalType,
@@ -157,13 +157,26 @@ impl ScalarExpression {
                     ColumnDesc::new(expr.return_type(), false)
                 ))
             }
-            ScalarExpression::AggCall { kind, args, ty } => {
+            ScalarExpression::AggCall { kind, args, ty, distinct } => {
                 let args_str = args.iter()
                     .map(|expr| expr.output_column(tuple).name.clone())
                     .join(", ");
+                let op = |allow_distinct, distinct| {
+                    if allow_distinct && distinct {
+                        "DISTINCT "
+                    } else {
+                        ""
+                    }
+                };
+                let column_name = format!(
+                    "{:?}({}{})",
+                    kind,
+                    op(kind.allow_distinct(), *distinct),
+                    args_str
+                );
 
                 Arc::new(ColumnCatalog::new(
-                    format!("{:?}({})", kind, args_str),
+                    column_name,
                     true,
                     ColumnDesc::new(ty.clone(), false)
                 ))
@@ -173,12 +186,6 @@ impl ScalarExpression {
             }
             _ => unreachable!()
         }
-    }
-}
-
-impl Display for ScalarExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
     }
 }
 

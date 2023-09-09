@@ -6,3 +6,4 @@ pub(crate) mod sort;
 pub(crate) mod limit;
 pub(crate) mod join;
 pub(crate) mod dummy;
+pub(crate) mod aggregate;

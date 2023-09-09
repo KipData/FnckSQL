@@ -53,6 +53,10 @@ impl<S: Storage> BinderContext<S> {
 
         self.aliases.insert(alias, expr);
     }
+
+    pub fn has_agg_call(&self, expr: &ScalarExpression) -> bool {
+        self.group_by_exprs.contains(expr)
+    }
 }
 
 pub struct Binder<S: Storage> {

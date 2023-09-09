@@ -142,26 +142,31 @@ impl<S: Storage> Binder<S> {
 
         Ok(match func.name.to_string().to_lowercase().as_str() {
             "count" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Count,
                 args,
                 ty: LogicalType::UInteger,
             },
             "sum" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Sum,
                 args,
                 ty,
             },
             "min" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Min,
                 args,
                 ty,
             },
             "max" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Max,
                 args,
                 ty,
             },
             "avg" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Avg,
                 args,
                 ty,

@@ -627,12 +627,12 @@ mod test {
 
     #[test]
     fn test_binary_op_cast() {
+        let _i16_cast_1 = binary_op(&DataValue::Int16(Some(1)), &DataValue::Int8(Some(1)), &BinaryOperator::Plus);
+
         let i32_cast_1 = binary_op(&DataValue::Int32(Some(1)), &DataValue::Int8(Some(1)), &BinaryOperator::Plus);
         let i32_cast_2 = binary_op(&DataValue::Int32(Some(1)), &DataValue::Int16(Some(1)), &BinaryOperator::Plus);
 
         assert_eq!(i32_cast_1, i32_cast_2);
-
-        let i32_cast_2 = binary_op(&DataValue::Int16(Some(1)), &DataValue::Int32(Some(1)), &BinaryOperator::Plus);
 
         let i64_cast_1 = binary_op(&DataValue::Int64(Some(1)), &DataValue::Int8(Some(1)), &BinaryOperator::Plus);
         let i64_cast_2 = binary_op(&DataValue::Int64(Some(1)), &DataValue::Int16(Some(1)), &BinaryOperator::Plus);

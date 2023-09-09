@@ -23,6 +23,12 @@ delete from t1 where b > 1;
 select * from t1;
 
 select * from t1 order by a asc nulls first
+
+select count(distinct a) from t1;
+
+truncate table t1;
+
+drop table t1;
 ```
 Using KipSQL in code
 ```rust

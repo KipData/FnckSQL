@@ -100,12 +100,14 @@ impl<S: Storage> Binder<S> {
                     ScalarExpression::AggCall {
                         kind,
                         args,
-                        ty: return_type,
+                        ty,
+                        distinct
                     } => {
                         self.context.agg_calls.push(ScalarExpression::AggCall {
+                            distinct,
                             kind,
                             args,
-                            ty: return_type,
+                            ty,
                         });
                     }
                     _ => unreachable!(),
@@ -173,7 +175,7 @@ impl<S: Storage> Binder<S> {
             if !group_raw_exprs.iter().contains(expr) {
                 return Err(BindError::AggMiss(
                     format!(
-                        "{} must appear in the GROUP BY clause or be used in an aggregate function",
+                        "{:?} must appear in the GROUP BY clause or be used in an aggregate function",
                         expr
                     )
                 ));
@@ -257,7 +259,7 @@ impl<S: Storage> Binder<S> {
 
                 Err(BindError::AggMiss(
                     format!(
-                        "column {} must appear in the GROUP BY clause or be used in an aggregate function",
+                        "column {:?} must appear in the GROUP BY clause or be used in an aggregate function",
                         expr
                     )
                 ))
@@ -269,7 +271,7 @@ impl<S: Storage> Binder<S> {
 
                 Err(BindError::AggMiss(
                     format!(
-                        "column {} must appear in the GROUP BY clause or be used in an aggregate function",
+                        "column {:?} must appear in the GROUP BY clause or be used in an aggregate function",
                         expr
                     )
                 ))
