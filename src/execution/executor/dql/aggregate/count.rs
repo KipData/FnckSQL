@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 use ahash::RandomState;
 use crate::execution::executor::dql::aggregate::Accumulator;
 use crate::execution::ExecutorError;
@@ -23,8 +24,8 @@ impl Accumulator for CountAccumulator {
         Ok(())
     }
 
-    fn evaluate(&self) -> Result<DataValue, ExecutorError> {
-        Ok(DataValue::UInt32(Some(self.result)))
+    fn evaluate(&self) -> Result<ValueRef, ExecutorError> {
+        Ok(Arc::new(DataValue::UInt32(Some(self.result))))
     }
 }
 
@@ -49,7 +50,7 @@ impl Accumulator for DistinctCountAccumulator {
         Ok(())
     }
 
-    fn evaluate(&self) -> Result<DataValue, ExecutorError> {
-        Ok(DataValue::UInt32(Some(self.distinct_values.len() as u32)))
+    fn evaluate(&self) -> Result<ValueRef, ExecutorError> {
+        Ok(Arc::new(DataValue::UInt32(Some(self.distinct_values.len() as u32))))
     }
 }

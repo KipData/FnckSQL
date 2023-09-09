@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use crate::execution::executor::{BoxedExecutor, Executor};
@@ -65,7 +64,7 @@ impl SimpleAggExecutor {
         if let Some(columns) = columns_option {
             let values: Vec<ValueRef> = accs
                 .into_iter()
-                .map(|acc| acc.evaluate().map(Arc::new))
+                .map(|acc| acc.evaluate())
                 .try_collect()?;
 
             yield Tuple {

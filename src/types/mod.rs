@@ -39,7 +39,7 @@ pub type ColumnId = u32;
 
 /// Sqlrs type conversion:
 /// sqlparser::ast::DataType -> LogicalType -> arrow::datatypes::DataType
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, AsRefStr, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, AsRefStr, Serialize, Deserialize)]
 pub enum LogicalType {
     Invalid,
     SqlNull,

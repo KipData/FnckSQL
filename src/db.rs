@@ -183,7 +183,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let kipsql = Database::with_kipdb(temp_dir.path()).await?;
         let _ = kipsql.run("create table t1 (a int, b int)").await?;
-        let _ = kipsql.run("create table t2 (c int, d int null)").await?;
+        let _ = kipsql.run("create table t2 (c int, d int UNSIGNED  null)").await?;
         let _ = kipsql.run("insert into t1 (a, b) values (1, 1), (5, 3), (5, 2)").await?;
         let _ = kipsql.run("insert into t2 (d, c) values (2, 1), (3, 1), (null, 6)").await?;
 
@@ -223,6 +223,30 @@ mod test {
         let tuples_full_join = kipsql.run("select * from t1 full join t2 on a = c").await?;
         println!("{}", create_table(&tuples_full_join));
 
+        println!("count agg:");
+        let tuples_count_agg = kipsql.run("select count(d) from t2").await?;
+        println!("{}", create_table(&tuples_count_agg));
+
+        println!("count distinct agg:");
+        let tuples_count_distinct_agg = kipsql.run("select count(distinct d) from t2").await?;
+        println!("{}", create_table(&tuples_count_distinct_agg));
+
+        println!("sum agg:");
+        let tuples_sum_agg = kipsql.run("select sum(d) from t2").await?;
+        println!("{}", create_table(&tuples_sum_agg));
+
+        println!("sum distinct agg:");
+        let tuples_sum_distinct_agg = kipsql.run("select sum(distinct d) from t2").await?;
+        println!("{}", create_table(&tuples_sum_distinct_agg));
+
+        println!("avg agg:");
+        let tuples_avg_agg = kipsql.run("select avg(d) from t2").await?;
+        println!("{}", create_table(&tuples_avg_agg));
+
+        println!("min_max agg:");
+        let tuples_min_max_agg = kipsql.run("select min(d), max(d) from t2").await?;
+        println!("{}", create_table(&tuples_min_max_agg));
+
         println!("update t1 with filter:");
         let _ = kipsql.run("update t1 set a = 0 where b > 1").await?;
         println!("after t1:");
@@ -232,10 +256,10 @@ mod test {
         println!("delete t1 with filter:");
         let _ = kipsql.run("delete from t1 where b > 1").await?;
         println!("after t1:");
-        let update_after_full_t1 = kipsql.run("select * from t1").await?;
-        println!("{}", create_table(&update_after_full_t1));
+        let delete_after_full_t1 = kipsql.run("select * from t1").await?;
+        println!("{}", create_table(&delete_after_full_t1));
 
-        println!(truncate t1:);
+        println!("truncate t1:");
         let _ = kipsql.run("truncate t1").await?;
 
         println!("drop t1:");

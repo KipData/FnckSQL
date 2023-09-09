@@ -1,13 +1,17 @@
 mod count;
 pub mod simple_agg;
 mod sum;
+mod min_max;
+mod avg;
 
+use crate::execution::executor::dql::aggregate::avg::AvgAccumulator;
 use crate::execution::executor::dql::aggregate::count::{CountAccumulator, DistinctCountAccumulator};
+use crate::execution::executor::dql::aggregate::min_max::MinMaxAccumulator;
 use crate::execution::executor::dql::aggregate::sum::{DistinctSumAccumulator, SumAccumulator};
 use crate::execution::ExecutorError;
 use crate::expression::agg::AggKind;
 use crate::expression::ScalarExpression;
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::ValueRef;
 
 /// Tips: Idea for sqlrs
 /// An accumulator represents a stateful object that lives throughout the evaluation of multiple
@@ -17,7 +21,7 @@ pub trait Accumulator: Send + Sync {
     fn update_value(&mut self, value: &ValueRef) -> Result<(), ExecutorError>;
 
     /// returns its value based on its current state.
-    fn evaluate(&self) -> Result<DataValue, ExecutorError>;
+    fn evaluate(&self) -> Result<ValueRef, ExecutorError>;
 }
 
 fn create_accumulator(expr: &ScalarExpression) -> Box<dyn Accumulator> {
@@ -27,9 +31,9 @@ fn create_accumulator(expr: &ScalarExpression) -> Box<dyn Accumulator> {
             (AggKind::Count, true) => Box::new(DistinctCountAccumulator::new()),
             (AggKind::Sum, false) => Box::new(SumAccumulator::new(ty)),
             (AggKind::Sum, true) => Box::new(DistinctSumAccumulator::new(ty)),
-            (AggKind::Min, _) => todo!(),
-            (AggKind::Max, _) => todo!(),
-            (AggKind::Avg, _) => todo!(),
+            (AggKind::Min, _) => Box::new(MinMaxAccumulator::new(ty, false)),
+            (AggKind::Max, _) => Box::new(MinMaxAccumulator::new(ty, true)),
+            (AggKind::Avg, _) => Box::new(AvgAccumulator::new(ty)),
         }
     } else {
         unreachable!(
