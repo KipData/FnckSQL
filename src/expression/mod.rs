@@ -11,7 +11,7 @@ use crate::types::tuple::Tuple;
 
 pub mod agg;
 mod evaluator;
-mod value_compute;
+pub mod value_compute;
 
 /// ScalarExpression represnet all scalar expression in SQL.
 /// SELECT a+1, b FROM t1.

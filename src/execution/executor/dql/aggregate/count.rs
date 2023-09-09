@@ -15,7 +15,7 @@ impl CountAccumulator {
 }
 
 impl Accumulator for CountAccumulator {
-    fn update_batch(&mut self, value: &ValueRef) -> Result<(), ExecutorError> {
+    fn update_value(&mut self, value: &ValueRef) -> Result<(), ExecutorError> {
         if !value.is_null() {
             self.result += 1;
         }
@@ -41,7 +41,7 @@ impl DistinctCountAccumulator {
 }
 
 impl Accumulator for DistinctCountAccumulator {
-    fn update_batch(&mut self, value: &ValueRef) -> Result<(), ExecutorError> {
+    fn update_value(&mut self, value: &ValueRef) -> Result<(), ExecutorError> {
         if !value.is_null() {
             self.distinct_values.insert(value.clone());
         }

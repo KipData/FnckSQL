@@ -187,6 +187,25 @@ impl DataValue {
         }
     }
 
+    pub fn init(logic_type: &LogicalType) -> DataValue {
+        match logic_type {
+            LogicalType::Invalid => panic!("invalid logical type"),
+            LogicalType::SqlNull => DataValue::Null,
+            LogicalType::Boolean => DataValue::Boolean(Some(false)),
+            LogicalType::Tinyint => DataValue::Int8(Some(0)),
+            LogicalType::UTinyint => DataValue::UInt8(Some(0)),
+            LogicalType::Smallint => DataValue::Int16(Some(0)),
+            LogicalType::USmallint => DataValue::UInt16(Some(0)),
+            LogicalType::Integer => DataValue::Int32(Some(0)),
+            LogicalType::UInteger => DataValue::UInt32(Some(0)),
+            LogicalType::Bigint => DataValue::Int64(Some(0)),
+            LogicalType::UBigint => DataValue::UInt64(Some(0)),
+            LogicalType::Float => DataValue::Float32(Some(0.0)),
+            LogicalType::Double => DataValue::Float64(Some(0.0)),
+            LogicalType::Varchar => DataValue::Utf8(Some("".to_string()))
+        }
+    }
+
     pub fn to_raw(&self) -> Vec<u8> {
         match self {
             DataValue::Null => None,

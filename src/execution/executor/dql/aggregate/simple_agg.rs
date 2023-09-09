@@ -58,13 +58,13 @@ impl SimpleAggExecutor {
                 .collect_vec();
 
             for (acc, value) in accs.iter_mut().zip_eq(values.iter()) {
-                acc.update_batch(value)?;
+                acc.update_value(value)?;
             }
         }
 
         if let Some(columns) = columns_option {
             let values: Vec<ValueRef> = accs
-                .iter()
+                .into_iter()
                 .map(|acc| acc.evaluate().map(Arc::new))
                 .try_collect()?;
 
