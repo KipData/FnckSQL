@@ -18,14 +18,18 @@ use crate::planner::operator::join::JoinType;
 use crate::storage::Storage;
 use crate::types::errors::TypeError;
 
+pub enum InputRefType {
+    AggCall,
+    GroupBy
+}
+
 #[derive(Clone)]
 pub struct BinderContext<S: Storage> {
     pub(crate) storage: S,
     pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
-    agg_calls: Vec<ScalarExpression>,
-    index: u16,
+    pub(crate) agg_calls: Vec<ScalarExpression>,
 }
 
 impl<S: Storage> BinderContext<S> {
@@ -36,14 +40,19 @@ impl<S: Storage> BinderContext<S> {
             aliases: Default::default(),
             group_by_exprs: vec![],
             agg_calls: Default::default(),
-            index: 0,
         }
     }
 
-    pub fn index(&mut self) -> u16 {
-        let index = self.index;
-        self.index += 1;
-        index
+    // Tips: The order of this index is based on Aggregate being bound first.
+    pub fn input_ref_index(&self, ty: InputRefType) -> usize {
+        match ty {
+            InputRefType::AggCall => {
+                self.agg_calls.len()
+            },
+            InputRefType::GroupBy => {
+                self.agg_calls.len() + self.group_by_exprs.len()
+            }
+        }
     }
 
     pub fn add_alias(&mut self, alias: String, expr: ScalarExpression) {
@@ -168,7 +177,7 @@ pub mod test {
     use crate::storage::kip::KipStorage;
     use crate::storage::{Storage, StorageError};
 
-    async fn build_test_catalog(path: impl Into<PathBuf> + Send) -> Result<KipStorage, StorageError> {
+    pub(crate) async fn build_test_catalog(path: impl Into<PathBuf> + Send) -> Result<KipStorage, StorageError> {
         let storage = KipStorage::new(path).await?;
 
         let _ = storage.create_table(

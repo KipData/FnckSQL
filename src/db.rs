@@ -247,6 +247,12 @@ mod test {
         let tuples_min_max_agg = kipsql.run("select min(d), max(d) from t2").await?;
         println!("{}", create_table(&tuples_min_max_agg));
 
+        println!("group agg:");
+        let tuples_group_agg = kipsql.run("select c, max(d) from t2 group by c").await?;
+        println!("{}", create_table(&tuples_group_agg));
+
+        assert!(kipsql.run("select max(d) from t2 group by c").await.is_err());
+
         println!("update t1 with filter:");
         let _ = kipsql.run("update t1 set a = 0 where b > 1").await?;
         println!("after t1:");

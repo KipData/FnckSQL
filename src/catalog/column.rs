@@ -7,7 +7,7 @@ use crate::types::{ColumnId, IdGenerator, LogicalType};
 
 pub type ColumnRef = Arc<ColumnCatalog>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct ColumnCatalog {
     pub id: ColumnId,
     pub name: String,
@@ -72,7 +72,7 @@ impl From<ColumnDef> for ColumnCatalog {
 }
 
 /// The descriptor of a column.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
     pub(crate) is_primary: bool,

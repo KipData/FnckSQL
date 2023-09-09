@@ -2,9 +2,11 @@ use std::sync::Arc;
 use itertools::Itertools;
 
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
+use crate::binder::BinderContext;
 
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
+use crate::storage::Storage;
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 use crate::types::tuple::Tuple;
@@ -17,7 +19,7 @@ pub mod value_compute;
 /// SELECT a+1, b FROM t1.
 /// a+1 -> ScalarExpression::Unary(a + 1)
 /// b   -> ScalarExpression::ColumnRef()
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum ScalarExpression {
     Constant(ValueRef),
     ColumnRef(ColumnRef),
@@ -134,8 +136,22 @@ impl ScalarExpression {
         exprs
     }
 
-    pub fn has_agg_call(&self) -> bool {
-        todo!()
+    pub fn has_agg_call<S: Storage>(&self, context: &BinderContext<S>) -> bool {
+        match self {
+            ScalarExpression::InputRef { index, .. } => {
+                context.agg_calls.get(*index).is_some()
+            },
+            ScalarExpression::AggCall { .. } => unreachable!(),
+            ScalarExpression::Constant(_) => false,
+            ScalarExpression::ColumnRef(_) => false,
+            ScalarExpression::Alias { expr, .. } => expr.has_agg_call(context),
+            ScalarExpression::TypeCast { expr, .. } => expr.has_agg_call(context),
+            ScalarExpression::IsNull { expr, .. } => expr.has_agg_call(context),
+            ScalarExpression::Unary { expr, .. } => expr.has_agg_call(context),
+            ScalarExpression::Binary { left_expr, right_expr, .. } => {
+                left_expr.has_agg_call(context) || right_expr.has_agg_call(context)
+            }
+        }
     }
 
     pub fn output_column(&self, tuple: &Tuple) -> ColumnRef {
@@ -189,7 +205,7 @@ impl ScalarExpression {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
     Plus,
     Minus,
@@ -204,7 +220,7 @@ impl From<SqlUnaryOperator> for UnaryOperator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinaryOperator {
     Plus,
     Minus,

@@ -10,6 +10,7 @@ use crate::execution::executor::ddl::truncate::Truncate;
 use crate::execution::executor::dml::delete::Delete;
 use crate::execution::executor::dml::insert::Insert;
 use crate::execution::executor::dml::update::Update;
+use crate::execution::executor::dql::aggregate::hash_agg::HashAggExecutor;
 use crate::execution::executor::dql::aggregate::simple_agg::SimpleAggExecutor;
 use crate::execution::executor::dql::dummy::Dummy;
 use crate::execution::executor::dql::filter::Filter;
@@ -39,7 +40,11 @@ pub fn build<S: Storage>(plan: LogicalPlan, storage: &S) -> BoxedExecutor {
         Operator::Aggregate(op) => {
             let input = build(childrens.remove(0), storage);
 
-            SimpleAggExecutor::from((op, input)).execute(storage)
+            if op.groupby_exprs.is_empty() {
+                SimpleAggExecutor::from((op, input)).execute(storage)
+            } else {
+                HashAggExecutor::from((op, input)).execute(storage)
+            }
         }
         Operator::Filter(op) => {
             let input = build(childrens.remove(0), storage);

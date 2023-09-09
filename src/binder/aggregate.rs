@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use ahash::RandomState;
 use itertools::Itertools;
 use sqlparser::ast::{Expr, OrderByExpr};
 
@@ -7,7 +9,7 @@ use crate::{
         operator::{aggregate::AggregateOperator, sort::SortField},
     },
 };
-use crate::binder::BindError;
+use crate::binder::{BindError, InputRefType};
 use crate::planner::LogicalPlan;
 use crate::storage::Storage;
 
@@ -91,7 +93,7 @@ impl<S: Storage> Binder<S> {
             ScalarExpression::AggCall {
                 ty: return_type, ..
             } => {
-                let index = self.context.agg_calls.len();
+                let index = self.context.input_ref_index(InputRefType::AggCall);
                 let input_ref = ScalarExpression::InputRef {
                     index,
                     ty: return_type.clone(),
@@ -146,6 +148,7 @@ impl<S: Storage> Binder<S> {
         let mut group_raw_exprs = vec![];
         for expr in groupby {
             let expr = self.bind_expr(expr).await?;
+
             if let ScalarExpression::Alias { alias, .. } = expr {
                 let alias_expr = select_items.iter().find(|column| {
                     if let ScalarExpression::Alias {
@@ -165,12 +168,13 @@ impl<S: Storage> Binder<S> {
                 group_raw_exprs.push(expr);
             }
         }
+        let mut group_raw_set: HashSet<&ScalarExpression, RandomState> = HashSet::from_iter(group_raw_exprs.iter());
 
-        for column in select_items {
-            let expr = &column;
-            if expr.has_agg_call() {
+        for expr in select_items {
+            if expr.has_agg_call(&self.context) {
                 continue;
             }
+            group_raw_set.remove(expr);
 
             if !group_raw_exprs.iter().contains(expr) {
                 return Err(BindError::AggMiss(
@@ -181,6 +185,13 @@ impl<S: Storage> Binder<S> {
                 ));
             }
         }
+
+        if !group_raw_set.is_empty() {
+            return Err(BindError::AggMiss(
+                format!("In the GROUP BY clause the field must be in the select clause")
+            ));
+        }
+
         Ok(())
     }
 
@@ -200,14 +211,10 @@ impl<S: Storage> Binder<S> {
                     false
                 }
             }) {
-                let index = if self.context.group_by_exprs.len() == 0 {
-                    0
-                } else {
-                    self.context.group_by_exprs.len() + 1
-                };
-
+                let index = self.context.input_ref_index(InputRefType::GroupBy);
                 let mut select_item = &mut select_list[i];
                 let return_type = select_item.return_type();
+
                 self.context.group_by_exprs.push(std::mem::replace(
                     &mut select_item,
                     ScalarExpression::InputRef {
@@ -226,11 +233,8 @@ impl<S: Storage> Binder<S> {
                     self.context.group_by_exprs.push(expr.clone())
                 }
                 _ => {
-                    let index = if self.context.group_by_exprs.len() == 0 {
-                        0
-                    } else {
-                        self.context.group_by_exprs.len() + 1
-                    };
+                    let index = self.context.input_ref_index(InputRefType::GroupBy);
+
                     self.context.group_by_exprs.push(std::mem::replace(
                         expr,
                         ScalarExpression::InputRef {

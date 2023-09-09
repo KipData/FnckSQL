@@ -3,6 +3,7 @@ pub mod simple_agg;
 mod sum;
 mod min_max;
 mod avg;
+pub mod hash_agg;
 
 use crate::execution::executor::dql::aggregate::avg::AvgAccumulator;
 use crate::execution::executor::dql::aggregate::count::{CountAccumulator, DistinctCountAccumulator};
