@@ -39,7 +39,7 @@ pub type ColumnId = u32;
 
 /// Sqlrs type conversion:
 /// sqlparser::ast::DataType -> LogicalType -> arrow::datatypes::DataType
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, AsRefStr, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, AsRefStr, Serialize, Deserialize)]
 pub enum LogicalType {
     Invalid,
     SqlNull,
@@ -55,6 +55,7 @@ pub enum LogicalType {
     Float,
     Double,
     Varchar,
+    Date,
 }
 
 impl LogicalType {
@@ -73,7 +74,8 @@ impl LogicalType {
             LogicalType::UBigint => Some(8),
             LogicalType::Float => Some(4),
             LogicalType::Double => Some(8),
-            LogicalType::Varchar => None
+            LogicalType::Varchar => None,
+            LogicalType::Date => Some(4),
         }
     }
 
@@ -245,6 +247,7 @@ impl LogicalType {
             LogicalType::Float => matches!(to, LogicalType::Double),
             LogicalType::Double => false,
             LogicalType::Varchar => false,
+            LogicalType::Date => false,
         }
     }
 }
@@ -274,6 +277,7 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
             sqlparser::ast::DataType::BigInt(_) => Ok(LogicalType::Bigint),
             sqlparser::ast::DataType::UnsignedBigInt(_) => Ok(LogicalType::UBigint),
             sqlparser::ast::DataType::Boolean => Ok(LogicalType::Boolean),
+            sqlparser::ast::DataType::Datetime(_) => Ok(LogicalType::Date),
             other => Err(TypeError::NotImplementedSqlparserDataType(
                 other.to_string(),
             )),

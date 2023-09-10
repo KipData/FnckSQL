@@ -16,6 +16,20 @@ fn unpack_i64(value: DataValue) -> Option<i64> {
     }
 }
 
+fn unpack_u32(value: DataValue) -> Option<u32> {
+    match value {
+        DataValue::UInt32(inner) => inner,
+        _ => None
+    }
+}
+
+fn unpack_u64(value: DataValue) -> Option<u64> {
+    match value {
+        DataValue::UInt64(inner) => inner,
+        _ => None
+    }
+}
+
 fn unpack_f64(value: DataValue) -> Option<f64> {
     match value {
         DataValue::Float64(inner) => inner,
@@ -33,6 +47,13 @@ fn unpack_f32(value: DataValue) -> Option<f32> {
 fn unpack_bool(value: DataValue) -> Option<bool> {
     match value {
         DataValue::Boolean(inner) => inner,
+        _ => None
+    }
+}
+
+fn unpack_date(value: DataValue) -> Option<i64> {
+    match value {
+        DataValue::Date64(inner) => inner,
         _ => None
     }
 }
@@ -81,12 +102,12 @@ pub fn binary_op(
                 }
                 BinaryOperator::Divide => {
                     let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
-                        Some(v1 / v2)
+                        Some(v1 as f64 / v2 as f64)
                     } else {
                         None
                     };
 
-                    DataValue::Int32(value)
+                    DataValue::Float64(value)
                 }
 
                 BinaryOperator::Gt => {
@@ -186,12 +207,222 @@ pub fn binary_op(
                 }
                 BinaryOperator::Divide => {
                     let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
-                        Some(v1 / v2)
+                        Some(v1 as f64 / v2 as f64)
                     } else {
                         None
                     };
 
-                    DataValue::Int64(value)
+                    DataValue::Float64(value)
+                }
+
+                BinaryOperator::Gt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 > v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Lt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 < v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::GtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 >= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::LtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 <= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Eq => {
+                    let value = match (left_value, right_value) {
+                        (Some(v1), Some(v2)) => {
+                            Some(v1 == v2)
+                        }
+                        (None, None) => {
+                            Some(true)
+                        }
+                        (_, _) => {
+                            None
+                        }
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::NotEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 != v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                _ => todo!("unsupported operator")
+            }
+        }
+        LogicalType::UInteger => {
+            let left_value = unpack_u32(left.clone().cast(&unified_type));
+            let right_value = unpack_u32(right.clone().cast(&unified_type));
+
+            match op {
+                BinaryOperator::Plus => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 + v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::UInt32(value)
+                }
+                BinaryOperator::Minus => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 - v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::UInt32(value)
+                }
+                BinaryOperator::Multiply => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 * v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::UInt32(value)
+                }
+                BinaryOperator::Divide => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 as f64 / v2 as f64)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Float64(value)
+                }
+
+                BinaryOperator::Gt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 > v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Lt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 < v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::GtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 >= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::LtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 <= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Eq => {
+                    let value = match (left_value, right_value) {
+                        (Some(v1), Some(v2)) => {
+                            Some(v1 == v2)
+                        }
+                        (None, None) => {
+                            Some(true)
+                        }
+                        (_, _) => {
+                            None
+                        }
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::NotEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 != v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                _ => todo!("unsupported operator")
+            }
+        }
+        LogicalType::UBigint => {
+            let left_value = unpack_u64(left.clone().cast(&unified_type));
+            let right_value = unpack_u64(right.clone().cast(&unified_type));
+
+            match op {
+                BinaryOperator::Plus => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 + v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::UInt64(value)
+                }
+                BinaryOperator::Minus => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 - v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::UInt64(value)
+                }
+                BinaryOperator::Multiply => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 * v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::UInt64(value)
+                }
+                BinaryOperator::Divide => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 as f64 / v2 as f64)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Float64(value)
                 }
 
                 BinaryOperator::Gt => {
@@ -422,12 +653,12 @@ pub fn binary_op(
                 }
                 BinaryOperator::Divide => {
                     let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
-                        Some(v1 / v2)
+                        Some(v1 as f64 / v2 as f64)
                     } else {
                         None
                     };
 
-                    DataValue::Float32(value)
+                    DataValue::Float64(value)
                 }
                 BinaryOperator::Gt => {
                     let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
@@ -494,6 +725,74 @@ pub fn binary_op(
         }
         LogicalType::SqlNull => {
             DataValue::Boolean(None)
+        }
+        LogicalType::Date => {
+            let left_value = unpack_date(left.clone().cast(&unified_type));
+            let right_value = unpack_date(right.clone().cast(&unified_type));
+
+            match op {
+                BinaryOperator::Gt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 > v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Lt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 < v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::GtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 >= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::LtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 <= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Eq => {
+                    let value = match (left_value, right_value) {
+                        (Some(v1), Some(v2)) => {
+                            Some(v1 == v2)
+                        }
+                        (None, None) => {
+                            Some(true)
+                        }
+                        (_, _) => {
+                            None
+                        }
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::NotEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 != v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                _ => todo!("unsupported operator")
+            }
         }
         _ => todo!("unsupported data type"),
     }
@@ -604,7 +903,7 @@ mod test {
 
         assert_eq!(divide_i32_1, divide_i32_2);
         assert_eq!(divide_i32_2, divide_i32_3);
-        assert_eq!(divide_i32_4, DataValue::Int32(Some(1)));
+        assert_eq!(divide_i32_4, DataValue::Float64(Some(1.0)));
 
         let divide_i64_1 = binary_op(&DataValue::Int64(None), &DataValue::Int64(None), &BinaryOperator::Divide);
         let divide_i64_2 = binary_op(&DataValue::Int64(Some(1)), &DataValue::Int64(None), &BinaryOperator::Divide);
@@ -613,7 +912,7 @@ mod test {
 
         assert_eq!(divide_i64_1, divide_i64_2);
         assert_eq!(divide_i64_2, divide_i64_3);
-        assert_eq!(divide_i64_4, DataValue::Int64(Some(1)));
+        assert_eq!(divide_i64_4, DataValue::Float64(Some(1.0)));
 
         let divide_f64_1 = binary_op(&DataValue::Float64(None), &DataValue::Float64(None), &BinaryOperator::Divide);
         let divide_f64_2 = binary_op(&DataValue::Float64(Some(1.0)), &DataValue::Float64(None), &BinaryOperator::Divide);
@@ -631,8 +930,6 @@ mod test {
         let i32_cast_2 = binary_op(&DataValue::Int32(Some(1)), &DataValue::Int16(Some(1)), &BinaryOperator::Plus);
 
         assert_eq!(i32_cast_1, i32_cast_2);
-
-        let i32_cast_2 = binary_op(&DataValue::Int16(Some(1)), &DataValue::Int32(Some(1)), &BinaryOperator::Plus);
 
         let i64_cast_1 = binary_op(&DataValue::Int64(Some(1)), &DataValue::Int8(Some(1)), &BinaryOperator::Plus);
         let i64_cast_2 = binary_op(&DataValue::Int64(Some(1)), &DataValue::Int16(Some(1)), &BinaryOperator::Plus);

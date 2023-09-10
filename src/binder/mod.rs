@@ -4,43 +4,55 @@ pub mod expr;
 mod select;
 mod insert;
 mod update;
+mod delete;
+mod drop_table;
+mod truncate;
 
 use std::collections::BTreeMap;
-use sqlparser::ast::{Ident, ObjectName, SetExpr, Statement};
+use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
 
 use crate::catalog::{DEFAULT_SCHEMA_NAME, CatalogError, TableName, TableCatalog};
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinType;
-use crate::storage::kip::KipStorage;
+use crate::storage::Storage;
 use crate::types::errors::TypeError;
 
+pub enum InputRefType {
+    AggCall,
+    GroupBy
+}
+
 #[derive(Clone)]
-pub struct BinderContext {
-    pub(crate) storage: KipStorage,
+pub struct BinderContext<S: Storage> {
+    pub(crate) storage: S,
     pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
-    agg_calls: Vec<ScalarExpression>,
-    index: u16,
+    pub(crate) agg_calls: Vec<ScalarExpression>,
 }
 
-impl BinderContext {
-    pub fn new(storage: KipStorage) -> Self {
+impl<S: Storage> BinderContext<S> {
+    pub fn new(storage: S) -> Self {
         BinderContext {
             storage,
             bind_table: Default::default(),
             aliases: Default::default(),
             group_by_exprs: vec![],
             agg_calls: Default::default(),
-            index: 0,
         }
     }
 
-    pub fn index(&mut self) -> u16 {
-        let index = self.index;
-        self.index += 1;
-        index
+    // Tips: The order of this index is based on Aggregate being bound first.
+    pub fn input_ref_index(&self, ty: InputRefType) -> usize {
+        match ty {
+            InputRefType::AggCall => {
+                self.agg_calls.len()
+            },
+            InputRefType::GroupBy => {
+                self.agg_calls.len() + self.group_by_exprs.len()
+            }
+        }
     }
 
     pub fn add_alias(&mut self, alias: String, expr: ScalarExpression) {
@@ -50,14 +62,18 @@ impl BinderContext {
 
         self.aliases.insert(alias, expr);
     }
+
+    pub fn has_agg_call(&self, expr: &ScalarExpression) -> bool {
+        self.group_by_exprs.contains(expr)
+    }
 }
 
-pub struct Binder {
-    context: BinderContext,
+pub struct Binder<S: Storage> {
+    context: BinderContext<S>,
 }
 
-impl Binder {
-    pub fn new(context: BinderContext) -> Self {
+impl<S: Storage> Binder<S> {
+    pub fn new(context: BinderContext<S>) -> Self {
         Binder { context }
     }
 
@@ -65,6 +81,14 @@ impl Binder {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query).await?,
             Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
+            Statement::Drop { object_type, names, .. } => {
+                match object_type {
+                    ObjectType::Table => {
+                        self.bind_drop_table(&names[0])?
+                    }
+                    _ => todo!()
+                }
+            }
             Statement::Insert { table_name, columns, source, .. } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
                     self.bind_insert(table_name.to_owned(), columns, &values.rows).await?
@@ -78,6 +102,18 @@ impl Binder {
                 } else {
                     self.bind_update(table, selection, assignments).await?
                 }
+            }
+            Statement::Delete { from, selection, .. } => {
+                let table = &from[0];
+
+                if !table.joins.is_empty() {
+                    unimplemented!()
+                } else {
+                    self.bind_delete(table, selection).await?
+                }
+            }
+            Statement::Truncate { table_name, .. } => {
+                self.bind_truncate(table_name).await?
             }
             _ => unimplemented!(),
         };
@@ -141,7 +177,7 @@ pub mod test {
     use crate::storage::kip::KipStorage;
     use crate::storage::{Storage, StorageError};
 
-    async fn build_test_catalog(path: impl Into<PathBuf> + Send) -> Result<KipStorage, StorageError> {
+    pub(crate) async fn build_test_catalog(path: impl Into<PathBuf> + Send) -> Result<KipStorage, StorageError> {
         let storage = KipStorage::new(path).await?;
 
         let _ = storage.create_table(

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use itertools::Itertools;
 use crate::expression::value_compute::binary_op;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
@@ -10,9 +11,10 @@ impl ScalarExpression {
             ScalarExpression::Constant(val) =>
                 val.clone(),
             ScalarExpression::ColumnRef(col) => {
-                let index = tuple
+                let (index, _) = tuple
                     .columns
-                    .binary_search_by(|tul_col| tul_col.name.cmp(&col.name))
+                    .iter()
+                    .find_position(|tul_col| tul_col.name == col.name)
                     .unwrap();
 
                 tuple.values[index].clone()
@@ -29,6 +31,7 @@ impl ScalarExpression {
             ScalarExpression::Binary{ left_expr, right_expr, op, .. } => {
                 let left = left_expr.eval_column(tuple);
                 let right = right_expr.eval_column(tuple);
+
                 Arc::new(binary_op(&left, &right, op))
             }
             ScalarExpression::IsNull{ expr } => {

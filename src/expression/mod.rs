@@ -1,24 +1,25 @@
-use std::fmt::Display;
 use std::sync::Arc;
 use itertools::Itertools;
 
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
+use crate::binder::BinderContext;
 
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
+use crate::storage::Storage;
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 use crate::types::tuple::Tuple;
 
 pub mod agg;
 mod evaluator;
-mod value_compute;
+pub mod value_compute;
 
 /// ScalarExpression represnet all scalar expression in SQL.
 /// SELECT a+1, b FROM t1.
 /// a+1 -> ScalarExpression::Unary(a + 1)
 /// b   -> ScalarExpression::ColumnRef()
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum ScalarExpression {
     Constant(ValueRef),
     ColumnRef(ColumnRef),
@@ -50,6 +51,7 @@ pub enum ScalarExpression {
         ty: LogicalType,
     },
     AggCall {
+        distinct: bool,
         kind: AggKind,
         args: Vec<ScalarExpression>,
         ty: LogicalType,
@@ -134,8 +136,22 @@ impl ScalarExpression {
         exprs
     }
 
-    pub fn has_agg_call(&self) -> bool {
-        todo!()
+    pub fn has_agg_call<S: Storage>(&self, context: &BinderContext<S>) -> bool {
+        match self {
+            ScalarExpression::InputRef { index, .. } => {
+                context.agg_calls.get(*index).is_some()
+            },
+            ScalarExpression::AggCall { .. } => unreachable!(),
+            ScalarExpression::Constant(_) => false,
+            ScalarExpression::ColumnRef(_) => false,
+            ScalarExpression::Alias { expr, .. } => expr.has_agg_call(context),
+            ScalarExpression::TypeCast { expr, .. } => expr.has_agg_call(context),
+            ScalarExpression::IsNull { expr, .. } => expr.has_agg_call(context),
+            ScalarExpression::Unary { expr, .. } => expr.has_agg_call(context),
+            ScalarExpression::Binary { left_expr, right_expr, .. } => {
+                left_expr.has_agg_call(context) || right_expr.has_agg_call(context)
+            }
+        }
     }
 
     pub fn output_column(&self, tuple: &Tuple) -> ColumnRef {
@@ -157,13 +173,26 @@ impl ScalarExpression {
                     ColumnDesc::new(expr.return_type(), false)
                 ))
             }
-            ScalarExpression::AggCall { kind, args, ty } => {
+            ScalarExpression::AggCall { kind, args, ty, distinct } => {
                 let args_str = args.iter()
                     .map(|expr| expr.output_column(tuple).name.clone())
                     .join(", ");
+                let op = |allow_distinct, distinct| {
+                    if allow_distinct && distinct {
+                        "DISTINCT "
+                    } else {
+                        ""
+                    }
+                };
+                let column_name = format!(
+                    "{:?}({}{})",
+                    kind,
+                    op(kind.allow_distinct(), *distinct),
+                    args_str
+                );
 
                 Arc::new(ColumnCatalog::new(
-                    format!("{:?}({})", kind, args_str),
+                    column_name,
                     true,
                     ColumnDesc::new(ty.clone(), false)
                 ))
@@ -176,13 +205,7 @@ impl ScalarExpression {
     }
 }
 
-impl Display for ScalarExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
     Plus,
     Minus,
@@ -197,7 +220,7 @@ impl From<SqlUnaryOperator> for UnaryOperator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinaryOperator {
     Plus,
     Minus,

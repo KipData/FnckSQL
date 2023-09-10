@@ -1,16 +1,39 @@
 use std::collections::HashMap;
 use futures_async_stream::try_stream;
 use crate::catalog::TableName;
-use crate::execution::executor::BoxedExecutor;
+use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
+use crate::planner::operator::update::UpdateOperator;
 use crate::storage::{Storage, Table};
 use crate::types::tuple::Tuple;
 
-pub struct Update { }
+pub struct Update {
+    table_name: TableName,
+    input: BoxedExecutor,
+    values: BoxedExecutor
+}
+
+impl From<(UpdateOperator, BoxedExecutor, BoxedExecutor)> for Update {
+    fn from((UpdateOperator { table_name }, input, values): (UpdateOperator, BoxedExecutor, BoxedExecutor)) -> Self {
+        Update {
+            table_name,
+            input,
+            values
+        }
+    }
+}
+
+impl<S: Storage> Executor<S> for Update {
+    fn execute(self, storage: &S) -> BoxedExecutor {
+        self._execute(storage.clone())
+    }
+}
 
 impl Update {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn execute(table_name: TableName, input: BoxedExecutor, values: BoxedExecutor, storage: impl Storage) {
+    pub async fn _execute<S: Storage>(self, storage: S) {
+        let Update { table_name, input, values } = self;
+
         if let Some(mut table) = storage.table(&table_name).await {
             let mut value_map = HashMap::new();
 

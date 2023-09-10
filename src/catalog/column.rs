@@ -7,7 +7,7 @@ use crate::types::{ColumnId, IdGenerator, LogicalType};
 
 pub type ColumnRef = Arc<ColumnCatalog>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct ColumnCatalog {
     pub id: ColumnId,
     pub name: String,
@@ -52,7 +52,7 @@ impl ColumnCatalog {
 impl From<ColumnDef> for ColumnCatalog {
     fn from(column_def: ColumnDef) -> Self {
         let column_name = column_def.name.to_string();
-        let column_desc = ColumnDesc::new(
+        let mut column_desc = ColumnDesc::new(
             LogicalType::try_from(column_def.data_type).unwrap(),
             false
         );
@@ -63,6 +63,11 @@ impl From<ColumnDef> for ColumnCatalog {
             match option_def.option {
                 ColumnOption::Null => nullable = true,
                 ColumnOption::NotNull => (),
+                ColumnOption::Unique { is_primary: true } => {
+                    column_desc.is_primary = true;
+                    // Skip other options when using primary key
+                    break;
+                },
                 _ => todo!()
             }
         }
@@ -72,7 +77,7 @@ impl From<ColumnDef> for ColumnCatalog {
 }
 
 /// The descriptor of a column.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
     pub(crate) is_primary: bool,

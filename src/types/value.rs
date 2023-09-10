@@ -4,11 +4,19 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::sync::Arc;
+use chrono::{Duration, NaiveDateTime, Utc, TimeZone};
 use integer_encoding::FixedInt;
+use lazy_static::lazy_static;
 
 use ordered_float::OrderedFloat;
 
 use super::LogicalType;
+
+lazy_static! {
+    static ref UNIX_DATETIME: NaiveDateTime = {
+        NaiveDateTime::from_timestamp_opt(0, 0).unwrap()
+    };
+}
 
 pub type ValueRef = Arc<DataValue>;
 
@@ -27,6 +35,8 @@ pub enum DataValue {
     UInt32(Option<u32>),
     UInt64(Option<u64>),
     Utf8(Option<String>),
+    /// Date stored as a unsigned 64bit int days since UNIX epoch 1970-01-01
+    Date64(Option<i64>),
 }
 
 impl PartialEq for DataValue {
@@ -67,6 +77,8 @@ impl PartialEq for DataValue {
             (Utf8(_), _) => false,
             (Null, Null) => true,
             (Null, _) => false,
+            (Date64(v1), Date64(v2)) => v1.eq(v2),
+            (Date64(_), _) => false,
         }
     }
 }
@@ -109,6 +121,8 @@ impl PartialOrd for DataValue {
             (Utf8(_), _) => None,
             (Null, Null) => Some(Ordering::Equal),
             (Null, _) => None,
+            (Date64(v1), Date64(v2)) => v1.partial_cmp(v2),
+            (Date64(_), _) => None,
         }
     }
 }
@@ -138,6 +152,7 @@ impl Hash for DataValue {
             UInt64(v) => v.hash(state),
             Utf8(v) => v.hash(state),
             Null => 1.hash(state),
+            Date64(v) => v.hash(state),
         }
     }
 }
@@ -165,6 +180,7 @@ impl DataValue {
             DataValue::UInt32(value) => value.is_none(),
             DataValue::UInt64(value) => value.is_none(),
             DataValue::Utf8(value) => value.is_none(),
+            DataValue::Date64(value) => value.is_none(),
         }
     }
 
@@ -183,7 +199,28 @@ impl DataValue {
             LogicalType::UBigint => DataValue::UInt64(None),
             LogicalType::Float => DataValue::Float32(None),
             LogicalType::Double => DataValue::Float64(None),
-            LogicalType::Varchar => DataValue::Utf8(None)
+            LogicalType::Varchar => DataValue::Utf8(None),
+            LogicalType::Date => DataValue::Date64(None)
+        }
+    }
+
+    pub fn init(logic_type: &LogicalType) -> DataValue {
+        match logic_type {
+            LogicalType::Invalid => panic!("invalid logical type"),
+            LogicalType::SqlNull => DataValue::Null,
+            LogicalType::Boolean => DataValue::Boolean(Some(false)),
+            LogicalType::Tinyint => DataValue::Int8(Some(0)),
+            LogicalType::UTinyint => DataValue::UInt8(Some(0)),
+            LogicalType::Smallint => DataValue::Int16(Some(0)),
+            LogicalType::USmallint => DataValue::UInt16(Some(0)),
+            LogicalType::Integer => DataValue::Int32(Some(0)),
+            LogicalType::UInteger => DataValue::UInt32(Some(0)),
+            LogicalType::Bigint => DataValue::Int64(Some(0)),
+            LogicalType::UBigint => DataValue::UInt64(Some(0)),
+            LogicalType::Float => DataValue::Float32(Some(0.0)),
+            LogicalType::Double => DataValue::Float64(Some(0.0)),
+            LogicalType::Varchar => DataValue::Utf8(Some("".to_string())),
+            LogicalType::Date => DataValue::Date64(Some(UNIX_DATETIME.timestamp()))
         }
     }
 
@@ -202,6 +239,7 @@ impl DataValue {
             DataValue::UInt32(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::UInt64(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::Utf8(v) => v.clone().map(|v| v.into_bytes()),
+            DataValue::Date64(v) => v.map(|v| v.encode_fixed_vec()),
         }.unwrap_or(vec![])
     }
 
@@ -229,6 +267,7 @@ impl DataValue {
                 f64::from_ne_bytes(buf)
             })),
             LogicalType::Varchar => DataValue::Utf8((!bytes.is_empty()).then(|| String::from_utf8(bytes.to_owned()).unwrap())),
+            LogicalType::Date => DataValue::Date64((!bytes.is_empty()).then(|| i64::decode_fixed(bytes))),
         }
     }
 
@@ -247,6 +286,7 @@ impl DataValue {
             DataValue::UInt32(_) => LogicalType::UInteger,
             DataValue::UInt64(_) => LogicalType::UBigint,
             DataValue::Utf8(_) => LogicalType::Varchar,
+            DataValue::Date64(_) => LogicalType::Date,
         }
     }
     
@@ -268,6 +308,7 @@ impl DataValue {
                     LogicalType::Float => DataValue::Float32(None),
                     LogicalType::Double => DataValue::Float64(None),
                     LogicalType::Varchar => DataValue::Utf8(None),
+                    LogicalType::Date => DataValue::Date64(None),
                 }
             }
             DataValue::Boolean(value) => {
@@ -286,6 +327,7 @@ impl DataValue {
                     LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
                     LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
                     LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    LogicalType::Date => panic!("not support"),
                 }
             }
             DataValue::Float32(value) => {
@@ -312,6 +354,10 @@ impl DataValue {
                     LogicalType::Invalid => panic!("invalid logical type"),
                     LogicalType::SqlNull => DataValue::Null,
                     LogicalType::Tinyint => DataValue::Int8(value),
+                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::try_from(v).unwrap())),
+                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::try_from(v).unwrap())),
+                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::try_from(v).unwrap())),
+                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::try_from(v).unwrap())),
                     LogicalType::Smallint => DataValue::Int16(value.map(|v| v.into())),
                     LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
                     LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
@@ -325,6 +371,10 @@ impl DataValue {
                 match to {
                     LogicalType::Invalid => panic!("invalid logical type"),
                     LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::try_from(v).unwrap())),
+                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::try_from(v).unwrap())),
+                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::try_from(v).unwrap())),
+                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::try_from(v).unwrap())),
                     LogicalType::Smallint => DataValue::Int16(value),
                     LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
                     LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
@@ -338,6 +388,10 @@ impl DataValue {
                 match to {
                     LogicalType::Invalid => panic!("invalid logical type"),
                     LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::try_from(v).unwrap())),
+                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::try_from(v).unwrap())),
+                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::try_from(v).unwrap())),
+                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::try_from(v).unwrap())),
                     LogicalType::Integer => DataValue::Int32(value),
                     LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
                     LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
@@ -349,6 +403,10 @@ impl DataValue {
                 match to {
                     LogicalType::Invalid => panic!("invalid logical type"),
                     LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::try_from(v).unwrap())),
+                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::try_from(v).unwrap())),
+                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::try_from(v).unwrap())),
+                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::try_from(v).unwrap())),
                     LogicalType::Bigint => DataValue::Int64(value),
                     LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
                     _ => panic!("not support"),
@@ -423,6 +481,24 @@ impl DataValue {
                     LogicalType::Float => DataValue::Float32(value.map(|v| f32::from_str(&v).unwrap())),
                     LogicalType::Double => DataValue::Float64(value.map(|v| f64::from_str(&v).unwrap())),
                     LogicalType::Varchar => DataValue::Utf8(value),
+                    LogicalType::Date => {
+                        let option = value.map(|v| {
+                            NaiveDateTime::parse_from_str(&v, "%Y-%m-%d %H:%M:%S")
+                                .unwrap()
+                                .timestamp()
+                        });
+
+                        DataValue::Date64(option)
+                    }
+                }
+            }
+            DataValue::Date64(value) => {
+                match to {
+                    LogicalType::Invalid => panic!("invalid logical type"),
+                    LogicalType::SqlNull => DataValue::Null,
+                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
+                    LogicalType::Date => DataValue::Date64(value),
+                    _ => panic!("not support"),
                 }
             }
         }
@@ -509,13 +585,20 @@ impl fmt::Display for DataValue {
             DataValue::UInt64(e) => format_option!(f, e)?,
             DataValue::Utf8(e) => format_option!(f, e)?,
             DataValue::Null => write!(f, "null")?,
+            DataValue::Date64(e) => {
+                format_option!(f, e.map(|s| {
+                    let datetime_utc = Utc.from_utc_datetime(&UNIX_DATETIME);
+
+                    datetime_utc + Duration::seconds(s)
+                }))?
+            },
         };
         Ok(())
     }
 }
 
 impl fmt::Debug for DataValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             DataValue::Boolean(_) => write!(f, "Boolean({})", self),
             DataValue::Float32(_) => write!(f, "Float32({})", self),
@@ -531,6 +614,7 @@ impl fmt::Debug for DataValue {
             DataValue::Utf8(None) => write!(f, "Utf8({})", self),
             DataValue::Utf8(Some(_)) => write!(f, "Utf8(\"{}\")", self),
             DataValue::Null => write!(f, "null"),
+            DataValue::Date64(_) => write!(f, "Date64({})", self),
         }
     }
 }

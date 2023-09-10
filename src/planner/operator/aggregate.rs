@@ -7,7 +7,6 @@ use crate::planner::LogicalPlan;
 #[derive(Debug, PartialEq, Clone)]
 pub struct AggregateOperator {
     pub groupby_exprs: Vec<ScalarExpression>,
-
     pub agg_calls: Vec<ScalarExpression>,
 }
 

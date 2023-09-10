@@ -11,7 +11,7 @@ use crate::expression::ScalarExpression;
 use crate::storage::Storage;
 use crate::types::LogicalType;
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     #[async_recursion]
     pub(crate) async fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
         match expr {
@@ -142,26 +142,31 @@ impl Binder {
 
         Ok(match func.name.to_string().to_lowercase().as_str() {
             "count" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Count,
                 args,
                 ty: LogicalType::UInteger,
             },
             "sum" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Sum,
                 args,
                 ty,
             },
             "min" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Min,
                 args,
                 ty,
             },
             "max" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Max,
                 args,
                 ty,
             },
             "avg" => ScalarExpression::AggCall{
+                distinct: func.distinct,
                 kind: AggKind::Avg,
                 args,
                 ty,

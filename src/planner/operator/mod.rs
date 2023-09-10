@@ -9,13 +9,19 @@ pub mod sort;
 pub mod insert;
 pub mod values;
 pub mod update;
+pub mod delete;
+pub mod drop_table;
+pub mod truncate;
 
-use std::sync::Arc;
 use itertools::Itertools;
 use crate::catalog::ColumnRef;
+use crate::expression::ScalarExpression;
 use crate::planner::operator::create_table::CreateTableOperator;
+use crate::planner::operator::delete::DeleteOperator;
+use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
+use crate::planner::operator::truncate::TruncateOperator;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
 
@@ -26,6 +32,7 @@ use self::{
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Operator {
+    // DQL
     Dummy,
     Aggregate(AggregateOperator),
     Filter(FilterOperator),
@@ -34,13 +41,31 @@ pub enum Operator {
     Scan(ScanOperator),
     Sort(SortOperator),
     Limit(LimitOperator),
+    Values(ValuesOperator),
+    // DML
     Insert(InsertOperator),
     Update(UpdateOperator),
-    Values(ValuesOperator),
-    CreateTable(CreateTableOperator)
+    Delete(DeleteOperator),
+    // DDL
+    CreateTable(CreateTableOperator),
+    DropTable(DropTableOperator),
+    Truncate(TruncateOperator),
 }
 
 impl Operator {
+    pub fn project_input_refs(&self) -> Vec<ScalarExpression> {
+        match self {
+            Operator::Project(op) => {
+                op.columns
+                    .iter()
+                    .filter(|expr| matches!(expr, ScalarExpression::InputRef { .. }))
+                    .cloned()
+                    .collect_vec()
+            }
+            _ => vec![],
+        }
+    }
+
     pub fn referenced_columns(&self) -> Vec<ColumnRef> {
         match self {
             Operator::Aggregate(op) => {
@@ -94,15 +119,7 @@ impl Operator {
             Operator::Values(op) => {
                 op.columns.clone()
             }
-            Operator::CreateTable(op) => {
-                op.columns
-                    .iter()
-                    .cloned()
-                    .map(|col| Arc::new(col))
-                    .collect_vec()
-            }
             _ => vec![],
-
         }
     }
 }

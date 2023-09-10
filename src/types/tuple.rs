@@ -7,7 +7,7 @@ use crate::types::value::{DataValue, ValueRef};
 
 const BITS_MAX_INDEX: usize = 8;
 
-pub type TupleId = usize;
+pub type TupleId = i64;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
@@ -51,7 +51,7 @@ impl Tuple {
         }
     }
 
-    /// e.g.: bits(u8)..|data_0(len for utf8_1)|utf8_0|data_1|f64_1|
+    /// e.g.: bits(u8)..|data_0(len for utf8_1)|utf8_0|data_1|
     /// Tips: all len is u32
     pub fn serialize_to(&self) -> Vec<u8> {
         fn flip_bit(bits: u8, i: usize) -> u8 {

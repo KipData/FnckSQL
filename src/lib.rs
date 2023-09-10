@@ -16,4 +16,4 @@ pub mod planner;
 pub mod types;
 mod optimizer;
 pub mod execution;
-mod storage;
+pub mod storage;

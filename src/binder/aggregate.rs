@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use ahash::RandomState;
 use itertools::Itertools;
 use sqlparser::ast::{Expr, OrderByExpr};
 
@@ -7,12 +9,13 @@ use crate::{
         operator::{aggregate::AggregateOperator, sort::SortField},
     },
 };
-use crate::binder::BindError;
+use crate::binder::{BindError, InputRefType};
 use crate::planner::LogicalPlan;
+use crate::storage::Storage;
 
 use super::Binder;
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     pub fn bind_aggregate(
         &mut self,
         children: LogicalPlan,
@@ -90,7 +93,7 @@ impl Binder {
             ScalarExpression::AggCall {
                 ty: return_type, ..
             } => {
-                let index = self.context.agg_calls.len();
+                let index = self.context.input_ref_index(InputRefType::AggCall);
                 let input_ref = ScalarExpression::InputRef {
                     index,
                     ty: return_type.clone(),
@@ -99,12 +102,14 @@ impl Binder {
                     ScalarExpression::AggCall {
                         kind,
                         args,
-                        ty: return_type,
+                        ty,
+                        distinct
                     } => {
                         self.context.agg_calls.push(ScalarExpression::AggCall {
+                            distinct,
                             kind,
                             args,
-                            ty: return_type,
+                            ty,
                         });
                     }
                     _ => unreachable!(),
@@ -114,6 +119,7 @@ impl Binder {
             ScalarExpression::TypeCast { expr, .. } => self.visit_column_agg_expr(expr),
             ScalarExpression::IsNull { expr } => self.visit_column_agg_expr(expr),
             ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr),
+            ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr),
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
@@ -122,11 +128,9 @@ impl Binder {
                 self.visit_column_agg_expr(left_expr);
                 self.visit_column_agg_expr(right_expr);
             }
-
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef { .. }
-            | ScalarExpression::InputRef { .. }
-            | ScalarExpression::Alias { .. } => {}
+            | ScalarExpression::InputRef { .. } => {}
         }
     }
 
@@ -143,6 +147,7 @@ impl Binder {
         let mut group_raw_exprs = vec![];
         for expr in groupby {
             let expr = self.bind_expr(expr).await?;
+
             if let ScalarExpression::Alias { alias, .. } = expr {
                 let alias_expr = select_items.iter().find(|column| {
                     if let ScalarExpression::Alias {
@@ -162,22 +167,30 @@ impl Binder {
                 group_raw_exprs.push(expr);
             }
         }
+        let mut group_raw_set: HashSet<&ScalarExpression, RandomState> = HashSet::from_iter(group_raw_exprs.iter());
 
-        for column in select_items {
-            let expr = &column;
-            if expr.has_agg_call() {
+        for expr in select_items {
+            if expr.has_agg_call(&self.context) {
                 continue;
             }
+            group_raw_set.remove(expr);
 
             if !group_raw_exprs.iter().contains(expr) {
                 return Err(BindError::AggMiss(
                     format!(
-                        "{} must appear in the GROUP BY clause or be used in an aggregate function",
+                        "{:?} must appear in the GROUP BY clause or be used in an aggregate function",
                         expr
                     )
                 ));
             }
         }
+
+        if !group_raw_set.is_empty() {
+            return Err(BindError::AggMiss(
+                format!("In the GROUP BY clause the field must be in the select clause")
+            ));
+        }
+
         Ok(())
     }
 
@@ -197,14 +210,10 @@ impl Binder {
                     false
                 }
             }) {
-                let index = if self.context.group_by_exprs.len() == 0 {
-                    0
-                } else {
-                    self.context.group_by_exprs.len() + 1
-                };
-
+                let index = self.context.input_ref_index(InputRefType::GroupBy);
                 let mut select_item = &mut select_list[i];
                 let return_type = select_item.return_type();
+
                 self.context.group_by_exprs.push(std::mem::replace(
                     &mut select_item,
                     ScalarExpression::InputRef {
@@ -223,11 +232,8 @@ impl Binder {
                     self.context.group_by_exprs.push(expr.clone())
                 }
                 _ => {
-                    let index = if self.context.group_by_exprs.len() == 0 {
-                        0
-                    } else {
-                        self.context.group_by_exprs.len() + 1
-                    };
+                    let index = self.context.input_ref_index(InputRefType::GroupBy);
+
                     self.context.group_by_exprs.push(std::mem::replace(
                         expr,
                         ScalarExpression::InputRef {
@@ -256,7 +262,7 @@ impl Binder {
 
                 Err(BindError::AggMiss(
                     format!(
-                        "column {} must appear in the GROUP BY clause or be used in an aggregate function",
+                        "column {:?} must appear in the GROUP BY clause or be used in an aggregate function",
                         expr
                     )
                 ))
@@ -268,7 +274,7 @@ impl Binder {
 
                 Err(BindError::AggMiss(
                     format!(
-                        "column {} must appear in the GROUP BY clause or be used in an aggregate function",
+                        "column {:?} must appear in the GROUP BY clause or be used in an aggregate function",
                         expr
                     )
                 ))

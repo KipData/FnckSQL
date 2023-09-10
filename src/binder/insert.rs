@@ -9,9 +9,9 @@ use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::Operator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::storage::Storage;
-use crate::types::value::ValueRef;
+use crate::types::value::{DataValue, ValueRef};
 
-impl Binder {
+impl<S: Storage> Binder<S> {
     pub(crate) async fn bind_insert(
         &mut self,
         name: ObjectName,
@@ -44,9 +44,14 @@ impl Binder {
             for expr_row in expr_rows {
                 let mut row = Vec::with_capacity(expr_row.len());
 
-                for expr in expr_row {
+                for (i, expr) in expr_row.into_iter().enumerate() {
                     match self.bind_expr(expr).await? {
-                        ScalarExpression::Constant(value) => row.push(value),
+                        ScalarExpression::Constant(value) => {
+                            let cast_value = DataValue::clone(&value)
+                                .cast(columns[i].datatype());
+
+                            row.push(Arc::new(cast_value))
+                        },
                         _ => unreachable!(),
                     }
                 }

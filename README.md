@@ -11,39 +11,62 @@ Install rust toolchain first.
 cargo run
 ```
 test command
-```mysql
+```sql
 create table t1 (a int, b int);
 
 insert into t1 (a, b) values (1, 1), (5, 3), (5, 2);
 
+update t1 set a = 0 where b > 1;
+
+delete from t1 where b > 1;
+
 select * from t1;
 
 select * from t1 order by a asc nulls first
+
+select count(distinct a) from t1;
+
+truncate table t1;
+
+drop table t1;
 ```
+Using KipSQL in code
+```rust
+let kipsql = Database::with_kipdb("./data").await?;
+
+let tupes = db.run("select * from t1").await?;
+```
+Storage Support:
+- KipDB
+- Memory
 
 ![demo](./static/images/demo.png)
 
 ### Features
 - DDL
   - Create
-    - [x] CreateTable
-    - [ ] CreateIndex
+    - [x] Table
+    - [ ] Index
   - Drop
+    - [x] Table
+    - [ ] Index
+  - [x] Truncate
 - DQL
   - [x] Select
   - [x] Where
   - [ ] Distinct
-  - [ ] Aggregation: count()/sum()/avg()/min()/max()
+  - [x] Alias
+  - [x] Aggregation: count()/sum()/avg()/min()/max()
   - [ ] Subquery
   - [x] Join: Inner/Left/Right/Full Cross(x)
-  - [ ] Group By
-  - [ ] Having
+  - [x] Group By
+  - [x] Having
   - [x] Order By
   - [x] Limit
 - DML
   - [x] Insert
   - [x] Update
-  - [ ] Delete
+  - [x] Delete
 - DataTypes
   - Invalid
   - SqlNull
@@ -59,6 +82,7 @@ select * from t1 order by a asc nulls first
   - Float
   - Double
   - Varchar
+  - DateTime
 - Optimizer rules
   - Limit Project Transpose
   - Eliminate Limits
@@ -67,18 +91,6 @@ select * from t1 order by a asc nulls first
   - Combine Filters
   - Column Pruning
   - Collapse Project
-- Executors
-  - [x] CreateTable
-  - [x] SeqScan
-  - [ ] IndexScan
-  - [x] Filter
-  - [x] Project
-  - [x] Limit
-  - [x] Hash Join
-  - [x] Insert
-  - [x] Values
-  - [x] Update
-  - [ ] Delete
 
 ### Thanks For
 - [Fedomn/sqlrs](https://github.com/Fedomn/sqlrs): 主要参考资料，Optimizer、Executor均参考自sqlrs的设计

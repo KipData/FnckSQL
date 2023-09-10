@@ -7,7 +7,7 @@ use kip_db::error::CacheError;
 use kip_db::KernelError;
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 use crate::expression::ScalarExpression;
-use crate::types::tuple::Tuple;
+use crate::types::tuple::{Tuple, TupleId};
 
 #[async_trait]
 pub trait Storage: Sync + Send + Clone + 'static {
@@ -18,6 +18,9 @@ pub trait Storage: Sync + Send + Clone + 'static {
         table_name: TableName,
         columns: Vec<ColumnCatalog>
     ) -> Result<TableName, StorageError>;
+
+    async fn drop_table(&self, name: &String) -> Result<(), StorageError>;
+    async fn drop_data(&self, name: &String) -> Result<(), StorageError>;
 
     async fn table(&self, name: &String) -> Option<Self::TableType>;
     async fn table_catalog(&self, name: &String) -> Option<&TableCatalog>;
@@ -41,6 +44,8 @@ pub trait Table: Sync + Send + 'static {
     ) -> Result<Self::TransactionType<'_>, StorageError>;
 
     fn append(&mut self, tuple: Tuple) -> Result<(), StorageError>;
+
+    fn delete(&mut self, tuple_id: TupleId) -> Result<(), StorageError>;
 
     async fn commit(self) -> Result<(), StorageError>;
 }

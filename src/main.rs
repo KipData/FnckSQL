@@ -28,9 +28,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("{} \nVersion: {}\n", BANNER, env!("CARGO_PKG_VERSION"));
 
     println!(":) Welcome to the KipSQL, Please input sql.\n");
-    println!("Tips: ");
+    println!("Tips🔞: ");
     println!("1. input \"quit\" to shutdown");
-    println!("2. no support \"delete\", so if u want remove data, you can delete the \'data\' folder");
+    println!("2. all data is in the \'data\' folder in the directory where the application is run");
 
     server_run().await?;
 
@@ -38,10 +38,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn server_run() -> Result<(), Box<dyn Error>> {
-    let db = Database::new("./data").await?;
+    let db = Database::with_kipdb("./data").await?;
 
     loop {
-        println!("> type👇 plz");
+        println!("> 👇👇🏻👇🏼👇🏽👇🏾👇🏿 <");
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
 
@@ -59,7 +59,7 @@ async fn server_run() -> Result<(), Box<dyn Error>> {
                 }
             }
             Err(err) => {
-                println!("{}", err);
+                println!("Oops!: {}", err);
             }
         }
     }

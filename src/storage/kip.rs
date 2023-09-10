@@ -1,4 +1,3 @@
-use core::slice::SlicePattern;
 use std::collections::Bound;
 use std::collections::hash_map::RandomState;
 use std::path::PathBuf;
@@ -13,7 +12,7 @@ use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
 use crate::storage::table_codec::TableCodec;
-use crate::types::tuple::Tuple;
+use crate::types::tuple::{Tuple, TupleId};
 
 #[derive(Clone)]
 pub struct KipStorage {
@@ -48,11 +47,58 @@ impl Storage for KipStorage {
             .iter()
             .filter_map(|(_, col)| TableCodec::encode_column(col))
         {
-            self.inner.set(key.as_slice(), value).await?;
+            self.inner.set(key, value).await?;
         }
         self.cache.put(table_name.to_string(), table);
 
         Ok(table_name)
+    }
+
+    async fn drop_table(&self, name: &String) -> Result<(), StorageError> {
+        self.drop_data(name).await?;
+
+        let (min, max) = TableCodec::columns_bound(name);
+        let mut tx = self.inner.new_transaction().await;
+        let mut iter = tx.iter(Bound::Included(&min), Bound::Included(&max))?;
+        let mut col_keys = vec![];
+
+        while let Some((key, value_option))  = iter.try_next()? {
+            if value_option.is_some() {
+                col_keys.push(key);
+            }
+        }
+        drop(iter);
+
+        for col_key in col_keys {
+            tx.remove(&col_key)?
+        }
+        tx.commit().await?;
+
+        let _ = self.cache.remove(name);
+
+        Ok(())
+    }
+
+    async fn drop_data(&self, name: &String) -> Result<(), StorageError> {
+        if let Some(mut table) = self.table(name).await {
+            let (min, max) = table.table_codec.tuple_bound();
+            let mut iter = table.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
+            let mut data_keys = vec![];
+
+            while let Some((key, value_option))  = iter.try_next()? {
+                if value_option.is_some() {
+                    data_keys.push(key);
+                }
+            }
+            drop(iter);
+
+            for col_key in data_keys {
+                table.tx.remove(&col_key)?
+            }
+            table.tx.commit().await?;
+        }
+
+        Ok(())
     }
 
     async fn table(&self, name: &String) -> Option<Self::TableType> {
@@ -75,7 +121,7 @@ impl Storage for KipStorage {
             let mut columns = vec![];
             let mut name_option = None;
 
-            while let Some((key, value_option))  = iter.try_next().ok()? {
+            while let Some((key, value_option))  = iter.try_next().ok().flatten() {
                 if let Some(value) = value_option {
                     if let Some((table_name, column)) = TableCodec::decode_column(&key, &value) {
                         if name != table_name.as_str() { return None; }
@@ -119,7 +165,14 @@ impl Table for KipTable {
 
     fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {
         let (key, value) = self.table_codec.encode_tuple(&tuple);
-        self.tx.set(key.as_slice(), value);
+        self.tx.set(key, value);
+
+        Ok(())
+    }
+
+    fn delete(&mut self, tuple_id: TupleId) -> Result<(), StorageError> {
+        let key = self.table_codec.encode_tuple_key(&tuple_id);
+        self.tx.remove(&key)?;
 
         Ok(())
     }

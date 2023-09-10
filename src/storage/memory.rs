@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use crate::catalog::{ColumnCatalog, RootCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
-use crate::types::tuple::Tuple;
+use crate::types::tuple::{Tuple, TupleId};
 
 // WARRING: Only single-threaded and tested using
 #[derive(Clone)]
@@ -63,6 +63,32 @@ impl Storage for MemStorage {
         inner.tables.push((table_name, new_table));
 
         Ok(table_id)
+    }
+
+    async fn drop_table(&self, name: &String) -> Result<(), StorageError> {
+        let inner = unsafe {
+            self.inner
+                .as_ptr()
+                .as_mut()
+                .unwrap()
+        };
+
+        inner.root.drop_table(&name)?;
+
+        Ok(())
+    }
+
+    async fn drop_data(&self, name: &String) -> Result<(), StorageError> {
+        let inner = unsafe {
+            self.inner
+                .as_ptr()
+                .as_mut()
+                .unwrap()
+        };
+
+        inner.tables.retain(|(t_name, _)| t_name.as_str() != name);
+
+        Ok(())
     }
 
     async fn table(&self, name: &String) -> Option<Self::TableType> {
@@ -142,6 +168,18 @@ impl Table for MemTable {
         } else {
             tuples.push(tuple);
         }
+
+        Ok(())
+    }
+
+    fn delete(&mut self, tuple_id: TupleId) -> Result<(), StorageError> {
+        let tuples = unsafe {
+            self.tuples
+                .as_ptr()
+                .as_mut()
+        }.unwrap();
+
+        tuples.retain(|tuple| tuple.id.unwrap() != tuple_id);
 
         Ok(())
     }
