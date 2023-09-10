@@ -54,7 +54,7 @@ Storage Support:
 - DQL
   - [x] Select
   - [x] Where
-  - [ ] Distinct
+  - [x] Distinct
   - [x] Alias
   - [x] Aggregation: count()/sum()/avg()/min()/max()
   - [ ] Subquery

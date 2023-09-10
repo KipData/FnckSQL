@@ -7,6 +7,7 @@ mod update;
 mod delete;
 mod drop_table;
 mod truncate;
+mod distinct;
 
 use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};

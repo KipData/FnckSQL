@@ -20,10 +20,7 @@ use super::Binder;
 use crate::catalog::{ColumnCatalog, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog, TableName};
 use itertools::Itertools;
 use sqlparser::ast;
-use sqlparser::ast::{
-    Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
-    SelectItem, SetExpr, TableFactor, TableWithJoins,
-};
+use sqlparser::ast::{Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins};
 use crate::binder::BindError;
 use crate::execution::executor::dql::join::joins_nullable;
 use crate::expression::BinaryOperator;
@@ -98,9 +95,9 @@ impl<S: Storage> Binder<S> {
             plan = self.bind_having(plan, having)?;
         }
 
-        // if select.distinct {
-        //     plan = self.bind_distinct(plan, select_list.clone())?;
-        // }
+        if let Some(Distinct::Distinct) = select.distinct {
+            plan = self.bind_distinct(plan, select_list.clone());
+        }
 
         if let Some(orderby) = having_orderby.1 {
             plan = self.bind_sort(plan, orderby);
