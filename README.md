@@ -55,6 +55,7 @@ Storage Support:
   - [x] Select
   - [x] Where
   - [ ] Distinct
+  - [x] Alias
   - [x] Aggregation: count()/sum()/avg()/min()/max()
   - [ ] Subquery
   - [x] Join: Inner/Left/Right/Full Cross(x)

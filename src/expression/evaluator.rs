@@ -31,6 +31,7 @@ impl ScalarExpression {
             ScalarExpression::Binary{ left_expr, right_expr, op, .. } => {
                 let left = left_expr.eval_column(tuple);
                 let right = right_expr.eval_column(tuple);
+
                 Arc::new(binary_op(&left, &right, op))
             }
             ScalarExpression::IsNull{ expr } => {

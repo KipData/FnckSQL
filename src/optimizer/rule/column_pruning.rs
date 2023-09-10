@@ -51,7 +51,10 @@ impl Rule for PushProjectIntoScan {
 
                 new_scan_op.columns = project_op.columns
                     .iter()
-                    .filter(|expr| matches!(expr, ScalarExpression::ColumnRef(_)))
+                    .filter(|expr| matches!(
+                        expr,
+                        ScalarExpression::ColumnRef(_) | ScalarExpression::Alias { .. }
+                    ))
                     .cloned()
                     .collect_vec();
 

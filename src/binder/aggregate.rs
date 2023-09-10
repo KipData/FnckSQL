@@ -119,6 +119,7 @@ impl<S: Storage> Binder<S> {
             ScalarExpression::TypeCast { expr, .. } => self.visit_column_agg_expr(expr),
             ScalarExpression::IsNull { expr } => self.visit_column_agg_expr(expr),
             ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr),
+            ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr),
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
@@ -127,11 +128,9 @@ impl<S: Storage> Binder<S> {
                 self.visit_column_agg_expr(left_expr);
                 self.visit_column_agg_expr(right_expr);
             }
-
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef { .. }
-            | ScalarExpression::InputRef { .. }
-            | ScalarExpression::Alias { .. } => {}
+            | ScalarExpression::InputRef { .. } => {}
         }
     }
 
