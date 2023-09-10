@@ -82,6 +82,7 @@ Storage Support:
   - Float
   - Double
   - Varchar
+  - DateTime
 - Optimizer rules
   - Limit Project Transpose
   - Eliminate Limits

@@ -51,6 +51,13 @@ fn unpack_bool(value: DataValue) -> Option<bool> {
     }
 }
 
+fn unpack_date(value: DataValue) -> Option<i64> {
+    match value {
+        DataValue::Date64(inner) => inner,
+        _ => None
+    }
+}
+
 /// Tips:
 /// - Null values operate as null values
 pub fn binary_op(
@@ -718,6 +725,74 @@ pub fn binary_op(
         }
         LogicalType::SqlNull => {
             DataValue::Boolean(None)
+        }
+        LogicalType::Date => {
+            let left_value = unpack_date(left.clone().cast(&unified_type));
+            let right_value = unpack_date(right.clone().cast(&unified_type));
+
+            match op {
+                BinaryOperator::Gt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 > v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Lt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 < v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::GtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 >= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::LtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 <= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Eq => {
+                    let value = match (left_value, right_value) {
+                        (Some(v1), Some(v2)) => {
+                            Some(v1 == v2)
+                        }
+                        (None, None) => {
+                            Some(true)
+                        }
+                        (_, _) => {
+                            None
+                        }
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::NotEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 != v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                _ => todo!("unsupported operator")
+            }
         }
         _ => todo!("unsupported data type"),
     }
