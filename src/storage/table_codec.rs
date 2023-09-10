@@ -6,6 +6,9 @@ use crate::types::tuple::{Tuple, TupleId};
 const COLUMNS_MIN: u8 = 0;
 const COLUMNS_MAX: u8 = 1;
 
+const TUPLE_ID_LEN: usize = 16;
+const COLUMNS_ID_LEN: usize = 10;
+
 #[derive(Clone)]
 pub struct TableCodec {
     pub table: TableCatalog
@@ -15,10 +18,10 @@ impl TableCodec {
     pub fn tuple_bound(&self) -> (Vec<u8>, Vec<u8>) {
         let op = |bound_id| {
             format!(
-                "Data_{}_{:0width$}",
+                "{}_Data_{:0width$}",
                 self.table.name,
                 bound_id,
-                width = std::mem::size_of::<i64>() * 2 + 3
+                width = TUPLE_ID_LEN
             )
         };
 
@@ -28,7 +31,7 @@ impl TableCodec {
     pub fn columns_bound(name: &String) -> (Vec<u8>, Vec<u8>) {
         let op = |bound_id| {
             format!(
-                "Catalog_{}_{}",
+                "{}_Catalog_{}",
                 name,
                 bound_id
             )
@@ -37,7 +40,7 @@ impl TableCodec {
         (op(COLUMNS_MIN).into_bytes(), op(COLUMNS_MAX).into_bytes())
     }
 
-    /// Key: Data_TableName_RowID(Sorted)
+    /// Key: TableName_Data_RowID(Sorted)
     /// Value: Tuple
     pub fn encode_tuple(&self, tuple: &Tuple) -> (Bytes, Bytes) {
         let key = self.encode_tuple_key(&tuple.id.unwrap());
@@ -47,10 +50,10 @@ impl TableCodec {
 
     pub fn encode_tuple_key(&self, tuple_id: &TupleId) -> Vec<u8> {
         format!(
-            "Data_{}_{:0width$}",
+            "{}_Data_{:0width$}",
             self.table.name,
             tuple_id,
-            width = std::mem::size_of::<i64>() * 2 + 3
+            width = TUPLE_ID_LEN
         ).into_bytes()
     }
 
@@ -68,7 +71,7 @@ impl TableCodec {
                 }))
     }
 
-    /// Key: Catalog_TableName_0_ColumnName_ColumnId
+    /// Key: TableName_Catalog_0_ColumnName_ColumnId
     /// Value: ColumnCatalog
     ///
     /// Tips: the `0` for bound range
@@ -78,12 +81,12 @@ impl TableCodec {
         bincode::serialize(&col).ok()
             .map(|bytes| {
                 let key = format!(
-                    "Catalog_{}_{}_{}_{:0width$}",
+                    "{}_Catalog_{}_{}_{:0width$}",
                     table_name,
                     COLUMNS_MIN,
                     col.name,
                     col.id,
-                    width = std::mem::size_of::<u32>() * 2 + 2
+                    width = COLUMNS_ID_LEN
                 );
 
                 (Bytes::from(key.into_bytes()), Bytes::from(bytes))
@@ -93,7 +96,7 @@ impl TableCodec {
     pub fn decode_column(key: &[u8], bytes: &[u8]) -> Option<(TableName, ColumnCatalog)> {
         String::from_utf8(key.to_owned()).ok()?
             .split("_")
-            .nth(1)
+            .nth(0)
             .and_then(|table_name| {
                 bincode::deserialize::<ColumnCatalog>(bytes).ok()
                     .and_then(|col| {
@@ -110,7 +113,7 @@ mod tests {
     use std::sync::Arc;
     use itertools::Itertools;
     use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog};
-    use crate::storage::table_codec::TableCodec;
+    use crate::storage::table_codec::{COLUMNS_ID_LEN, TableCodec, TUPLE_ID_LEN};
     use crate::types::LogicalType;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
@@ -145,10 +148,10 @@ mod tests {
         assert_eq!(
             String::from_utf8(key.to_vec()).ok().unwrap(),
             format!(
-                "Data_{}_{:0width$}",
+                "{}_Data_{:0width$}",
                 table_catalog.name,
                 tuple.id.unwrap(),
-                width = std::mem::size_of::<i64>() * 2 + 3
+                width = TUPLE_ID_LEN
             )
         );
         assert_eq!(codec.decode_tuple(&key, &bytes).unwrap(), tuple)
@@ -163,11 +166,11 @@ mod tests {
         assert_eq!(
             String::from_utf8(key.to_vec()).ok().unwrap(),
             format!(
-                "Catalog_{}_0_{}_{:0width$}",
+                "{}_Catalog_0_{}_{:0width$}",
                 table_catalog.name,
                 col.name,
                 col.id,
-                width = std::mem::size_of::<u32>() * 2 + 2
+                width = COLUMNS_ID_LEN
             )
         );
 
@@ -184,17 +187,17 @@ mod tests {
             str.to_string().into_bytes()
         };
 
-        set.insert(op("Catalog_T0_0_C0_0"));
-        set.insert(op("Catalog_T0_0_C1_1"));
-        set.insert(op("Catalog_T0_0_C2_2"));
+        set.insert(op("T0_Catalog_0_C0_0"));
+        set.insert(op("T0_Catalog_0_C1_1"));
+        set.insert(op("T0_Catalog_0_C2_2"));
 
-        set.insert(op("Catalog_T1_0_C0_0"));
-        set.insert(op("Catalog_T1_0_C1_1"));
-        set.insert(op("Catalog_T1_0_C2_2"));
+        set.insert(op("T1_Catalog_0_C0_0"));
+        set.insert(op("T1_Catalog_0_C1_1"));
+        set.insert(op("T1_Catalog_0_C2_2"));
 
-        set.insert(op("Catalog_T2_0_C0_0"));
-        set.insert(op("Catalog_T2_0_C1_1"));
-        set.insert(op("Catalog_T2_0_C2_2"));
+        set.insert(op("T2_Catalog_0_C0_0"));
+        set.insert(op("T2_Catalog_0_C1_1"));
+        set.insert(op("T2_Catalog_0_C2_2"));
 
         let (min, max) = TableCodec::columns_bound(
             &Arc::new("T1".to_string())
@@ -204,9 +207,9 @@ mod tests {
             .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
             .collect_vec();
 
-        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "Catalog_T1_0_C0_0");
-        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "Catalog_T1_0_C1_1");
-        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "Catalog_T1_0_C2_2");
+        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "T1_Catalog_0_C0_0");
+        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "T1_Catalog_0_C1_1");
+        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "T1_Catalog_0_C2_2");
     }
 
     #[test]
@@ -216,17 +219,17 @@ mod tests {
             str.to_string().into_bytes()
         };
 
-        set.insert(op("Data_T0_0000000000000000000"));
-        set.insert(op("Data_T0_0000000000000000001"));
-        set.insert(op("Data_T0_0000000000000000002"));
+        set.insert(op("T0_Data_0000000000000000000"));
+        set.insert(op("T0_Data_0000000000000000001"));
+        set.insert(op("T0_Data_0000000000000000002"));
 
-        set.insert(op("Data_T1_0000000000000000000"));
-        set.insert(op("Data_T1_0000000000000000001"));
-        set.insert(op("Data_T1_0000000000000000002"));
+        set.insert(op("T1_Data_0000000000000000000"));
+        set.insert(op("T1_Data_0000000000000000001"));
+        set.insert(op("T1_Data_0000000000000000002"));
 
-        set.insert(op("Data_T2_0000000000000000000"));
-        set.insert(op("Data_T2_0000000000000000001"));
-        set.insert(op("Data_T2_0000000000000000002"));
+        set.insert(op("T2_Data_0000000000000000000"));
+        set.insert(op("T2_Data_0000000000000000001"));
+        set.insert(op("T2_Data_0000000000000000002"));
 
         let table_codec = TableCodec {
             table: TableCatalog::new(Arc::new("T1".to_string()), vec![]).unwrap(),
@@ -237,8 +240,8 @@ mod tests {
             .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
             .collect_vec();
 
-        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "Data_T1_0000000000000000000");
-        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "Data_T1_0000000000000000001");
-        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "Data_T1_0000000000000000002");
+        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "T1_Data_0000000000000000000");
+        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "T1_Data_0000000000000000001");
+        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "T1_Data_0000000000000000002");
     }
 }
