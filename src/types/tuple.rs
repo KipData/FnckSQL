@@ -7,7 +7,7 @@ use crate::types::value::{DataValue, ValueRef};
 
 const BITS_MAX_INDEX: usize = 8;
 
-pub type TupleId = usize;
+pub type TupleId = i64;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
