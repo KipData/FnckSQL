@@ -263,6 +263,10 @@ mod test {
         let tuples_time_max = kipsql.run("select max(e) as max_time from t2").await?;
         println!("{}", create_table(&tuples_time_max));
 
+        println!("time where:");
+        let tuples_time_where_t2 = kipsql.run("select (c + 1) from t2 where e > '2021-05-20 21:00:00'").await?;
+        println!("{}", create_table(&tuples_time_where_t2));
+
         assert!(kipsql.run("select max(d) from t2 group by c").await.is_err());
 
         println!("distinct t1:");

@@ -220,7 +220,7 @@ impl Transaction for MemTraction<'_> {
 
                 for expr in self.projections.iter() {
                     values.push(expr.eval_column(&tuple));
-                    columns.push(expr.output_column(&tuple));
+                    columns.push(expr.output_columns(&tuple));
                 }
 
                 self.limit = self.limit.map(|num| num - 1);

@@ -51,10 +51,7 @@ impl Rule for PushProjectIntoScan {
 
                 new_scan_op.columns = project_op.columns
                     .iter()
-                    .filter(|expr| matches!(
-                        expr,
-                        ScalarExpression::ColumnRef(_) | ScalarExpression::Alias { .. }
-                    ))
+                    .filter(|expr| matches!(expr.unpack_alias(),ScalarExpression::ColumnRef(_)))
                     .cloned()
                     .collect_vec();
 
@@ -82,16 +79,27 @@ impl Rule for PushProjectThroughChild {
 
         if let Operator::Project(_) = node_operator {
             let child_index = graph.children_at(node_id)[0];
-            let node_referenced_columns = node_operator.referenced_columns();
+            let mut node_referenced_columns = node_operator.referenced_columns();
+            let child_operator = graph.operator(child_index);
+            let child_referenced_columns = child_operator.referenced_columns();
+            let is_child_agg = matches!(child_operator, Operator::Aggregate(_));
 
-            let intersection_columns_ids = graph
-                .operator(child_index)
-                .referenced_columns()
-                .into_iter()
+            // When the aggregate function is a child node,
+            // the pushdown will lose the corresponding ColumnRef due to `InputRef`.
+            // Therefore, it is necessary to map the InputRef to the corresponding ColumnRef
+            // and push it down.
+            if is_child_agg && !input_refs.is_empty() {
+                node_referenced_columns.append(
+                    &mut child_operator.agg_mapping_col_refs(&input_refs)
+                )
+            }
+
+            let intersection_columns_ids = child_referenced_columns
+                .iter()
                 .map(|col| col.id)
                 .chain(
                     node_referenced_columns
-                        .into_iter()
+                        .iter()
                         .map(|col| col.id)
                 )
                 .collect::<HashSet<ColumnId>>();
@@ -101,25 +109,28 @@ impl Rule for PushProjectThroughChild {
             }
 
             for grandson_id in graph.children_at(child_index) {
-                let columns = graph.operator(grandson_id)
+                let mut columns = graph.operator(grandson_id)
                     .referenced_columns()
                     .into_iter()
                     .unique_by(|col| col.id)
                     .filter(|u| intersection_columns_ids.contains(&u.id))
                     .map(|col| ScalarExpression::ColumnRef(col))
                     .collect_vec();
-                // Tips: Aggregation fields take precedence
-                let full_columns = input_refs.iter()
-                    .cloned()
-                    .chain(columns)
-                    .collect_vec();
 
-                if !full_columns.is_empty() {
+                if !is_child_agg && !input_refs.is_empty() {
+                    // Tips: Aggregation InputRefs fields take precedence
+                    columns = input_refs.iter()
+                        .cloned()
+                        .chain(columns)
+                        .collect_vec();
+                }
+
+                if !columns.is_empty() {
                     graph.add_node(
                         child_index,
                         Some(grandson_id),
                         OptExprNode::OperatorRef(
-                            Operator::Project(ProjectOperator { columns: full_columns })
+                            Operator::Project(ProjectOperator { columns })
                         )
                     );
                 }

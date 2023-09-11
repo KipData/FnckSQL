@@ -75,7 +75,7 @@ impl LogicalType {
             LogicalType::Float => Some(4),
             LogicalType::Double => Some(8),
             LogicalType::Varchar => None,
-            LogicalType::Date => Some(4),
+            LogicalType::Date => Some(8),
         }
     }
 
@@ -145,6 +145,9 @@ impl LogicalType {
         }
         if left.is_numeric() && right.is_numeric() {
             return LogicalType::combine_numeric_types(left, right);
+        }
+        if matches!((left, right), (LogicalType::Date, LogicalType::Varchar) | (LogicalType::Varchar, LogicalType::Date)) {
+            return Ok(LogicalType::Date);
         }
         Err(TypeError::InternalError(format!(
             "can not compare two types: {:?} and {:?}",

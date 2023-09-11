@@ -165,6 +165,11 @@ mod tests {
                 false,
                 ColumnDesc::new(LogicalType::Boolean, false)
             )),
+            Arc::new(ColumnCatalog::new(
+                "c11".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Date, false)
+            )),
         ];
 
         let tuples = vec![
@@ -182,6 +187,7 @@ mod tests {
                     Arc::new(DataValue::Int8(Some(1))),
                     Arc::new(DataValue::UInt8(Some(1))),
                     Arc::new(DataValue::Boolean(Some(true))),
+                    Arc::new(DataValue::Date64(Some(0)))
                 ]
             },
             Tuple {
@@ -198,6 +204,7 @@ mod tests {
                     Arc::new(DataValue::Int8(None)),
                     Arc::new(DataValue::UInt8(None)),
                     Arc::new(DataValue::Boolean(None)),
+                    Arc::new(DataValue::Date64(None))
                 ],
             }
         ];

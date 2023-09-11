@@ -1,3 +1,5 @@
+use std::fmt;
+use std::fmt::Formatter;
 use std::sync::Arc;
 use itertools::Itertools;
 
@@ -59,6 +61,14 @@ pub enum ScalarExpression {
 }
 
 impl ScalarExpression {
+    pub fn unpack_alias(&self) -> &ScalarExpression {
+        if let ScalarExpression::Alias { expr, .. } = self {
+            expr.unpack_alias()
+        } else {
+            self
+        }
+    }
+
     pub fn nullable(&self) -> bool {
         match self {
             ScalarExpression::Constant(_) => false,
@@ -154,14 +164,14 @@ impl ScalarExpression {
         }
     }
 
-    pub fn output_column(&self, tuple: &Tuple) -> ColumnRef {
+    pub fn output_columns(&self, tuple: &Tuple) -> ColumnRef {
         match self {
             ScalarExpression::ColumnRef(col) => {
                 col.clone()
             }
             ScalarExpression::Constant(value) => {
                 Arc::new(ColumnCatalog::new(
-                    String::new(),
+                    format!("{}", value),
                     true,
                     ColumnDesc::new(value.logical_type(), false)
                 ))
@@ -175,7 +185,7 @@ impl ScalarExpression {
             }
             ScalarExpression::AggCall { kind, args, ty, distinct } => {
                 let args_str = args.iter()
-                    .map(|expr| expr.output_column(tuple).name.clone())
+                    .map(|expr| expr.output_columns(tuple).name.clone())
                     .join(", ");
                 let op = |allow_distinct, distinct| {
                     if allow_distinct && distinct {
@@ -199,6 +209,25 @@ impl ScalarExpression {
             }
             ScalarExpression::InputRef { index, .. } => {
                 tuple.columns[*index].clone()
+            }
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                op,
+                ty
+            } => {
+                let column_name = format!(
+                    "({} {} {})",
+                    left_expr.output_columns(tuple).name,
+                    op,
+                    right_expr.output_columns(tuple).name,
+                );
+
+                Arc::new(ColumnCatalog::new(
+                    column_name,
+                    true,
+                    ColumnDesc::new(ty.clone(), false)
+                ))
             }
             _ => unreachable!()
         }
@@ -238,9 +267,29 @@ pub enum BinaryOperator {
     And,
     Or,
     Xor,
-    BitwiseOr,
-    BitwiseAnd,
-    BitwiseXor,
+}
+
+impl fmt::Display for BinaryOperator {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            BinaryOperator::Plus => write!(f, "+"),
+            BinaryOperator::Minus => write!(f, "-"),
+            BinaryOperator::Multiply => write!(f, "*"),
+            BinaryOperator::Divide => write!(f, "/"),
+            BinaryOperator::Modulo => write!(f, "mod"),
+            BinaryOperator::StringConcat => write!(f, "&"),
+            BinaryOperator::Gt => write!(f, ">"),
+            BinaryOperator::Lt => write!(f, "<"),
+            BinaryOperator::GtEq => write!(f, ">="),
+            BinaryOperator::LtEq => write!(f, "<="),
+            BinaryOperator::Spaceship => write!(f, "<=>"),
+            BinaryOperator::Eq => write!(f, "="),
+            BinaryOperator::NotEq => write!(f, "!="),
+            BinaryOperator::And => write!(f, "&&"),
+            BinaryOperator::Or => write!(f, "||"),
+            BinaryOperator::Xor => write!(f, "^"),
+        }
+    }
 }
 
 impl From<SqlBinaryOperator> for BinaryOperator {
@@ -262,9 +311,6 @@ impl From<SqlBinaryOperator> for BinaryOperator {
             SqlBinaryOperator::And => BinaryOperator::And,
             SqlBinaryOperator::Or => BinaryOperator::Or,
             SqlBinaryOperator::Xor => BinaryOperator::Xor,
-            SqlBinaryOperator::BitwiseOr => BinaryOperator::BitwiseOr,
-            SqlBinaryOperator::BitwiseAnd => BinaryOperator::BitwiseAnd,
-            SqlBinaryOperator::BitwiseXor => BinaryOperator::BitwiseXor,
             _ => todo!()
         }
     }

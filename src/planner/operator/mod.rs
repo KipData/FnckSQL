@@ -58,8 +58,28 @@ impl Operator {
             Operator::Project(op) => {
                 op.columns
                     .iter()
+                    .map(ScalarExpression::unpack_alias)
                     .filter(|expr| matches!(expr, ScalarExpression::InputRef { .. }))
                     .cloned()
+                    .collect_vec()
+            }
+            _ => vec![],
+        }
+    }
+
+    pub fn agg_mapping_col_refs(&self, input_refs: &[ScalarExpression]) -> Vec<ColumnRef> {
+        match self {
+            Operator::Aggregate(AggregateOperator { agg_calls, .. }) => {
+                input_refs.iter()
+                    .filter_map(|expr| {
+                        if let ScalarExpression::InputRef { index, .. } = expr {
+                            Some(agg_calls[*index].clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .map(|expr| expr.referenced_columns())
+                    .flatten()
                     .collect_vec()
             }
             _ => vec![],
