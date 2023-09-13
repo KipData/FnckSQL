@@ -227,6 +227,10 @@ mod test {
         let tuples_count_agg = kipsql.run("select count(d) from t2").await?;
         println!("{}", create_table(&tuples_count_agg));
 
+        println!("count wildcard agg:");
+        let tuples_count_wildcard_agg = kipsql.run("select count(*) from t2").await?;
+        println!("{}", create_table(&tuples_count_wildcard_agg));
+
         println!("count distinct agg:");
         let tuples_count_distinct_agg = kipsql.run("select count(distinct d) from t2").await?;
         println!("{}", create_table(&tuples_count_distinct_agg));

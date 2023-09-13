@@ -10,6 +10,7 @@ use super::Binder;
 use crate::expression::ScalarExpression;
 use crate::storage::Storage;
 use crate::types::LogicalType;
+use crate::types::value::DataValue;
 
 impl<S: Storage> Binder<S> {
     #[async_recursion]
@@ -135,6 +136,7 @@ impl<S: Storage> Binder<S> {
             };
             match arg_expr {
                 FunctionArgExpr::Expr(expr) => args.push(self.bind_expr(expr).await?),
+                FunctionArgExpr::Wildcard => args.push(Self::wildcard_expr()),
                 _ => todo!()
             }
         }
@@ -173,5 +175,9 @@ impl<S: Storage> Binder<S> {
             },
             _ => todo!(),
         })
+    }
+
+    fn wildcard_expr() -> ScalarExpression {
+        ScalarExpression::Constant(Arc::new(DataValue::Utf8(Some("*".to_string()))))
     }
 }
