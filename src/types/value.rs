@@ -200,7 +200,7 @@ impl DataValue {
             LogicalType::Float => DataValue::Float32(None),
             LogicalType::Double => DataValue::Float64(None),
             LogicalType::Varchar => DataValue::Utf8(None),
-            LogicalType::Date => DataValue::Date64(None)
+            LogicalType::DateTime => DataValue::Date64(None)
         }
     }
 
@@ -220,7 +220,7 @@ impl DataValue {
             LogicalType::Float => DataValue::Float32(Some(0.0)),
             LogicalType::Double => DataValue::Float64(Some(0.0)),
             LogicalType::Varchar => DataValue::Utf8(Some("".to_string())),
-            LogicalType::Date => DataValue::Date64(Some(UNIX_DATETIME.timestamp()))
+            LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.timestamp()))
         }
     }
 
@@ -267,7 +267,7 @@ impl DataValue {
                 f64::from_ne_bytes(buf)
             })),
             LogicalType::Varchar => DataValue::Utf8((!bytes.is_empty()).then(|| String::from_utf8(bytes.to_owned()).unwrap())),
-            LogicalType::Date => DataValue::Date64((!bytes.is_empty()).then(|| i64::decode_fixed(bytes))),
+            LogicalType::DateTime => DataValue::Date64((!bytes.is_empty()).then(|| i64::decode_fixed(bytes))),
         }
     }
 
@@ -286,7 +286,7 @@ impl DataValue {
             DataValue::UInt32(_) => LogicalType::UInteger,
             DataValue::UInt64(_) => LogicalType::UBigint,
             DataValue::Utf8(_) => LogicalType::Varchar,
-            DataValue::Date64(_) => LogicalType::Date,
+            DataValue::Date64(_) => LogicalType::DateTime,
         }
     }
     
@@ -308,7 +308,7 @@ impl DataValue {
                     LogicalType::Float => DataValue::Float32(None),
                     LogicalType::Double => DataValue::Float64(None),
                     LogicalType::Varchar => DataValue::Utf8(None),
-                    LogicalType::Date => DataValue::Date64(None),
+                    LogicalType::DateTime => DataValue::Date64(None),
                 }
             }
             DataValue::Boolean(value) => {
@@ -327,7 +327,7 @@ impl DataValue {
                     LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
                     LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
                     LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    LogicalType::Date => panic!("not support"),
+                    LogicalType::DateTime => panic!("not support"),
                 }
             }
             DataValue::Float32(value) => {
@@ -481,7 +481,7 @@ impl DataValue {
                     LogicalType::Float => DataValue::Float32(value.map(|v| f32::from_str(&v).unwrap())),
                     LogicalType::Double => DataValue::Float64(value.map(|v| f64::from_str(&v).unwrap())),
                     LogicalType::Varchar => DataValue::Utf8(value),
-                    LogicalType::Date => {
+                    LogicalType::DateTime => {
                         let option = value.map(|v| {
                             NaiveDateTime::parse_from_str(&v, "%Y-%m-%d %H:%M:%S")
                                 .unwrap()
@@ -497,7 +497,7 @@ impl DataValue {
                     LogicalType::Invalid => panic!("invalid logical type"),
                     LogicalType::SqlNull => DataValue::Null,
                     LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    LogicalType::Date => DataValue::Date64(value),
+                    LogicalType::DateTime => DataValue::Date64(value),
                     _ => panic!("not support"),
                 }
             }

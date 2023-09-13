@@ -726,7 +726,7 @@ pub fn binary_op(
         LogicalType::SqlNull => {
             DataValue::Boolean(None)
         }
-        LogicalType::Date => {
+        LogicalType::DateTime => {
             let left_value = unpack_date(left.clone().cast(&unified_type));
             let right_value = unpack_date(right.clone().cast(&unified_type));
 

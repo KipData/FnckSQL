@@ -168,7 +168,7 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c11".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Date, false)
+                ColumnDesc::new(LogicalType::DateTime, false)
             )),
         ];
 
