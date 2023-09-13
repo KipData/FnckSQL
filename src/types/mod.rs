@@ -55,6 +55,7 @@ pub enum LogicalType {
     Float,
     Double,
     Varchar,
+    Date,
     DateTime,
 }
 
@@ -75,6 +76,7 @@ impl LogicalType {
             LogicalType::Float => Some(4),
             LogicalType::Double => Some(8),
             LogicalType::Varchar => None,
+            LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
         }
     }
@@ -145,6 +147,12 @@ impl LogicalType {
         }
         if left.is_numeric() && right.is_numeric() {
             return LogicalType::combine_numeric_types(left, right);
+        }
+        if matches!((left, right), (LogicalType::Date, LogicalType::Varchar) | (LogicalType::Varchar, LogicalType::Date)) {
+            return Ok(LogicalType::Date);
+        }
+        if matches!((left, right), (LogicalType::Date, LogicalType::DateTime) | (LogicalType::DateTime, LogicalType::Date)) {
+            return Ok(LogicalType::DateTime);
         }
         if matches!((left, right), (LogicalType::DateTime, LogicalType::Varchar) | (LogicalType::Varchar, LogicalType::DateTime)) {
             return Ok(LogicalType::DateTime);
@@ -250,7 +258,8 @@ impl LogicalType {
             LogicalType::Float => matches!(to, LogicalType::Double),
             LogicalType::Double => false,
             LogicalType::Varchar => false,
-            LogicalType::DateTime => false,
+            LogicalType::Date => matches!(to, LogicalType::DateTime | LogicalType::Varchar),
+            LogicalType::DateTime => matches!(to, LogicalType::Date | LogicalType::Varchar),
         }
     }
 }
