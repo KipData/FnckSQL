@@ -27,7 +27,7 @@ impl Accumulator for SumAccumulator {
                 &self.result,
                 value,
                 &BinaryOperator::Plus
-            );
+            )?;
         }
 
         Ok(())

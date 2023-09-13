@@ -308,280 +308,260 @@ impl DataValue {
         }
     }
     
-    pub fn cast(self, to: &LogicalType) -> DataValue {
+    pub fn cast(self, to: &LogicalType) -> Result<DataValue, TypeError> {
         match self {
             DataValue::Null => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::Boolean => DataValue::Boolean(None),
-                    LogicalType::Tinyint => DataValue::Int8(None),
-                    LogicalType::UTinyint => DataValue::UInt8(None),
-                    LogicalType::Smallint => DataValue::Int16(None),
-                    LogicalType::USmallint => DataValue::UInt16(None),
-                    LogicalType::Integer => DataValue::Int32(None),
-                    LogicalType::UInteger => DataValue::UInt32(None),
-                    LogicalType::Bigint => DataValue::Int64(None),
-                    LogicalType::UBigint => DataValue::UInt64(None),
-                    LogicalType::Float => DataValue::Float32(None),
-                    LogicalType::Double => DataValue::Float64(None),
-                    LogicalType::Varchar => DataValue::Utf8(None),
-                    LogicalType::Date => DataValue::Date32(None),
-                    LogicalType::DateTime => DataValue::Date64(None),
+                    LogicalType::Invalid => Err(TypeError::CastFail),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::Boolean => Ok(DataValue::Boolean(None)),
+                    LogicalType::Tinyint => Ok(DataValue::Int8(None)),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(None)),
+                    LogicalType::Smallint => Ok(DataValue::Int16(None)),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(None)),
+                    LogicalType::Integer => Ok(DataValue::Int32(None)),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(None)),
+                    LogicalType::Bigint => Ok(DataValue::Int64(None)),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(None)),
+                    LogicalType::Float => Ok(DataValue::Float32(None)),
+                    LogicalType::Double => Ok(DataValue::Float64(None)),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(None)),
+                    LogicalType::Date => Ok(DataValue::Date32(None)),
+                    LogicalType::DateTime => Ok(DataValue::Date64(None)),
                 }
             }
             DataValue::Boolean(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::Boolean => DataValue::Boolean(value),
-                    LogicalType::Tinyint => DataValue::Int8(value.map(|v| v.into())),
-                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| v.into())),
-                    LogicalType::Smallint => DataValue::Int16(value.map(|v| v.into())),
-                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| v.into())),
-                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
-                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| v.into())),
-                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
-                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| v.into())),
-                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
-                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::Boolean => Ok(DataValue::Boolean(value)),
+                    LogicalType::Tinyint => Ok(DataValue::Int8(value.map(|v| v.into()))),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(|v| v.into()))),
+                    LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| v.into()))),
+                    LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| v.into()))),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
+                    LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
+                    LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::Float32(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::Float => DataValue::Float32(value),
-                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::Float => Ok(DataValue::Float32(value)),
+                    LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::Float64(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::Double => DataValue::Float64(value),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::Double => Ok(DataValue::Float64(value)),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::Int8(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::Tinyint => DataValue::Int8(value),
-                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::try_from(v).unwrap())),
-                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::try_from(v).unwrap())),
-                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::try_from(v).unwrap())),
-                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::try_from(v).unwrap())),
-                    LogicalType::Smallint => DataValue::Int16(value.map(|v| v.into())),
-                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
-                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
-                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
-                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::Tinyint => Ok(DataValue::Int8(value)),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::try_from(v).ok()))),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::try_from(v).ok()))),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::try_from(v).ok()))),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::try_from(v).ok()))),
+                    LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
+                    LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                    LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
+                    LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::Int16(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::try_from(v).unwrap())),
-                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::try_from(v).unwrap())),
-                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::try_from(v).unwrap())),
-                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::try_from(v).unwrap())),
-                    LogicalType::Smallint => DataValue::Int16(value),
-                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
-                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
-                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
-                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::try_from(v).ok()))),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::try_from(v).ok()))),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::try_from(v).ok()))),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::try_from(v).ok()))),
+                    LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
+                    LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                    LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
+                    LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::Int32(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::try_from(v).unwrap())),
-                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::try_from(v).unwrap())),
-                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::try_from(v).unwrap())),
-                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::try_from(v).unwrap())),
-                    LogicalType::Integer => DataValue::Int32(value),
-                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
-                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::try_from(v).ok()))),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::try_from(v).ok()))),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::try_from(v).ok()))),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::try_from(v).ok()))),
+                    LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                    LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::Int64(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::try_from(v).unwrap())),
-                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::try_from(v).unwrap())),
-                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::try_from(v).unwrap())),
-                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::try_from(v).unwrap())),
-                    LogicalType::Bigint => DataValue::Int64(value),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::try_from(v).ok()))),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::try_from(v).ok()))),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::try_from(v).ok()))),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::try_from(v).ok()))),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::UInt8(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::UTinyint => DataValue::UInt8(value),
-                    LogicalType::Smallint => DataValue::Int16(value.map(|v| v.into())),
-                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| v.into())),
-                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
-                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| v.into())),
-                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
-                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| v.into())),
-                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
-                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value)),
+                    LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| v.into()))),
+                    LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| v.into()))),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
+                    LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
+                    LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::UInt16(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::USmallint => DataValue::UInt16(value),
-                    LogicalType::Integer => DataValue::Int32(value.map(|v| v.into())),
-                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| v.into())),
-                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
-                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| v.into())),
-                    LogicalType::Float => DataValue::Float32(value.map(|v| v.into())),
-                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                   _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| v.into()))),
+                    LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| v.into()))),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
+                    LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
+                    LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::UInt32(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::UInteger => DataValue::UInt32(value),
-                    LogicalType::Bigint => DataValue::Int64(value.map(|v| v.into())),
-                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| v.into())),
-                    LogicalType::Double => DataValue::Float64(value.map(|v| v.into())),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| v.into()))),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
+                    LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::UInt64(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::UBigint => DataValue::UInt64(value),
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| format!("{}", v))),
-                    _ => panic!("not support"),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    _ => Err(TypeError::CastFail),
                 }
             }
             DataValue::Utf8(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::Boolean => DataValue::Boolean(value.map(|v| bool::from_str(&v).unwrap())),
-                    LogicalType::Tinyint => DataValue::Int8(value.map(|v| i8::from_str(&v).unwrap())),
-                    LogicalType::UTinyint => DataValue::UInt8(value.map(|v| u8::from_str(&v).unwrap())),
-                    LogicalType::Smallint => DataValue::Int16(value.map(|v| i16::from_str(&v).unwrap())),
-                    LogicalType::USmallint => DataValue::UInt16(value.map(|v| u16::from_str(&v).unwrap())),
-                    LogicalType::Integer => DataValue::Int32(value.map(|v| i32::from_str(&v).unwrap())),
-                    LogicalType::UInteger => DataValue::UInt32(value.map(|v| u32::from_str(&v).unwrap())),
-                    LogicalType::Bigint => DataValue::Int64(value.map(|v| i64::from_str(&v).unwrap())),
-                    LogicalType::UBigint => DataValue::UInt64(value.map(|v| u64::from_str(&v).unwrap())),
-                    LogicalType::Float => DataValue::Float32(value.map(|v| f32::from_str(&v).unwrap())),
-                    LogicalType::Double => DataValue::Float64(value.map(|v| f64::from_str(&v).unwrap())),
-                    LogicalType::Varchar => DataValue::Utf8(value),
+                    LogicalType::Invalid => Err(TypeError::CastFail),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::Boolean => Ok(DataValue::Boolean(value.and_then(|v| bool::from_str(&v).ok()))),
+                    LogicalType::Tinyint => Ok(DataValue::Int8(value.and_then(|v| i8::from_str(&v).ok()))),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::from_str(&v).ok()))),
+                    LogicalType::Smallint => Ok(DataValue::Int16(value.and_then(|v| i16::from_str(&v).ok()))),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::from_str(&v).ok()))),
+                    LogicalType::Integer => Ok(DataValue::Int32(value.and_then(|v| i32::from_str(&v).ok()))),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::from_str(&v).ok()))),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.and_then(|v| i64::from_str(&v).ok()))),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::from_str(&v).ok()))),
+                    LogicalType::Float => Ok(DataValue::Float32(value.and_then(|v| f32::from_str(&v).ok()))),
+                    LogicalType::Double => Ok(DataValue::Float64(value.and_then(|v| f64::from_str(&v).ok()))),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value)),
                     LogicalType::Date => {
-                        let option = value.map(|v| {
+                        let option = value.and_then(|v| {
                             NaiveDate::parse_from_str(&v, DATE_FMT)
-                                .unwrap()
-                                .num_days_from_ce()
+                                .map(|date| date.num_days_from_ce())
+                                .ok()
                         });
 
-                        DataValue::Date32(option)
+                        Ok(DataValue::Date32(option))
                     }
                     LogicalType::DateTime => {
-                        let option = value.map(|v| {
+                        let option = value.and_then(|v| {
                             NaiveDateTime::parse_from_str(&v, DATE_TIME_FMT)
-                                .or_else(|_| {
+                                .ok()
+                                .or_else(|| {
                                     NaiveDate::parse_from_str(&v, DATE_FMT)
-                                        .unwrap()
-                                        .and_hms_opt(0, 0 ,0)
-                                        .ok_or_else(|| TypeError::InternalError("wrong format".to_string()))
+                                        .ok()
+                                        .and_then(|date| date.and_hms_opt(0, 0 ,0))
                                 })
-                                .unwrap()
-                                .timestamp()
+                                .map(|date_time| date_time.timestamp())
                         });
 
-                        DataValue::Date64(option)
+                        Ok(DataValue::Date64(option))
                     }
                 }
             }
             DataValue::Date32(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| {
-                        format!("{}", Self::date_format(v))
-                    })),
-                    LogicalType::Date => DataValue::Date32(value),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.and_then(|v| {
+                        Self::date_format(v).map(|fmt| format!("{}", fmt))
+                    }))),
+                    LogicalType::Date => Ok(DataValue::Date32(value)),
                     LogicalType::DateTime => {
-                        let option = value.map(|v| {
+                        let option = value.and_then(|v| {
                             NaiveDate::from_num_days_from_ce_opt(v)
-                                .unwrap()
-                                .and_hms_opt(0, 0, 0)
-                                .unwrap()
-                                .timestamp()
+                                .and_then(|date| date.and_hms_opt(0, 0, 0))
+                                .map(|date_time| date_time.timestamp())
                         });
 
-                        DataValue::Date64(option)
+                        Ok(DataValue::Date64(option))
                     },
-                    _ => panic!("not support"),
+                    _ => Err(TypeError::CastFail)
                 }
             }
             DataValue::Date64(value) => {
                 match to {
-                    LogicalType::Invalid => panic!("invalid logical type"),
-                    LogicalType::SqlNull => DataValue::Null,
-                    LogicalType::Varchar => DataValue::Utf8(value.map(|v| {
-                        format!("{}", Self::date_time_format(v))
-                    })),
+                    LogicalType::SqlNull => Ok(DataValue::Null),
+                    LogicalType::Varchar => Ok(DataValue::Utf8(value.and_then(|v| {
+                        Self::date_time_format(v).map(|fmt| format!("{}", fmt))
+                    }))),
                     LogicalType::Date => {
-                        let option = value.map(|v| {
+                        let option = value.and_then(|v| {
                             NaiveDateTime::from_timestamp_opt(v, 0)
-                                .unwrap()
-                                .date()
-                                .num_days_from_ce()
+                                .map(|date_time| date_time.date().num_days_from_ce())
                         });
 
-                        DataValue::Date32(option)
+                        Ok(DataValue::Date32(option))
                     }
-                    LogicalType::DateTime => DataValue::Date64(value),
-                    _ => panic!("not support"),
+                    LogicalType::DateTime => Ok(DataValue::Date64(value)),
+                    _ => Err(TypeError::CastFail),
                 }
             }
         }
     }
 
-    fn date_format<'a>(v: i32) -> DelayedFormat<StrftimeItems<'a>> {
+    fn date_format<'a>(v: i32) -> Option<DelayedFormat<StrftimeItems<'a>>> {
         NaiveDate::from_num_days_from_ce_opt(v)
-            .unwrap()
-            .format(DATE_FMT)
+            .map(|date| date.format(DATE_FMT))
     }
 
-    fn date_time_format<'a>(v: i64) -> DelayedFormat<StrftimeItems<'a>> {
+    fn date_time_format<'a>(v: i64) -> Option<DelayedFormat<StrftimeItems<'a>>> {
         NaiveDateTime::from_timestamp_opt(v, 0)
-            .unwrap()
-            .format(DATE_TIME_FMT)
+            .map(|date_time| date_time.format(DATE_TIME_FMT))
     }
 }
 
@@ -666,10 +646,10 @@ impl fmt::Display for DataValue {
             DataValue::Utf8(e) => format_option!(f, e)?,
             DataValue::Null => write!(f, "null")?,
             DataValue::Date32(e) => {
-                format_option!(f, e.map(|s| DataValue::date_format(s)))?
+                format_option!(f, e.and_then(|s| DataValue::date_format(s)))?
             }
             DataValue::Date64(e) => {
-                format_option!(f, e.map(|s| DataValue::date_time_format(s)))?
+                format_option!(f, e.and_then(|s| DataValue::date_time_format(s)))?
             },
         };
         Ok(())

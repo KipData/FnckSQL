@@ -35,7 +35,7 @@ impl Filter {
         #[for_await]
         for tuple in input {
             let tuple = tuple?;
-            if let DataValue::Boolean(option) = predicate.eval_column(&tuple).as_ref() {
+            if let DataValue::Boolean(option) = predicate.eval_column(&tuple)?.as_ref() {
                 if let Some(true) = option{
                     yield tuple;
                 } else {

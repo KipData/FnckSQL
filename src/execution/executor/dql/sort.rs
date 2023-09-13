@@ -43,15 +43,14 @@ impl Sort {
             let mut ordering = Ordering::Equal;
 
             for SortField { expr, desc, nulls_first } in &sort_fields {
-                let value_1 = expr.eval_column(tuple_1);
-                let value_2 = expr.eval_column(tuple_2);
+                let value_1 = expr.eval_column(tuple_1).unwrap();
+                let value_2 = expr.eval_column(tuple_2).unwrap();
 
                 ordering = value_1.partial_cmp(&value_2)
                     .unwrap_or_else(|| match (value_1.is_null(), value_2.is_null()) {
                         (false, true) => if *nulls_first { Ordering::Less } else { Ordering::Greater },
                         (true, false) => if *nulls_first { Ordering::Greater } else { Ordering::Less },
-                        (true, true) => Ordering::Equal,
-                        _ => unreachable!(),
+                        _ => Ordering::Equal,
                     });
 
                 if *desc {

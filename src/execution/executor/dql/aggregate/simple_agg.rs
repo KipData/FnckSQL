@@ -46,7 +46,7 @@ impl SimpleAggExecutor {
                     .collect_vec()
             });
 
-            let values = self.agg_calls
+            let values: Vec<ValueRef> = self.agg_calls
                 .iter()
                 .map(|expr| match expr {
                     ScalarExpression::AggCall { args, .. } => {
@@ -54,7 +54,7 @@ impl SimpleAggExecutor {
                     }
                     _ => unreachable!()
                 })
-                .collect_vec();
+                .try_collect()?;
 
             for (acc, value) in accs.iter_mut().zip_eq(values.iter()) {
                 acc.update_value(value)?;

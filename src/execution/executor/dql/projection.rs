@@ -39,7 +39,7 @@ impl Projection {
             let mut values = Vec::with_capacity(exprs.len());
 
             for expr in exprs.iter() {
-                values.push(expr.eval_column(&tuple));
+                values.push(expr.eval_column(&tuple)?);
                 columns.push(expr.output_columns(&tuple));
             }
 

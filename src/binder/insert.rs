@@ -48,7 +48,7 @@ impl<S: Storage> Binder<S> {
                     match self.bind_expr(expr).await? {
                         ScalarExpression::Constant(value) => {
                             let cast_value = DataValue::clone(&value)
-                                .cast(columns[i].datatype());
+                                .cast(columns[i].datatype())?;
 
                             row.push(Arc::new(cast_value))
                         },

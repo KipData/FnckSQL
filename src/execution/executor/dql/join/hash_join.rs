@@ -9,6 +9,7 @@ use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
 use crate::storage::Storage;
+use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 
@@ -63,7 +64,7 @@ impl HashJoin {
         #[for_await]
         for tuple in left_input {
             let tuple: Tuple = tuple?;
-            let hash = Self::hash_row(&on_left_keys, &hash_random_state, &tuple);
+            let hash = Self::hash_row(&on_left_keys, &hash_random_state, &tuple)?;
 
             if !left_init_flag {
                 Self::columns_filling(&tuple, &mut join_columns, left_force_nullable);
@@ -82,7 +83,7 @@ impl HashJoin {
         for tuple in right_input {
             let tuple: Tuple = tuple?;
             let right_cols_len = tuple.columns.len();
-            let hash = Self::hash_row(&on_right_keys, &hash_random_state, &tuple);
+            let hash = Self::hash_row(&on_right_keys, &hash_random_state, &tuple)?;
 
             if !right_init_flag {
                 Self::columns_filling(&tuple, &mut join_columns, right_force_nullable);
@@ -122,7 +123,7 @@ impl HashJoin {
                 let mut filter_tuples = Vec::with_capacity(join_tuples.len());
 
                 for mut tuple in join_tuples {
-                    if let DataValue::Boolean(option) = expr.eval_column(&tuple).as_ref() {
+                    if let DataValue::Boolean(option) = expr.eval_column(&tuple)?.as_ref() {
                         if let Some(false) | None = option {
                             let full_cols_len = tuple.columns.len();
                             let left_cols_len = full_cols_len - right_cols_len;
@@ -200,13 +201,14 @@ impl HashJoin {
         on_keys: &[ScalarExpression],
         hash_random_state: &RandomState,
         tuple: &Tuple
-    ) -> u64 {
-        let values = on_keys
-            .iter()
-            .map(|expr| expr.eval_column(tuple))
-            .collect_vec();
+    ) -> Result<u64, TypeError> {
+        let mut values = Vec::with_capacity(on_keys.len());
 
-        hash_random_state.hash_one(values)
+        for expr in on_keys {
+            values.push(expr.eval_column(tuple)?);
+        }
+
+        Ok(hash_random_state.hash_one(values))
     }
 }
 

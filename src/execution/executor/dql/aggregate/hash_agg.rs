@@ -53,7 +53,7 @@ impl HashAggExecutor {
             });
 
             // 2.1 evaluate agg exprs and collect the result values for later accumulators.
-            let values = self.agg_calls
+            let values: Vec<ValueRef> = self.agg_calls
                 .iter()
                 .map(|expr| {
                     if let ScalarExpression::AggCall { args, .. } = expr {
@@ -62,12 +62,12 @@ impl HashAggExecutor {
                         unreachable!()
                     }
                 })
-                .collect_vec();
+                .try_collect()?;
 
-            let group_keys = self.groupby_exprs
+            let group_keys: Vec<ValueRef> = self.groupby_exprs
                 .iter()
                 .map(|expr| expr.eval_column(&tuple))
-                .collect_vec();
+                .try_collect()?;
 
             for (acc, value) in group_hash_accs
                 .entry(group_keys)

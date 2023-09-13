@@ -8,4 +8,6 @@ pub enum TypeError {
     NotImplementedSqlparserDataType(String),
     #[error("internal error: {0}")]
     InternalError(String),
+    #[error("cast fail")]
+    CastFail,
 }

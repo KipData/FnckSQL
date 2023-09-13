@@ -205,7 +205,7 @@ impl Transaction for KipTraction<'_> {
             }
         }
 
-        Ok(self.iter
+        self.iter
             .try_next()?
             .and_then(|(key, bytes)| {
                 bytes.and_then(|value| {
@@ -217,20 +217,21 @@ impl Transaction for KipTraction<'_> {
                             let mut values = Vec::with_capacity(projection_len);
 
                             for expr in self.projections.iter() {
-                                values.push(expr.eval_column(&tuple));
+                                values.push(expr.eval_column(&tuple)?);
                                 columns.push(expr.output_columns(&tuple));
                             }
 
                             self.limit = self.limit.map(|num| num - 1);
 
-                            Tuple {
+                            Ok(Tuple {
                                 id: tuple.id,
                                 columns,
                                 values,
-                            }
+                            })
                         })
                 })
-            }))
+            })
+            .transpose()
     }
 }
 

@@ -209,7 +209,7 @@ impl Transaction for MemTraction<'_> {
             }
         }
 
-        Ok(self.iter
+        self.iter
             .next()
             .cloned()
             .map(|tuple| {
@@ -219,18 +219,19 @@ impl Transaction for MemTraction<'_> {
                 let mut values = Vec::with_capacity(projection_len);
 
                 for expr in self.projections.iter() {
-                    values.push(expr.eval_column(&tuple));
+                    values.push(expr.eval_column(&tuple)?);
                     columns.push(expr.output_columns(&tuple));
                 }
 
                 self.limit = self.limit.map(|num| num - 1);
 
-                Tuple {
+                Ok(Tuple {
                     id: tuple.id,
                     columns,
                     values,
-                }
-            }))
+                })
+            })
+            .transpose()
     }
 }
 

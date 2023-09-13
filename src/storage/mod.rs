@@ -7,6 +7,7 @@ use kip_db::error::CacheError;
 use kip_db::KernelError;
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 use crate::expression::ScalarExpression;
+use crate::types::errors::TypeError;
 use crate::types::tuple::{Tuple, TupleId};
 
 #[async_trait]
@@ -64,6 +65,9 @@ pub enum StorageError {
 
     #[error("cache error")]
     CacheError(CacheError),
+
+    #[error("type error")]
+    TypeError(#[from] TypeError),
 }
 
 impl From<KernelError> for StorageError {

@@ -51,7 +51,7 @@ impl Insert {
                 });
 
                 let tuple_id = if let DataValue::Int64(Some(primary_id)) =
-                    DataValue::clone(&values[*primary_idx]).cast(&LogicalType::Bigint)
+                    DataValue::clone(&values[*primary_idx]).cast(&LogicalType::Bigint)?
                 {
                     primary_id
                 } else {

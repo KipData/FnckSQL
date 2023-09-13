@@ -46,7 +46,7 @@ impl Accumulator for AvgAccumulator {
                 &value,
                 &quantity,
                 &BinaryOperator::Divide
-            )
+            )?
         ))
     }
 }
