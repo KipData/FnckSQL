@@ -98,3 +98,94 @@ impl HashAggExecutor {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+    use itertools::Itertools;
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::execution::executor::dql::aggregate::hash_agg::HashAggExecutor;
+    use crate::execution::executor::dql::values::Values;
+    use crate::execution::executor::{Executor, try_collect};
+    use crate::execution::executor::dql::test::build_integers;
+    use crate::execution::ExecutorError;
+    use crate::expression::agg::AggKind;
+    use crate::expression::ScalarExpression;
+    use crate::planner::operator::aggregate::AggregateOperator;
+    use crate::planner::operator::values::ValuesOperator;
+    use crate::storage::memory::MemStorage;
+    use crate::types::LogicalType;
+    use crate::types::tuple::create_table;
+    use crate::types::value::DataValue;
+
+
+    #[tokio::test]
+    async fn test_hash_agg() -> Result<(), ExecutorError> {
+        let mem_storage = MemStorage::new();
+        let desc = ColumnDesc::new(LogicalType::Integer, false);
+
+        let t1_columns = vec![
+            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
+        ];
+
+        let operator = AggregateOperator {
+            groupby_exprs: vec![
+                ScalarExpression::ColumnRef(t1_columns[0].clone())
+            ],
+            agg_calls: vec![
+                ScalarExpression::AggCall {
+                    distinct: false,
+                    kind: AggKind::Sum,
+                    args: vec![
+                        ScalarExpression::ColumnRef(t1_columns[1].clone())
+                    ],
+                    ty: LogicalType::Integer,
+                }
+            ],
+        };
+
+        let input = Values::from(ValuesOperator {
+            rows: vec![
+                vec![
+                    Arc::new(DataValue::Int32(Some(0))),
+                    Arc::new(DataValue::Int32(Some(2))),
+                    Arc::new(DataValue::Int32(Some(4))),
+                ],
+                vec![
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(Some(3))),
+                    Arc::new(DataValue::Int32(Some(5))),
+                ],
+                vec![
+                    Arc::new(DataValue::Int32(Some(0))),
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(Some(2))),
+                ],
+                vec![
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(Some(2))),
+                    Arc::new(DataValue::Int32(Some(3))),
+                ]
+            ],
+            columns: t1_columns,
+        }).execute(&mem_storage);
+
+        let tuples = try_collect(&mut HashAggExecutor::from((operator, input)).execute(&mem_storage)).await?;
+
+        println!("hash_agg_test: \n{}", create_table(&tuples));
+
+        assert_eq!(tuples.len(), 2);
+
+        let vec_values = tuples
+            .into_iter()
+            .map(|tuple| tuple.values)
+            .collect_vec();
+
+        assert!(vec_values.contains(&build_integers(vec![Some(3), Some(0)])));
+        assert!(vec_values.contains(&build_integers(vec![Some(5), Some(1)])));
+
+        Ok(())
+    }
+}

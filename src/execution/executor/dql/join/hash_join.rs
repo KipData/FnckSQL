@@ -213,10 +213,10 @@ impl HashJoin {
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
-    use itertools::Itertools;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::execution::executor::{BoxedExecutor, Executor, try_collect};
     use crate::execution::executor::dql::join::hash_join::HashJoin;
+    use crate::execution::executor::dql::test::build_integers;
     use crate::execution::executor::dql::values::Values;
     use crate::execution::ExecutorError;
     use crate::expression::ScalarExpression;
@@ -226,7 +226,7 @@ mod test {
     use crate::storage::Storage;
     use crate::types::LogicalType;
     use crate::types::tuple::create_table;
-    use crate::types::value::{DataValue, ValueRef};
+    use crate::types::value::DataValue;
 
     fn build_join_values<S: Storage>(_s: &S) -> (Vec<(ScalarExpression, ScalarExpression)>, BoxedExecutor, BoxedExecutor) {
         let desc = ColumnDesc::new(LogicalType::Integer, false);
@@ -299,12 +299,6 @@ mod test {
         (on_keys, values_t1.execute(_s), values_t2.execute(_s))
     }
 
-    fn build_integers(ints: Vec<Option<i32>>) -> Vec<ValueRef> {
-        ints.into_iter()
-            .map(|i| Arc::new(DataValue::Int32(i)))
-            .collect_vec()
-    }
-
     #[tokio::test]
     async fn test_inner_join() -> Result<(), ExecutorError> {
         let mem_storage = MemStorage::new();
@@ -318,6 +312,8 @@ mod test {
         let tuples = try_collect(&mut executor).await?;
 
         println!("inner_test: \n{}", create_table(&tuples));
+
+        assert_eq!(tuples.len(), 3);
 
         assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
         assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
@@ -339,6 +335,8 @@ mod test {
         let tuples = try_collect(&mut executor).await?;
 
         println!("left_test: \n{}", create_table(&tuples));
+
+        assert_eq!(tuples.len(), 4);
 
         assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
         assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
@@ -362,6 +360,8 @@ mod test {
 
         println!("right_test: \n{}", create_table(&tuples));
 
+        assert_eq!(tuples.len(), 4);
+
         assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
         assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
         assert_eq!(tuples[2].values, build_integers(vec![None, None, None, Some(4), Some(6), Some(8)]));
@@ -383,6 +383,8 @@ mod test {
         let tuples = try_collect(&mut executor).await?;
 
         println!("full_test: \n{}", create_table(&tuples));
+
+        assert_eq!(tuples.len(), 5);
 
         assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
         assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
