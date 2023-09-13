@@ -209,3 +209,187 @@ impl HashJoin {
         hash_random_state.hash_one(values)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+    use itertools::Itertools;
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::execution::executor::{BoxedExecutor, Executor, try_collect};
+    use crate::execution::executor::dql::join::hash_join::HashJoin;
+    use crate::execution::executor::dql::values::Values;
+    use crate::execution::ExecutorError;
+    use crate::expression::ScalarExpression;
+    use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
+    use crate::planner::operator::values::ValuesOperator;
+    use crate::storage::memory::MemStorage;
+    use crate::storage::Storage;
+    use crate::types::LogicalType;
+    use crate::types::tuple::create_table;
+    use crate::types::value::{DataValue, ValueRef};
+
+    fn build_join_values<S: Storage>(_s: &S) -> (Vec<(ScalarExpression, ScalarExpression)>, BoxedExecutor, BoxedExecutor) {
+        let desc = ColumnDesc::new(LogicalType::Integer, false);
+
+        let t1_columns = vec![
+            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
+        ];
+
+        let t2_columns = vec![
+            Arc::new(ColumnCatalog::new("c4".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c5".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c6".to_string(), true, desc.clone())),
+        ];
+
+        let on_keys = vec![
+            (ScalarExpression::ColumnRef(t1_columns[0].clone()), ScalarExpression::ColumnRef(t2_columns[0].clone()))
+        ];
+
+        let values_t1 = Values::from(ValuesOperator {
+            rows: vec![
+                vec![
+                    Arc::new(DataValue::Int32(Some(0))),
+                    Arc::new(DataValue::Int32(Some(2))),
+                    Arc::new(DataValue::Int32(Some(4))),
+                ],
+                vec![
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(Some(3))),
+                    Arc::new(DataValue::Int32(Some(5))),
+                ],
+                vec![
+                    Arc::new(DataValue::Int32(Some(3))),
+                    Arc::new(DataValue::Int32(Some(5))),
+                    Arc::new(DataValue::Int32(Some(7))),
+                ]
+            ],
+            columns: t1_columns,
+        });
+
+        let values_t2 = Values::from(ValuesOperator {
+            rows: vec![
+                vec![
+                    Arc::new(DataValue::Int32(Some(0))),
+                    Arc::new(DataValue::Int32(Some(2))),
+                    Arc::new(DataValue::Int32(Some(4))),
+                ],
+                vec![
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(Some(3))),
+                    Arc::new(DataValue::Int32(Some(5))),
+                ],
+                vec![
+                    Arc::new(DataValue::Int32(Some(4))),
+                    Arc::new(DataValue::Int32(Some(6))),
+                    Arc::new(DataValue::Int32(Some(8))),
+                ],
+                vec![
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(Some(1))),
+                ],
+            ],
+            columns: t2_columns,
+        });
+
+
+
+        (on_keys, values_t1.execute(_s), values_t2.execute(_s))
+    }
+
+    fn build_integers(ints: Vec<Option<i32>>) -> Vec<ValueRef> {
+        ints.into_iter()
+            .map(|i| Arc::new(DataValue::Int32(i)))
+            .collect_vec()
+    }
+
+    #[tokio::test]
+    async fn test_inner_join() -> Result<(), ExecutorError> {
+        let mem_storage = MemStorage::new();
+        let (keys, left, right) = build_join_values(&mem_storage);
+
+        let op = JoinOperator {
+            on: JoinCondition::On { on: keys, filter: None },
+            join_type: JoinType::Inner,
+        };
+        let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
+        let tuples = try_collect(&mut executor).await?;
+
+        println!("inner_test: \n{}", create_table(&tuples));
+
+        assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
+        assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
+        assert_eq!(tuples[2].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)]));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_left_join() -> Result<(), ExecutorError> {
+        let mem_storage = MemStorage::new();
+        let (keys, left, right) = build_join_values(&mem_storage);
+
+        let op = JoinOperator {
+            on: JoinCondition::On { on: keys, filter: None },
+            join_type: JoinType::Left,
+        };
+        let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
+        let tuples = try_collect(&mut executor).await?;
+
+        println!("left_test: \n{}", create_table(&tuples));
+
+        assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
+        assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
+        assert_eq!(tuples[2].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)]));
+        assert_eq!(tuples[3].values, build_integers(vec![Some(3), Some(5), Some(7), None, None, None]));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_right_join() -> Result<(), ExecutorError> {
+        let mem_storage = MemStorage::new();
+        let (keys, left, right) = build_join_values(&mem_storage);
+
+        let op = JoinOperator {
+            on: JoinCondition::On { on: keys, filter: None },
+            join_type: JoinType::Right,
+        };
+        let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
+        let tuples = try_collect(&mut executor).await?;
+
+        println!("right_test: \n{}", create_table(&tuples));
+
+        assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
+        assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
+        assert_eq!(tuples[2].values, build_integers(vec![None, None, None, Some(4), Some(6), Some(8)]));
+        assert_eq!(tuples[3].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)]));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_full_join() -> Result<(), ExecutorError> {
+        let mem_storage = MemStorage::new();
+        let (keys, left, right) = build_join_values(&mem_storage);
+
+        let op = JoinOperator {
+            on: JoinCondition::On { on: keys, filter: None },
+            join_type: JoinType::Full,
+        };
+        let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
+        let tuples = try_collect(&mut executor).await?;
+
+        println!("full_test: \n{}", create_table(&tuples));
+
+        assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
+        assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
+        assert_eq!(tuples[2].values, build_integers(vec![None, None, None, Some(4), Some(6), Some(8)]));
+        assert_eq!(tuples[3].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)]));
+        assert_eq!(tuples[4].values, build_integers(vec![Some(3), Some(5), Some(7), None, None, None]));
+
+        Ok(())
+    }
+}

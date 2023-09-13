@@ -76,6 +76,10 @@ impl Insert {
                     let value = tuple_map.remove(col_id)
                         .unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())));
 
+                    if value.is_null() && !col.nullable {
+                        return Err(ExecutorError::InternalError(format!("Non-null fields do not allow null values to be passed in: {:?}", col)));
+                    }
+
                     tuple.columns.push(col.clone());
                     tuple.values.push(value)
                 }
