@@ -138,6 +138,16 @@ impl PartialOrd for DataValue {
     }
 }
 
+macro_rules! signed_to_primary_key {
+    ($ty:ty, $EXPR:expr) => {{
+        if $EXPR.is_negative() {
+            $EXPR ^ (-1 ^ <$ty>::MIN)
+        } else {
+            $EXPR
+        }
+    }};
+}
+
 impl Eq for DataValue {}
 
 impl Hash for DataValue {
@@ -310,10 +320,10 @@ impl DataValue {
 
     pub fn to_primary_key(&self) -> Result<String, TypeError> {
         match self {
-            DataValue::Int8(option) => option.map(|v| format!("{:0width$}", v, width = 3)),
-            DataValue::Int16(option) => option.map(|v| format!("{:0width$}", v, width = 5)),
-            DataValue::Int32(option) => option.map(|v| format!("{:0width$}", v, width = 10)),
-            DataValue::Int64(option) => option.map(|v| format!("{:0width$}", v, width = 19)),
+            DataValue::Int8(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i8, v), width = 4)),
+            DataValue::Int16(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i16, v), width = 6)),
+            DataValue::Int32(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i32, v), width = 11)),
+            DataValue::Int64(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i64, v), width = 20)),
             DataValue::UInt8(option) => option.map(|v| format!("{:0width$}", v, width = 3)),
             DataValue::UInt16(option) => option.map(|v| format!("{:0width$}", v, width = 5)),
             DataValue::UInt32(option) => option.map(|v| format!("{:0width$}", v, width = 10)),
@@ -691,5 +701,52 @@ impl fmt::Debug for DataValue {
             DataValue::Date32(_) => write!(f, "Date32({})", self),
             DataValue::Date64(_) => write!(f, "Date64({})", self),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::types::errors::TypeError;
+    use crate::types::value::DataValue;
+
+    #[test]
+    fn test_to_primary_key() -> Result<(), TypeError> {
+        let key_i8_1 = DataValue::Int8(Some(i8::MIN)).to_primary_key()?;
+        let key_i8_2 = DataValue::Int8(Some(-1_i8)).to_primary_key()?;
+        let key_i8_3 = DataValue::Int8(Some(i8::MAX)).to_primary_key()?;
+
+        println!("{} < {}", key_i8_1, key_i8_2);
+        println!("{} < {}", key_i8_2, key_i8_3);
+        assert!(key_i8_1 < key_i8_2);
+        assert!(key_i8_2 < key_i8_3);
+
+        let key_i16_1 = DataValue::Int16(Some(i16::MIN)).to_primary_key()?;
+        let key_i16_2 = DataValue::Int16(Some(-1_i16)).to_primary_key()?;
+        let key_i16_3 = DataValue::Int16(Some(i16::MAX)).to_primary_key()?;
+
+        println!("{} < {}", key_i16_1, key_i16_2);
+        println!("{} < {}", key_i16_2, key_i16_3);
+        assert!(key_i16_1 < key_i16_2);
+        assert!(key_i16_2 < key_i16_3);
+
+        let key_i32_1 = DataValue::Int32(Some(i32::MIN)).to_primary_key()?;
+        let key_i32_2 = DataValue::Int32(Some(-1_i32)).to_primary_key()?;
+        let key_i32_3 = DataValue::Int32(Some(i32::MAX)).to_primary_key()?;
+
+        println!("{} < {}", key_i32_1, key_i32_2);
+        println!("{} < {}", key_i32_2, key_i32_3);
+        assert!(key_i32_1 < key_i32_2);
+        assert!(key_i32_2 < key_i32_3);
+
+        let key_i64_1 = DataValue::Int64(Some(i64::MIN)).to_primary_key()?;
+        let key_i64_2 = DataValue::Int64(Some(-1_i64)).to_primary_key()?;
+        let key_i64_3 = DataValue::Int64(Some(i64::MAX)).to_primary_key()?;
+
+        println!("{} < {}", key_i64_1, key_i64_2);
+        println!("{} < {}", key_i64_2, key_i64_3);
+        assert!(key_i64_1 < key_i64_2);
+        assert!(key_i64_2 < key_i64_3);
+
+        Ok(())
     }
 }
