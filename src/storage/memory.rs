@@ -179,7 +179,7 @@ impl Table for MemTable {
                 .as_mut()
         }.unwrap();
 
-        tuples.retain(|tuple| tuple.id.unwrap() != tuple_id);
+        tuples.retain(|tuple| tuple.id.clone().unwrap() != tuple_id);
 
         Ok(())
     }
@@ -249,7 +249,7 @@ pub(crate) mod test {
 
     pub fn data_filling(columns: Vec<ColumnRef>, table: &mut impl Table) -> Result<(), StorageError> {
         table.append(Tuple {
-            id: Some(0),
+            id: Some(Arc::new(DataValue::Int32(Some(1)))),
             columns: columns.clone(),
             values: vec![
                 Arc::new(DataValue::Int32(Some(1))),
@@ -257,7 +257,7 @@ pub(crate) mod test {
             ],
         })?;
         table.append(Tuple {
-            id: Some(1),
+            id: Some(Arc::new(DataValue::Int32(Some(2)))),
             columns: columns.clone(),
             values: vec![
                 Arc::new(DataValue::Int32(Some(2))),
@@ -303,7 +303,7 @@ pub(crate) mod test {
         )?;
 
         let option_1 = tx.next_tuple()?;
-        assert_eq!(option_1.unwrap().id, Some(1));
+        assert_eq!(option_1.unwrap().id, Some(Arc::new(DataValue::Int32(Some(2)))));
 
         let option_2 = tx.next_tuple()?;
         assert_eq!(option_2, None);

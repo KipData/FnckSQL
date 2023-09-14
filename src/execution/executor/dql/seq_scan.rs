@@ -26,7 +26,6 @@ impl<S: Storage> Executor<S> for SeqScan {
 impl SeqScan {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn _execute<S: Storage>(self, storage: S) {
-        // TODO: sort_fields, pre_where, limit
         let ScanOperator { table_name,  columns, limit, .. } = self.op;
 
         if let Some(table) = storage.table(&table_name).await {

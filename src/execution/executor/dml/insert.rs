@@ -7,7 +7,7 @@ use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::insert::InsertOperator;
 use crate::storage::{Storage, Table};
-use crate::types::{ColumnId, LogicalType};
+use crate::types::ColumnId;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 
@@ -49,25 +49,16 @@ impl Insert {
                         .map(|(i, _)| i)
                         .unwrap()
                 });
-
-                let tuple_id = if let DataValue::Int64(Some(primary_id)) =
-                    DataValue::clone(&values[*primary_idx]).cast(&LogicalType::Bigint)?
-                {
-                    primary_id
-                } else {
-                    unreachable!("Primary key must have a value")
-                };
-
+                let id = Some(values[*primary_idx].clone());
                 let mut tuple_map: HashMap<ColumnId, ValueRef> = values
                     .into_iter()
                     .enumerate()
                     .map(|(i, value)| (columns[i].id, value))
                     .collect();
-
                 let all_columns = table_catalog.all_columns_with_id();
 
                 let mut tuple = Tuple {
-                    id: Some(tuple_id),
+                    id,
                     columns: Vec::with_capacity(all_columns.len()),
                     values: Vec::with_capacity(all_columns.len()),
                 };

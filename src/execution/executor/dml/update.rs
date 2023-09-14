@@ -45,13 +45,19 @@ impl Update {
                     value_map.insert(columns[i].id, values[i].clone());
                 }
             }
-
             #[for_await]
             for tuple in input {
                 let mut tuple = tuple?;
 
                 for (i, column) in tuple.columns.iter().enumerate() {
                     if let Some(value) = value_map.get(&column.id) {
+                        if column.desc.is_primary {
+                            if let Some(old_key) = tuple.id.replace(value.clone()) {
+                                if value != &old_key {
+                                    table.delete(old_key)?;
+                                }
+                            }
+                        }
                         tuple.values[i] = value.clone();
                     }
                 }

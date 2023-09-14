@@ -13,7 +13,7 @@ pub struct Filter {
 }
 
 impl From<(FilterOperator, BoxedExecutor)> for Filter {
-    fn from((FilterOperator { predicate, having }, input): (FilterOperator, BoxedExecutor)) -> Self {
+    fn from((FilterOperator { predicate, .. }, input): (FilterOperator, BoxedExecutor)) -> Self {
         Filter {
             predicate,
             input

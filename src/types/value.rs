@@ -307,6 +307,21 @@ impl DataValue {
             DataValue::Date64(_) => LogicalType::DateTime,
         }
     }
+
+    pub fn to_primary_key(&self) -> Result<String, TypeError> {
+        match self {
+            DataValue::Int8(option) => option.map(|v| format!("{:0width$}", v, width = 3)),
+            DataValue::Int16(option) => option.map(|v| format!("{:0width$}", v, width = 5)),
+            DataValue::Int32(option) => option.map(|v| format!("{:0width$}", v, width = 10)),
+            DataValue::Int64(option) => option.map(|v| format!("{:0width$}", v, width = 19)),
+            DataValue::UInt8(option) => option.map(|v| format!("{:0width$}", v, width = 3)),
+            DataValue::UInt16(option) => option.map(|v| format!("{:0width$}", v, width = 5)),
+            DataValue::UInt32(option) => option.map(|v| format!("{:0width$}", v, width = 10)),
+            DataValue::UInt64(option) => option.map(|v| format!("{:0width$}", v, width = 20)),
+            DataValue::Utf8(option) => option.clone(),
+            _ => return Err(TypeError::InvalidType),
+        }.ok_or(TypeError::NotNull)
+    }
     
     pub fn cast(self, to: &LogicalType) -> Result<DataValue, TypeError> {
         match self {

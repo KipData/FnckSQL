@@ -7,7 +7,7 @@ use crate::types::value::{DataValue, ValueRef};
 
 const BITS_MAX_INDEX: usize = 8;
 
-pub type TupleId = i64;
+pub type TupleId = ValueRef;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
@@ -17,7 +17,7 @@ pub struct Tuple {
 }
 
 impl Tuple {
-    pub fn deserialize_from(id: Option<TupleId>, columns: Vec<ColumnRef>, bytes: &[u8]) -> Self {
+    pub fn deserialize_from(columns: Vec<ColumnRef>, bytes: &[u8]) -> Self {
         fn bit_index(bits: u8, i: usize) -> bool {
             bits & (1 << (7 - i)) > 0
         }
@@ -25,6 +25,7 @@ impl Tuple {
         let values_len = columns.len();
         let mut values = Vec::with_capacity(values_len);
         let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
+        let mut id_option = None;
 
         let mut pos = bits_len;
 
@@ -42,10 +43,14 @@ impl Tuple {
                 values.push(Arc::new(DataValue::from_raw(&bytes[pos..pos + len], logic_type)));
                 pos += len;
             }
+
+            if col.desc.is_primary {
+                id_option = Some(values[i].clone());
+            }
         }
 
         Tuple {
-            id,
+            id: id_option,
             columns,
             values,
         }
@@ -179,7 +184,7 @@ mod tests {
 
         let tuples = vec![
             Tuple {
-                id: Some(0),
+                id: Some(Arc::new(DataValue::Int32(Some(0)))),
                 columns: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(0))),
@@ -197,7 +202,7 @@ mod tests {
                 ]
             },
             Tuple {
-                id: Some(1),
+                id: Some(Arc::new(DataValue::Int32(Some(1)))),
                 columns: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(1))),
@@ -217,12 +222,10 @@ mod tests {
         ];
 
         let tuple_0 = Tuple::deserialize_from(
-            Some(0),
             columns.clone(),
             &tuples[0].serialize_to()
         );
         let tuple_1 = Tuple::deserialize_from(
-            Some(1),
             columns.clone(),
             &tuples[1].serialize_to()
         );

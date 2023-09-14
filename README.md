@@ -43,6 +43,16 @@ Storage Support:
 ![demo](./static/images/demo.png)
 
 ### Features
+- Supports multiple primary key types
+  - Tinyint
+  - UTinyint
+  - Smallint
+  - USmallint
+  - Integer
+  - UInteger
+  - Bigint
+  - UBigint
+  - Varchar
 - DDL
   - Create
     - [x] Table
@@ -82,6 +92,7 @@ Storage Support:
   - Float
   - Double
   - Varchar
+  - Date
   - DateTime
 - Optimizer rules
   - Limit Project Transpose

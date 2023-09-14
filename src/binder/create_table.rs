@@ -10,7 +10,6 @@ use crate::planner::LogicalPlan;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
 use crate::storage::Storage;
-use crate::types::LogicalType;
 
 impl<S: Storage> Binder<S> {
     pub(crate) fn bind_create_table(
@@ -30,17 +29,12 @@ impl<S: Storage> Binder<S> {
                 return Err(BindError::AmbiguousColumn(col_name.to_string()));
             }
         }
-
         let columns = columns
             .iter()
             .map(|col| ColumnCatalog::from(col.clone()))
             .collect_vec();
 
-        if let Some(col) = columns.iter().find(|col| col.desc.is_primary) {
-            if !matches!(col.datatype(), LogicalType::Integer) {
-                return Err(BindError::InvalidColumn("Primary key types only support signed integers".to_string()));
-            }
-        } else {
+        if columns.iter().find(|col| col.desc.is_primary).is_none() {
             return Err(BindError::InvalidTable("At least one primary key field exists".to_string()));
         }
 

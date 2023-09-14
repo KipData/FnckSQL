@@ -164,14 +164,14 @@ impl Table for KipTable {
     }
 
     fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {
-        let (key, value) = self.table_codec.encode_tuple(&tuple);
+        let (key, value) = self.table_codec.encode_tuple(&tuple)?;
         self.tx.set(key, value);
 
         Ok(())
     }
 
     fn delete(&mut self, tuple_id: TupleId) -> Result<(), StorageError> {
-        let key = self.table_codec.encode_tuple_key(&tuple_id);
+        let key = self.table_codec.encode_tuple_key(&tuple_id)?;
         self.tx.remove(&key)?;
 
         Ok(())
@@ -205,33 +205,31 @@ impl Transaction for KipTraction<'_> {
             }
         }
 
-        self.iter
-            .try_next()?
-            .and_then(|(key, bytes)| {
-                bytes.and_then(|value| {
-                    self.table_codec.decode_tuple(&key, &value)
-                        .map(|tuple| {
-                            let projection_len = self.projections.len();
+        while let Some(item) = self.iter.try_next()? {
+            if let (_, Some(value)) = item {
+                let tuple = self.table_codec.decode_tuple(&value);
 
-                            let mut columns = Vec::with_capacity(projection_len);
-                            let mut values = Vec::with_capacity(projection_len);
+                let projection_len = self.projections.len();
 
-                            for expr in self.projections.iter() {
-                                values.push(expr.eval_column(&tuple)?);
-                                columns.push(expr.output_columns(&tuple));
-                            }
+                let mut columns = Vec::with_capacity(projection_len);
+                let mut values = Vec::with_capacity(projection_len);
 
-                            self.limit = self.limit.map(|num| num - 1);
+                for expr in self.projections.iter() {
+                    values.push(expr.eval_column(&tuple)?);
+                    columns.push(expr.output_columns(&tuple));
+                }
 
-                            Ok(Tuple {
-                                id: tuple.id,
-                                columns,
-                                values,
-                            })
-                        })
-                })
-            })
-            .transpose()
+                self.limit = self.limit.map(|num| num - 1);
+
+                return Ok(Some(Tuple {
+                    id: tuple.id,
+                    columns,
+                    values,
+                }))
+            }
+        }
+
+        Ok(None)
     }
 }
 
@@ -246,6 +244,7 @@ mod test {
     use crate::storage::{Storage, StorageError, Transaction, Table};
     use crate::storage::memory::test::data_filling;
     use crate::types::LogicalType;
+    use crate::types::value::DataValue;
 
     #[tokio::test]
     async fn test_in_kipdb_storage_works_with_data() -> Result<(), StorageError> {
@@ -282,7 +281,7 @@ mod test {
         )?;
 
         let option_1 = tx.next_tuple()?;
-        assert_eq!(option_1.unwrap().id, Some(1));
+        assert_eq!(option_1.unwrap().id, Some(Arc::new(DataValue::Int32(Some(2)))));
 
         let option_2 = tx.next_tuple()?;
         assert_eq!(option_2, None);
