@@ -394,10 +394,10 @@ impl DataValue {
                 match to {
                     LogicalType::SqlNull => Ok(DataValue::Null),
                     LogicalType::Tinyint => Ok(DataValue::Int8(value)),
-                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::try_from(v).ok()))),
-                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::try_from(v).ok()))),
-                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::try_from(v).ok()))),
-                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::try_from(v).ok()))),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(|v| u8::try_from(v)).transpose()?)),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| u16::try_from(v)).transpose()?)),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| u32::try_from(v)).transpose()?)),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| u64::try_from(v)).transpose()?)),
                     LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
                     LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                     LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
@@ -410,10 +410,10 @@ impl DataValue {
             DataValue::Int16(value) => {
                 match to {
                     LogicalType::SqlNull => Ok(DataValue::Null),
-                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::try_from(v).ok()))),
-                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::try_from(v).ok()))),
-                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::try_from(v).ok()))),
-                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::try_from(v).ok()))),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(|v| u8::try_from(v)).transpose()?)),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| u16::try_from(v)).transpose()?)),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| u32::try_from(v)).transpose()?)),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| u64::try_from(v)).transpose()?)),
                     LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
                     LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                     LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
@@ -426,10 +426,10 @@ impl DataValue {
             DataValue::Int32(value) => {
                 match to {
                     LogicalType::SqlNull => Ok(DataValue::Null),
-                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::try_from(v).ok()))),
-                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::try_from(v).ok()))),
-                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::try_from(v).ok()))),
-                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::try_from(v).ok()))),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(|v| u8::try_from(v)).transpose()?)),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| u16::try_from(v)).transpose()?)),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| u32::try_from(v)).transpose()?)),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| u64::try_from(v)).transpose()?)),
                     LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                     LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
@@ -440,10 +440,10 @@ impl DataValue {
             DataValue::Int64(value) => {
                 match to {
                     LogicalType::SqlNull => Ok(DataValue::Null),
-                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::try_from(v).ok()))),
-                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::try_from(v).ok()))),
-                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::try_from(v).ok()))),
-                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::try_from(v).ok()))),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(|v| u8::try_from(v)).transpose()?)),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| u16::try_from(v)).transpose()?)),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| u32::try_from(v)).transpose()?)),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| u64::try_from(v)).transpose()?)),
                     LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                     LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
                     _ => Err(TypeError::CastFail),
@@ -502,38 +502,35 @@ impl DataValue {
                 match to {
                     LogicalType::Invalid => Err(TypeError::CastFail),
                     LogicalType::SqlNull => Ok(DataValue::Null),
-                    LogicalType::Boolean => Ok(DataValue::Boolean(value.and_then(|v| bool::from_str(&v).ok()))),
-                    LogicalType::Tinyint => Ok(DataValue::Int8(value.and_then(|v| i8::from_str(&v).ok()))),
-                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.and_then(|v| u8::from_str(&v).ok()))),
-                    LogicalType::Smallint => Ok(DataValue::Int16(value.and_then(|v| i16::from_str(&v).ok()))),
-                    LogicalType::USmallint => Ok(DataValue::UInt16(value.and_then(|v| u16::from_str(&v).ok()))),
-                    LogicalType::Integer => Ok(DataValue::Int32(value.and_then(|v| i32::from_str(&v).ok()))),
-                    LogicalType::UInteger => Ok(DataValue::UInt32(value.and_then(|v| u32::from_str(&v).ok()))),
-                    LogicalType::Bigint => Ok(DataValue::Int64(value.and_then(|v| i64::from_str(&v).ok()))),
-                    LogicalType::UBigint => Ok(DataValue::UInt64(value.and_then(|v| u64::from_str(&v).ok()))),
-                    LogicalType::Float => Ok(DataValue::Float32(value.and_then(|v| f32::from_str(&v).ok()))),
-                    LogicalType::Double => Ok(DataValue::Float64(value.and_then(|v| f64::from_str(&v).ok()))),
+                    LogicalType::Boolean => Ok(DataValue::Boolean(value.map(|v| bool::from_str(&v)).transpose()?)),
+                    LogicalType::Tinyint => Ok(DataValue::Int8(value.map(|v| i8::from_str(&v)).transpose()?)),
+                    LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(|v| u8::from_str(&v)).transpose()?)),
+                    LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| i16::from_str(&v)).transpose()?)),
+                    LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| u16::from_str(&v)).transpose()?)),
+                    LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| i32::from_str(&v)).transpose()?)),
+                    LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| u32::from_str(&v)).transpose()?)),
+                    LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| i64::from_str(&v)).transpose()?)),
+                    LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| u64::from_str(&v)).transpose()?)),
+                    LogicalType::Float => Ok(DataValue::Float32(value.map(|v| f32::from_str(&v)).transpose()?)),
+                    LogicalType::Double => Ok(DataValue::Float64(value.map(|v| f64::from_str(&v)).transpose()?)),
                     LogicalType::Varchar => Ok(DataValue::Utf8(value)),
                     LogicalType::Date => {
-                        let option = value.and_then(|v| {
+                        let option = value.map(|v| {
                             NaiveDate::parse_from_str(&v, DATE_FMT)
                                 .map(|date| date.num_days_from_ce())
-                                .ok()
-                        });
+                        }).transpose()?;
 
                         Ok(DataValue::Date32(option))
                     }
                     LogicalType::DateTime => {
-                        let option = value.and_then(|v| {
+                        let option = value.map(|v| {
                             NaiveDateTime::parse_from_str(&v, DATE_TIME_FMT)
-                                .ok()
-                                .or_else(|| {
+                                .or_else(|_| {
                                     NaiveDate::parse_from_str(&v, DATE_FMT)
-                                        .ok()
-                                        .and_then(|date| date.and_hms_opt(0, 0 ,0))
+                                        .map(|date| date.and_hms_opt(0, 0, 0).unwrap())
                                 })
                                 .map(|date_time| date_time.timestamp())
-                        });
+                        }).transpose()?;
 
                         Ok(DataValue::Date64(option))
                     }
