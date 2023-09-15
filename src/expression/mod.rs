@@ -239,13 +239,16 @@ pub enum UnaryOperator {
     Plus,
     Minus,
     Not,
-    True,
-    False,
 }
 
 impl From<SqlUnaryOperator> for UnaryOperator {
     fn from(value: SqlUnaryOperator) -> Self {
-        todo!()
+        match value {
+            SqlUnaryOperator::Plus =>  UnaryOperator::Plus,
+            SqlUnaryOperator::Minus => UnaryOperator::Minus,
+            SqlUnaryOperator::Not => UnaryOperator::Not,
+            _ => unimplemented!("not support!")
+        }
     }
 }
 
@@ -311,7 +314,7 @@ impl From<SqlBinaryOperator> for BinaryOperator {
             SqlBinaryOperator::And => BinaryOperator::And,
             SqlBinaryOperator::Or => BinaryOperator::Or,
             SqlBinaryOperator::Xor => BinaryOperator::Xor,
-            _ => todo!()
+            _ => unimplemented!("not support!")
         }
     }
 }

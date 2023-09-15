@@ -1,6 +1,6 @@
 use crate::binder::BindError;
 use itertools::Itertools;
-use sqlparser::ast::{BinaryOperator, Expr, Function, FunctionArg, FunctionArgExpr, Ident};
+use sqlparser::ast::{BinaryOperator, Expr, Function, FunctionArg, FunctionArgExpr, Ident, UnaryOperator};
 use std::slice;
 use std::sync::Arc;
 use async_recursion::async_recursion;
@@ -28,6 +28,7 @@ impl<S: Storage> Binder<S> {
             Expr::Value(v) => Ok(ScalarExpression::Constant(Arc::new(v.into()))),
             Expr::Function(func) => self.bind_agg_call(func).await,
             Expr::Nested(expr) => self.bind_expr(expr).await,
+            Expr::UnaryOp { expr, op } => self.bind_unary_op_internal(expr, op).await,
             _ => {
                 todo!()
             }
@@ -122,6 +123,25 @@ impl<S: Storage> Binder<S> {
             op: (op.clone()).into(),
             left_expr,
             right_expr,
+            ty,
+        })
+    }
+
+    async fn bind_unary_op_internal(
+        &mut self,
+        expr: &Expr,
+        op: &UnaryOperator,
+    ) -> Result<ScalarExpression, BindError> {
+        let expr = Box::new(self.bind_expr(expr).await?);
+        let ty = if let UnaryOperator::Not = op {
+            LogicalType::Boolean
+        } else {
+            expr.return_type()
+        };
+
+        Ok(ScalarExpression::Unary {
+            op: (op.clone()).into(),
+            expr,
             ty,
         })
     }

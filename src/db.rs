@@ -184,7 +184,7 @@ mod test {
         let kipsql = Database::with_kipdb(temp_dir.path()).await?;
         let _ = kipsql.run("create table t1 (a int primary key, b int, k int)").await?;
         let _ = kipsql.run("create table t2 (c int primary key, d int unsigned null, e datetime)").await?;
-        let _ = kipsql.run("insert into t1 (a, b, k) values (1, 1, 1), (4, 2, 2), (5, 2, 2)").await?;
+        let _ = kipsql.run("insert into t1 (a, b, k) values (-99, 1, 1), (-1, 2, 2), (5, 2, 2)").await?;
         let _ = kipsql.run("insert into t2 (d, c, e) values (2, 1, '2021-05-20 21:00:00'), (3, 4, '2023-09-10 00:00:00')").await?;
 
         println!("full t1:");
