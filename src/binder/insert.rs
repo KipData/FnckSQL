@@ -17,7 +17,8 @@ impl<S: Storage> Binder<S> {
         &mut self,
         name: ObjectName,
         idents: &[Ident],
-        expr_rows: &Vec<Vec<Expr>>
+        expr_rows: &Vec<Vec<Expr>>,
+        is_overwrite: bool
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
         let (_, name) = split_name(&name)?;
@@ -72,6 +73,7 @@ impl<S: Storage> Binder<S> {
                 operator: Operator::Insert(
                     InsertOperator {
                         table_name,
+                        is_overwrite,
                     }
                 ),
                 childrens: vec![values_plan],

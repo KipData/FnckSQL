@@ -278,10 +278,16 @@ mod test {
         println!("{}", create_table(&tuples_distinct_t1));
 
         println!("update t1 with filter:");
-        let _ = kipsql.run("update t1 set a = 0 where b > 1").await?;
+        let _ = kipsql.run("update t1 set b = 0 where b > 1").await?;
         println!("after t1:");
         let update_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&update_after_full_t1));
+
+        println!("insert overwrite t1:");
+        let _ = kipsql.run("insert overwrite t1 (a, b, k) values (-1, 1, 1)").await?;
+        println!("after t1:");
+        let insert_overwrite_after_full_t1 = kipsql.run("select * from t1").await?;
+        println!("{}", create_table(&insert_overwrite_after_full_t1));
 
         println!("delete t1 with filter:");
         let _ = kipsql.run("delete from t1 where b > 1").await?;

@@ -44,7 +44,7 @@ pub trait Table: Sync + Send + 'static {
         projection: Projections,
     ) -> Result<Self::TransactionType<'_>, StorageError>;
 
-    fn append(&mut self, tuple: Tuple) -> Result<(), StorageError>;
+    fn append(&mut self, tuple: Tuple, is_overwrite: bool) -> Result<(), StorageError>;
 
     fn delete(&mut self, tuple_id: TupleId) -> Result<(), StorageError>;
 
@@ -68,6 +68,9 @@ pub enum StorageError {
 
     #[error("type error")]
     TypeError(#[from] TypeError),
+
+    #[error("The same primary key data already exists")]
+    DuplicatePrimaryKey,
 }
 
 impl From<KernelError> for StorageError {

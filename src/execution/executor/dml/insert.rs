@@ -14,13 +14,15 @@ use crate::types::value::{DataValue, ValueRef};
 pub struct Insert {
     table_name: TableName,
     input: BoxedExecutor,
+    is_overwrite: bool
 }
 
 impl From<(InsertOperator, BoxedExecutor)> for Insert {
-    fn from((InsertOperator { table_name }, input): (InsertOperator, BoxedExecutor)) -> Self {
+    fn from((InsertOperator { table_name, is_overwrite }, input): (InsertOperator, BoxedExecutor)) -> Self {
         Insert {
             table_name,
-            input
+            input,
+            is_overwrite,
         }
     }
 }
@@ -34,7 +36,7 @@ impl<S: Storage> Executor<S> for Insert {
 impl Insert {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn _execute<S: Storage>(self, storage: S) {
-        let Insert { table_name, input } = self;
+        let Insert { table_name, input, is_overwrite } = self;
         let mut primary_key_index = None;
 
         if let (Some(table_catalog), Some(mut table)) =
@@ -75,7 +77,7 @@ impl Insert {
                     tuple.values.push(value)
                 }
 
-                table.append(tuple)?;
+                table.append(tuple, is_overwrite)?;
             }
             table.commit().await?;
         }

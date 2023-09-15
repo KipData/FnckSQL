@@ -48,21 +48,21 @@ impl Update {
             #[for_await]
             for tuple in input {
                 let mut tuple = tuple?;
+                let mut is_overwrite = true;
 
                 for (i, column) in tuple.columns.iter().enumerate() {
                     if let Some(value) = value_map.get(&column.id) {
                         if column.desc.is_primary {
                             if let Some(old_key) = tuple.id.replace(value.clone()) {
-                                if value != &old_key {
-                                    table.delete(old_key)?;
-                                }
+                                table.delete(old_key)?;
+                                is_overwrite = false;
                             }
                         }
                         tuple.values[i] = value.clone();
                     }
                 }
 
-                table.append(tuple)?;
+                table.append(tuple, is_overwrite)?;
             }
             table.commit().await?;
         }

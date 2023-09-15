@@ -90,9 +90,14 @@ impl<S: Storage> Binder<S> {
                     _ => todo!()
                 }
             }
-            Statement::Insert { table_name, columns, source, .. } => {
+            Statement::Insert { table_name, columns, source, overwrite, .. } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
-                    self.bind_insert(table_name.to_owned(), columns, &values.rows).await?
+                    self.bind_insert(
+                        table_name.to_owned(),
+                        columns,
+                        &values.rows,
+                        *overwrite
+                    ).await?
                 } else {
                     todo!()
                 }
