@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::fmt;
+use std::{fmt, mem};
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::str::FromStr;
@@ -384,6 +384,26 @@ impl DataValue {
             DataValue::UInt32(option) => option.map(|v| format!("{:0width$}", v, width = 10)),
             DataValue::UInt64(option) => option.map(|v| format!("{:0width$}", v, width = 20)),
             DataValue::Utf8(option) => option.clone(),
+            _ => return Err(TypeError::InvalidType),
+        }.ok_or(TypeError::NotNull)
+    }
+
+    pub fn to_index_key(&self) -> Result<String, TypeError> {
+        match self {
+            DataValue::Int8(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i8, v), width = 4)),
+            DataValue::Int16(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i16, v), width = 6)),
+            DataValue::Int32(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i32, v), width = 11)),
+            DataValue::Int64(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i64, v), width = 20)),
+            DataValue::UInt8(option) => option.map(|v| format!("{:0width$}", v, width = 3)),
+            DataValue::UInt16(option) => option.map(|v| format!("{:0width$}", v, width = 5)),
+            DataValue::UInt32(option) => option.map(|v| format!("{:0width$}", v, width = 10)),
+            DataValue::UInt64(option) => option.map(|v| format!("{:0width$}", v, width = 20)),
+            DataValue::Utf8(option) => option.clone(),
+            DataValue::Date32(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i32, v), width = 11)),
+            DataValue::Date64(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i64, v), width = 20)),
+            DataValue::Boolean(option) => option.map(|b| if b { "1" } else { "0" }.to_string()),
+            DataValue::Float32(option) => option.map(|v| format!("{:0width$}", (unsafe { mem::transmute::<u32, i32>(v.to_bits()) }), width = 11)),
+            DataValue::Float64(option) => option.map(|v| format!("{:0width$}", (unsafe { mem::transmute::<u64, i64>(v.to_bits()) }), width = 20)),
             _ => return Err(TypeError::InvalidType),
         }.ok_or(TypeError::NotNull)
     }
@@ -794,6 +814,29 @@ mod test {
         println!("{} < {}", key_i64_2, key_i64_3);
         assert!(key_i64_1 < key_i64_2);
         assert!(key_i64_2 < key_i64_3);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_index_key() -> Result<(), TypeError> {
+        let key_f32_1 = DataValue::Float32(Some(f32::MIN)).to_index_key()?;
+        let key_f32_2 = DataValue::Float32(Some(-1_f32)).to_index_key()?;
+        let key_f32_3 = DataValue::Float32(Some(f32::MAX)).to_index_key()?;
+
+        println!("{} < {}", key_f32_1, key_f32_2);
+        println!("{} < {}", key_f32_2, key_f32_3);
+        assert!(key_f32_1 < key_f32_2);
+        assert!(key_f32_2 < key_f32_3);
+
+        let key_f64_1 = DataValue::Float64(Some(f64::MIN)).to_index_key()?;
+        let key_f64_2 = DataValue::Float64(Some(-1_f64)).to_index_key()?;
+        let key_f64_3 = DataValue::Float64(Some(f64::MAX)).to_index_key()?;
+
+        println!("{} < {}", key_f64_1, key_f64_2);
+        println!("{} < {}", key_f64_2, key_f64_3);
+        assert!(key_f64_1 < key_f64_2);
+        assert!(key_f64_2 < key_f64_3);
 
         Ok(())
     }
