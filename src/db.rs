@@ -183,9 +183,9 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let kipsql = Database::with_kipdb(temp_dir.path()).await?;
 
-        let _ = kipsql.run("create table t1 (a int primary key, b int, k int)").await?;
+        let _ = kipsql.run("create table t1 (a int primary key, b int unique, k int)").await?;
         let _ = kipsql.run("create table t2 (c int primary key, d int unsigned null, e datetime)").await?;
-        let _ = kipsql.run("insert into t1 (a, b, k) values (-99, 1, 1), (-1, 2, 2), (5, 2, 2)").await?;
+        let _ = kipsql.run("insert into t1 (a, b, k) values (-99, 1, 1), (-1, 2, 2), (5, 3, 2)").await?;
         let _ = kipsql.run("insert into t2 (d, c, e) values (2, 1, '2021-05-20 21:00:00'), (3, 4, '2023-09-10 00:00:00')").await?;
 
         println!("full t1:");
@@ -285,13 +285,15 @@ mod test {
         println!("{}", create_table(&update_after_full_t1));
 
         println!("insert overwrite t1:");
-        let _ = kipsql.run("insert overwrite t1 (a, b, k) values (-1, 1, 1)").await?;
+        let _ = kipsql.run("insert overwrite t1 (a, b, k) values (-99, 1, 0)").await?;
         println!("after t1:");
         let insert_overwrite_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&insert_overwrite_after_full_t1));
 
+        assert!(kipsql.run("insert overwrite t1 (a, b, k) values (-1, 1, 0)").await.is_err());
+
         println!("delete t1 with filter:");
-        let _ = kipsql.run("delete from t1 where b > 1").await?;
+        let _ = kipsql.run("delete from t1 where b = 0").await?;
         println!("after t1:");
         let delete_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&delete_after_full_t1));

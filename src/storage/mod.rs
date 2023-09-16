@@ -8,6 +8,7 @@ use kip_db::KernelError;
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 use crate::expression::ScalarExpression;
 use crate::types::errors::TypeError;
+use crate::types::index::Index;
 use crate::types::tuple::{Tuple, TupleId};
 
 #[async_trait]
@@ -46,6 +47,8 @@ pub trait Table: Sync + Send + 'static {
         projection: Projections,
     ) -> Result<Self::TransactionType<'_>, StorageError>;
 
+    fn add_index(&mut self, index: Index, is_unique: bool) -> Result<(), StorageError>;
+
     fn append(&mut self, tuple: Tuple, is_overwrite: bool) -> Result<(), StorageError>;
 
     fn delete(&mut self, tuple_id: TupleId) -> Result<(), StorageError>;
@@ -73,6 +76,9 @@ pub enum StorageError {
 
     #[error("The same primary key data already exists")]
     DuplicatePrimaryKey,
+
+    #[error("The column has been declared unique and the value already exists")]
+    DuplicateUniqueValue,
 
     #[error("Serialization error")]
     Serialization,

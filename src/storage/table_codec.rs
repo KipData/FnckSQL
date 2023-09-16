@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use bytes::Bytes;
-use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
+use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexId, IndexMeta, IndexValue};
 use crate::types::tuple::{Tuple, TupleId};
@@ -289,8 +289,6 @@ mod tests {
 
     #[test]
     fn test_table_codec_index_meta() -> Result<(), TypeError> {
-        let (_, codec) = build_table_codec();
-
         let index_meta = IndexMeta {
             id: 0,
             column_ids: vec![0],

@@ -7,12 +7,11 @@ use kip_db::kernel::lsm::mvcc::TransactionIter;
 use kip_db::kernel::lsm::{mvcc, storage};
 use kip_db::kernel::lsm::iterator::Iter;
 use kip_db::kernel::lsm::storage::Config;
-use kip_db::kernel::Storage as Kip_Storage;
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
 use crate::storage::table_codec::TableCodec;
-use crate::types::index::IndexMeta;
+use crate::types::index::{Index, IndexMeta};
 use crate::types::tuple::{Tuple, TupleId};
 
 #[derive(Clone)]
@@ -28,7 +27,7 @@ impl KipStorage {
 
         Ok(KipStorage {
             cache: Arc::new(ShardingLruCache::new(
-                128,
+                32,
                 16,
                 RandomState::default(),
             )?),
@@ -236,6 +235,28 @@ impl Table for KipTable {
             table_codec: &self.table_codec,
             iter,
         })
+    }
+
+    fn add_index(&mut self, index: Index, is_unique: bool) -> Result<(), StorageError> {
+        let (key, value) = self.table_codec.encode_index(&index)?;
+
+        if let Some(bytes) = self.tx.get(&key)? {
+            if is_unique {
+                let old_index = TableCodec::decode_index(&bytes)?;
+
+                if old_index.tuple_ids[0] != index.value.tuple_ids[0] {
+                    return Err(StorageError::DuplicateUniqueValue);
+                } else {
+                    return Ok(())
+                }
+            } else {
+                todo!("联合索引")
+            }
+        }
+
+        self.tx.set(key, value);
+
+        Ok(())
     }
 
     fn append(&mut self, tuple: Tuple, is_overwrite: bool) -> Result<(), StorageError> {

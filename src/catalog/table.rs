@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::ColumnId;
-use crate::types::index::IndexMeta;
+use crate::types::index::{IndexId, IndexMeta};
 
 pub type TableName = Arc<String>;
 
@@ -17,6 +17,12 @@ pub struct TableCatalog {
 }
 
 impl TableCatalog {
+    pub(crate) fn get_unique_index(&self, col_id: &ColumnId) -> Option<&IndexMeta> {
+        self.indexes
+            .iter()
+            .find(|meta| meta.is_unique && &meta.column_ids[0] == col_id)
+    }
+
     pub(crate) fn get_column_by_id(&self, id: &ColumnId) -> Option<&ColumnRef> {
         self.columns.get(id)
     }

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use crate::catalog::{ColumnCatalog, RootCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
+use crate::types::index::Index;
 use crate::types::tuple::{Tuple, TupleId};
 
 // WARRING: Only single-threaded and tested using
@@ -158,6 +159,10 @@ impl Table for MemTable {
                 }
             )
         }
+    }
+
+    fn add_index(&mut self, _index: Index, _is_unique: bool) -> Result<(), StorageError> {
+        todo!()
     }
 
     fn append(&mut self, tuple: Tuple, is_overwrite: bool) -> Result<(), StorageError> {
