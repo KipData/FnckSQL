@@ -1,5 +1,4 @@
 #![feature(error_generic_member_access)]
-#![feature(provide_any)]
 #![allow(unused_doc_comments)]
 #![feature(result_flattening)]
 #![feature(generators)]
