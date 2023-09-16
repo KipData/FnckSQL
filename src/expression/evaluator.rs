@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use itertools::Itertools;
-use crate::expression::value_compute::binary_op;
+use crate::expression::value_compute::{binary_op, unary_op};
 use crate::expression::ScalarExpression;
 use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
@@ -35,7 +35,11 @@ impl ScalarExpression {
             ScalarExpression::IsNull{ expr } => {
                 Ok(Arc::new(DataValue::Boolean(Some(expr.nullable()))))
             }
-            ScalarExpression::Unary{ .. } => todo!(),
+            ScalarExpression::Unary{ expr, op, .. } => {
+                let value = expr.eval_column(tuple)?;
+
+                Ok(Arc::new(unary_op(&value, op)?))
+            },
             ScalarExpression::AggCall{ .. } => todo!()
         }
     }

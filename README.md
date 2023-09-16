@@ -75,6 +75,7 @@ Storage Support:
   - [x] Limit
 - DML
   - [x] Insert
+  - [x] Insert Overwrite
   - [x] Update
   - [x] Delete
 - DataTypes

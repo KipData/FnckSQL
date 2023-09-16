@@ -156,7 +156,7 @@ impl Table for MemTable {
         }
     }
 
-    fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {
+    fn append(&mut self, tuple: Tuple, is_overwrite: bool) -> Result<(), StorageError> {
         let tuples = unsafe {
             self.tuples
                 .as_ptr()
@@ -164,6 +164,9 @@ impl Table for MemTable {
         }.unwrap();
 
         if let Some(original_tuple) = tuples.iter_mut().find(|t| t.id == tuple.id) {
+            if !is_overwrite {
+                return Err(StorageError::DuplicatePrimaryKey);
+            }
             *original_tuple = tuple;
         } else {
             tuples.push(tuple);
@@ -255,7 +258,7 @@ pub(crate) mod test {
                 Arc::new(DataValue::Int32(Some(1))),
                 Arc::new(DataValue::Boolean(Some(true)))
             ],
-        })?;
+        }, false)?;
         table.append(Tuple {
             id: Some(Arc::new(DataValue::Int32(Some(2)))),
             columns: columns.clone(),
@@ -263,7 +266,7 @@ pub(crate) mod test {
                 Arc::new(DataValue::Int32(Some(2))),
                 Arc::new(DataValue::Boolean(Some(false)))
             ],
-        })?;
+        }, false)?;
 
         Ok(())
     }

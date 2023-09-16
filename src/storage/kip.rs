@@ -163,8 +163,12 @@ impl Table for KipTable {
         })
     }
 
-    fn append(&mut self, tuple: Tuple) -> Result<(), StorageError> {
+    fn append(&mut self, tuple: Tuple, is_overwrite: bool) -> Result<(), StorageError> {
         let (key, value) = self.table_codec.encode_tuple(&tuple)?;
+
+        if !is_overwrite && self.tx.get(&key)?.is_some() {
+            return Err(StorageError::DuplicatePrimaryKey);
+        }
         self.tx.set(key, value);
 
         Ok(())

@@ -4,6 +4,7 @@ use sqlparser::ast::{Expr, Ident, ObjectName};
 use crate::binder::{Binder, BindError, lower_case_name, split_name};
 use crate::catalog::ColumnRef;
 use crate::expression::ScalarExpression;
+use crate::expression::value_compute::unary_op;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::Operator;
@@ -16,7 +17,8 @@ impl<S: Storage> Binder<S> {
         &mut self,
         name: ObjectName,
         idents: &[Ident],
-        expr_rows: &Vec<Vec<Expr>>
+        expr_rows: &Vec<Vec<Expr>>,
+        is_overwrite: bool
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
         let (_, name) = split_name(&name)?;
@@ -45,13 +47,20 @@ impl<S: Storage> Binder<S> {
                 let mut row = Vec::with_capacity(expr_row.len());
 
                 for (i, expr) in expr_row.into_iter().enumerate() {
-                    match self.bind_expr(expr).await? {
+                    match &self.bind_expr(expr).await? {
                         ScalarExpression::Constant(value) => {
-                            let cast_value = DataValue::clone(&value)
+                            let cast_value = DataValue::clone(value)
                                 .cast(columns[i].datatype())?;
 
                             row.push(Arc::new(cast_value))
                         },
+                        ScalarExpression::Unary { expr, op, .. } => {
+                            if let ScalarExpression::Constant(value) = expr.as_ref() {
+                                row.push(Arc::new(unary_op(value, op)?))
+                            } else {
+                                unreachable!()
+                            }
+                        }
                         _ => unreachable!(),
                     }
                 }
@@ -64,6 +73,7 @@ impl<S: Storage> Binder<S> {
                 operator: Operator::Insert(
                     InsertOperator {
                         table_name,
+                        is_overwrite,
                     }
                 ),
                 childrens: vec![values_plan],

@@ -132,6 +132,14 @@ impl LogicalType {
         )
     }
 
+    pub fn is_floating_point_numeric(&self) -> bool {
+        matches!(
+            self,
+            LogicalType::Float
+                | LogicalType::Double
+        )
+    }
+
     pub fn max_logical_type(
         left: &LogicalType,
         right: &LogicalType,
