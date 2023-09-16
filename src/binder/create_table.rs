@@ -78,7 +78,7 @@ mod tests {
                 assert_eq!(op.columns[0].desc, ColumnDesc::new(LogicalType::Integer, true));
                 assert_eq!(op.columns[1].name, "name".to_string());
                 assert_eq!(op.columns[1].nullable, true);
-                assert_eq!(op.columns[1].desc, ColumnDesc::new(LogicalType::Varchar, false));
+                assert_eq!(op.columns[1].desc, ColumnDesc::new(LogicalType::Varchar(Some(10)), false));
             }
             _ => unreachable!()
         }
