@@ -49,14 +49,10 @@ impl<S: Storage> Binder<S> {
                 for (i, expr) in expr_row.into_iter().enumerate() {
                     match &self.bind_expr(expr).await? {
                         ScalarExpression::Constant(value) => {
+                            // Check if the value length is too long
+                            value.check_length(columns[i].datatype())?;
                             let cast_value = DataValue::clone(value)
                                 .cast(columns[i].datatype())?;
-
-                            // Check if the value length is too long
-                            if Some(cast_value.to_raw().len()) > columns[i].datatype().raw_len() {
-                                return Err(BindError::InvalidTable(format!("value length is too long")))
-                            }
-
                             row.push(Arc::new(cast_value))
                         },
                         ScalarExpression::Unary { expr, op, .. } => {

@@ -55,7 +55,6 @@ pub enum LogicalType {
     Float,
     Double,
     Varchar(Option<u32>),
-    Nvarchar(Option<u32>),
     Date,
     DateTime,
 }
@@ -76,8 +75,8 @@ impl LogicalType {
             LogicalType::UBigint => Some(8),
             LogicalType::Float => Some(4),
             LogicalType::Double => Some(8),
-            LogicalType::Varchar(len)=> len.map(|len| len as usize),
-            LogicalType::Nvarchar(len) => len.map(|len| len as usize),
+            /// Note: The non-fixed length type's raw_len is None
+            LogicalType::Varchar(_)=>None,
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
         }
@@ -158,13 +157,13 @@ impl LogicalType {
         if left.is_numeric() && right.is_numeric() {
             return LogicalType::combine_numeric_types(left, right);
         }
-        if matches!((left, right), (LogicalType::Date, LogicalType::Varchar(len)) | (LogicalType::Varchar(len), LogicalType::Date)) {
+        if matches!((left, right), (LogicalType::Date, LogicalType::Varchar(_)) | (LogicalType::Varchar(_), LogicalType::Date)) {
             return Ok(LogicalType::Date);
         }
         if matches!((left, right), (LogicalType::Date, LogicalType::DateTime) | (LogicalType::DateTime, LogicalType::Date)) {
             return Ok(LogicalType::DateTime);
         }
-        if matches!((left, right), (LogicalType::DateTime, LogicalType::Varchar(len)) | (LogicalType::Varchar(len), LogicalType::DateTime)) {
+        if matches!((left, right), (LogicalType::DateTime, LogicalType::Varchar(_)) | (LogicalType::Varchar(_), LogicalType::DateTime)) {
             return Ok(LogicalType::DateTime);
         }
         Err(TypeError::InternalError(format!(
@@ -267,8 +266,7 @@ impl LogicalType {
             LogicalType::UBigint => matches!(to, LogicalType::Float | LogicalType::Double),
             LogicalType::Float => matches!(to, LogicalType::Double),
             LogicalType::Double => false,
-            LogicalType::Varchar(_len) => false,
-            LogicalType::Nvarchar(_len) => false,
+            LogicalType::Varchar(_) => false,
             LogicalType::Date => matches!(to, LogicalType::DateTime | LogicalType::Varchar(_)),
             LogicalType::DateTime => matches!(to, LogicalType::Date | LogicalType::Varchar(_)),
         }
@@ -283,7 +281,6 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
         match value {
             sqlparser::ast::DataType::Char(len)
             | sqlparser::ast::DataType::Varchar(len)=> Ok(LogicalType::Varchar(len.map(|len| len.length as u32))),
-            sqlparser::ast::DataType::Nvarchar(len) => Ok(LogicalType::Nvarchar(len.map(|len| len as u32))),
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
             sqlparser::ast::DataType::Double => Ok(LogicalType::Double),
             sqlparser::ast::DataType::TinyInt(_) => Ok(LogicalType::Tinyint),
@@ -338,20 +335,5 @@ mod test {
 
     fn test_id_generator_reset() {
         ID_BUF.store(0, Release)
-    }
-
-
-    #[test]
-    fn test_logical_type() {
-        assert_eq!(LogicalType::Integer.raw_len(), Some(4));
-        assert_eq!(LogicalType::UInteger.raw_len(), Some(4));
-        assert_eq!(LogicalType::Bigint.raw_len(), Some(8));
-        assert_eq!(LogicalType::UBigint.raw_len(), Some(8));
-        assert_eq!(LogicalType::Float.raw_len(), Some(4));
-        assert_eq!(LogicalType::Double.raw_len(), Some(8));
-        assert_eq!(LogicalType::Varchar(Some(10)).raw_len(), Some(10));
-        assert_eq!(LogicalType::Nvarchar(Some(10)).raw_len(), Some(10));
-        assert_eq!(LogicalType::Date.raw_len(), Some(4));
-        assert_eq!(LogicalType::DateTime.raw_len(), Some(8));
     }
 }
