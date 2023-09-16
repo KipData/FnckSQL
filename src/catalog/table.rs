@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::ColumnId;
+use crate::types::index::IndexMeta;
 
 pub type TableName = Arc<String>;
 
@@ -12,6 +13,7 @@ pub struct TableCatalog {
     /// Mapping from column names to column ids
     column_idxs: BTreeMap<String, ColumnId>,
     pub(crate) columns: BTreeMap<ColumnId, ColumnRef>,
+    pub indexes: Vec<IndexMeta>
 }
 
 impl TableCatalog {
@@ -66,11 +68,13 @@ impl TableCatalog {
     pub(crate) fn new(
         name: TableName,
         columns: Vec<ColumnCatalog>,
+        indexes: Vec<IndexMeta>
     ) -> Result<TableCatalog, CatalogError> {
         let mut table_catalog = TableCatalog {
             name,
             column_idxs: BTreeMap::new(),
             columns: BTreeMap::new(),
+            indexes,
         };
 
         for col_catalog in columns.into_iter() {
@@ -93,10 +97,10 @@ mod tests {
     // | 1         | true     |
     // | 2         | false    |
     fn test_table_catalog() {
-        let col0 = ColumnCatalog::new("a".into(), false, ColumnDesc::new(LogicalType::Integer, false));
-        let col1 = ColumnCatalog::new("b".into(), false, ColumnDesc::new(LogicalType::Boolean, false));
+        let col0 = ColumnCatalog::new("a".into(), false, ColumnDesc::new(LogicalType::Integer, false, false));
+        let col1 = ColumnCatalog::new("b".into(), false, ColumnDesc::new(LogicalType::Boolean, false, false));
         let col_catalogs = vec![col0, col1];
-        let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs).unwrap();
+        let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs, vec![]).unwrap();
 
         assert_eq!(table_catalog.contains_column(&"a".to_string()), true);
         assert_eq!(table_catalog.contains_column(&"b".to_string()), true);

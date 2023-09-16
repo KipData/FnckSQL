@@ -12,6 +12,7 @@ use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
 use crate::storage::table_codec::TableCodec;
+use crate::types::index::IndexMeta;
 use crate::types::tuple::{Tuple, TupleId};
 
 #[derive(Clone)]
@@ -34,6 +35,43 @@ impl KipStorage {
             inner: Arc::new(storage),
         })
     }
+
+    fn column_collect(name: &String, tx: &mvcc::Transaction) -> Option<(Vec<ColumnCatalog>, Option<TableName>)> {
+        let (column_min, column_max) = TableCodec::columns_bound(name);
+        let mut column_iter = tx.iter(Bound::Included(&column_min), Bound::Included(&column_max)).ok()?;
+
+        let mut columns = vec![];
+        let mut name_option = None;
+
+        while let Some((key, value_option)) = column_iter.try_next().ok().flatten() {
+            if let Some(value) = value_option {
+                if let Some((table_name, column)) = TableCodec::decode_column(&key, &value) {
+                    if name != table_name.as_str() { return None; }
+                    let _ = name_option.insert(table_name);
+
+                    columns.push(column);
+                }
+            }
+        }
+
+        Some((columns, name_option))
+    }
+
+    fn index_collect(name: &String, tx: &mvcc::Transaction) -> Option<Vec<IndexMeta>> {
+        let (index_min, index_max) = TableCodec::index_meta_bound(name);
+        let mut indexes = vec![];
+        let mut index_iter = tx.iter(Bound::Included(&index_min), Bound::Included(&index_max)).ok()?;
+
+        while let Some((_, value_option)) = index_iter.try_next().ok().flatten() {
+            if let Some(value) = value_option {
+                if let Some(index_meta) = TableCodec::decode_index_meta(&value).ok() {
+                    indexes.push(index_meta);
+                }
+            }
+        }
+
+        Some(indexes)
+    }
 }
 
 #[async_trait]
@@ -41,20 +79,42 @@ impl Storage for KipStorage {
     type TableType = KipTable;
 
     async fn create_table(&self, table_name: TableName, columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
-        let table = TableCatalog::new(table_name.clone(), columns)?;
+        let mut tx = self.inner.new_transaction().await;
 
-        for (key, value) in table.columns
+        for (key, value) in columns
             .iter()
-            .filter_map(|(_, col)| TableCodec::encode_column(col))
+            .filter_map(|col| TableCodec::encode_column(&table_name, &col))
         {
-            self.inner.set(key, value).await?;
+            tx.set(key, value);
+        }
+        let mut indexes = Vec::new();
+
+        for col in columns
+            .iter()
+            .filter(|col| col.desc.is_unique) {
+
+            let meta = IndexMeta {
+                id: indexes.len() as u32,
+                column_ids: vec![col.id],
+                name: format!("uk_{}", col.name),
+                is_unique: true,
+            };
+            let (key, value) = TableCodec::encode_index_meta(&table_name, &meta)?;
+
+            indexes.push(meta);
+            tx.set(key, value);
         }
 
-        let (k, v)= TableCodec::encode_root_table(table_name.as_str(), table.columns.len())
+        let (k, v)= TableCodec::encode_root_table(table_name.as_str(), columns.len())
             .ok_or(StorageError::Serialization)?;
         self.inner.set(k, v).await?;
 
-        self.cache.put(table_name.to_string(), table);
+        tx.commit().await?;
+
+        self.cache.put(
+            table_name.to_string(),
+            TableCatalog::new(table_name.clone(), columns, indexes)?
+        );
 
         Ok(table_name)
     }
@@ -122,25 +182,14 @@ impl Storage for KipStorage {
         let mut option = self.cache.get(name);
 
         if option.is_none() {
-            let (min, max) = TableCodec::columns_bound(name);
             let tx = self.inner.new_transaction().await;
-            let mut iter = tx.iter(Bound::Included(&min), Bound::Included(&max)).ok()?;
+            // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
+            let (columns, name_option) = Self::column_collect(name, &tx)?;
+            let indexes = Self::index_collect(name, &tx)?;
 
-            let mut columns = vec![];
-            let mut name_option = None;
-
-            while let Some((key, value_option))  = iter.try_next().ok().flatten() {
-                if let Some(value) = value_option {
-                    if let Some((table_name, column)) = TableCodec::decode_column(&key, &value) {
-                        if name != table_name.as_str() { return None; }
-                        let _ = name_option.insert(table_name);
-
-                        columns.push(column);
-                    }
-                }
-            }
-
-            if let Some(catalog) = name_option.and_then(|table_name| TableCatalog::new(table_name, columns).ok()) {
+            if let Some(catalog) = name_option
+                .and_then(|table_name| TableCatalog::new(table_name, columns, indexes).ok())
+            {
                 option = self.cache.get_or_insert(name.to_string(), |_| Ok(catalog)).ok();
             }
         }
@@ -284,12 +333,12 @@ mod test {
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true)
+                ColumnDesc::new(LogicalType::Integer, true, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false)
+                ColumnDesc::new(LogicalType::Boolean, false, false)
             )),
         ];
 

@@ -155,12 +155,12 @@ mod test {
             ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true)
+                ColumnDesc::new(LogicalType::Integer, true, false)
             ),
             ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false)
+                ColumnDesc::new(LogicalType::Boolean, false, false)
             ),
         ];
 
@@ -182,6 +182,7 @@ mod test {
     async fn test_crud_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let kipsql = Database::with_kipdb(temp_dir.path()).await?;
+
         let _ = kipsql.run("create table t1 (a int primary key, b int, k int)").await?;
         let _ = kipsql.run("create table t2 (c int primary key, d int unsigned null, e datetime)").await?;
         let _ = kipsql.run("insert into t1 (a, b, k) values (-99, 1, 1), (-1, 2, 2), (5, 2, 2)").await?;

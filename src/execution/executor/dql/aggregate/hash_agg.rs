@@ -122,7 +122,7 @@ mod test {
     #[tokio::test]
     async fn test_hash_agg() -> Result<(), ExecutorError> {
         let mem_storage = MemStorage::new();
-        let desc = ColumnDesc::new(LogicalType::Integer, false);
+        let desc = ColumnDesc::new(LogicalType::Integer, false, false);
 
         let t1_columns = vec![
             Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),

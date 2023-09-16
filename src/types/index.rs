@@ -10,6 +10,7 @@ pub struct IndexMeta {
     pub id: IndexId,
     pub column_ids: Vec<ColumnId>,
     pub name: String,
+    pub is_unique:bool
 }
 
 pub struct Index {
@@ -21,5 +22,4 @@ pub struct Index {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct IndexValue {
     pub tuple_ids: Vec<TupleId>,
-    pub is_unique:bool
 }

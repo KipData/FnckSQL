@@ -193,16 +193,16 @@ pub mod test {
         let _ = storage.create_table(
             Arc::new("t1".to_string()),
             vec![
-                ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
-                ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
+                ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true, true)),
+                ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false, false)),
             ]
         ).await?;
 
         let _ = storage.create_table(
             Arc::new("t2".to_string()),
             vec![
-                ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
-                ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
+                ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true, false)),
+                ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false, false)),
             ]
         ).await?;
 

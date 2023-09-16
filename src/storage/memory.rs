@@ -282,12 +282,12 @@ pub(crate) mod test {
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true)
+                ColumnDesc::new(LogicalType::Integer, true, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false)
+                ColumnDesc::new(LogicalType::Boolean, false, false)
             )),
         ];
 

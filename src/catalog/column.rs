@@ -51,6 +51,7 @@ impl From<ColumnDef> for ColumnCatalog {
         let column_name = column_def.name.to_string();
         let mut column_desc = ColumnDesc::new(
             LogicalType::try_from(column_def.data_type).unwrap(),
+            false,
             false
         );
         let mut nullable = false;
@@ -60,10 +61,15 @@ impl From<ColumnDef> for ColumnCatalog {
             match option_def.option {
                 ColumnOption::Null => nullable = true,
                 ColumnOption::NotNull => (),
-                ColumnOption::Unique { is_primary: true } => {
-                    column_desc.is_primary = true;
-                    // Skip other options when using primary key
-                    break;
+                ColumnOption::Unique { is_primary } => {
+                    if is_primary {
+                        column_desc.is_primary = true;
+                        nullable = false;
+                        // Skip other options when using primary key
+                        break;
+                    } else {
+                        column_desc.is_unique = true;
+                    }
                 },
                 _ => todo!()
             }
@@ -78,13 +84,15 @@ impl From<ColumnDef> for ColumnCatalog {
 pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
     pub(crate) is_primary: bool,
+    pub(crate) is_unique: bool,
 }
 
 impl ColumnDesc {
-    pub(crate) const fn new(column_datatype: LogicalType, is_primary: bool) -> ColumnDesc {
+    pub(crate) const fn new(column_datatype: LogicalType, is_primary: bool, is_unique: bool) -> ColumnDesc {
         ColumnDesc {
             column_datatype,
             is_primary,
+            is_unique,
         }
     }
 }
