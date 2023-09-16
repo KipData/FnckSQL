@@ -2,6 +2,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
 use crate::types::errors::TypeError;
+use crate::types::index::{Index, IndexId, IndexMeta, IndexValue};
 use crate::types::tuple::{Tuple, TupleId};
 
 const BOUND_MIN_TAG: u8 = 0;
@@ -20,6 +21,31 @@ impl TableCodec {
             format!(
                 "{}_Data_{}",
                 self.table.name,
+                bound_id
+            )
+        };
+
+        (op(BOUND_MIN_TAG).into_bytes(), op(BOUND_MAX_TAG).into_bytes())
+    }
+
+    pub fn index_meta_bound(&self) -> (Vec<u8>, Vec<u8>) {
+        let op = |bound_id| {
+            format!(
+                "{}_IndexMeta_{}",
+                self.table.name,
+                bound_id
+            )
+        };
+
+        (op(BOUND_MIN_TAG).into_bytes(), op(BOUND_MAX_TAG).into_bytes())
+    }
+
+    pub fn index_bound(&self, index_id: &IndexId) -> (Vec<u8>, Vec<u8>) {
+        let op = |bound_id| {
+            format!(
+                "{}_Index_{}_{}",
+                self.table.name,
+                index_id,
                 bound_id
             )
         };
@@ -63,6 +89,56 @@ impl TableCodec {
 
     pub fn decode_tuple(&self, bytes: &[u8]) -> Tuple {
         Tuple::deserialize_from(self.table.all_columns(), bytes)
+    }
+
+    /// Key: TableName_IndexMeta_0_IndexID
+    /// Value: IndexMeta
+    pub fn encode_index_meta(&self, index_meta: &IndexMeta) -> Result<(Bytes, Bytes), TypeError> {
+        let key = format!(
+            "{}_IndexMeta_0_{}",
+            self.table.name,
+            index_meta.id
+        );
+
+        Ok((Bytes::from(key), Bytes::from(bincode::serialize(&index_meta)?)))
+    }
+
+    pub fn decode_index_meta(&self, bytes: &[u8]) -> Result<IndexMeta, TypeError> {
+        Ok(bincode::deserialize(bytes)?)
+    }
+
+    /// NonUnique Index:
+    /// Key: TableName_Index_IndexID_0_DataValue1_DataValue2 ..
+    /// Value: IndexValue
+    ///
+    /// Unique Index:
+    /// Key: TableName_Index_IndexID_0_DataValue
+    /// Value: IndexValue
+    ///
+    /// Tips: The unique index has only one ColumnID and one corresponding DataValue,
+    /// so it can be positioned directly.
+    pub fn encode_index(&self, index: &Index) -> Result<(Bytes, Bytes), TypeError> {
+        let key = self.encode_index_key(index)?;
+
+        Ok((Bytes::from(key), Bytes::from(bincode::serialize(&index.value)?)))
+    }
+
+    pub fn encode_index_key(&self, index: &Index) -> Result<Vec<u8>, TypeError> {
+        let mut string_key = format!(
+            "{}_Index_{}_0",
+            self.table.name,
+            index.id
+        );
+
+        for col_v in &index.column_values {
+            string_key += &format!("_{}", col_v.to_index_key()?);
+        }
+
+        Ok(string_key.into_bytes())
+    }
+
+    pub fn decode_index(&self, bytes: &[u8]) -> Result<IndexValue, TypeError> {
+        Ok(bincode::deserialize(bytes)?)
     }
 
     /// Key: TableName_Catalog_0_ColumnName_ColumnId
@@ -149,6 +225,7 @@ mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog};
     use crate::storage::table_codec::{COLUMNS_ID_LEN, TableCodec};
     use crate::types::errors::TypeError;
+    use crate::types::index::{Index, IndexMeta, IndexValue};
     use crate::types::LogicalType;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
@@ -213,6 +290,60 @@ mod tests {
     }
 
     #[test]
+    fn test_table_codec_index_meta() -> Result<(), TypeError> {
+        let (table_catalog, codec) = build_table_codec();
+
+        let index_meta = IndexMeta {
+            id: 0,
+            column_ids: vec![0],
+            name: "index_1".to_string(),
+        };
+
+        let (key, bytes) = codec.encode_index_meta(&index_meta)?;
+
+        assert_eq!(
+            String::from_utf8(key.to_vec()).ok().unwrap(),
+            format!(
+                "{}_IndexMeta_0_{}",
+                table_catalog.name,
+                index_meta.id
+            )
+        );
+        assert_eq!(codec.decode_index_meta(&bytes)?, index_meta);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_table_codec_index() -> Result<(), TypeError> {
+        let (table_catalog, codec) = build_table_codec();
+
+        let index = Index {
+            id: 0,
+            column_values: vec![Arc::new(DataValue::Int32(Some(0)))],
+            value: IndexValue {
+                tuple_ids: vec![Arc::new(DataValue::Int32(Some(0)))],
+                is_unique: false,
+            },
+        };
+
+        let (key, bytes) = codec.encode_index(&index)?;
+
+        assert_eq!(
+            String::from_utf8(key.to_vec()).ok().unwrap(),
+            format!(
+                "{}_Index_{}_0_{}",
+                table_catalog.name,
+                index.id,
+                index.column_values[0].to_index_key()?
+            )
+        );
+        assert_eq!(codec.decode_index(&bytes)?, index.value);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_table_codec_column() {
         let (table_catalog, _) = build_table_codec();
         let col = table_catalog.all_columns()[0].clone();
@@ -262,9 +393,81 @@ mod tests {
             .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
             .collect_vec();
 
+        assert_eq!(vec.len(), 3);
+
         assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "T1_Catalog_0_C0_0");
         assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "T1_Catalog_0_C1_1");
         assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "T1_Catalog_0_C2_2");
+    }
+
+    #[test]
+    fn test_table_codec_index_meta_bound() {
+        let mut set = BTreeSet::new();
+        let op = |str: &str| {
+            str.to_string().into_bytes()
+        };
+
+        set.insert(op("T0_IndexMeta_0_0"));
+        set.insert(op("T0_IndexMeta_0_1"));
+        set.insert(op("T0_IndexMeta_0_2"));
+
+        set.insert(op("T1_IndexMeta_0_0"));
+        set.insert(op("T1_IndexMeta_0_1"));
+        set.insert(op("T1_IndexMeta_0_2"));
+
+        set.insert(op("T2_IndexMeta_0_0"));
+        set.insert(op("T2_IndexMeta_0_1"));
+        set.insert(op("T2_IndexMeta_0_2"));
+
+        let table_codec = TableCodec {
+            table: TableCatalog::new(Arc::new("T1".to_string()), vec![]).unwrap(),
+        };
+        let (min, max) = table_codec.index_meta_bound();
+
+        let vec = set
+            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
+            .collect_vec();
+
+        assert_eq!(vec.len(), 3);
+
+        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "T1_IndexMeta_0_0");
+        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "T1_IndexMeta_0_1");
+        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "T1_IndexMeta_0_2");
+    }
+
+    #[test]
+    fn test_table_codec_index_bound() {
+        let mut set = BTreeSet::new();
+        let op = |str: &str| {
+            str.to_string().into_bytes()
+        };
+
+        set.insert(op("T0_Index_0_0_0000000000000000000"));
+        set.insert(op("T0_Index_0_0_0000000000000000001"));
+        set.insert(op("T0_Index_0_0_0000000000000000002"));
+
+        set.insert(op("T0_Index_1_0_0000000000000000000"));
+        set.insert(op("T0_Index_1_0_0000000000000000001"));
+        set.insert(op("T0_Index_1_0_0000000000000000002"));
+
+        set.insert(op("T0_Index_2_0_0000000000000000000"));
+        set.insert(op("T0_Index_2_0_0000000000000000001"));
+        set.insert(op("T0_Index_2_0_0000000000000000002"));
+
+        let table_codec = TableCodec {
+            table: TableCatalog::new(Arc::new("T0".to_string()), vec![]).unwrap(),
+        };
+        let (min, max) = table_codec.index_bound(&1);
+
+        let vec = set
+            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
+            .collect_vec();
+
+        assert_eq!(vec.len(), 3);
+
+        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "T0_Index_1_0_0000000000000000000");
+        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "T0_Index_1_0_0000000000000000001");
+        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "T0_Index_1_0_0000000000000000002");
     }
 
     #[test]

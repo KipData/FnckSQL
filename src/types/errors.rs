@@ -46,4 +46,10 @@ pub enum TypeError {
         #[from]
         ParseError,
     ),
+    #[error("bindcode")]
+    Bincode(
+        #[source]
+        #[from]
+        Box<bincode::ErrorKind>
+    )
 }

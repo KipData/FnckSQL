@@ -10,6 +10,7 @@ use integer_encoding::FixedInt;
 use lazy_static::lazy_static;
 
 use ordered_float::OrderedFloat;
+use serde::{Deserialize, Serialize};
 use crate::types::errors::TypeError;
 
 use super::LogicalType;
@@ -25,7 +26,7 @@ pub const DATE_TIME_FMT: &str = "%Y-%m-%d %H:%M:%S";
 
 pub type ValueRef = Arc<DataValue>;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum DataValue {
     Null,
     Boolean(Option<bool>),

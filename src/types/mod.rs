@@ -1,6 +1,7 @@
 pub mod errors;
 pub mod value;
 pub mod tuple;
+pub mod index;
 
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering::{Acquire, Release};
@@ -313,7 +314,7 @@ impl std::fmt::Display for LogicalType {
 mod test {
     use std::sync::atomic::Ordering::Release;
 
-    use crate::types::{IdGenerator, ID_BUF, LogicalType};
+    use crate::types::{IdGenerator, ID_BUF};
 
     /// Tips: 由于IdGenerator为static全局性质生成的id，因此需要单独测试避免其他测试方法干扰
     #[test]
