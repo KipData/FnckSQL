@@ -71,6 +71,24 @@ impl KipStorage {
 
         Some(indexes)
     }
+
+    fn _drop_data(table: &mut KipTable, min: &[u8], max: &[u8]) -> Result<(), StorageError> {
+        let mut iter = table.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
+        let mut data_keys = vec![];
+
+        while let Some((key, value_option)) = iter.try_next()? {
+            if value_option.is_some() {
+                data_keys.push(key);
+            }
+        }
+        drop(iter);
+
+        for key in data_keys {
+            table.tx.remove(&key)?
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -148,20 +166,13 @@ impl Storage for KipStorage {
 
     async fn drop_data(&self, name: &String) -> Result<(), StorageError> {
         if let Some(mut table) = self.table(name).await {
-            let (min, max) = table.table_codec.tuple_bound();
-            let mut iter = table.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
-            let mut data_keys = vec![];
 
-            while let Some((key, value_option))  = iter.try_next()? {
-                if value_option.is_some() {
-                    data_keys.push(key);
-                }
-            }
-            drop(iter);
+            let (tuple_min, tuple_max) = table.table_codec.tuple_bound();
+            Self::_drop_data(&mut table, &tuple_min, &tuple_max)?;
 
-            for col_key in data_keys {
-                table.tx.remove(&col_key)?
-            }
+            let (index_min, index_max) = table.table_codec.all_index_bound();
+            Self::_drop_data(&mut table, &index_min, &index_max)?;
+
             table.tx.commit().await?;
         }
 

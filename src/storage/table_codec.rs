@@ -43,9 +43,21 @@ impl TableCodec {
     pub fn index_bound(&self, index_id: &IndexId) -> (Vec<u8>, Vec<u8>) {
         let op = |bound_id| {
             format!(
-                "{}_Index_{}_{}",
+                "{}_Index_0_{}_{}",
                 self.table.name,
                 index_id,
+                bound_id
+            )
+        };
+
+        (op(BOUND_MIN_TAG).into_bytes(), op(BOUND_MAX_TAG).into_bytes())
+    }
+
+    pub fn all_index_bound(&self) -> (Vec<u8>, Vec<u8>) {
+        let op = |bound_id| {
+            format!(
+                "{}_Index_{}",
+                self.table.name,
                 bound_id
             )
         };
@@ -108,11 +120,11 @@ impl TableCodec {
     }
 
     /// NonUnique Index:
-    /// Key: TableName_Index_IndexID_0_DataValue1_DataValue2 ..
+    /// Key: TableName_Index_0_IndexID_0_DataValue1_DataValue2 ..
     /// Value: IndexValue
     ///
     /// Unique Index:
-    /// Key: TableName_Index_IndexID_0_DataValue
+    /// Key: TableName_Index_0_IndexID_0_DataValue
     /// Value: IndexValue
     ///
     /// Tips: The unique index has only one ColumnID and one corresponding DataValue,
@@ -125,7 +137,7 @@ impl TableCodec {
 
     pub fn encode_index_key(&self, index: &Index) -> Result<Vec<u8>, TypeError> {
         let mut string_key = format!(
-            "{}_Index_{}_0",
+            "{}_Index_0_{}_0",
             self.table.name,
             index.id
         );
@@ -325,7 +337,7 @@ mod tests {
         assert_eq!(
             String::from_utf8(key.to_vec()).ok().unwrap(),
             format!(
-                "{}_Index_{}_0_{}",
+                "{}_Index_0_{}_0_{}",
                 table_catalog.name,
                 index.id,
                 index.column_values[0].to_index_key()?
@@ -432,17 +444,17 @@ mod tests {
             str.to_string().into_bytes()
         };
 
-        set.insert(op("T0_Index_0_0_0000000000000000000"));
-        set.insert(op("T0_Index_0_0_0000000000000000001"));
-        set.insert(op("T0_Index_0_0_0000000000000000002"));
+        set.insert(op("T0_Index_0_0_0_0000000000000000000"));
+        set.insert(op("T0_Index_0_0_0_0000000000000000001"));
+        set.insert(op("T0_Index_0_0_0_0000000000000000002"));
 
-        set.insert(op("T0_Index_1_0_0000000000000000000"));
-        set.insert(op("T0_Index_1_0_0000000000000000001"));
-        set.insert(op("T0_Index_1_0_0000000000000000002"));
+        set.insert(op("T0_Index_0_1_0_0000000000000000000"));
+        set.insert(op("T0_Index_0_1_0_0000000000000000001"));
+        set.insert(op("T0_Index_0_1_0_0000000000000000002"));
 
-        set.insert(op("T0_Index_2_0_0000000000000000000"));
-        set.insert(op("T0_Index_2_0_0000000000000000001"));
-        set.insert(op("T0_Index_2_0_0000000000000000002"));
+        set.insert(op("T0_Index_0_2_0_0000000000000000000"));
+        set.insert(op("T0_Index_0_2_0_0000000000000000001"));
+        set.insert(op("T0_Index_0_2_0_0000000000000000002"));
 
         let table_codec = TableCodec {
             table: TableCatalog::new(Arc::new("T0".to_string()), vec![], vec![]).unwrap(),
@@ -455,9 +467,44 @@ mod tests {
 
         assert_eq!(vec.len(), 3);
 
-        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "T0_Index_1_0_0000000000000000000");
-        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "T0_Index_1_0_0000000000000000001");
-        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "T0_Index_1_0_0000000000000000002");
+        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "T0_Index_0_1_0_0000000000000000000");
+        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "T0_Index_0_1_0_0000000000000000001");
+        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "T0_Index_0_1_0_0000000000000000002");
+    }
+
+    #[test]
+    fn test_table_codec_index_all_bound() {
+        let mut set = BTreeSet::new();
+        let op = |str: &str| {
+            str.to_string().into_bytes()
+        };
+
+        set.insert(op("T0_Index_0_0_0_0000000000000000000"));
+        set.insert(op("T0_Index_0_0_0_0000000000000000001"));
+        set.insert(op("T0_Index_0_0_0_0000000000000000002"));
+
+        set.insert(op("T1_Index_0_1_0_0000000000000000000"));
+        set.insert(op("T1_Index_0_1_0_0000000000000000001"));
+        set.insert(op("T1_Index_0_1_0_0000000000000000002"));
+
+        set.insert(op("T2_Index_0_2_0_0000000000000000000"));
+        set.insert(op("T2_Index_0_2_0_0000000000000000001"));
+        set.insert(op("T2_Index_0_2_0_0000000000000000002"));
+
+        let table_codec = TableCodec {
+            table: TableCatalog::new(Arc::new("T1".to_string()), vec![], vec![]).unwrap(),
+        };
+        let (min, max) = table_codec.all_index_bound();
+
+        let vec = set
+            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
+            .collect_vec();
+
+        assert_eq!(vec.len(), 3);
+
+        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "T1_Index_0_1_0_0000000000000000000");
+        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "T1_Index_0_1_0_0000000000000000001");
+        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "T1_Index_0_1_0_0000000000000000002");
     }
 
     #[test]
