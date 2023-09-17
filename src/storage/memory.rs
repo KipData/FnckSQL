@@ -4,7 +4,7 @@ use std::slice;
 use std::sync::Arc;
 use async_trait::async_trait;
 use crate::catalog::{ColumnCatalog, RootCatalog, TableCatalog, TableName};
-use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
+use crate::storage::{Bounds, Projections, Storage, StorageError, Transaction, Iter};
 use crate::types::index::Index;
 use crate::types::tuple::{Tuple, TupleId};
 
@@ -52,7 +52,7 @@ struct StorageInner {
 
 #[async_trait]
 impl Storage for MemStorage {
-    type TableType = MemTable;
+    type TransactionType = MemTable;
 
     async fn create_table(&self, table_name: TableName, columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
         let new_table = MemTable {
@@ -92,7 +92,7 @@ impl Storage for MemStorage {
         Ok(())
     }
 
-    async fn table(&self, name: &String) -> Option<Self::TableType> {
+    async fn transaction(&self, name: &String) -> Option<Self::TransactionType> {
         unsafe {
             self.inner
                 .as_ptr()
@@ -105,7 +105,7 @@ impl Storage for MemStorage {
         }
     }
 
-    async fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
+    async fn table(&self, name: &String) -> Option<&TableCatalog> {
         unsafe {
             self.inner
                 .as_ptr()
@@ -145,10 +145,10 @@ impl Debug for MemTable {
 }
 
 #[async_trait]
-impl Table for MemTable {
-    type TransactionType<'a> = MemTraction<'a>;
+impl Transaction for MemTable {
+    type IterType<'a> = MemTraction<'a>;
 
-    fn read(&self, bounds: Bounds, projection: Projections) -> Result<Self::TransactionType<'_>, StorageError> {
+    fn read(&self, bounds: Bounds, projection: Projections) -> Result<Self::IterType<'_>, StorageError> {
         unsafe {
             Ok(
                 MemTraction {
@@ -212,7 +212,7 @@ pub struct MemTraction<'a> {
     iter: slice::Iter<'a, Tuple>
 }
 
-impl Transaction for MemTraction<'_> {
+impl Iter for MemTraction<'_> {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, StorageError> {
         while self.offset > 0 {
             let _ = self.iter.next();
@@ -258,12 +258,12 @@ pub(crate) mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::expression::ScalarExpression;
     use crate::storage::memory::MemStorage;
-    use crate::storage::{Storage, StorageError, Table, Transaction};
+    use crate::storage::{Storage, StorageError, Transaction, Iter};
     use crate::types::LogicalType;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
 
-    pub fn data_filling(columns: Vec<ColumnRef>, table: &mut impl Table) -> Result<(), StorageError> {
+    pub fn data_filling(columns: Vec<ColumnRef>, table: &mut impl Transaction) -> Result<(), StorageError> {
         table.append(Tuple {
             id: Some(Arc::new(DataValue::Int32(Some(1)))),
             columns: columns.clone(),
@@ -306,22 +306,22 @@ pub(crate) mod test {
 
         let table_id = storage.create_table(Arc::new("test".to_string()), source_columns).await?;
 
-        let table_catalog = storage.table_catalog(&"test".to_string()).await;
+        let table_catalog = storage.table(&"test".to_string()).await;
         assert!(table_catalog.is_some());
         assert!(table_catalog.unwrap().get_column_id_by_name(&"c1".to_string()).is_some());
 
-        let mut table = storage.table(&table_id).await.unwrap();
-        data_filling(columns, &mut table)?;
+        let mut transaction = storage.transaction(&table_id).await.unwrap();
+        data_filling(columns, &mut transaction)?;
 
-        let mut tx = table.read(
+        let mut iter = transaction.read(
             (Some(1), Some(1)),
             vec![ScalarExpression::InputRef { index: 0, ty: LogicalType::Integer }]
         )?;
 
-        let option_1 = tx.next_tuple()?;
+        let option_1 = iter.next_tuple()?;
         assert_eq!(option_1.unwrap().id, Some(Arc::new(DataValue::Int32(Some(2)))));
 
-        let option_2 = tx.next_tuple()?;
+        let option_2 = iter.next_tuple()?;
         assert_eq!(option_2, None);
 
         Ok(())

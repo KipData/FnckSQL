@@ -4,7 +4,7 @@ use crate::catalog::TableName;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::update::UpdateOperator;
-use crate::storage::{Storage, Table};
+use crate::storage::{Storage, Transaction};
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 
@@ -35,8 +35,8 @@ impl Update {
     pub async fn _execute<S: Storage>(self, storage: S) {
         let Update { table_name, input, values } = self;
 
-        if let Some(mut table) = storage.table(&table_name).await {
-            let table_catalog = storage.table_catalog(&table_name).await.unwrap();
+        if let Some(mut transaction) = storage.transaction(&table_name).await {
+            let table_catalog = storage.table(&table_name).await.unwrap();
             let mut value_map = HashMap::new();
 
             // only once
@@ -57,7 +57,7 @@ impl Update {
                         if column.desc.is_primary {
                             let old_key = tuple.id.replace(value.clone()).unwrap();
 
-                            table.delete(old_key)?;
+                            transaction.delete(old_key)?;
                             is_overwrite = false;
                         }
                         if column.desc.is_unique && value != &tuple.values[i] {
@@ -66,11 +66,11 @@ impl Update {
                                     id: index_meta.id,
                                     column_values: vec![tuple.values[i].clone()],
                                 };
-                                table.del_index(&index)?;
+                                transaction.del_index(&index)?;
 
                                 if !value.is_null() {
                                     index.column_values[0] = value.clone();
-                                    table.add_index(index, vec![tuple.id.clone().unwrap()], true)?;
+                                    transaction.add_index(index, vec![tuple.id.clone().unwrap()], true)?;
                                 }
                             }
                         }
@@ -79,10 +79,10 @@ impl Update {
                     }
                 }
 
-                table.append(tuple, is_overwrite)?;
+                transaction.append(tuple, is_overwrite)?;
             }
 
-            table.commit().await?;
+            transaction.commit().await?;
         }
     }
 }

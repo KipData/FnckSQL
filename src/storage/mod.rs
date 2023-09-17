@@ -13,7 +13,7 @@ use crate::types::tuple::{Tuple, TupleId};
 
 #[async_trait]
 pub trait Storage: Sync + Send + Clone + 'static {
-    type TableType: Table;
+    type TransactionType: Transaction;
 
     async fn create_table(
         &self,
@@ -24,8 +24,8 @@ pub trait Storage: Sync + Send + Clone + 'static {
     async fn drop_table(&self, name: &String) -> Result<(), StorageError>;
     async fn drop_data(&self, name: &String) -> Result<(), StorageError>;
 
-    async fn table(&self, name: &String) -> Option<Self::TableType>;
-    async fn table_catalog(&self, name: &String) -> Option<&TableCatalog>;
+    async fn transaction(&self, name: &String) -> Option<Self::TransactionType>;
+    async fn table(&self, name: &String) -> Option<&TableCatalog>;
 
     async fn show_tables(&self) -> Option<Vec<(String,usize)>>;
 }
@@ -35,8 +35,8 @@ pub(crate) type Bounds = (Option<usize>, Option<usize>);
 type Projections = Vec<ScalarExpression>;
 
 #[async_trait]
-pub trait Table: Sync + Send + 'static {
-    type TransactionType<'a>: Transaction;
+pub trait Transaction: Sync + Send + 'static {
+    type IterType<'a>: Iter;
 
     /// The bounds is applied to the whole data batches, not per batch.
     ///
@@ -45,7 +45,7 @@ pub trait Table: Sync + Send + 'static {
         &self,
         bounds: Bounds,
         projection: Projections,
-    ) -> Result<Self::TransactionType<'_>, StorageError>;
+    ) -> Result<Self::IterType<'_>, StorageError>;
 
     fn add_index(&mut self, index: Index, tuple_ids: Vec<TupleId>, is_unique: bool) -> Result<(), StorageError>;
 
@@ -58,7 +58,7 @@ pub trait Table: Sync + Send + 'static {
     async fn commit(self) -> Result<(), StorageError>;
 }
 
-pub trait Transaction: Sync + Send {
+pub trait Iter: Sync + Send {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, StorageError>;
 }
 

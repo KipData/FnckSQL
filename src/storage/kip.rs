@@ -5,11 +5,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use kip_db::kernel::lsm::mvcc::TransactionIter;
 use kip_db::kernel::lsm::{mvcc, storage};
-use kip_db::kernel::lsm::iterator::Iter;
+use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
 use kip_db::kernel::lsm::storage::Config;
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
-use crate::storage::{Bounds, Projections, Storage, StorageError, Table, Transaction};
+use crate::storage::{Bounds, Projections, Storage, StorageError, Transaction, Iter};
 use crate::storage::table_codec::TableCodec;
 use crate::types::index::{Index, IndexMeta};
 use crate::types::tuple::{Tuple, TupleId};
@@ -72,7 +72,7 @@ impl KipStorage {
         Some(indexes)
     }
 
-    fn _drop_data(table: &mut KipTable, min: &[u8], max: &[u8]) -> Result<(), StorageError> {
+    fn _drop_data(table: &mut KipTransaction, min: &[u8], max: &[u8]) -> Result<(), StorageError> {
         let mut iter = table.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
         let mut data_keys = vec![];
 
@@ -93,7 +93,7 @@ impl KipStorage {
 
 #[async_trait]
 impl Storage for KipStorage {
-    type TableType = KipTable;
+    type TransactionType = KipTransaction;
 
     async fn create_table(&self, table_name: TableName, columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
         let mut tx = self.inner.new_transaction().await;
@@ -165,30 +165,30 @@ impl Storage for KipStorage {
     }
 
     async fn drop_data(&self, name: &String) -> Result<(), StorageError> {
-        if let Some(mut table) = self.table(name).await {
+        if let Some(mut transaction) = self.transaction(name).await {
 
-            let (tuple_min, tuple_max) = table.table_codec.tuple_bound();
-            Self::_drop_data(&mut table, &tuple_min, &tuple_max)?;
+            let (tuple_min, tuple_max) = transaction.table_codec.tuple_bound();
+            Self::_drop_data(&mut transaction, &tuple_min, &tuple_max)?;
 
-            let (index_min, index_max) = table.table_codec.all_index_bound();
-            Self::_drop_data(&mut table, &index_min, &index_max)?;
+            let (index_min, index_max) = transaction.table_codec.all_index_bound();
+            Self::_drop_data(&mut transaction, &index_min, &index_max)?;
 
-            table.tx.commit().await?;
+            transaction.tx.commit().await?;
         }
 
         Ok(())
     }
 
-    async fn table(&self, name: &String) -> Option<Self::TableType> {
-        let table_codec = self.table_catalog(name)
+    async fn transaction(&self, name: &String) -> Option<Self::TransactionType> {
+        let table_codec = self.table(name)
             .await
             .map(|catalog| TableCodec { table: catalog.clone() })?;
         let tx = self.inner.new_transaction().await;
 
-        Some(KipTable { table_codec, tx, })
+        Some(KipTransaction { table_codec, tx, })
     }
 
-    async fn table_catalog(&self, name: &String) -> Option<&TableCatalog> {
+    async fn table(&self, name: &String) -> Option<&TableCatalog> {
         let mut option = self.cache.get(name);
 
         if option.is_none() {
@@ -226,20 +226,20 @@ impl Storage for KipStorage {
     }
 }
 
-pub struct KipTable {
+pub struct KipTransaction {
     table_codec: TableCodec,
     tx: mvcc::Transaction
 }
 
 #[async_trait]
-impl Table for KipTable {
-    type TransactionType<'a> = KipTraction<'a>;
+impl Transaction for KipTransaction {
+    type IterType<'a> = KipIter<'a>;
 
-    fn read(&self, bounds: Bounds, projections: Projections) -> Result<Self::TransactionType<'_>, StorageError> {
+    fn read(&self, bounds: Bounds, projections: Projections) -> Result<Self::IterType<'_>, StorageError> {
         let (min, max) = self.table_codec.tuple_bound();
         let iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
 
-        Ok(KipTraction {
+        Ok(KipIter {
             offset: bounds.0.unwrap_or(0),
             limit: bounds.1,
             projections,
@@ -303,7 +303,7 @@ impl Table for KipTable {
     }
 }
 
-pub struct KipTraction<'a> {
+pub struct KipIter<'a> {
     offset: usize,
     limit: Option<usize>,
     projections: Projections,
@@ -311,7 +311,7 @@ pub struct KipTraction<'a> {
     iter: TransactionIter<'a>
 }
 
-impl Transaction for KipTraction<'_> {
+impl Iter for KipIter<'_> {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, StorageError> {
         while self.offset > 0 {
             let _ = self.iter.try_next()?;
@@ -360,7 +360,7 @@ mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::expression::ScalarExpression;
     use crate::storage::kip::KipStorage;
-    use crate::storage::{Storage, StorageError, Transaction, Table};
+    use crate::storage::{Storage, StorageError, Iter, Transaction};
     use crate::storage::memory::test::data_filling;
     use crate::types::LogicalType;
     use crate::types::value::DataValue;
@@ -387,22 +387,22 @@ mod test {
             .collect_vec();
         let table_id = storage.create_table(Arc::new("test".to_string()), source_columns).await?;
 
-        let table_catalog = storage.table_catalog(&"test".to_string()).await;
+        let table_catalog = storage.table(&"test".to_string()).await;
         assert!(table_catalog.is_some());
         assert!(table_catalog.unwrap().get_column_id_by_name(&"c1".to_string()).is_some());
 
-        let mut table = storage.table(&table_id).await.unwrap();
-        data_filling(columns, &mut table)?;
+        let mut transaction = storage.transaction(&table_id).await.unwrap();
+        data_filling(columns, &mut transaction)?;
 
-        let mut tx = table.read(
+        let mut iter = transaction.read(
             (Some(1), Some(1)),
             vec![ScalarExpression::InputRef { index: 0, ty: LogicalType::Integer }]
         )?;
 
-        let option_1 = tx.next_tuple()?;
+        let option_1 = iter.next_tuple()?;
         assert_eq!(option_1.unwrap().id, Some(Arc::new(DataValue::Int32(Some(2)))));
 
-        let option_2 = tx.next_tuple()?;
+        let option_2 = iter.next_tuple()?;
         assert_eq!(option_2, None);
 
         Ok(())

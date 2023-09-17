@@ -18,7 +18,7 @@ pub struct Tuple {
 
 impl Tuple {
     pub fn deserialize_from(columns: Vec<ColumnRef>, bytes: &[u8]) -> Self {
-        fn bit_index(bits: u8, i: usize) -> bool {
+        fn is_none(bits: u8, i: usize) -> bool {
             bits & (1 << (7 - i)) > 0
         }
 
@@ -32,7 +32,7 @@ impl Tuple {
         for (i, col) in columns.iter().enumerate() {
             let logic_type = col.datatype();
 
-            if bit_index(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
+            if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
                 values.push(Arc::new(DataValue::none(logic_type)));
             } else if let Some(len) = logic_type.raw_len() {
                 /// fixed length (e.g.: int)

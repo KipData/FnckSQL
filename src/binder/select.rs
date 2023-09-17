@@ -167,7 +167,7 @@ impl<S: Storage> Binder<S> {
         let table_catalog = self
             .context
             .storage
-            .table_catalog(&table_name)
+            .table(&table_name)
             .await
             .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
 
@@ -215,7 +215,7 @@ impl<S: Storage> Binder<S> {
         for table_name in self.context.bind_table.keys().cloned() {
             let table = self.context
                 .storage
-                .table_catalog(&table_name)
+                .table(&table_name)
                 .await
                 .ok_or_else(|| BindError::InvalidTable(table_name.to_string()))?;
             for col in table.all_columns() {
@@ -244,12 +244,12 @@ impl<S: Storage> Binder<S> {
         let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type)).await?;
 
         let left_table = self.context.storage
-            .table_catalog(&left_table)
+            .table(&left_table)
             .await
             .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("Left: {} not found", left_table)))?;
         let right_table = self.context.storage
-            .table_catalog(&right_table)
+            .table(&right_table)
             .await
             .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("Right: {} not found", right_table)))?;

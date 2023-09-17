@@ -4,7 +4,7 @@ use crate::catalog::TableName;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::delete::DeleteOperator;
-use crate::storage::{Storage, Table};
+use crate::storage::{Storage, Transaction};
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 
@@ -33,8 +33,8 @@ impl Delete {
     pub async fn _execute<S: Storage>(self, storage: S) {
         let Delete { table_name, input } = self;
 
-        if let Some(mut table) = storage.table(&table_name).await {
-            let table_catalog = storage.table_catalog(&table_name).await.unwrap();
+        if let Some(mut transaction) = storage.transaction(&table_name).await {
+            let table_catalog = storage.table(&table_name).await.unwrap();
 
             let vec = table_catalog
                 .all_columns()
@@ -60,15 +60,15 @@ impl Delete {
                             column_values: vec![value.clone()],
                         };
 
-                        table.del_index(&index)?;
+                        transaction.del_index(&index)?;
                     }
                 }
 
                 if let Some(tuple_id) = tuple.id {
-                    table.delete(tuple_id)?;
+                    transaction.delete(tuple_id)?;
                 }
             }
-            table.commit().await?;
+            transaction.commit().await?;
         }
     }
 }

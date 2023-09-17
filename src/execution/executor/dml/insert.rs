@@ -6,7 +6,7 @@ use crate::catalog::TableName;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::insert::InsertOperator;
-use crate::storage::{Storage, Table};
+use crate::storage::{Storage, Transaction};
 use crate::types::ColumnId;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
@@ -41,8 +41,8 @@ impl Insert {
         let mut primary_key_index = None;
         let mut unique_values = HashMap::new();
 
-        if let (Some(table_catalog), Some(mut table)) =
-            (storage.table_catalog(&table_name).await, storage.table(&table_name).await)
+        if let (Some(table_catalog), Some(mut transaction)) =
+            (storage.table(&table_name).await, storage.transaction(&table_name).await)
         {
             #[for_await]
             for tuple in input {
@@ -84,7 +84,7 @@ impl Insert {
                     tuple.values.push(value)
                 }
 
-                table.append(tuple, is_overwrite)?;
+                transaction.append(tuple, is_overwrite)?;
             }
             // Unique Index
             for (col_id, values) in unique_values {
@@ -95,12 +95,12 @@ impl Insert {
                             column_values: vec![value],
                         };
 
-                        table.add_index(index, vec![tuple_id], true)?;
+                        transaction.add_index(index, vec![tuple_id], true)?;
                     }
                 }
             }
 
-            table.commit().await?;
+            transaction.commit().await?;
         }
     }
 }
