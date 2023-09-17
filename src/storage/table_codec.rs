@@ -98,6 +98,45 @@ impl TableCodec {
                     })
             })
     }
+
+
+    /// Key: RootCatalog_0_TableName
+    /// Value: TableName
+    pub fn encode_root_table(table_name: &str) -> Option<(Bytes, Bytes)> {
+        let key = format!(
+            "RootCatalog_{}_{}",
+            BOUND_MIN_TAG,
+            table_name,
+        );
+
+        bincode::serialize(&table_name).ok()
+            .map(|bytes| {
+                (Bytes::from(key.into_bytes()), Bytes::from(bytes))
+            })
+    }
+
+    pub fn decode_root_table(key: &[u8], bytes: &[u8]) -> Option<(String,String)> {
+        String::from_utf8(key.to_owned()).ok()?
+            .split("_")
+            .nth(2)
+            .and_then(|table_name| {
+                bincode::deserialize::<String>(bytes).ok()
+                    .and_then(|name| {
+                        Some((table_name.to_string(), name))
+                    })
+            })
+    }
+
+    pub fn root_table_bound() -> (Vec<u8>, Vec<u8>) {
+        let op = |bound_id| {
+            format!(
+                "RootCatalog_{}",
+                bound_id,
+            )
+        };
+
+        (op(BOUND_MIN_TAG).into_bytes(), op(BOUND_MAX_TAG).into_bytes())
+    }
 }
 
 #[cfg(test)]
@@ -151,6 +190,25 @@ mod tests {
         assert_eq!(codec.decode_tuple(&bytes), tuple);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_root_catalog() {
+        let (table_catalog, _) = build_table_codec();
+        let (key, bytes) = TableCodec::encode_root_table(&table_catalog.name).unwrap();
+
+        assert_eq!(
+            String::from_utf8(key.to_vec()).ok().unwrap(),
+            format!(
+                "RootCatalog_0_{}",
+                table_catalog.name,
+            )
+        );
+
+        let (table_name, name) = TableCodec::decode_root_table(&key, &bytes).unwrap();
+
+        assert_eq!(table_name, table_catalog.name.as_str());
+        assert_eq!(name, table_catalog.name.as_str());
     }
 
     #[test]
@@ -239,5 +297,32 @@ mod tests {
         assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "T1_Data_0_0000000000000000000");
         assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "T1_Data_0_0000000000000000001");
         assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "T1_Data_0_0000000000000000002");
+    }
+
+    #[test]
+    fn test_root_codec_name_bound(){
+        let mut set = BTreeSet::new();
+        let op = |str: &str| {
+            str.to_string().into_bytes()
+        };
+
+        set.insert(op("RootCatalog_0_T0"));
+        set.insert(op("RootCatalog_0_T1"));
+        set.insert(op("RootCatalog_0_T2"));
+
+        set.insert(op("RootCatalog_1_T0"));
+        set.insert(op("RootCatalog_1_T1"));
+        set.insert(op("RootCatalog_1_T2"));
+
+        let (min, max) = TableCodec::root_table_bound();
+
+        let vec = set
+            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
+            .collect_vec();
+
+        assert_eq!(String::from_utf8(vec[0].clone()).unwrap(), "RootCatalog_0_T0");
+        assert_eq!(String::from_utf8(vec[1].clone()).unwrap(), "RootCatalog_0_T1");
+        assert_eq!(String::from_utf8(vec[2].clone()).unwrap(), "RootCatalog_0_T2");
+
     }
 }

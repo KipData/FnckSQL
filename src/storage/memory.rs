@@ -114,6 +114,10 @@ impl Storage for MemStorage {
                 .get_table(name)
         }
     }
+
+    async fn show_tables(&self) -> Option<Vec<String>> {
+        todo!()
+    }
 }
 
 unsafe impl Send for MemTable {

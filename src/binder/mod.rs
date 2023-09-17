@@ -8,6 +8,7 @@ mod delete;
 mod drop_table;
 mod truncate;
 mod distinct;
+mod show;
 
 use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
@@ -121,7 +122,10 @@ impl<S: Storage> Binder<S> {
             Statement::Truncate { table_name, .. } => {
                 self.bind_truncate(table_name).await?
             }
-            _ => unimplemented!(),
+            Statement::ShowTables { .. } => {
+                self.bind_show_tables()?
+            }
+            _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
     }

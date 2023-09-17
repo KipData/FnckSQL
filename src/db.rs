@@ -301,6 +301,10 @@ mod test {
         println!("drop t1:");
         let _ = kipsql.run("drop table t1").await?;
 
+        println!("show tables:");
+        let tuples_show_tables = kipsql.run("show tables").await?;
+        println!("{}", create_table(&tuples_show_tables));
+
         Ok(())
     }
 }

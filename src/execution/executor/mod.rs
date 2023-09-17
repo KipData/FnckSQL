@@ -1,6 +1,7 @@
 pub(crate) mod dql;
 pub(crate)mod ddl;
 pub(crate)mod dml;
+pub(crate) mod show;
 
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
@@ -20,6 +21,7 @@ use crate::execution::executor::dql::projection::Projection;
 use crate::execution::executor::dql::seq_scan::SeqScan;
 use crate::execution::executor::dql::sort::Sort;
 use crate::execution::executor::dql::values::Values;
+use crate::execution::executor::show::show_table::ShowTables;
 use crate::execution::ExecutorError;
 use crate::planner::LogicalPlan;
 use crate::planner::operator::Operator;
@@ -102,6 +104,9 @@ pub fn build<S: Storage>(plan: LogicalPlan, storage: &S) -> BoxedExecutor {
         }
         Operator::Truncate(op) => {
             Truncate::from(op).execute(storage)
+        }
+        Operator::Show(op) => {
+            ShowTables::from(op).execute(storage)
         }
     }
 }

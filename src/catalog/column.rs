@@ -27,6 +27,16 @@ impl ColumnCatalog {
         }
     }
 
+    pub(crate) fn new_dummy(column_name: String)-> ColumnCatalog {
+        ColumnCatalog {
+            id: 0,
+            name: column_name,
+            table_name: None,
+            nullable: false,
+            desc: ColumnDesc::new(LogicalType::Varchar(None), false),
+        }
+    }
+
     pub(crate) fn datatype(&self) -> &LogicalType {
         &self.desc.column_datatype
     }
