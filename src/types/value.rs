@@ -183,15 +183,12 @@ macro_rules! varchar_cast {
         $value.map(|v| {
             let string_value = format!("{}", v);
             if let Some(len) = $len {
-                let len_usize = *len as usize;
-                if string_value.len() > len_usize {
-                    Err(TypeError::CastFail)
-                } else {
-                    Ok(DataValue::Utf8(Some(string_value)))
+                if string_value.len() > *len as usize {
+                    return Err(TypeError::TooLong);
                 }
-            } else {
-                Ok(DataValue::Utf8(Some(string_value)))
             }
+            Ok(DataValue::Utf8(Some(string_value)))
+
         }).unwrap_or(Ok(DataValue::Utf8(None)))
     };
 }
@@ -216,12 +213,12 @@ impl DataValue {
                 if let LogicalType::Varchar(len) = logic_type {
                     if let Some(len) = len {
                         if value.as_ref().map(|v| v.len() > *len as usize).unwrap_or(false) {
-                            return Err(TypeError::CastFail);
+                            return Err(TypeError::TooLong);
                         }
                     }
                 }
             }
-            _ => { return Err(TypeError::CastFail); }
+            _ => { return Err(TypeError::InvalidType); }
         }
         Ok(())
     }
