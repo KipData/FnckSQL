@@ -178,8 +178,63 @@ impl Hash for DataValue {
         }
     }
 }
+macro_rules! varchar_cast {
+    ($value:expr, $len:expr) => {
+        $value.map(|v| {
+            let string_value = format!("{}", v);
+            if let Some(len) = $len {
+                if string_value.len() > *len as usize {
+                    return Err(TypeError::TooLong);
+                }
+            }
+            Ok(DataValue::Utf8(Some(string_value)))
+
+        }).unwrap_or(Ok(DataValue::Utf8(None)))
+    };
+}
 
 impl DataValue {
+    pub(crate) fn check_length(&self, logic_type: &LogicalType) -> Result<(), TypeError> {
+        match self {
+            DataValue::Boolean(_) => return Ok(()),
+            DataValue::Float32(_) => return Ok(()),
+            DataValue::Float64(_) => return Ok(()),
+            DataValue::Int8(_) => return Ok(()),
+            DataValue::Int16(_) => return Ok(()),
+            DataValue::Int32(_) => return Ok(()),
+            DataValue::Int64(_) => return Ok(()),
+            DataValue::UInt8(_) => return Ok(()),
+            DataValue::UInt16(_) => return Ok(()),
+            DataValue::UInt32(_) => return Ok(()),
+            DataValue::UInt64(_) => return Ok(()),
+            DataValue::Date32(_) => return Ok(()),
+            DataValue::Date64(_) => return Ok(()),
+            DataValue::Utf8(value) => {
+                if let LogicalType::Varchar(len) = logic_type {
+                    if let Some(len) = len {
+                        if value.as_ref().map(|v| v.len() > *len as usize).unwrap_or(false) {
+                            return Err(TypeError::TooLong);
+                        }
+                    }
+                }
+            }
+            _ => { return Err(TypeError::InvalidType); }
+        }
+        Ok(())
+    }
+
+    fn format_date(value: Option<i32>) -> Option<String> {
+        value.and_then(|v| {
+            Self::date_format(v).map(|fmt| format!("{}", fmt))
+        })
+    }
+
+    fn format_datetime(value: Option<i64>) -> Option<String> {
+        value.and_then(|v| {
+            Self::date_time_format(v).map(|fmt| format!("{}", fmt))
+        })
+    }
+
     pub fn is_variable(&self) -> bool {
         match self {
             DataValue::Utf8(_) => true,
@@ -222,7 +277,7 @@ impl DataValue {
             LogicalType::UBigint => DataValue::UInt64(None),
             LogicalType::Float => DataValue::Float32(None),
             LogicalType::Double => DataValue::Float64(None),
-            LogicalType::Varchar => DataValue::Utf8(None),
+            LogicalType::Varchar(_) => DataValue::Utf8(None),
             LogicalType::Date => DataValue::Date32(None),
             LogicalType::DateTime => DataValue::Date64(None)
         }
@@ -243,7 +298,7 @@ impl DataValue {
             LogicalType::UBigint => DataValue::UInt64(Some(0)),
             LogicalType::Float => DataValue::Float32(Some(0.0)),
             LogicalType::Double => DataValue::Float64(Some(0.0)),
-            LogicalType::Varchar => DataValue::Utf8(Some("".to_string())),
+            LogicalType::Varchar(_) => DataValue::Utf8(Some("".to_string())),
             LogicalType::Date => DataValue::Date32(Some(UNIX_DATETIME.num_days_from_ce())),
             LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.timestamp()))
         }
@@ -292,7 +347,7 @@ impl DataValue {
                 buf.copy_from_slice(bytes);
                 f64::from_ne_bytes(buf)
             })),
-            LogicalType::Varchar => DataValue::Utf8((!bytes.is_empty()).then(|| String::from_utf8(bytes.to_owned()).unwrap())),
+            LogicalType::Varchar(_) => DataValue::Utf8((!bytes.is_empty()).then(|| String::from_utf8(bytes.to_owned()).unwrap())),
             LogicalType::Date => DataValue::Date32((!bytes.is_empty()).then(|| i32::decode_fixed(bytes))),
             LogicalType::DateTime => DataValue::Date64((!bytes.is_empty()).then(|| i64::decode_fixed(bytes))),
         }
@@ -312,7 +367,7 @@ impl DataValue {
             DataValue::UInt16(_) => LogicalType::USmallint,
             DataValue::UInt32(_) => LogicalType::UInteger,
             DataValue::UInt64(_) => LogicalType::UBigint,
-            DataValue::Utf8(_) => LogicalType::Varchar,
+            DataValue::Utf8(_) => LogicalType::Varchar(None),
             DataValue::Date32(_) => LogicalType::Date,
             DataValue::Date64(_) => LogicalType::DateTime,
         }
@@ -332,7 +387,7 @@ impl DataValue {
             _ => return Err(TypeError::InvalidType),
         }.ok_or(TypeError::NotNull)
     }
-    
+
     pub fn cast(self, to: &LogicalType) -> Result<DataValue, TypeError> {
         match self {
             DataValue::Null => {
@@ -350,7 +405,7 @@ impl DataValue {
                     LogicalType::UBigint => Ok(DataValue::UInt64(None)),
                     LogicalType::Float => Ok(DataValue::Float32(None)),
                     LogicalType::Double => Ok(DataValue::Float64(None)),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(None)),
+                    LogicalType::Varchar(_) => Ok(DataValue::Utf8(None)),
                     LogicalType::Date => Ok(DataValue::Date32(None)),
                     LogicalType::DateTime => Ok(DataValue::Date64(None)),
                 }
@@ -369,7 +424,7 @@ impl DataValue {
                     LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
                     LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -378,7 +433,7 @@ impl DataValue {
                     LogicalType::SqlNull => Ok(DataValue::Null),
                     LogicalType::Float => Ok(DataValue::Float32(value)),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -386,7 +441,7 @@ impl DataValue {
                 match to {
                     LogicalType::SqlNull => Ok(DataValue::Null),
                     LogicalType::Double => Ok(DataValue::Float64(value)),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -403,7 +458,7 @@ impl DataValue {
                     LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                     LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -419,7 +474,7 @@ impl DataValue {
                     LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                     LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -433,7 +488,7 @@ impl DataValue {
                     LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                     LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -445,7 +500,7 @@ impl DataValue {
                     LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| u32::try_from(v)).transpose()?)),
                     LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| u64::try_from(v)).transpose()?)),
                     LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -461,7 +516,7 @@ impl DataValue {
                     LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
                     LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -475,7 +530,7 @@ impl DataValue {
                     LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
                     LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -486,7 +541,7 @@ impl DataValue {
                     LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                     LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -494,7 +549,7 @@ impl DataValue {
                 match to {
                     LogicalType::SqlNull => Ok(DataValue::Null),
                     LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.map(|v| format!("{}", v)))),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     _ => Err(TypeError::CastFail),
                 }
             }
@@ -513,7 +568,7 @@ impl DataValue {
                     LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| u64::from_str(&v)).transpose()?)),
                     LogicalType::Float => Ok(DataValue::Float32(value.map(|v| f32::from_str(&v)).transpose()?)),
                     LogicalType::Double => Ok(DataValue::Float64(value.map(|v| f64::from_str(&v)).transpose()?)),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value)),
+                    LogicalType::Varchar(len) => varchar_cast!(value, len),
                     LogicalType::Date => {
                         let option = value.map(|v| {
                             NaiveDate::parse_from_str(&v, DATE_FMT)
@@ -539,9 +594,7 @@ impl DataValue {
             DataValue::Date32(value) => {
                 match to {
                     LogicalType::SqlNull => Ok(DataValue::Null),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.and_then(|v| {
-                        Self::date_format(v).map(|fmt| format!("{}", fmt))
-                    }))),
+                    LogicalType::Varchar(len) => varchar_cast!(Self::format_date(value), len),
                     LogicalType::Date => Ok(DataValue::Date32(value)),
                     LogicalType::DateTime => {
                         let option = value.and_then(|v| {
@@ -551,16 +604,14 @@ impl DataValue {
                         });
 
                         Ok(DataValue::Date64(option))
-                    },
+                    }
                     _ => Err(TypeError::CastFail)
                 }
             }
             DataValue::Date64(value) => {
                 match to {
                     LogicalType::SqlNull => Ok(DataValue::Null),
-                    LogicalType::Varchar => Ok(DataValue::Utf8(value.and_then(|v| {
-                        Self::date_time_format(v).map(|fmt| format!("{}", fmt))
-                    }))),
+                    LogicalType::Varchar(len) => varchar_cast!(Self::format_datetime(value), len),
                     LogicalType::Date => {
                         let option = value.and_then(|v| {
                             NaiveDateTime::from_timestamp_opt(v, 0)
@@ -672,7 +723,7 @@ impl fmt::Display for DataValue {
             }
             DataValue::Date64(e) => {
                 format_option!(f, e.and_then(|s| DataValue::date_time_format(s)))?
-            },
+            }
         };
         Ok(())
     }

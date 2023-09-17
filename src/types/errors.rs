@@ -12,6 +12,8 @@ pub enum TypeError {
     InternalError(String),
     #[error("cast fail")]
     CastFail,
+    #[error("Too long")]
+    TooLong,
     #[error("cannot be Null")]
     NotNull,
     #[error("try from int")]

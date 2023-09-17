@@ -44,6 +44,7 @@ impl<S: Storage> Binder<S> {
                         bind_table_name.as_ref()
                     ).await? {
                         ScalarExpression::ColumnRef(catalog) => {
+                            value.check_length(catalog.datatype())?;
                             columns.push(catalog);
                             row.push(value.clone());
                         },

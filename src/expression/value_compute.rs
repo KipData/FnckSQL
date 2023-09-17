@@ -59,6 +59,13 @@ fn unpack_date(value: DataValue) -> Option<i64> {
     }
 }
 
+fn unpack_utf8(value: DataValue) -> Option<String> {
+    match value {
+        DataValue::Utf8(inner) => inner,
+        _ => None
+    }
+}
+
 pub fn unary_op(
     value: &DataValue,
     op: &UnaryOperator,
@@ -114,7 +121,7 @@ pub fn binary_op(
 ) -> Result<DataValue, TypeError> {
     let unified_type = LogicalType::max_logical_type(
         &left.logical_type(),
-        &right.logical_type()
+        &right.logical_type(),
     )?;
 
     let value = match &unified_type {
@@ -844,6 +851,76 @@ pub fn binary_op(
                 _ => todo!("unsupported operator")
             }
         }
+        LogicalType::Varchar(None) => {
+            let left_value = unpack_utf8(left.clone().cast(&unified_type)?);
+            let right_value = unpack_utf8(right.clone().cast(&unified_type)?);
+
+            match op {
+                BinaryOperator::Gt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 > v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Lt => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 < v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::GtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 >= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::LtEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 <= v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::Eq => {
+                    let value = match (left_value, right_value) {
+                        (Some(v1), Some(v2)) => {
+                            Some(v1 == v2)
+                        }
+                        (None, None) => {
+                            Some(true)
+                        }
+                        (_, _) => {
+                            None
+                        }
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::NotEq => {
+                    let value = if let (Some(v1), Some(v2)) = (left_value, right_value) {
+                        Some(v1 != v2)
+                    } else {
+                        None
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                _ => todo!("unsupported operator")
+            }
+        }
+        // Utf8
+
         _ => todo!("unsupported data type"),
     };
 
@@ -1102,6 +1179,24 @@ mod test {
         assert_eq!(binary_op(&DataValue::Boolean(Some(false)), &DataValue::Boolean(Some(false)), &BinaryOperator::Or)?, DataValue::Boolean(Some(false)));
 
         assert_eq!(binary_op(&DataValue::Boolean(None), &DataValue::Boolean(Some(true)), &BinaryOperator::Or)?, DataValue::Boolean(None));
+
+        Ok(())
+    }
+    
+    #[test]
+    fn test_binary_op_Utf8_compare()->Result<(),TypeError>{
+        assert_eq!(binary_op(&DataValue::Utf8(Some("a".to_string())), &DataValue::Utf8(Some("b".to_string())), &BinaryOperator::Gt)?, DataValue::Boolean(Some(false)));
+        assert_eq!(binary_op(&DataValue::Utf8(Some("a".to_string())), &DataValue::Utf8(Some("b".to_string())), &BinaryOperator::Lt)?, DataValue::Boolean(Some(true)));
+        assert_eq!(binary_op(&DataValue::Utf8(Some("a".to_string())), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::GtEq)?, DataValue::Boolean(Some(true)));
+        assert_eq!(binary_op(&DataValue::Utf8(Some("a".to_string())), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::LtEq)?, DataValue::Boolean(Some(true)));
+        assert_eq!(binary_op(&DataValue::Utf8(Some("a".to_string())), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::NotEq)?, DataValue::Boolean(Some(false)));
+        assert_eq!(binary_op(&DataValue::Utf8(Some("a".to_string())), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::Eq)?, DataValue::Boolean(Some(true)));
+
+        assert_eq!(binary_op(&DataValue::Utf8(None), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::Gt)?, DataValue::Boolean(None));
+        assert_eq!(binary_op(&DataValue::Utf8(None), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::Lt)?, DataValue::Boolean(None));
+        assert_eq!(binary_op(&DataValue::Utf8(None), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::GtEq)?, DataValue::Boolean(None));
+        assert_eq!(binary_op(&DataValue::Utf8(None), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::LtEq)?, DataValue::Boolean(None));
+        assert_eq!(binary_op(&DataValue::Utf8(None), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::NotEq)?, DataValue::Boolean(None));
 
         Ok(())
     }

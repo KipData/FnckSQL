@@ -54,7 +54,7 @@ pub enum LogicalType {
     UBigint,
     Float,
     Double,
-    Varchar,
+    Varchar(Option<u32>),
     Date,
     DateTime,
 }
@@ -75,7 +75,8 @@ impl LogicalType {
             LogicalType::UBigint => Some(8),
             LogicalType::Float => Some(4),
             LogicalType::Double => Some(8),
-            LogicalType::Varchar => None,
+            /// Note: The non-fixed length type's raw_len is None
+            LogicalType::Varchar(_)=>None,
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
         }
@@ -156,13 +157,13 @@ impl LogicalType {
         if left.is_numeric() && right.is_numeric() {
             return LogicalType::combine_numeric_types(left, right);
         }
-        if matches!((left, right), (LogicalType::Date, LogicalType::Varchar) | (LogicalType::Varchar, LogicalType::Date)) {
+        if matches!((left, right), (LogicalType::Date, LogicalType::Varchar(_)) | (LogicalType::Varchar(_), LogicalType::Date)) {
             return Ok(LogicalType::Date);
         }
         if matches!((left, right), (LogicalType::Date, LogicalType::DateTime) | (LogicalType::DateTime, LogicalType::Date)) {
             return Ok(LogicalType::DateTime);
         }
-        if matches!((left, right), (LogicalType::DateTime, LogicalType::Varchar) | (LogicalType::Varchar, LogicalType::DateTime)) {
+        if matches!((left, right), (LogicalType::DateTime, LogicalType::Varchar(_)) | (LogicalType::Varchar(_), LogicalType::DateTime)) {
             return Ok(LogicalType::DateTime);
         }
         Err(TypeError::InternalError(format!(
@@ -265,9 +266,9 @@ impl LogicalType {
             LogicalType::UBigint => matches!(to, LogicalType::Float | LogicalType::Double),
             LogicalType::Float => matches!(to, LogicalType::Double),
             LogicalType::Double => false,
-            LogicalType::Varchar => false,
-            LogicalType::Date => matches!(to, LogicalType::DateTime | LogicalType::Varchar),
-            LogicalType::DateTime => matches!(to, LogicalType::Date | LogicalType::Varchar),
+            LogicalType::Varchar(_) => false,
+            LogicalType::Date => matches!(to, LogicalType::DateTime | LogicalType::Varchar(_)),
+            LogicalType::DateTime => matches!(to, LogicalType::Date | LogicalType::Varchar(_)),
         }
     }
 }
@@ -278,11 +279,8 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
 
     fn try_from(value: sqlparser::ast::DataType) -> Result<Self, Self::Error> {
         match value {
-            sqlparser::ast::DataType::Char(_)
-            | sqlparser::ast::DataType::Varchar(_)
-            | sqlparser::ast::DataType::Nvarchar(_)
-            | sqlparser::ast::DataType::Text
-            | sqlparser::ast::DataType::String => Ok(LogicalType::Varchar),
+            sqlparser::ast::DataType::Char(len)
+            | sqlparser::ast::DataType::Varchar(len)=> Ok(LogicalType::Varchar(len.map(|len| len.length as u32))),
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
             sqlparser::ast::DataType::Double => Ok(LogicalType::Double),
             sqlparser::ast::DataType::TinyInt(_) => Ok(LogicalType::Tinyint),
@@ -315,7 +313,7 @@ impl std::fmt::Display for LogicalType {
 mod test {
     use std::sync::atomic::Ordering::Release;
 
-    use crate::types::{IdGenerator, ID_BUF};
+    use crate::types::{IdGenerator, ID_BUF, LogicalType};
 
     /// Tips: 由于IdGenerator为static全局性质生成的id，因此需要单独测试避免其他测试方法干扰
     #[test]
