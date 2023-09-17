@@ -2,7 +2,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::types::errors::TypeError;
-use crate::types::index::{Index, IndexId, IndexMeta, IndexValue};
+use crate::types::index::{Index, IndexId, IndexMeta};
 use crate::types::tuple::{Tuple, TupleId};
 
 const BOUND_MIN_TAG: u8 = 0;
@@ -117,10 +117,10 @@ impl TableCodec {
     ///
     /// Tips: The unique index has only one ColumnID and one corresponding DataValue,
     /// so it can be positioned directly.
-    pub fn encode_index(&self, index: &Index) -> Result<(Bytes, Bytes), TypeError> {
+    pub fn encode_index(&self, index: &Index, tuple_ids: &[TupleId]) -> Result<(Bytes, Bytes), TypeError> {
         let key = self.encode_index_key(index)?;
 
-        Ok((Bytes::from(key), Bytes::from(bincode::serialize(&index.value)?)))
+        Ok((Bytes::from(key), Bytes::from(bincode::serialize(tuple_ids)?)))
     }
 
     pub fn encode_index_key(&self, index: &Index) -> Result<Vec<u8>, TypeError> {
@@ -137,7 +137,7 @@ impl TableCodec {
         Ok(string_key.into_bytes())
     }
 
-    pub fn decode_index(bytes: &[u8]) -> Result<IndexValue, TypeError> {
+    pub fn decode_index(bytes: &[u8]) -> Result<Vec<TupleId>, TypeError> {
         Ok(bincode::deserialize(bytes)?)
     }
 
@@ -223,7 +223,7 @@ mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog};
     use crate::storage::table_codec::{COLUMNS_ID_LEN, TableCodec};
     use crate::types::errors::TypeError;
-    use crate::types::index::{Index, IndexMeta, IndexValue};
+    use crate::types::index::{Index, IndexMeta};
     use crate::types::LogicalType;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
@@ -317,12 +317,10 @@ mod tests {
         let index = Index {
             id: 0,
             column_values: vec![Arc::new(DataValue::Int32(Some(0)))],
-            value: IndexValue {
-                tuple_ids: vec![Arc::new(DataValue::Int32(Some(0)))],
-            },
         };
+        let tuple_ids = vec![Arc::new(DataValue::Int32(Some(0)))];
 
-        let (key, bytes) = codec.encode_index(&index)?;
+        let (key, bytes) = codec.encode_index(&index, &tuple_ids)?;
 
         assert_eq!(
             String::from_utf8(key.to_vec()).ok().unwrap(),
@@ -333,7 +331,7 @@ mod tests {
                 index.column_values[0].to_index_key()?
             )
         );
-        assert_eq!(TableCodec::decode_index(&bytes)?, index.value);
+        assert_eq!(TableCodec::decode_index(&bytes)?, tuple_ids);
 
         Ok(())
     }

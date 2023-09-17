@@ -47,7 +47,9 @@ pub trait Table: Sync + Send + 'static {
         projection: Projections,
     ) -> Result<Self::TransactionType<'_>, StorageError>;
 
-    fn add_index(&mut self, index: Index, is_unique: bool) -> Result<(), StorageError>;
+    fn add_index(&mut self, index: Index, tuple_ids: Vec<TupleId>, is_unique: bool) -> Result<(), StorageError>;
+
+    fn del_index(&mut self, index: &Index) -> Result<(), StorageError>;
 
     fn append(&mut self, tuple: Tuple, is_overwrite: bool) -> Result<(), StorageError>;
 

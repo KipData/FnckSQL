@@ -161,7 +161,11 @@ impl Table for MemTable {
         }
     }
 
-    fn add_index(&mut self, _index: Index, _is_unique: bool) -> Result<(), StorageError> {
+    fn add_index(&mut self, index: Index, tuple_ids: Vec<TupleId>, is_unique: bool) -> Result<(), StorageError> {
+        todo!()
+    }
+
+    fn del_index(&mut self, _index: &Index) -> Result<(), StorageError> {
         todo!()
     }
 

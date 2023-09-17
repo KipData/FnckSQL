@@ -8,7 +8,7 @@ use crate::execution::ExecutorError;
 use crate::planner::operator::insert::InsertOperator;
 use crate::storage::{Storage, Table};
 use crate::types::ColumnId;
-use crate::types::index::{Index, IndexValue};
+use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 
@@ -70,7 +70,7 @@ impl Insert {
                     let value = tuple_map.remove(col_id)
                         .unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())));
 
-                    if col.desc.is_unique {
+                    if col.desc.is_unique && !value.is_null() {
                         unique_values
                             .entry(col.id)
                             .or_insert_with(|| vec![])
@@ -93,12 +93,9 @@ impl Insert {
                         let index = Index {
                             id: index_meta.id,
                             column_values: vec![value],
-                            value: IndexValue {
-                                tuple_ids: vec![tuple_id],
-                            },
                         };
 
-                        table.add_index(index, true)?;
+                        table.add_index(index, vec![tuple_id], true)?;
                     }
                 }
             }

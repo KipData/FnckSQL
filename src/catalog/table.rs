@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::ColumnId;
-use crate::types::index::{IndexId, IndexMeta};
+use crate::types::index::IndexMeta;
 
 pub type TableName = Arc<String>;
 

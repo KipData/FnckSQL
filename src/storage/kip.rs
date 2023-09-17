@@ -237,17 +237,17 @@ impl Table for KipTable {
         })
     }
 
-    fn add_index(&mut self, index: Index, is_unique: bool) -> Result<(), StorageError> {
-        let (key, value) = self.table_codec.encode_index(&index)?;
+    fn add_index(&mut self, index: Index, tuple_ids: Vec<TupleId>, is_unique: bool) -> Result<(), StorageError> {
+        let (key, value) = self.table_codec.encode_index(&index, &tuple_ids)?;
 
         if let Some(bytes) = self.tx.get(&key)? {
             if is_unique {
-                let old_index = TableCodec::decode_index(&bytes)?;
+                let old_tuple_ids = TableCodec::decode_index(&bytes)?;
 
-                if old_index.tuple_ids[0] != index.value.tuple_ids[0] {
+                if old_tuple_ids[0] != tuple_ids[0] {
                     return Err(StorageError::DuplicateUniqueValue);
                 } else {
-                    return Ok(())
+                    return Ok(());
                 }
             } else {
                 todo!("联合索引")
@@ -255,6 +255,14 @@ impl Table for KipTable {
         }
 
         self.tx.set(key, value);
+
+        Ok(())
+    }
+
+    fn del_index(&mut self, index: &Index) -> Result<(), StorageError> {
+        let key = self.table_codec.encode_index_key(&index)?;
+
+        self.tx.remove(&key)?;
 
         Ok(())
     }

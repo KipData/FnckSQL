@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use crate::types::ColumnId;
-use crate::types::tuple::TupleId;
 use crate::types::value::ValueRef;
 
 pub type IndexId = u32;
@@ -16,10 +15,4 @@ pub struct IndexMeta {
 pub struct Index {
     pub id: IndexId,
     pub column_values: Vec<ValueRef>,
-    pub value: IndexValue
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct IndexValue {
-    pub tuple_ids: Vec<TupleId>,
 }

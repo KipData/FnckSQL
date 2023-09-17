@@ -5,6 +5,7 @@ use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::update::UpdateOperator;
 use crate::storage::{Storage, Table};
+use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 
 pub struct Update {
@@ -35,6 +36,7 @@ impl Update {
         let Update { table_name, input, values } = self;
 
         if let Some(mut table) = storage.table(&table_name).await {
+            let table_catalog = storage.table_catalog(&table_name).await.unwrap();
             let mut value_map = HashMap::new();
 
             // only once
@@ -47,23 +49,39 @@ impl Update {
             }
             #[for_await]
             for tuple in input {
-                let mut tuple = tuple?;
+                let mut tuple: Tuple = tuple?;
                 let mut is_overwrite = true;
 
                 for (i, column) in tuple.columns.iter().enumerate() {
                     if let Some(value) = value_map.get(&column.id) {
                         if column.desc.is_primary {
-                            if let Some(old_key) = tuple.id.replace(value.clone()) {
-                                table.delete(old_key)?;
-                                is_overwrite = false;
+                            let old_key = tuple.id.replace(value.clone()).unwrap();
+
+                            table.delete(old_key)?;
+                            is_overwrite = false;
+                        }
+                        if column.desc.is_unique && value != &tuple.values[i] {
+                            if let Some(index_meta) = table_catalog.get_unique_index(&column.id) {
+                                let mut index = Index {
+                                    id: index_meta.id,
+                                    column_values: vec![tuple.values[i].clone()],
+                                };
+                                table.del_index(&index)?;
+
+                                if !value.is_null() {
+                                    index.column_values[0] = value.clone();
+                                    table.add_index(index, vec![tuple.id.clone().unwrap()], true)?;
+                                }
                             }
                         }
+
                         tuple.values[i] = value.clone();
                     }
                 }
 
                 table.append(tuple, is_overwrite)?;
             }
+
             table.commit().await?;
         }
     }

@@ -1,9 +1,11 @@
 use futures_async_stream::try_stream;
+use itertools::Itertools;
 use crate::catalog::TableName;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::storage::{Storage, Table};
+use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 
 pub struct Delete {
@@ -32,9 +34,35 @@ impl Delete {
         let Delete { table_name, input } = self;
 
         if let Some(mut table) = storage.table(&table_name).await {
+            let table_catalog = storage.table_catalog(&table_name).await.unwrap();
+
+            let vec = table_catalog
+                .all_columns()
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, col)| col.desc.is_unique
+                    .then(|| table_catalog.get_unique_index(&col.id)
+                        .map(|index_meta| (i, index_meta)))
+                    .flatten())
+                .collect_vec();
+
+
             #[for_await]
             for tuple in input {
                 let tuple: Tuple = tuple?;
+
+                for (i, index_meta) in vec.iter() {
+                    let value = &tuple.values[*i];
+
+                    if !value.is_null() {
+                        let index = Index {
+                            id: index_meta.id,
+                            column_values: vec![value.clone()],
+                        };
+
+                        table.del_index(&index)?;
+                    }
+                }
 
                 if let Some(tuple_id) = tuple.id {
                     table.delete(tuple_id)?;
