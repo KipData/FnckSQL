@@ -310,10 +310,6 @@ mod tests {
         set.insert(op("RootCatalog_0_T1"));
         set.insert(op("RootCatalog_0_T2"));
 
-        set.insert(op("RootCatalog_1_T0"));
-        set.insert(op("RootCatalog_1_T1"));
-        set.insert(op("RootCatalog_1_T2"));
-
         let (min, max) = TableCodec::root_table_bound();
 
         let vec = set
