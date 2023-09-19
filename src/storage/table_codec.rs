@@ -121,11 +121,11 @@ impl TableCodec {
 
     /// NonUnique Index:
     /// Key: TableName_Index_0_IndexID_0_DataValue1_DataValue2 ..
-    /// Value: IndexValue
+    /// Value: TupleIDs
     ///
     /// Unique Index:
     /// Key: TableName_Index_0_IndexID_0_DataValue
-    /// Value: IndexValue
+    /// Value: TupleIDs
     ///
     /// Tips: The unique index has only one ColumnID and one corresponding DataValue,
     /// so it can be positioned directly.

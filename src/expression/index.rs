@@ -9,7 +9,7 @@ use crate::types::{ColumnId, LogicalType};
 use crate::types::errors::TypeError;
 use crate::types::value::{DataValue, ValueRef};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum IndexBinary {
     Scope {
         min: Bound<ValueRef>,
@@ -18,7 +18,9 @@ pub enum IndexBinary {
     Eq(ValueRef),
     NotEq(ValueRef),
 
+    // IndexBinary in And can only be Scope\Eq\NotEq
     And(Vec<IndexBinary>),
+    // IndexBinary in Or can only be Scope\Eq\NotEq\And
     Or(Vec<IndexBinary>)
 }
 
@@ -32,9 +34,27 @@ impl IndexBinary {
         }
     }
 
+    pub fn scope_aggregation(&mut self) -> Result<(), TypeError> {
+        match self {
+            IndexBinary::And(binaries) => {
+                let fixed_binaries = Self::_scope_aggregation(&binaries)?;
+                let _ = mem::replace(binaries, fixed_binaries);
+            }
+            IndexBinary::Or(binaryies) => {
+                for binary in binaryies {
+                    binary.scope_aggregation()?
+                }
+            }
+            _ => ()
+        }
+
+
+        Ok(())
+    }
+
     // FIXME: 聚合时将scope以外的等值条件已经非等值条件去除
     // Tips: Not `And` and `Or`
-    pub fn scope_aggregation(binaries: Vec<IndexBinary>) -> Result<Vec<IndexBinary>, TypeError> {
+    fn _scope_aggregation(binaries: &[IndexBinary]) -> Result<Vec<IndexBinary>, TypeError> {
         fn bound_compared(left_bound: &Bound<ValueRef>, right_bound: &Bound<ValueRef>, is_min: bool) -> Option<Ordering> {
             let op = |is_min, order: Ordering| {
                 if is_min {
@@ -69,17 +89,17 @@ impl IndexBinary {
             if let IndexBinary::Scope { min, max } = binary {
                 if let Some(order) = bound_compared(&scope_min, &min, true) {
                     if order.is_lt() {
-                        scope_min = min;
+                        scope_min = min.clone();
                     }
                 }
 
                 if let Some(order) = bound_compared(&scope_max, &max, false) {
                     if order.is_gt() {
-                        scope_max = max;
+                        scope_max = max.clone();
                     }
                 }
             } else if !binary.is_null()? {
-                new_binaries.push(binary);
+                new_binaries.push(binary.clone());
             }
         }
         if !matches!((&scope_min, &scope_max), (Bound::Unbounded, Bound::Unbounded)) {
@@ -155,19 +175,23 @@ impl ScalarExpression {
         }
     }
 
+    pub fn arithmetic_flip(&mut self) {
+        self._arithmetic_flip(&mut None);
+    }
+
     // Tips: Indirect expressions like `ScalarExpression:：Alias` will be lost
-    fn arithmetic_flip(&mut self, col_id: &ColumnId, fix_option: &mut Option<ReplaceBinary>) {
+    pub fn _arithmetic_flip(&mut self, fix_option: &mut Option<ReplaceBinary>) {
         match self {
             ScalarExpression::Binary { left_expr, right_expr, op, ty } => {
                 let mut is_fixed = false;
 
-                left_expr.arithmetic_flip(col_id, fix_option);
+                left_expr._arithmetic_flip(fix_option);
                 is_fixed = fix_option.is_some();
                 Self::fix_binary(fix_option, left_expr, right_expr, op);
 
                 // `(c1 - 1) and (c1 + 2)` cannot fix!
                 if fix_option.is_none() && !is_fixed {
-                    right_expr.arithmetic_flip(col_id, fix_option);
+                    right_expr._arithmetic_flip(fix_option);
                     Self::fix_binary(fix_option, right_expr, left_expr, op);
                 }
 
@@ -177,9 +201,6 @@ impl ScalarExpression {
                     match (left_expr.unpack_col(true), right_expr.unpack_col(true)) {
                         (Some(_), Some(_)) => (),
                         (Some(col), None) => {
-                            if col_id != &col.id{
-                                return;
-                            }
                             fix_option.replace(ReplaceBinary{
                                 column_expr: ScalarExpression::ColumnRef(col),
                                 val_expr: right_expr.as_ref().clone(),
@@ -189,9 +210,6 @@ impl ScalarExpression {
                             });
                         }
                         (None, Some(col)) => {
-                            if col_id != &col.id{
-                                return;
-                            }
                             fix_option.replace(ReplaceBinary{
                                 column_expr: ScalarExpression::ColumnRef(col),
                                 val_expr: left_expr.as_ref().clone(),
@@ -204,10 +222,10 @@ impl ScalarExpression {
                     }
                 }
             }
-            ScalarExpression::Alias { expr, .. } => expr.arithmetic_flip(col_id, fix_option),
-            ScalarExpression::TypeCast { expr, .. } => expr.arithmetic_flip(col_id, fix_option),
-            ScalarExpression::IsNull { expr, .. } => expr.arithmetic_flip(col_id, fix_option),
-            ScalarExpression::Unary { expr, .. } => expr.arithmetic_flip(col_id, fix_option),
+            ScalarExpression::Alias { expr, .. } => expr._arithmetic_flip(fix_option),
+            ScalarExpression::TypeCast { expr, .. } => expr._arithmetic_flip(fix_option),
+            ScalarExpression::IsNull { expr, .. } => expr._arithmetic_flip(fix_option),
+            ScalarExpression::Unary { expr, .. } => expr._arithmetic_flip(fix_option),
             _ => ()
         }
     }
@@ -256,7 +274,8 @@ impl ScalarExpression {
     pub fn convert_binary(&self, col_id: &ColumnId) -> Result<Option<IndexBinary>, TypeError> {
         let mut expr = self.clone();
 
-        expr.arithmetic_flip(col_id, &mut None);
+        // FIXME: 这个表达式重写不应该放在这里, RBO加一个Rule统一重写会比较好
+        expr.arithmetic_flip();
 
         match &expr {
             ScalarExpression::Binary { left_expr, right_expr, op, .. } => {
@@ -544,11 +563,11 @@ mod test {
         let (mut c1_main_expr, mut val_main_expr) = build_test_expr();
 
         // c1 - 1 >= 2
-        c1_main_expr.arithmetic_flip(&0, &mut None);
+        c1_main_expr.arithmetic_flip();
         println!("{:#?}", c1_main_expr);
 
         // 1 - c1 >= 2
-        val_main_expr.arithmetic_flip(&0, &mut None);
+        val_main_expr.arithmetic_flip();
         println!("{:#?}", val_main_expr);
     }
 
@@ -557,24 +576,24 @@ mod test {
         let (mut c1_main_expr, mut val_main_expr) = build_test_expr();
 
         // c1 - 1 >= 2
-        c1_main_expr.arithmetic_flip(&0, &mut None);
+        c1_main_expr.arithmetic_flip();
         println!("{:#?}", c1_main_expr.convert_binary(&0)?);
 
         // 1 - c1 >= 2
-        val_main_expr.arithmetic_flip(&0, &mut None);
+        val_main_expr.arithmetic_flip();
         println!("{:#?}", val_main_expr.convert_binary(&0)?);
 
         Ok(())
     }
 
     #[test]
-    fn test_scope_aggregation() {
+    fn test_scope_aggregation() -> Result<(), TypeError> {
         let val_1 = Arc::new(DataValue::Int32(Some(0)));
         let val_2 = Arc::new(DataValue::Int32(Some(1)));
         let val_3 = Arc::new(DataValue::Int32(Some(2)));
         let val_4 = Arc::new(DataValue::Int32(Some(3)));
 
-        let binaries = vec![
+        let mut binary = IndexBinary::And(vec![
             IndexBinary::Scope {
                 min: Bound::Excluded(val_1.clone()),
                 max: Bound::Included(val_4.clone())
@@ -596,17 +615,21 @@ mod test {
                 max: Bound::Unbounded,
             },
             IndexBinary::Eq(val_1.clone()),
-        ];
+        ]);
+
+        binary.scope_aggregation()?;
 
         assert_eq!(
-            IndexBinary::scope_aggregation(binaries).unwrap(),
-            vec![
+            binary,
+            IndexBinary::And(vec![
                 IndexBinary::Eq(val_1.clone()),
                 IndexBinary::Scope {
                     min: Bound::Excluded(val_2.clone()),
                     max: Bound::Excluded(val_3.clone()),
                 }
-            ]
-        )
+            ])
+        );
+
+        Ok(())
     }
 }
