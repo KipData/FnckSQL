@@ -2,15 +2,18 @@ use crate::expression::ScalarExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
+use crate::optimizer::OptimizerError;
 use crate::optimizer::rule::column_pruning::{PushProjectIntoScan, PushProjectThroughChild};
 use crate::optimizer::rule::combine_operators::{CollapseProject, CombineFilter};
 use crate::optimizer::rule::pushdown_limit::{LimitProjectTranspose, EliminateLimits, PushLimitThroughJoin, PushLimitIntoScan};
 use crate::optimizer::rule::pushdown_predicates::PushPredicateThroughJoin;
+use crate::optimizer::rule::simplification::SimplifyFilter;
 
 mod column_pruning;
 mod combine_operators;
 mod pushdown_limit;
 mod pushdown_predicates;
+mod simplification;
 
 #[derive(Debug, Copy, Clone)]
 pub enum RuleImpl {
@@ -26,7 +29,9 @@ pub enum RuleImpl {
     PushLimitThroughJoin,
     PushLimitIntoTableScan,
     // PushDown predicates
-    PushPredicateThroughJoin
+    PushPredicateThroughJoin,
+    // Simplification
+    SimplifyFilter
 }
 
 impl Rule for RuleImpl {
@@ -41,10 +46,11 @@ impl Rule for RuleImpl {
             RuleImpl::PushLimitThroughJoin => PushLimitThroughJoin {}.pattern(),
             RuleImpl::PushLimitIntoTableScan => PushLimitIntoScan {}.pattern(),
             RuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin {}.pattern(),
+            RuleImpl::SimplifyFilter => SimplifyFilter {}.pattern(),
         }
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError>{
         match self {
             RuleImpl::PushProjectIntoScan => PushProjectIntoScan {}.apply(node_id, graph),
             RuleImpl::PushProjectThroughChild => PushProjectThroughChild {}.apply(node_id, graph),
@@ -55,6 +61,7 @@ impl Rule for RuleImpl {
             RuleImpl::PushLimitThroughJoin => PushLimitThroughJoin {}.apply(node_id, graph),
             RuleImpl::PushLimitIntoTableScan => PushLimitIntoScan {}.apply(node_id, graph),
             RuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin {}.apply(node_id, graph),
+            RuleImpl::SimplifyFilter => SimplifyFilter {}.apply(node_id, graph)
         }
     }
 }

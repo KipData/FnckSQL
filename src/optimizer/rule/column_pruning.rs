@@ -6,6 +6,7 @@ use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
+use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
 use crate::planner::operator::project::ProjectOperator;
 use crate::types::ColumnId;
@@ -43,7 +44,7 @@ impl Rule for PushProjectIntoScan {
         &PUSH_PROJECT_INTO_SCAN_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Project(project_op) = graph.operator(node_id) {
             let child_index = graph.children_at(node_id)[0];
             if let Operator::Scan(scan_op) = graph.operator(child_index) {
@@ -62,6 +63,8 @@ impl Rule for PushProjectIntoScan {
                 );
             }
         }
+
+        Ok(())
     }
 }
 
@@ -73,7 +76,7 @@ impl Rule for PushProjectThroughChild {
         &PUSH_PROJECT_THROUGH_CHILD_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         let node_operator = graph.operator(node_id);
         let input_refs = node_operator.project_input_refs();
 
@@ -105,7 +108,7 @@ impl Rule for PushProjectThroughChild {
                 .collect::<HashSet<ColumnId>>();
 
             if intersection_columns_ids.is_empty() {
-                return;
+                return Ok(());
             }
 
             for grandson_id in graph.children_at(child_index) {
@@ -136,13 +139,15 @@ impl Rule for PushProjectThroughChild {
                 }
             }
         }
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::db::DatabaseError;
     use crate::optimizer::heuristic::batch::{HepBatchStrategy};
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::RuleImpl;
@@ -150,7 +155,7 @@ mod tests {
     use crate::planner::operator::Operator;
 
     #[tokio::test]
-    async fn test_project_into_table_scan() -> Result<(), ExecutorError> {
+    async fn test_project_into_table_scan() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1").await?;
 
         let best_plan = HepOptimizer::new(plan.clone())
@@ -159,7 +164,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![RuleImpl::PushProjectIntoScan]
             )
-            .find_best();
+            .find_best()?;
 
         assert_eq!(best_plan.childrens.len(), 0);
         match best_plan.operator {
@@ -173,7 +178,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_project_through_child_on_join() -> Result<(), ExecutorError> {
+    async fn test_project_through_child_on_join() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select c1, c3 from t1 left join t2 on c1 = c3").await?;
 
         let best_plan = HepOptimizer::new(plan.clone())
@@ -184,7 +189,7 @@ mod tests {
                     RuleImpl::PushProjectThroughChild,
                     RuleImpl::PushProjectIntoScan
                 ]
-            ).find_best();
+            ).find_best()?;
 
         assert_eq!(best_plan.childrens.len(), 1);
         match best_plan.operator {

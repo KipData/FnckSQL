@@ -4,6 +4,7 @@ use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
+use crate::optimizer::OptimizerError;
 use crate::optimizer::rule::is_subset_exprs;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::Operator;
@@ -38,7 +39,7 @@ impl Rule for CollapseProject {
         &COLLAPSE_PROJECT_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Project(op) = graph.operator(node_id) {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Project(child_op) = graph.operator(child_id) {
@@ -47,6 +48,8 @@ impl Rule for CollapseProject {
                 }
             }
         }
+
+        Ok(())
     }
 }
 
@@ -58,7 +61,7 @@ impl Rule for CombineFilter {
         &COMBINE_FILTERS_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Filter(op) = graph.operator(node_id) {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Filter(child_op) = graph.operator(child_id) {
@@ -78,6 +81,8 @@ impl Rule for CombineFilter {
                 graph.remove_node(child_id, false);
             }
         }
+
+        Ok(())
     }
 }
 
@@ -85,7 +90,7 @@ impl Rule for CombineFilter {
 mod tests {
     use std::sync::Arc;
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::db::DatabaseError;
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::expression::ScalarExpression::Constant;
     use crate::optimizer::core::opt_expr::OptExprNode;
@@ -98,7 +103,7 @@ mod tests {
     use crate::types::value::DataValue;
 
     #[tokio::test]
-    async fn test_collapse_project() -> Result<(), ExecutorError> {
+    async fn test_collapse_project() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select c1, c2 from t1").await?;
 
         let mut optimizer = HepOptimizer::new(plan.clone())
@@ -120,7 +125,7 @@ mod tests {
 
         optimizer.graph.add_root(OptExprNode::OperatorRef(new_project_op));
 
-        let best_plan = optimizer.find_best();
+        let best_plan = optimizer.find_best()?;
 
         if let Operator::Project(op) = &best_plan.operator {
             assert_eq!(op.columns.len(), 1);
@@ -138,7 +143,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_combine_filter() -> Result<(), ExecutorError> {
+    async fn test_combine_filter() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 where c1 > 1").await?;
 
         let mut optimizer = HepOptimizer::new(plan.clone())
@@ -169,7 +174,7 @@ mod tests {
             OptExprNode::OperatorRef(new_filter_op)
         );
 
-        let best_plan = optimizer.find_best();
+        let best_plan = optimizer.find_best()?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             if let ScalarExpression::Binary { op, .. } = &op.predicate {

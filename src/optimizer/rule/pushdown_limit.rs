@@ -5,6 +5,7 @@ use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
+use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::Operator;
@@ -54,11 +55,13 @@ impl Rule for LimitProjectTranspose {
         &LIMIT_PROJECT_TRANSPOSE_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         graph.swap_node(
             node_id,
             graph.children_at(node_id)[0]
         );
+
+        Ok(())
     }
 }
 
@@ -71,7 +74,7 @@ impl Rule for EliminateLimits {
         &ELIMINATE_LIMITS_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Limit(op) = graph.operator(node_id) {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Limit(child_op) = graph.operator(child_id) {
@@ -89,6 +92,8 @@ impl Rule for EliminateLimits {
                 );
             }
         }
+
+        Ok(())
     }
 }
 
@@ -105,7 +110,7 @@ impl Rule for PushLimitThroughJoin {
         &PUSH_LIMIT_THROUGH_JOIN_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         let child_id = graph.children_at(node_id)[0];
         let join_type = if let Operator::Join(op) = graph.operator(child_id) {
             Some(op.join_type)
@@ -128,6 +133,8 @@ impl Rule for PushLimitThroughJoin {
                 );
             }
         }
+
+        Ok(())
     }
 }
 
@@ -139,7 +146,7 @@ impl Rule for PushLimitIntoScan {
         &PUSH_LIMIT_INTO_TABLE_SCAN_RULE
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Limit(limit_op) = graph.operator(node_id) {
             let child_index = graph.children_at(node_id)[0];
             if let Operator::Scan(scan_op) = graph.operator(child_index) {
@@ -154,13 +161,15 @@ impl Rule for PushLimitIntoScan {
                 );
             }
         }
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::db::DatabaseError;
     use crate::optimizer::core::opt_expr::OptExprNode;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -169,7 +178,7 @@ mod tests {
     use crate::planner::operator::Operator;
 
     #[tokio::test]
-    async fn test_limit_project_transpose() -> Result<(), ExecutorError> {
+    async fn test_limit_project_transpose() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select c1, c2 from t1 limit 1").await?;
 
         let best_plan = HepOptimizer::new(plan.clone())
@@ -178,7 +187,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![RuleImpl::LimitProjectTranspose]
             )
-             .find_best();
+             .find_best()?;
 
         if let Operator::Project(_) = &best_plan.operator {
 
@@ -196,7 +205,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_eliminate_limits() -> Result<(), ExecutorError> {
+    async fn test_eliminate_limits() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select c1, c2 from t1 limit 1 offset 1").await?;
 
         let mut optimizer = HepOptimizer::new(plan.clone())
@@ -215,7 +224,7 @@ mod tests {
             OptExprNode::OperatorRef(Operator::Limit(new_limit_op))
         );
 
-        let best_plan = optimizer.find_best();
+        let best_plan = optimizer.find_best()?;
 
         if let Operator::Limit(op) = &best_plan.operator {
             assert_eq!(op.limit, 1);
@@ -232,7 +241,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_push_limit_through_join() -> Result<(), ExecutorError> {
+    async fn test_push_limit_through_join() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 limit 1").await?;
 
         let best_plan = HepOptimizer::new(plan.clone())
@@ -244,7 +253,7 @@ mod tests {
                     RuleImpl::PushLimitThroughJoin
                 ]
             )
-            .find_best();
+            .find_best()?;
 
         if let Operator::Join(_) = &best_plan.childrens[0].operator {
         } else {
@@ -261,7 +270,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_push_limit_into_table_scan() -> Result<(), ExecutorError> {
+    async fn test_push_limit_into_table_scan() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 limit 1 offset 1").await?;
 
         let best_plan = HepOptimizer::new(plan.clone())
@@ -273,7 +282,7 @@ mod tests {
                     RuleImpl::PushLimitIntoTableScan
                 ]
             )
-            .find_best();
+            .find_best()?;
 
         if let Operator::Scan(op) = &best_plan.childrens[0].operator {
             assert_eq!(op.limit, (Some(1), Some(1)))

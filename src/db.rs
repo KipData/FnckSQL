@@ -6,6 +6,7 @@ use crate::execution::ExecutorError;
 use crate::execution::executor::{build, try_collect};
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
+use crate::optimizer::OptimizerError;
 use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
@@ -64,7 +65,7 @@ impl<S: Storage> Database<S> {
         // println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan = Self::default_optimizer(source_plan)
-            .find_best();
+            .find_best()?;
         // println!("best_plan plan: {:#?}", best_plan);
 
         let mut stream = build(best_plan, &self.storage);
@@ -138,6 +139,12 @@ pub enum DatabaseError {
     ),
     #[error("Internal error: {0}")]
     InternalError(String),
+    #[error("optimizer error: {0}")]
+    OptimizerError(
+        #[source]
+        #[from]
+        OptimizerError
+    )
 }
 
 #[cfg(test)]

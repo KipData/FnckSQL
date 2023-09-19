@@ -7,6 +7,7 @@ use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
+use crate::optimizer::OptimizerError;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
@@ -92,11 +93,11 @@ impl Rule for PushPredicateThroughJoin {
     }
 
     // TODO: pushdown_predicates need to consider output columns
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         let child_id = graph.children_at(node_id)[0];
         if let Operator::Join(child_op) = graph.operator(child_id) {
             if !matches!(child_op.join_type, JoinType::Inner | JoinType::Left | JoinType::Right) {
-                return ;
+                return Ok(());
             }
 
             let join_childs = graph.children_at(child_id);
@@ -194,13 +195,15 @@ impl Rule for PushPredicateThroughJoin {
                 graph.remove_node(node_id, false);
             }
         }
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::db::DatabaseError;
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -209,7 +212,7 @@ mod tests {
     use crate::types::LogicalType;
 
     #[tokio::test]
-    async fn test_push_predicate_through_join_in_left_join() -> Result<(), ExecutorError> {
+    async fn test_push_predicate_through_join_in_left_join() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
 
         let best_plan = HepOptimizer::new(plan)
@@ -218,7 +221,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![RuleImpl::PushPredicateThroughJoin]
             )
-            .find_best();
+            .find_best()?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -250,7 +253,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_push_predicate_through_join_in_right_join() -> Result<(), ExecutorError> {
+    async fn test_push_predicate_through_join_in_right_join() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
 
         let best_plan = HepOptimizer::new(plan)
@@ -259,7 +262,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![RuleImpl::PushPredicateThroughJoin]
             )
-            .find_best();
+            .find_best()?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -291,7 +294,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_push_predicate_through_join_in_inner_join() -> Result<(), ExecutorError> {
+    async fn test_push_predicate_through_join_in_inner_join() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
 
         let best_plan = HepOptimizer::new(plan)
@@ -300,7 +303,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![RuleImpl::PushPredicateThroughJoin]
             )
-            .find_best();
+            .find_best()?;
 
         if let Operator::Join(_) = &best_plan.childrens[0].operator {
 

@@ -16,6 +16,7 @@ use crate::types::tuple::Tuple;
 pub mod agg;
 mod evaluator;
 pub mod value_compute;
+pub mod simplify;
 
 /// ScalarExpression represnet all scalar expression in SQL.
 /// SELECT a+1, b FROM t1.
@@ -36,7 +37,6 @@ pub enum ScalarExpression {
     TypeCast {
         expr: Box<ScalarExpression>,
         ty: LogicalType,
-        is_try: bool,
     },
     IsNull {
         expr: Box<ScalarExpression>,
