@@ -211,7 +211,6 @@ pub mod test {
 
     pub async fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-
         let storage = build_test_catalog(temp_dir.path()).await?;
         let binder = Binder::new(BinderContext::new(storage));
         let stmt = crate::parser::parse_sql(sql)?;

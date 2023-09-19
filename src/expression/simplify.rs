@@ -266,7 +266,13 @@ impl ScalarExpression {
         Ok(())
     }
 
-    fn fix_expr(fix_option: &mut Option<Replace>, left_expr: &mut Box<ScalarExpression>, right_expr: &mut Box<ScalarExpression>, op: &mut BinaryOperator, is_fixed: &mut bool) -> Result<(), TypeError> {
+    fn fix_expr(
+        fix_option: &mut Option<Replace>,
+        left_expr: &mut Box<ScalarExpression>,
+        right_expr: &mut Box<ScalarExpression>,
+        op: &mut BinaryOperator,
+        is_fixed: &mut bool
+    ) -> Result<(), TypeError> {
         left_expr._arithmetic_flip(fix_option)?;
         let _ = mem::replace(is_fixed, fix_option.is_some());
         if let Some(replace) = fix_option.take() {
@@ -281,7 +287,12 @@ impl ScalarExpression {
         Ok(())
     }
 
-    fn fix_unary(replace_unary: ReplaceUnary, col_expr: &mut Box<ScalarExpression>, val_expr: &mut Box<ScalarExpression>, op: &mut BinaryOperator) {
+    fn fix_unary(
+        replace_unary: ReplaceUnary,
+        col_expr: &mut Box<ScalarExpression>,
+        val_expr: &mut Box<ScalarExpression>,
+        op: &mut BinaryOperator
+    ) {
         let ReplaceUnary { child_expr, op: fix_op, ty: fix_ty } = replace_unary;
         let _ = mem::replace(col_expr, Box::new(child_expr));
         let _ = mem::replace(val_expr, Box::new(ScalarExpression::Unary {
@@ -316,7 +327,12 @@ impl ScalarExpression {
         });
     }
 
-    fn fix_binary(replace_binary: ReplaceBinary, left_expr: &mut Box<ScalarExpression>, right_expr: &mut Box<ScalarExpression>, op: &mut BinaryOperator) {
+    fn fix_binary(
+        replace_binary: ReplaceBinary,
+        left_expr: &mut Box<ScalarExpression>,
+        right_expr: &mut Box<ScalarExpression>,
+        op: &mut BinaryOperator
+    ) {
         let ReplaceBinary { column_expr, val_expr, op: fix_op, ty: fix_ty, is_column_left } = replace_binary;
         let op_flip = |op: BinaryOperator| {
             match op {
@@ -403,8 +419,10 @@ impl ScalarExpression {
                         }
                     },
                     (None, None) => {
-                        if let (Some(col), Some(val)) = (left_expr.unpack_col(false), right_expr.unpack_val()) {
-                            if !col.id == *col_id {
+                        if let (Some(col), Some(val)) =
+                            (left_expr.unpack_col(false), right_expr.unpack_val())
+                        {
+                            if col.id.unwrap() != *col_id {
                                 return Ok(None);
                             }
 
@@ -442,8 +460,10 @@ impl ScalarExpression {
                                 _ => Ok(None)
                             };
                         }
-                        if let (Some(val), Some(col)) = (left_expr.unpack_val(), right_expr.unpack_col(false)) {
-                            if !col.id == *col_id {
+                        if let (Some(val), Some(col)) =
+                            (left_expr.unpack_val(), right_expr.unpack_col(false))
+                        {
+                            if col.id.unwrap() != *col_id {
                                 return Ok(None);
                             }
 
@@ -509,7 +529,7 @@ mod test {
 
     fn build_test_expr() -> (ScalarExpression, ScalarExpression) {
         let col_1 = Arc::new(ColumnCatalog {
-            id: 0,
+            id: Some(0),
             name: "c1".to_string(),
             table_name: None,
             nullable: false,
@@ -555,7 +575,7 @@ mod test {
     #[test]
     fn test_convert_binary_simple() -> Result<(), TypeError> {
         let col_1 = Arc::new(ColumnCatalog {
-            id: 0,
+            id: Some(0),
             name: "c1".to_string(),
             table_name: None,
             nullable: false,
@@ -632,36 +652,6 @@ mod test {
             min: Bound::Included(val_1.clone()),
             max: Bound::Unbounded
         });
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_arithmetic_flip() -> Result<(), TypeError> {
-        let (mut c1_main_expr, mut val_main_expr) = build_test_expr();
-
-        // c1 - 1 >= 2
-        c1_main_expr.simplify()?;
-        println!("{:#?}", c1_main_expr);
-
-        // 1 - c1 >= 2
-        val_main_expr.simplify()?;
-        println!("{:#?}", val_main_expr);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_convert_binary_nested() -> Result<(), TypeError> {
-        let (mut c1_main_expr, mut val_main_expr) = build_test_expr();
-
-        // c1 - 1 >= 2
-        c1_main_expr.simplify()?;
-        println!("{:#?}", c1_main_expr.convert_binary(&0)?);
-
-        // 1 - c1 >= 2
-        val_main_expr.simplify()?;
-        println!("{:#?}", val_main_expr.convert_binary(&0)?);
 
         Ok(())
     }

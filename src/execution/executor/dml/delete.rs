@@ -41,8 +41,10 @@ impl Delete {
                 .into_iter()
                 .enumerate()
                 .filter_map(|(i, col)| col.desc.is_unique
-                    .then(|| table_catalog.get_unique_index(&col.id)
-                        .map(|index_meta| (i, index_meta)))
+                    .then(|| col.id.and_then(|col_id| {
+                        table_catalog.get_unique_index(&col_id)
+                            .map(|index_meta| (i, index_meta))
+                    }))
                     .flatten())
                 .collect_vec();
 

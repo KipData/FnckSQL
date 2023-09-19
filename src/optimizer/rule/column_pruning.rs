@@ -105,6 +105,7 @@ impl Rule for PushProjectThroughChild {
                         .iter()
                         .map(|col| col.id)
                 )
+                .flatten()
                 .collect::<HashSet<ColumnId>>();
 
             if intersection_columns_ids.is_empty() {
@@ -116,7 +117,10 @@ impl Rule for PushProjectThroughChild {
                     .referenced_columns()
                     .into_iter()
                     .unique_by(|col| col.id)
-                    .filter(|u| intersection_columns_ids.contains(&u.id))
+                    .filter(|u| matches!(
+                            u.id.map(|u_id| intersection_columns_ids.contains(&u_id)),
+                            Some(true)
+                        ))
                     .map(|col| ScalarExpression::ColumnRef(col))
                     .collect_vec();
 

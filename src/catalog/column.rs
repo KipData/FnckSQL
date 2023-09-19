@@ -3,13 +3,13 @@ use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ColumnDef, ColumnOption};
 use crate::catalog::TableName;
 
-use crate::types::{ColumnId, IdGenerator, LogicalType};
+use crate::types::{ColumnId, LogicalType};
 
 pub type ColumnRef = Arc<ColumnCatalog>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct ColumnCatalog {
-    pub id: ColumnId,
+    pub id: Option<ColumnId>,
     pub name: String,
     pub table_name: Option<TableName>,
     pub nullable: bool,
@@ -19,7 +19,7 @@ pub struct ColumnCatalog {
 impl ColumnCatalog {
     pub(crate) fn new(column_name: String, nullable: bool, column_desc: ColumnDesc) -> ColumnCatalog {
         ColumnCatalog {
-            id: IdGenerator::build(),
+            id: None,
             name: column_name,
             table_name: None,
             nullable,

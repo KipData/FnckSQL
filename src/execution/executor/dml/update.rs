@@ -61,7 +61,7 @@ impl Update {
                             is_overwrite = false;
                         }
                         if column.desc.is_unique && value != &tuple.values[i] {
-                            if let Some(index_meta) = table_catalog.get_unique_index(&column.id) {
+                            if let Some(index_meta) = table_catalog.get_unique_index(&column.id.unwrap()) {
                                 let mut index = Index {
                                     id: index_meta.id,
                                     column_values: vec![tuple.values[i].clone()],

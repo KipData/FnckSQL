@@ -62,8 +62,9 @@ impl TableCatalog {
             return Err(CatalogError::Duplicated("column", col.name.clone()));
         }
 
-        let col_id = col.id;
+        let col_id = self.columns.len() as u32;
 
+        col.id = Some(col_id);
         col.table_name = Some(self.name.clone());
         self.column_idxs.insert(col.name.clone(), col_id);
         self.columns.insert(col_id, Arc::new(col));

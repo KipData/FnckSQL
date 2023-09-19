@@ -95,8 +95,12 @@ impl KipStorage {
 impl Storage for KipStorage {
     type TransactionType = KipTransaction;
 
-    async fn create_table(&self, table_name: TableName, columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
+    async fn create_table(&self, table_name: TableName, mut columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
         let mut tx = self.inner.new_transaction().await;
+
+        for (i, col) in columns.iter_mut().enumerate() {
+            col.id = Some(i as u32);
+        }
 
         for (key, value) in columns
             .iter()
@@ -108,18 +112,20 @@ impl Storage for KipStorage {
 
         for col in columns
             .iter()
-            .filter(|col| col.desc.is_unique) {
+            .filter(|col| col.desc.is_unique)
+        {
+            if let Some(col_id) = col.id {
+                let meta = IndexMeta {
+                    id: indexes.len() as u32,
+                    column_ids: vec![col_id],
+                    name: format!("uk_{}", col.name),
+                    is_unique: true,
+                };
+                let (key, value) = TableCodec::encode_index_meta(&table_name, &meta)?;
 
-            let meta = IndexMeta {
-                id: indexes.len() as u32,
-                column_ids: vec![col.id],
-                name: format!("uk_{}", col.name),
-                is_unique: true,
-            };
-            let (key, value) = TableCodec::encode_index_meta(&table_name, &meta)?;
-
-            indexes.push(meta);
-            tx.set(key, value);
+                indexes.push(meta);
+                tx.set(key, value);
+            }
         }
 
         let (k, v)= TableCodec::encode_root_table(table_name.as_str(), columns.len())

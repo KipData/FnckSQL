@@ -57,7 +57,7 @@ impl Insert {
                 let mut tuple_map: HashMap<ColumnId, ValueRef> = values
                     .into_iter()
                     .enumerate()
-                    .map(|(i, value)| (columns[i].id, value))
+                    .filter_map(|(i, value)| columns[i].id.map(|id| (id, value)))
                     .collect();
                 let all_columns = table_catalog.all_columns_with_id();
                 let mut tuple = Tuple {
@@ -88,7 +88,7 @@ impl Insert {
             }
             // Unique Index
             for (col_id, values) in unique_values {
-                if let Some(index_meta) = table_catalog.get_unique_index(&col_id) {
+                if let Some(index_meta) = table_catalog.get_unique_index(&col_id.unwrap()) {
                     for (tuple_id, value) in values {
                         let index = Index {
                             id: index_meta.id,

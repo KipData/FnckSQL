@@ -165,7 +165,7 @@ impl TableCodec {
                     table_name,
                     BOUND_MIN_TAG,
                     col.name,
-                    col.id,
+                    col.id.unwrap(),
                     width = COLUMNS_ID_LEN
                 );
 
@@ -360,7 +360,7 @@ mod tests {
                 "{}_Catalog_0_{}_{:0width$}",
                 table_catalog.name,
                 col.name,
-                col.id,
+                col.id.unwrap(),
                 width = COLUMNS_ID_LEN
             )
         );
