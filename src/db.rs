@@ -76,14 +76,14 @@ impl<S: Storage> Database<S> {
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
             .batch(
-                "Predicate pushdown".to_string(),
+                "Predicate Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::PushPredicateThroughJoin
                 ]
             )
             .batch(
-                "Limit pushdown".to_string(),
+                "Limit Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::LimitProjectTranspose,
@@ -93,7 +93,7 @@ impl<S: Storage> Database<S> {
                 ],
             )
             .batch(
-                "Column pruning".to_string(),
+                "Column Pruning".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::PushProjectThroughChild,
@@ -101,12 +101,17 @@ impl<S: Storage> Database<S> {
                 ]
             )
             .batch(
-                "Combine operators".to_string(),
+                "Combine Operators".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::CollapseProject,
                     RuleImpl::CombineFilter
                 ]
+            )
+            .batch(
+                "Simplify Filter".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![RuleImpl::SimplifyFilter]
             )
     }
 }
