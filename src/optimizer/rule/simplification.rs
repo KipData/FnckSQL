@@ -43,7 +43,7 @@ mod test {
     use crate::binder::test::select_sql_run;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::DatabaseError;
-    use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
+    use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::expression::simplify::ConstantBinary;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -82,7 +82,7 @@ mod test {
                     vec![RuleImpl::SimplifyFilter]
                 )
                 .find_best()?;
-            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+            if let Operator::Filter(mut filter_op) = best_plan.childrens[0].clone().operator {
                 println!("{expr}: {:#?}", filter_op.predicate.convert_binary(&0).unwrap());
 
                 Ok(filter_op.predicate.convert_binary(&0).unwrap())
@@ -147,17 +147,13 @@ mod test {
                 filter_op.predicate,
                 ScalarExpression::Binary {
                     op: BinaryOperator::Lt,
-                    left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c1_col))),
-                    right_expr: Box::new(ScalarExpression::Binary {
+                    left_expr: Box::new(ScalarExpression::Binary {
                         op: BinaryOperator::Minus,
-                        left_expr: Box::new(ScalarExpression::Unary {
-                            op: UnaryOperator::Minus,
-                            expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
-                            ty: LogicalType::Integer,
-                        }),
-                        right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(1))))),
+                        left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c1_col))),
+                        right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(-1))))),
                         ty: LogicalType::Integer,
                     }),
+                    right_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
                     ty: LogicalType::Boolean,
                 }
             )
@@ -196,10 +192,10 @@ mod test {
             }
         };
 
-        let op_1 = op(plan_1, "-(c1 + 1) > 1 and -(1 - c2) > 1")?.unwrap();
-        let op_2 = op(plan_2, "-(1 - c1) > 1 and -(c2 + 1) > 1")?.unwrap();
-        let op_3 = op(plan_3, "-c1 > 1 and c2 + 1 > 1")?.unwrap();
-        let op_4 = op(plan_4, "c1 + 1 > 1 and -c2 > 1")?.unwrap();
+        let mut op_1 = op(plan_1, "-(c1 + 1) > 1 and -(1 - c2) > 1")?.unwrap();
+        let mut op_2 = op(plan_2, "-(1 - c1) > 1 and -(c2 + 1) > 1")?.unwrap();
+        let mut op_3 = op(plan_3, "-c1 > 1 and c2 + 1 > 1")?.unwrap();
+        let mut op_4 = op(plan_4, "c1 + 1 > 1 and -c2 > 1")?.unwrap();
 
         let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
