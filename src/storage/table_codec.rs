@@ -101,26 +101,27 @@ impl TableCodec {
 
 
     /// Key: RootCatalog_0_TableName
-    /// Value: TableName
-    pub fn encode_root_table(table_name: &str) -> Option<(Bytes, Bytes)> {
+    /// Value: ColumnCount
+    pub fn encode_root_table(table_name: &str,column_count:usize) -> Option<(Bytes, Bytes)> {
         let key = format!(
             "RootCatalog_{}_{}",
             BOUND_MIN_TAG,
             table_name,
         );
 
-        bincode::serialize(&table_name).ok()
+        bincode::serialize(&column_count).ok()
             .map(|bytes| {
                 (Bytes::from(key.into_bytes()), Bytes::from(bytes))
             })
     }
 
-    pub fn decode_root_table(key: &[u8], bytes: &[u8]) -> Option<(String,String)> {
+    // TODO: value is reserved for saving meta-information
+    pub fn decode_root_table(key: &[u8], bytes: &[u8]) -> Option<(String,usize)> {
         String::from_utf8(key.to_owned()).ok()?
             .split("_")
             .nth(2)
             .and_then(|table_name| {
-                bincode::deserialize::<String>(bytes).ok()
+                bincode::deserialize::<usize>(bytes).ok()
                     .and_then(|name| {
                         Some((table_name.to_string(), name))
                     })
@@ -195,7 +196,7 @@ mod tests {
     #[test]
     fn test_root_catalog() {
         let (table_catalog, _) = build_table_codec();
-        let (key, bytes) = TableCodec::encode_root_table(&table_catalog.name).unwrap();
+        let (key, bytes) = TableCodec::encode_root_table(&table_catalog.name,2).unwrap();
 
         assert_eq!(
             String::from_utf8(key.to_vec()).ok().unwrap(),
@@ -205,10 +206,10 @@ mod tests {
             )
         );
 
-        let (table_name, name) = TableCodec::decode_root_table(&key, &bytes).unwrap();
+        let (table_name, column_count) = TableCodec::decode_root_table(&key, &bytes).unwrap();
 
         assert_eq!(table_name, table_catalog.name.as_str());
-        assert_eq!(name, table_catalog.name.as_str());
+        assert_eq!(column_count, 2);
     }
 
     #[test]

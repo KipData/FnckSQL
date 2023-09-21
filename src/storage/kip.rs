@@ -50,7 +50,7 @@ impl Storage for KipStorage {
             self.inner.set(key, value).await?;
         }
 
-        let (k, v)= TableCodec::encode_root_table(table_name.as_str())
+        let (k, v)= TableCodec::encode_root_table(table_name.as_str(), table.columns.len())
             .ok_or(StorageError::Serialization)?;
         self.inner.set(k, v).await?;
 
@@ -77,7 +77,7 @@ impl Storage for KipStorage {
         for col_key in col_keys {
             tx.remove(&col_key)?
         }
-        let (k, _) = TableCodec::encode_root_table(name.as_str())
+        let (k, _) = TableCodec::encode_root_table(name.as_str(),0)
             .ok_or(StorageError::Serialization)?;
         tx.remove(&k)?;
         tx.commit().await?;
@@ -148,7 +148,7 @@ impl Storage for KipStorage {
         option
     }
 
-    async fn show_tables(&self) -> Option<Vec<String>> {
+    async fn show_tables(&self) -> Option<Vec<(String,usize)>> {
         let mut tables = vec![];
         let (min, max) = TableCodec::root_table_bound();
 
@@ -157,8 +157,8 @@ impl Storage for KipStorage {
 
         while let Some((key, value_option))  = iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
-                if let Some((table_name, _)) = TableCodec::decode_root_table(&key, &value) {
-                    tables.push(table_name);
+                if let Some((table_name, column_count)) = TableCodec::decode_root_table(&key, &value) {
+                    tables.push((table_name,column_count));
                 }
             }
         }

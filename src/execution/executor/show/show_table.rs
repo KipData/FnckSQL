@@ -31,12 +31,14 @@ impl ShowTables {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn _execute<S: Storage>(self, storage: S) {
         if let Some(tables) = storage.show_tables().await {
-            for table in tables {
+            for (table,column_count) in tables {
                 let columns: Vec<ColumnRef> = vec![
                     Arc::new(ColumnCatalog::new_dummy("TABLES".to_string())),
+                    Arc::new(ColumnCatalog::new_dummy("COLUMN_COUNT".to_string())),
                 ];
                 let values: Vec<ValueRef> = vec![
                     Arc::new(DataValue::Utf8(Some(table))),
+                    Arc::new(DataValue::UInt32(Some(column_count as u32))),
                 ];
 
                 yield Tuple {
