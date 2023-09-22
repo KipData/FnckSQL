@@ -1,7 +1,9 @@
 use std::cmp::Ordering;
-use std::collections::Bound;
+use std::collections::{Bound, HashSet};
 use std::mem;
 use std::sync::Arc;
+use ahash::RandomState;
+use itertools::Itertools;
 use crate::catalog::ColumnRef;
 use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
 use crate::expression::value_compute::{binary_op, unary_op};
@@ -169,81 +171,62 @@ impl ConstantBinary {
     fn _scope_aggregation(binaries: &mut Vec<ConstantBinary>) -> Result<(), TypeError> {
         let mut scope_min = Bound::Unbounded;
         let mut scope_max = Bound::Unbounded;
+        let mut eq_set = HashSet::with_hasher(RandomState::new());
+
+        let sort_op = |binary: &&ConstantBinary| {
+            match binary {
+                ConstantBinary::Scope { .. } => 3,
+                ConstantBinary::NotEq(_) => 2,
+                ConstantBinary::Eq(_) => 1,
+                ConstantBinary::And(_) | ConstantBinary::Or(_) => 0
+            }
+        };
 
         // Aggregate various ranges to get the minimum range
-        for binary in binaries.iter() {
-            if let ConstantBinary::Scope { min, max } = binary {
-                if let Some(order) = Self::bound_compared(&scope_min, &min, true) {
-                    if order.is_lt() {
-                        scope_min = min.clone();
-                    }
-                }
+        for binary in binaries.iter().sorted_by_key(sort_op) {
+            match binary {
+                ConstantBinary::Scope { min, max } => {
+                    // Skip if eq or noteq exists
+                    if !eq_set.is_empty() { continue }
 
-                if let Some(order) = Self::bound_compared(&scope_max, &max, false) {
-                    if order.is_gt() {
-                        scope_max = max.clone();
+                    if let Some(order) = Self::bound_compared(&scope_min, &min, true) {
+                        if order.is_lt() {
+                            scope_min = min.clone();
+                        }
+                    }
+
+                    if let Some(order) = Self::bound_compared(&scope_max, &max, false) {
+                        if order.is_gt() {
+                            scope_max = max.clone();
+                        }
                     }
                 }
-            } else if let ConstantBinary::Or(_) | ConstantBinary::And(_) = binary {
-                return Err(TypeError::InvalidType);
+                ConstantBinary::Eq(val) => {
+                    let _ = eq_set.insert(val.clone());
+                },
+                ConstantBinary::NotEq(val) => {
+                    let _ = eq_set.remove(val);
+                },
+                ConstantBinary::Or(_) | ConstantBinary::And(_) => return Err(TypeError::InvalidType)
             }
         }
 
-        // Remove Scope and equivalent conditions within the range
-        binaries.retain(|binary| {
-            let op = |bound_val: Bound<ValueRef>, min: &Bound<ValueRef>, max: &Bound<ValueRef>| {
-                if let Some(order) = Self::bound_compared(min, &bound_val, true) {
-                    return order.is_gt();
-                }
+        let eq_binaries = eq_set.into_iter()
+            .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+            .map(|val| ConstantBinary::Eq(val))
+            .collect_vec();
 
-                if let Some(order) = Self::bound_compared(max, &bound_val, false) {
-                    return order.is_lt();
-                }
-
-                true
-            };
-
-            // 1. preserve Eq\NotEq outside of Scope
-            // 2. marginal value fusion
-            match binary {
-                ConstantBinary::Scope { .. } => false,
-                ConstantBinary::Eq(val) => {
-                    let included_op = |scope: &mut Bound<Arc<DataValue>>, val: &ValueRef| {
-                        if let Bound::Excluded(scope_val) = &scope {
-                            if val.eq(&scope_val) {
-                                let _ = mem::replace(scope, Bound::Included(scope_val.clone()));
-                            }
-                        }
-                    };
-
-                    included_op(&mut scope_min, val);
-                    included_op(&mut scope_max, val);
-
-                    op(Bound::Included(val.clone()), &scope_min, &scope_max)
-                },
-                ConstantBinary::NotEq(val) => {
-                    let excluded_op = |scope: &mut Bound<Arc<DataValue>>, val: &ValueRef| {
-                        if let Bound::Included(scope_val) = &scope {
-                            if val.eq(&scope_val) {
-                                let _ = mem::replace(scope, Bound::Excluded(scope_val.clone()));
-                            }
-                        }
-                    };
-
-                    excluded_op(&mut scope_min, val);
-                    excluded_op(&mut scope_max, val);
-
-                    op(Bound::Excluded(val.clone()), &scope_min, &scope_max)
-                },
-                _ => unreachable!()
-            }
-        });
-
-        if !matches!((&scope_min, &scope_max), (Bound::Unbounded, Bound::Unbounded)) {
-            binaries.push(ConstantBinary::Scope {
+        if !eq_binaries.is_empty() {
+            let _ = mem::replace(binaries, eq_binaries);
+        } else if !matches!((&scope_min, &scope_max), (Bound::Unbounded, Bound::Unbounded)) {
+            let scope_binary = ConstantBinary::Scope {
                 min: scope_min,
                 max: scope_max,
-            })
+            };
+
+            let _ = mem::replace(binaries, vec![scope_binary]);
+        } else {
+            let _ = mem::replace(binaries, vec![]);
         }
 
         Ok(())
@@ -779,7 +762,63 @@ mod test {
     }
 
     #[test]
-    fn test_scope_aggregation() -> Result<(), TypeError> {
+    fn test_scope_aggregation_eq_noteq() -> Result<(), TypeError> {
+        let val_0 = Arc::new(DataValue::Int32(Some(0)));
+        let val_1 = Arc::new(DataValue::Int32(Some(1)));
+        let val_2 = Arc::new(DataValue::Int32(Some(2)));
+        let val_3 = Arc::new(DataValue::Int32(Some(3)));
+
+        let mut binary = ConstantBinary::And(vec![
+            ConstantBinary::Eq(val_0.clone()),
+            ConstantBinary::NotEq(val_1.clone()),
+            ConstantBinary::Eq(val_2.clone()),
+            ConstantBinary::NotEq(val_3.clone()),
+        ]);
+
+        binary.scope_aggregation()?;
+
+        assert_eq!(
+            binary,
+            ConstantBinary::And(vec![
+                ConstantBinary::Eq(val_0),
+                ConstantBinary::Eq(val_2),
+            ])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_scope_aggregation_eq_noteq_cover() -> Result<(), TypeError> {
+        let val_0 = Arc::new(DataValue::Int32(Some(0)));
+        let val_1 = Arc::new(DataValue::Int32(Some(1)));
+        let val_2 = Arc::new(DataValue::Int32(Some(2)));
+        let val_3 = Arc::new(DataValue::Int32(Some(3)));
+
+        let mut binary = ConstantBinary::And(vec![
+            ConstantBinary::Eq(val_0.clone()),
+            ConstantBinary::NotEq(val_1.clone()),
+            ConstantBinary::Eq(val_2.clone()),
+            ConstantBinary::NotEq(val_3.clone()),
+
+            ConstantBinary::NotEq(val_0.clone()),
+            ConstantBinary::NotEq(val_1.clone()),
+            ConstantBinary::NotEq(val_2.clone()),
+            ConstantBinary::NotEq(val_3.clone()),
+        ]);
+
+        binary.scope_aggregation()?;
+
+        assert_eq!(
+            binary,
+            ConstantBinary::And(vec![])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_scope_aggregation_scope() -> Result<(), TypeError> {
         let val_0 = Arc::new(DataValue::Int32(Some(0)));
         let val_1 = Arc::new(DataValue::Int32(Some(1)));
         let val_2 = Arc::new(DataValue::Int32(Some(2)));
@@ -806,8 +845,54 @@ mod test {
                 min: Bound::Unbounded,
                 max: Bound::Unbounded,
             },
-            ConstantBinary::Eq(val_0.clone()),
+        ]);
+
+        binary.scope_aggregation()?;
+
+        assert_eq!(
+            binary,
+            ConstantBinary::And(vec![
+                ConstantBinary::Scope {
+                    min: Bound::Excluded(val_1.clone()),
+                    max: Bound::Excluded(val_2.clone()),
+                }
+            ])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_scope_aggregation_mixed() -> Result<(), TypeError> {
+        let val_0 = Arc::new(DataValue::Int32(Some(0)));
+        let val_1 = Arc::new(DataValue::Int32(Some(1)));
+        let val_2 = Arc::new(DataValue::Int32(Some(2)));
+        let val_3 = Arc::new(DataValue::Int32(Some(3)));
+
+        let mut binary = ConstantBinary::And(vec![
+            ConstantBinary::Scope {
+                min: Bound::Excluded(val_0.clone()),
+                max: Bound::Included(val_3.clone())
+            },
+            ConstantBinary::Scope {
+                min: Bound::Included(val_1.clone()),
+                max: Bound::Excluded(val_2.clone())
+            },
+            ConstantBinary::Scope {
+                min: Bound::Excluded(val_1.clone()),
+                max: Bound::Included(val_2.clone())
+            },
+            ConstantBinary::Scope {
+                min: Bound::Included(val_0.clone()),
+                max: Bound::Excluded(val_3.clone())
+            },
+            ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Unbounded,
+            },
             ConstantBinary::Eq(val_1.clone()),
+            ConstantBinary::Eq(val_0.clone()),
+            ConstantBinary::NotEq(val_1.clone()),
         ]);
 
         binary.scope_aggregation()?;
@@ -816,10 +901,6 @@ mod test {
             binary,
             ConstantBinary::And(vec![
                 ConstantBinary::Eq(val_0.clone()),
-                ConstantBinary::Scope {
-                    min: Bound::Included(val_1.clone()),
-                    max: Bound::Excluded(val_2.clone()),
-                }
             ])
         );
 
