@@ -12,6 +12,7 @@ pub mod update;
 pub mod delete;
 pub mod drop_table;
 pub mod truncate;
+pub mod show;
 
 use itertools::Itertools;
 use crate::catalog::ColumnRef;
@@ -21,6 +22,7 @@ use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
+use crate::planner::operator::show::ShowTablesOperator;
 use crate::planner::operator::truncate::TruncateOperator;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
@@ -50,6 +52,8 @@ pub enum Operator {
     CreateTable(CreateTableOperator),
     DropTable(DropTableOperator),
     Truncate(TruncateOperator),
+    // Show
+    Show(ShowTablesOperator),
 }
 
 impl Operator {
