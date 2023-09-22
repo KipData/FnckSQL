@@ -76,6 +76,11 @@ impl<S: Storage> Database<S> {
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
             .batch(
+                "Simplify Filter".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![RuleImpl::SimplifyFilter]
+            )
+            .batch(
                 "Predicate Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
@@ -107,11 +112,6 @@ impl<S: Storage> Database<S> {
                     RuleImpl::CollapseProject,
                     RuleImpl::CombineFilter
                 ]
-            )
-            .batch(
-                "Simplify Filter".to_string(),
-                HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::SimplifyFilter]
             )
     }
 }

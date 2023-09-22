@@ -258,8 +258,10 @@ pub enum BinaryOperator {
     Minus,
     Multiply,
     Divide,
+
     Modulo,
     StringConcat,
+
     Gt,
     Lt,
     GtEq,
@@ -267,6 +269,7 @@ pub enum BinaryOperator {
     Spaceship,
     Eq,
     NotEq,
+
     And,
     Or,
     Xor,

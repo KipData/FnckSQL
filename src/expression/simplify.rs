@@ -127,15 +127,12 @@ impl ConstantBinary {
 
     pub fn scope_aggregation(&mut self) -> Result<(), TypeError> {
         match self {
-            ConstantBinary::And(binaries) => {
-                Self::_scope_aggregation(binaries)?
-            }
             ConstantBinary::Or(binaries) => {
                 for binary in binaries {
                     binary.scope_aggregation()?
                 }
             }
-            _ => ()
+            binary => binary._scope_aggregation()?
         }
 
         Ok(())
@@ -168,65 +165,67 @@ impl ConstantBinary {
     }
 
     // Tips: It only makes sense if the condition is and aggregation
-    fn _scope_aggregation(binaries: &mut Vec<ConstantBinary>) -> Result<(), TypeError> {
-        let mut scope_min = Bound::Unbounded;
-        let mut scope_max = Bound::Unbounded;
-        let mut eq_set = HashSet::with_hasher(RandomState::new());
+    fn _scope_aggregation(&mut self) -> Result<(), TypeError> {
+        if let ConstantBinary::And(binaries) = self {
+            let mut scope_min = Bound::Unbounded;
+            let mut scope_max = Bound::Unbounded;
+            let mut eq_set = HashSet::with_hasher(RandomState::new());
 
-        let sort_op = |binary: &&ConstantBinary| {
-            match binary {
-                ConstantBinary::Scope { .. } => 3,
-                ConstantBinary::NotEq(_) => 2,
-                ConstantBinary::Eq(_) => 1,
-                ConstantBinary::And(_) | ConstantBinary::Or(_) => 0
-            }
-        };
-
-        // Aggregate various ranges to get the minimum range
-        for binary in binaries.iter().sorted_by_key(sort_op) {
-            match binary {
-                ConstantBinary::Scope { min, max } => {
-                    // Skip if eq or noteq exists
-                    if !eq_set.is_empty() { continue }
-
-                    if let Some(order) = Self::bound_compared(&scope_min, &min, true) {
-                        if order.is_lt() {
-                            scope_min = min.clone();
-                        }
-                    }
-
-                    if let Some(order) = Self::bound_compared(&scope_max, &max, false) {
-                        if order.is_gt() {
-                            scope_max = max.clone();
-                        }
-                    }
+            let sort_op = |binary: &&ConstantBinary| {
+                match binary {
+                    ConstantBinary::Scope { .. } => 3,
+                    ConstantBinary::NotEq(_) => 2,
+                    ConstantBinary::Eq(_) => 1,
+                    ConstantBinary::And(_) | ConstantBinary::Or(_) => 0
                 }
-                ConstantBinary::Eq(val) => {
-                    let _ = eq_set.insert(val.clone());
-                },
-                ConstantBinary::NotEq(val) => {
-                    let _ = eq_set.remove(val);
-                },
-                ConstantBinary::Or(_) | ConstantBinary::And(_) => return Err(TypeError::InvalidType)
-            }
-        }
-
-        let eq_binaries = eq_set.into_iter()
-            .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
-            .map(|val| ConstantBinary::Eq(val))
-            .collect_vec();
-
-        if !eq_binaries.is_empty() {
-            let _ = mem::replace(binaries, eq_binaries);
-        } else if !matches!((&scope_min, &scope_max), (Bound::Unbounded, Bound::Unbounded)) {
-            let scope_binary = ConstantBinary::Scope {
-                min: scope_min,
-                max: scope_max,
             };
 
-            let _ = mem::replace(binaries, vec![scope_binary]);
-        } else {
-            let _ = mem::replace(binaries, vec![]);
+            // Aggregate various ranges to get the minimum range
+            for binary in binaries.iter().sorted_by_key(sort_op) {
+                match binary {
+                    ConstantBinary::Scope { min, max } => {
+                        // Skip if eq or noteq exists
+                        if !eq_set.is_empty() { continue }
+
+                        if let Some(order) = Self::bound_compared(&scope_min, &min, true) {
+                            if order.is_lt() {
+                                scope_min = min.clone();
+                            }
+                        }
+
+                        if let Some(order) = Self::bound_compared(&scope_max, &max, false) {
+                            if order.is_gt() {
+                                scope_max = max.clone();
+                            }
+                        }
+                    }
+                    ConstantBinary::Eq(val) => {
+                        let _ = eq_set.insert(val.clone());
+                    },
+                    ConstantBinary::NotEq(val) => {
+                        let _ = eq_set.remove(val);
+                    },
+                    ConstantBinary::Or(_) | ConstantBinary::And(_) => return Err(TypeError::InvalidType)
+                }
+            }
+
+            let eq_option = eq_set.into_iter()
+                .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+                .next()
+                .map(|val| ConstantBinary::Eq(val));
+
+            if let Some(eq) = eq_option {
+                let _ = mem::replace(self, eq);
+            } else if !matches!((&scope_min, &scope_max), (Bound::Unbounded, Bound::Unbounded)) {
+                let scope_binary = ConstantBinary::Scope {
+                    min: scope_min,
+                    max: scope_max,
+                };
+
+                let _ = mem::replace(self, scope_binary);
+            } else {
+                let _ = mem::replace(self, ConstantBinary::And(vec![]));
+            }
         }
 
         Ok(())
@@ -779,10 +778,7 @@ mod test {
 
         assert_eq!(
             binary,
-            ConstantBinary::And(vec![
-                ConstantBinary::Eq(val_0),
-                ConstantBinary::Eq(val_2),
-            ])
+            ConstantBinary::Eq(val_0)
         );
 
         Ok(())
@@ -851,12 +847,10 @@ mod test {
 
         assert_eq!(
             binary,
-            ConstantBinary::And(vec![
-                ConstantBinary::Scope {
-                    min: Bound::Excluded(val_1.clone()),
-                    max: Bound::Excluded(val_2.clone()),
-                }
-            ])
+            ConstantBinary::Scope {
+                min: Bound::Excluded(val_1.clone()),
+                max: Bound::Excluded(val_2.clone()),
+            }
         );
 
         Ok(())
@@ -899,9 +893,7 @@ mod test {
 
         assert_eq!(
             binary,
-            ConstantBinary::And(vec![
-                ConstantBinary::Eq(val_0.clone()),
-            ])
+            ConstantBinary::Eq(val_0.clone())
         );
 
         Ok(())
