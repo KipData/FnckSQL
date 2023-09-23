@@ -233,20 +233,23 @@ impl Rule for PushPredicateIntoScan {
 
                     if let Some(mut binary) = option.take() {
                         binary.scope_aggregation()?;
-                        let mut scan_by_index = child_op.clone();
+                        let rearrange_binaries = binary.rearrange()?;
 
-                        scan_by_index.index_by = Some((meta.clone(), binary.rearrange()?));
+                        if !rearrange_binaries.is_empty() {
+                            let mut scan_by_index = child_op.clone();
+                            scan_by_index.index_by = Some((meta.clone(), rearrange_binaries));
 
-                        // The constant expression extracted in prewhere is used to
-                        // reduce the data scanning range and cannot replace the role of Filter.
-                        graph.replace_node(
-                            child_id,
-                            OptExprNode::OperatorRef(
-                                Operator::Scan(scan_by_index)
-                            )
-                        );
+                            // The constant expression extracted in prewhere is used to
+                            // reduce the data scanning range and cannot replace the role of Filter.
+                            graph.replace_node(
+                                child_id,
+                                OptExprNode::OperatorRef(
+                                    Operator::Scan(scan_by_index)
+                                )
+                            );
 
-                        return Ok(())
+                            return Ok(())
+                        }
                     }
                 }
             }
