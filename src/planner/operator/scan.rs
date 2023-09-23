@@ -4,13 +4,13 @@ use crate::expression::ScalarExpression;
 use crate::expression::simplify::ConstantBinary;
 use crate::planner::LogicalPlan;
 use crate::storage::Bounds;
-use crate::types::index::IndexRef;
+use crate::types::index::IndexMetaRef;
 
 use super::Operator;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ScanOperator {
-    pub index_metas: Vec<IndexRef>,
+    pub index_metas: Vec<IndexMetaRef>,
 
     pub table_name: TableName,
     pub columns: Vec<ScalarExpression>,
@@ -20,7 +20,7 @@ pub struct ScanOperator {
     // IndexScan only
     // Support push down predicate.
     // If pre_where is simple predicate, for example:  a > 1 then can calculate directly when read data.
-    pub index_by: Option<(IndexRef, Vec<ConstantBinary>)>,
+    pub index_by: Option<(IndexMetaRef, Vec<ConstantBinary>)>,
 }
 impl ScanOperator {
     pub fn new(table_name: TableName, table_catalog: &TableCatalog) -> LogicalPlan {

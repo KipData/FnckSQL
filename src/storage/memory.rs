@@ -4,8 +4,9 @@ use std::slice;
 use std::sync::Arc;
 use async_trait::async_trait;
 use crate::catalog::{ColumnCatalog, RootCatalog, TableCatalog, TableName};
-use crate::storage::{Bounds, Projections, Storage, StorageError, Transaction, Iter};
-use crate::types::index::Index;
+use crate::expression::simplify::ConstantBinary;
+use crate::storage::{Bounds, Projections, Storage, StorageError, Transaction, Iter, tuple_projection, IndexIter};
+use crate::types::index::{Index, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
 
 // WARRING: Only single-threaded and tested using
@@ -161,6 +162,10 @@ impl Transaction for MemTable {
         }
     }
 
+    fn read_by_index(&self, bounds: Bounds, projection: Projections, index_meta: IndexMetaRef, binaries: Vec<ConstantBinary>) -> Result<IndexIter<'_>, StorageError> {
+        todo!()
+    }
+
     fn add_index(&mut self, index: Index, tuple_ids: Vec<TupleId>, is_unique: bool) -> Result<(), StorageError> {
         todo!()
     }
@@ -228,25 +233,7 @@ impl Iter for MemTraction<'_> {
         self.iter
             .next()
             .cloned()
-            .map(|tuple| {
-                let projection_len = self.projections.len();
-
-                let mut columns = Vec::with_capacity(projection_len);
-                let mut values = Vec::with_capacity(projection_len);
-
-                for expr in self.projections.iter() {
-                    values.push(expr.eval_column(&tuple)?);
-                    columns.push(expr.output_columns(&tuple));
-                }
-
-                self.limit = self.limit.map(|num| num - 1);
-
-                Ok(Tuple {
-                    id: tuple.id,
-                    columns,
-                    values,
-                })
-            })
+            .map(|tuple| tuple_projection(&mut self.limit, &self.projections, tuple))
             .transpose()
     }
 }

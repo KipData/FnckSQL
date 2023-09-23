@@ -1,5 +1,6 @@
-use std::collections::Bound;
+use std::collections::{Bound, VecDeque};
 use std::collections::hash_map::RandomState;
+use std::mem;
 use std::path::PathBuf;
 use std::sync::Arc;
 use async_trait::async_trait;
@@ -9,10 +10,13 @@ use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
 use kip_db::kernel::lsm::storage::Config;
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
-use crate::storage::{Bounds, Projections, Storage, StorageError, Transaction, Iter};
+use crate::expression::simplify::ConstantBinary;
+use crate::storage::{Bounds, Projections, Storage, StorageError, Transaction, Iter, tuple_projection, IndexIter};
 use crate::storage::table_codec::TableCodec;
-use crate::types::index::{Index, IndexMeta};
+use crate::types::errors::TypeError;
+use crate::types::index::{Index, IndexMeta, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
+use crate::types::value::ValueRef;
 
 #[derive(Clone)]
 pub struct KipStorage {
@@ -56,20 +60,20 @@ impl KipStorage {
         Some((columns, name_option))
     }
 
-    fn index_collect(name: &String, tx: &mvcc::Transaction) -> Option<Vec<IndexMeta>> {
+    fn index_meta_collect(name: &String, tx: &mvcc::Transaction) -> Option<Vec<IndexMeta>> {
         let (index_min, index_max) = TableCodec::index_meta_bound(name);
-        let mut indexes = vec![];
+        let mut index_metas = vec![];
         let mut index_iter = tx.iter(Bound::Included(&index_min), Bound::Included(&index_max)).ok()?;
 
         while let Some((_, value_option)) = index_iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
                 if let Some(index_meta) = TableCodec::decode_index_meta(&value).ok() {
-                    indexes.push(index_meta);
+                    index_metas.push(index_meta);
                 }
             }
         }
 
-        Some(indexes)
+        Some(index_metas)
     }
 
     fn _drop_data(table: &mut KipTransaction, min: &[u8], max: &[u8]) -> Result<(), StorageError> {
@@ -201,7 +205,7 @@ impl Storage for KipStorage {
             let tx = self.inner.new_transaction().await;
             // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
             let (columns, name_option) = Self::column_collect(name, &tx)?;
-            let indexes = Self::index_collect(name, &tx)?;
+            let indexes = Self::index_meta_collect(name, &tx)?;
 
             if let Some(catalog) = name_option
                 .and_then(|table_name| TableCatalog::new(table_name, columns, indexes).ok())
@@ -251,6 +255,46 @@ impl Transaction for KipTransaction {
             projections,
             table_codec: &self.table_codec,
             iter,
+        })
+    }
+
+    fn read_by_index(
+        &self,
+        (offset, limit): Bounds,
+        projections: Projections,
+        index_meta: IndexMetaRef,
+        binaries: Vec<ConstantBinary>
+    ) -> Result<IndexIter<'_>, StorageError> {
+        let mut tuple_ids = Vec::new();
+
+        // TODO: 支持Limit
+        for binary in binaries {
+            match binary {
+                ConstantBinary::Scope { min, max } => {
+                    let mut iter = self.scope_to_iter(&index_meta, min, max)?;
+
+                    while let Some((_, value_option)) = iter.try_next()? {
+                        if let Some(value) = value_option {
+                            tuple_ids.append(&mut TableCodec::decode_index(&value)?)
+                        }
+                    }
+                }
+                ConstantBinary::Eq(val) => {
+                    let key = self.val_to_key(&index_meta, val)?;
+
+                    if let Some(bytes) = self.tx.get(&key)? {
+                        tuple_ids.append(&mut TableCodec::decode_index(&bytes)?)
+                    }
+                }
+                _ => ()
+            }
+        }
+
+        Ok(IndexIter {
+            projections,
+            table_codec: &self.table_codec,
+            tuple_ids: VecDeque::from(tuple_ids),
+            tx: &self.tx,
         })
     }
 
@@ -309,6 +353,50 @@ impl Transaction for KipTransaction {
     }
 }
 
+impl KipTransaction {
+    fn val_to_key(&self, index_meta: &IndexMetaRef, val: ValueRef) -> Result<Vec<u8>, TypeError> {
+        let index = Index::new(index_meta.id, vec![val]);
+
+        self.table_codec.encode_index_key(&index)
+    }
+
+    fn scope_to_iter(
+        &self,
+        index_meta: &IndexMetaRef,
+        min: Bound<ValueRef>,
+        max: Bound<ValueRef>
+    ) -> Result<TransactionIter, StorageError> {
+        let bound_encode = |bound: Bound<ValueRef>| -> Result<_, StorageError> {
+            match bound {
+                Bound::Included(val) => {
+                    Ok(Bound::Included(self.val_to_key(&index_meta, val)?))
+                },
+                Bound::Excluded(val) => {
+                    Ok(Bound::Excluded(self.val_to_key(&index_meta, val)?))
+                }
+                Bound::Unbounded => Ok(Bound::Unbounded)
+            }
+        };
+        let check_bound = |value: &mut Bound<Vec<u8>>, bound: Vec<u8>| {
+            if matches!(value, Bound::Unbounded) {
+                let _ = mem::replace(value, Bound::Included(bound));
+            }
+        };
+        let (bound_min, bound_max) = self.table_codec.index_bound(&index_meta.id);
+
+        let mut encode_min = bound_encode(min)?;
+        check_bound(&mut encode_min, bound_min);
+
+        let mut encode_max = bound_encode(max)?;
+        check_bound(&mut encode_max, bound_max);
+
+        Ok(self.tx.iter(
+            encode_min.as_ref().map(Vec::as_slice),
+            encode_max.as_ref().map(Vec::as_slice),
+        )?)
+    }
+}
+
 pub struct KipIter<'a> {
     offset: usize,
     limit: Option<usize>,
@@ -332,25 +420,13 @@ impl Iter for KipIter<'_> {
 
         while let Some(item) = self.iter.try_next()? {
             if let (_, Some(value)) = item {
-                let tuple = self.table_codec.decode_tuple(&value);
+                let tuple = tuple_projection(
+                    &mut self.limit,
+                    &self.projections,
+                    self.table_codec.decode_tuple(&value)
+                )?;
 
-                let projection_len = self.projections.len();
-
-                let mut columns = Vec::with_capacity(projection_len);
-                let mut values = Vec::with_capacity(projection_len);
-
-                for expr in self.projections.iter() {
-                    values.push(expr.eval_column(&tuple)?);
-                    columns.push(expr.output_columns(&tuple));
-                }
-
-                self.limit = self.limit.map(|num| num - 1);
-
-                return Ok(Some(Tuple {
-                    id: tuple.id,
-                    columns,
-                    values,
-                }))
+                return Ok(Some(tuple))
             }
         }
 

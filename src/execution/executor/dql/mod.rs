@@ -7,6 +7,7 @@ pub(crate) mod limit;
 pub(crate) mod join;
 pub(crate) mod dummy;
 pub(crate) mod aggregate;
+pub(crate) mod index_scan;
 
 #[cfg(test)]
 pub(crate) mod test {

@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::ColumnId;
-use crate::types::index::{IndexMeta, IndexRef};
+use crate::types::index::{IndexMeta, IndexMetaRef};
 
 pub type TableName = Arc<String>;
 
@@ -14,11 +14,11 @@ pub struct TableCatalog {
     /// Mapping from column names to column ids
     column_idxs: BTreeMap<String, ColumnId>,
     pub(crate) columns: BTreeMap<ColumnId, ColumnRef>,
-    pub indexes: Vec<IndexRef>
+    pub indexes: Vec<IndexMetaRef>
 }
 
 impl TableCatalog {
-    pub(crate) fn get_unique_index(&self, col_id: &ColumnId) -> Option<&IndexRef> {
+    pub(crate) fn get_unique_index(&self, col_id: &ColumnId) -> Option<&IndexMetaRef> {
         self.indexes
             .iter()
             .find(|meta| meta.is_unique && &meta.column_ids[0] == col_id)
