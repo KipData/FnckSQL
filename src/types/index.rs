@@ -1,8 +1,10 @@
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use crate::types::ColumnId;
 use crate::types::value::ValueRef;
 
 pub type IndexId = u32;
+pub type IndexRef = Arc<IndexMeta>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct IndexMeta {

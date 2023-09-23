@@ -252,7 +252,7 @@ struct ReplaceUnary {
 }
 
 impl ScalarExpression {
-    fn unpack_val(&mut self) -> Option<ValueRef> {
+    fn unpack_val(&self) -> Option<ValueRef> {
         match self {
             ScalarExpression::Constant(val) => Some(val.clone()),
             ScalarExpression::Alias { expr, .. } => expr.unpack_val(),
@@ -279,15 +279,7 @@ impl ScalarExpression {
                 let right = right_expr.unpack_val()?;
 
                 binary_op(&left, &right, op).ok()
-                    .map(|val| {
-                        let val_ref = Arc::new(val);
-                        let _ = mem::replace(
-                            self,
-                            ScalarExpression::Constant(val_ref.clone()),
-                        );
-
-                        val_ref
-                    })
+                    .map(Arc::new)
             }
             _ => None
         }
@@ -496,7 +488,7 @@ impl ScalarExpression {
     /// The And and Or of ConstantBinary are concerned with the data range that needs to be aggregated.
     /// - `ConstantBinary::And`: Aggregate the minimum range of all conditions in and
     /// - `ConstantBinary::Or`: Rearrange and sort the range of each OR data
-    pub fn convert_binary(&mut self, col_id: &ColumnId) -> Result<Option<ConstantBinary>, TypeError> {
+    pub fn convert_binary(&self, col_id: &ColumnId) -> Result<Option<ConstantBinary>, TypeError> {
         match self {
             ScalarExpression::Binary { left_expr, right_expr, op, .. } => {
                 match (left_expr.convert_binary(col_id)?, right_expr.convert_binary(col_id)?) {

@@ -24,6 +24,16 @@ lazy_static! {
         }
     };
 
+    static ref PUSH_PREDICATE_INTO_SCAN: Pattern = {
+        Pattern {
+            predicate: |op| matches!(op, Operator::Filter(_)),
+            children: PatternChildrenPredicate::Predicate(vec![Pattern {
+                predicate: |op| matches!(op, Operator::Scan(_)),
+                children: PatternChildrenPredicate::None,
+            }]),
+        }
+    };
+
     // TODO
     static ref PUSH_PREDICATE_THROUGH_NON_JOIN: Pattern = {
         Pattern {
@@ -200,16 +210,98 @@ impl Rule for PushPredicateThroughJoin {
     }
 }
 
+pub struct PushPredicateIntoScan {
+
+}
+
+impl Rule for PushPredicateIntoScan {
+    fn pattern(&self) -> &Pattern {
+        &PUSH_PREDICATE_INTO_SCAN
+    }
+
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+        if let Operator::Filter(op) = graph.operator(node_id) {
+            let child_id = graph.children_at(node_id)[0];
+            if let Operator::Scan(child_op) = graph.operator(child_id) {
+                if child_op.index_by.is_some() {
+                    return Ok(())
+                }
+
+                //FIXME: now only support unique
+                for meta in &child_op.index_metas {
+                    let mut option = op.predicate.convert_binary(&meta.column_ids[0])?;
+
+                    if let Some(mut binary) = option.take() {
+                        binary.scope_aggregation()?;
+                        let mut scan_by_index = child_op.clone();
+
+                        scan_by_index.index_by = Some((meta.clone(), binary.rearrange()?));
+
+                        // The constant expression extracted in prewhere is used to
+                        // reduce the data scanning range and cannot replace the role of Filter.
+                        graph.replace_node(
+                            child_id,
+                            OptExprNode::OperatorRef(
+                                Operator::Scan(scan_by_index)
+                            )
+                        );
+
+                        return Ok(())
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::Bound;
+    use std::sync::Arc;
     use crate::binder::test::select_sql_run;
     use crate::db::DatabaseError;
     use crate::expression::{BinaryOperator, ScalarExpression};
+    use crate::expression::simplify::ConstantBinary::Scope;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::RuleImpl;
     use crate::planner::operator::Operator;
     use crate::types::LogicalType;
+    use crate::types::value::DataValue;
+
+    #[tokio::test]
+    async fn test_push_predicate_into_scan() -> Result<(), DatabaseError> {
+        // 1 - c2 < 0 => c2 > 1
+        let plan = select_sql_run("select * from t1 where -(1 - c2) > 0").await?;
+
+        let best_plan = HepOptimizer::new(plan)
+            .batch(
+                "simplify_filter".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![RuleImpl::SimplifyFilter]
+            )
+            .batch(
+                "test_push_predicate_into_scan".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![RuleImpl::PushPredicateIntoScan]
+            )
+            .find_best()?;
+
+        if let Operator::Scan(op) = &best_plan.childrens[0].childrens[0].operator {
+            let mock_binaries = vec![Scope {
+                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
+                max: Bound::Unbounded
+            }];
+
+            assert_eq!(op.index_by.clone().unwrap().1, mock_binaries);
+        } else {
+            unreachable!("Should be a filter operator")
+        }
+
+        Ok(())
+    }
 
     #[tokio::test]
     async fn test_push_predicate_through_join_in_left_join() -> Result<(), DatabaseError> {

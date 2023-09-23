@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use itertools::Itertools;
 
 use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::ColumnId;
-use crate::types::index::IndexMeta;
+use crate::types::index::{IndexMeta, IndexRef};
 
 pub type TableName = Arc<String>;
 
@@ -13,11 +14,11 @@ pub struct TableCatalog {
     /// Mapping from column names to column ids
     column_idxs: BTreeMap<String, ColumnId>,
     pub(crate) columns: BTreeMap<ColumnId, ColumnRef>,
-    pub indexes: Vec<IndexMeta>
+    pub indexes: Vec<IndexRef>
 }
 
 impl TableCatalog {
-    pub(crate) fn get_unique_index(&self, col_id: &ColumnId) -> Option<&IndexMeta> {
+    pub(crate) fn get_unique_index(&self, col_id: &ColumnId) -> Option<&IndexRef> {
         self.indexes
             .iter()
             .find(|meta| meta.is_unique && &meta.column_ids[0] == col_id)
@@ -77,6 +78,10 @@ impl TableCatalog {
         columns: Vec<ColumnCatalog>,
         indexes: Vec<IndexMeta>
     ) -> Result<TableCatalog, CatalogError> {
+        let indexes = indexes.into_iter()
+            .map(Arc::new)
+            .collect_vec();
+
         let mut table_catalog = TableCatalog {
             name,
             column_idxs: BTreeMap::new(),

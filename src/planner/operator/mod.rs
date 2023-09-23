@@ -125,11 +125,7 @@ impl Operator {
                     .collect_vec()
             }
             Operator::Scan(op) => {
-                op.sort_fields
-                    .iter()
-                    .map(|field| &field.expr)
-                    .chain(op.columns.iter())
-                    .chain(op.pre_where.iter())
+                op.columns.iter()
                     .flat_map(|expr| expr.referenced_columns())
                     .collect_vec()
             }

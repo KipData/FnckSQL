@@ -7,6 +7,7 @@ use crate::optimizer::rule::column_pruning::{PushProjectIntoScan, PushProjectThr
 use crate::optimizer::rule::combine_operators::{CollapseProject, CombineFilter};
 use crate::optimizer::rule::pushdown_limit::{LimitProjectTranspose, EliminateLimits, PushLimitThroughJoin, PushLimitIntoScan};
 use crate::optimizer::rule::pushdown_predicates::PushPredicateThroughJoin;
+use crate::optimizer::rule::pushdown_predicates::PushPredicateIntoScan;
 use crate::optimizer::rule::simplification::SimplifyFilter;
 
 mod column_pruning;
@@ -30,6 +31,8 @@ pub enum RuleImpl {
     PushLimitIntoTableScan,
     // PushDown predicates
     PushPredicateThroughJoin,
+    // Tips: need to be used with `SimplifyFilter`
+    PushPredicateIntoScan,
     // Simplification
     SimplifyFilter
 }
@@ -46,6 +49,7 @@ impl Rule for RuleImpl {
             RuleImpl::PushLimitThroughJoin => PushLimitThroughJoin {}.pattern(),
             RuleImpl::PushLimitIntoTableScan => PushLimitIntoScan {}.pattern(),
             RuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin {}.pattern(),
+            RuleImpl::PushPredicateIntoScan => PushPredicateIntoScan {}.pattern(),
             RuleImpl::SimplifyFilter => SimplifyFilter {}.pattern(),
         }
     }
@@ -61,7 +65,8 @@ impl Rule for RuleImpl {
             RuleImpl::PushLimitThroughJoin => PushLimitThroughJoin {}.apply(node_id, graph),
             RuleImpl::PushLimitIntoTableScan => PushLimitIntoScan {}.apply(node_id, graph),
             RuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin {}.apply(node_id, graph),
-            RuleImpl::SimplifyFilter => SimplifyFilter {}.apply(node_id, graph)
+            RuleImpl::SimplifyFilter => SimplifyFilter {}.apply(node_id, graph),
+            RuleImpl::PushPredicateIntoScan => PushPredicateIntoScan {}.apply(node_id, graph)
         }
     }
 }
