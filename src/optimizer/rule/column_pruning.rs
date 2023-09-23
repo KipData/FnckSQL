@@ -1,15 +1,15 @@
-use std::collections::HashSet;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use crate::catalog::ColumnRef;
 use crate::expression::ScalarExpression;
 use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
+use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::operator::Operator;
 use crate::planner::operator::project::ProjectOperator;
-use crate::types::ColumnId;
 
 lazy_static! {
     static ref PUSH_PROJECT_INTO_SCAN_RULE: Pattern = {
@@ -78,73 +78,102 @@ impl Rule for PushProjectThroughChild {
 
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         let node_operator = graph.operator(node_id);
-        let input_refs = node_operator.project_input_refs();
 
         if let Operator::Project(_) = node_operator {
             let child_index = graph.children_at(node_id)[0];
-            let mut node_referenced_columns = node_operator.referenced_columns();
+            let node_referenced_columns = node_operator.referenced_columns();
             let child_operator = graph.operator(child_index);
             let child_referenced_columns = child_operator.referenced_columns();
-            let is_child_agg = matches!(child_operator, Operator::Aggregate(_));
+            let op = |col: &ColumnRef| format!("{:?}.{:?}", col.table_name, col.id);
 
-            // When the aggregate function is a child node,
-            // the pushdown will lose the corresponding ColumnRef due to `InputRef`.
-            // Therefore, it is necessary to map the InputRef to the corresponding ColumnRef
-            // and push it down.
-            if is_child_agg && !input_refs.is_empty() {
-                node_referenced_columns.append(
-                    &mut child_operator.agg_mapping_col_refs(&input_refs)
-                )
-            }
-
-            let intersection_columns_ids = child_referenced_columns
-                .iter()
-                .map(|col| col.id)
-                .chain(
-                    node_referenced_columns
+            match child_operator {
+                // When the aggregate function is a child node,
+                // the pushdown will lose the corresponding ColumnRef due to `InputRef`.
+                // Therefore, it is necessary to map the InputRef to the corresponding ColumnRef
+                // and push it down.
+                Operator::Aggregate(AggregateOperator { agg_calls, .. }) => {
+                    let grandson_id = graph.children_at(child_index)[0];
+                    let columns = node_operator
+                        .project_input_refs()
                         .iter()
-                        .map(|col| col.id)
-                )
-                .flatten()
-                .collect::<HashSet<ColumnId>>();
-
-            if intersection_columns_ids.is_empty() {
-                return Ok(());
-            }
-
-            for grandson_id in graph.children_at(child_index) {
-                let mut columns = graph.operator(grandson_id)
-                    .referenced_columns()
-                    .into_iter()
-                    .unique_by(|col| col.id)
-                    .filter(|u| matches!(
-                            u.id.map(|u_id| intersection_columns_ids.contains(&u_id)),
-                            Some(true)
-                        ))
-                    .map(|col| ScalarExpression::ColumnRef(col))
-                    .collect_vec();
-
-                if !is_child_agg && !input_refs.is_empty() {
-                    // Tips: Aggregation InputRefs fields take precedence
-                    columns = input_refs.iter()
-                        .cloned()
-                        .chain(columns)
+                        .filter_map(|expr| {
+                            if let ScalarExpression::InputRef { index, .. } = expr {
+                                Some(agg_calls[*index].clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .map(|expr| expr.referenced_columns())
+                        .flatten()
+                        .chain(node_referenced_columns.into_iter())
+                        .chain(child_referenced_columns.into_iter())
+                        .unique_by(op)
+                        .map(|col| ScalarExpression::ColumnRef(col))
                         .collect_vec();
-                }
 
-                if !columns.is_empty() {
-                    graph.add_node(
-                        child_index,
-                        Some(grandson_id),
-                        OptExprNode::OperatorRef(
-                            Operator::Project(ProjectOperator { columns })
-                        )
-                    );
+                    Self::add_project_node(graph, child_index, columns, grandson_id);
+                }
+                Operator::Join(_) => {
+                    let parent_referenced_columns = node_referenced_columns
+                        .into_iter()
+                        .chain(child_referenced_columns.into_iter())
+                        .unique_by(op)
+                        .collect_vec();
+
+                    for grandson_id in graph.children_at(child_index) {
+                        let grandson_referenced_column = graph
+                            .operator(grandson_id)
+                            .referenced_columns();
+
+                        // for PushLimitThroughJoin
+                        if grandson_referenced_column.is_empty() {
+                            return Ok(())
+                        }
+                        let grandson_table_name = grandson_referenced_column[0]
+                            .table_name
+                            .clone();
+                        let columns = parent_referenced_columns.iter()
+                            .filter(|col| col.table_name == grandson_table_name)
+                            .cloned()
+                            .map(|col| ScalarExpression::ColumnRef(col))
+                            .collect_vec();
+
+                        Self::add_project_node(graph, child_index, columns, grandson_id);
+                    }
+                }
+                _ => {
+                    let grandson_id = graph.children_at(child_index)[0];
+                    let mut columns = node_operator.project_input_refs();
+
+                    let mut referenced_columns = node_referenced_columns
+                        .into_iter()
+                        .chain(child_referenced_columns.into_iter())
+                        .unique_by(op)
+                        .map(|col| ScalarExpression::ColumnRef(col))
+                        .collect_vec();
+
+                    columns.append(&mut referenced_columns);
+
+                    Self::add_project_node(graph, child_index, columns, grandson_id);
                 }
             }
         }
 
         Ok(())
+    }
+}
+
+impl PushProjectThroughChild {
+    fn add_project_node(graph: &mut HepGraph, child_index: HepNodeId, columns: Vec<ScalarExpression>, grandson_id: HepNodeId) {
+        if !columns.is_empty() {
+            graph.add_node(
+                child_index,
+                Some(grandson_id),
+                OptExprNode::OperatorRef(
+                    Operator::Project(ProjectOperator { columns })
+                )
+            );
+        }
     }
 }
 

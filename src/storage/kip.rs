@@ -261,7 +261,7 @@ impl Transaction for KipTransaction {
 
     fn read_by_index(
         &self,
-        (mut offset_option, mut limit_option): Bounds,
+        (offset_option, mut limit_option): Bounds,
         projections: Projections,
         index_meta: IndexMetaRef,
         binaries: Vec<ConstantBinary>

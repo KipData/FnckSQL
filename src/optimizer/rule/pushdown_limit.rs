@@ -111,26 +111,26 @@ impl Rule for PushLimitThroughJoin {
     }
 
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
-        let child_id = graph.children_at(node_id)[0];
-        let join_type = if let Operator::Join(op) = graph.operator(child_id) {
-            Some(op.join_type)
-        } else {
-            None
-        };
+        if let Operator::Limit(op) = graph.operator(node_id) {
+            let child_id = graph.children_at(node_id)[0];
+            let join_type = if let Operator::Join(op) = graph.operator(child_id) {
+                Some(op.join_type)
+            } else {
+                None
+            };
 
-        if let Some(ty) = join_type {
-            if let Some(grandson_id) = match ty {
-                JoinType::Left => Some(graph.children_at(child_id)[0]),
-                JoinType::Right => Some(graph.children_at(child_id)[1]),
-                _ => None
-            } {
-                let limit_node = graph.remove_node(node_id, false).unwrap();
-
-                graph.add_node(
-                    child_id,
-                    Some(grandson_id),
-                    limit_node
-                );
+            if let Some(ty) = join_type {
+                if let Some(grandson_id) = match ty {
+                    JoinType::Left => Some(graph.children_at(child_id)[0]),
+                    JoinType::Right => Some(graph.children_at(child_id)[1]),
+                    _ => None
+                } {
+                    graph.add_node(
+                        child_id,
+                        Some(grandson_id),
+                        OptExprNode::OperatorRef(Operator::Limit(op.clone()))
+                    );
+                }
             }
         }
 
@@ -255,15 +255,15 @@ mod tests {
             )
             .find_best()?;
 
-        if let Operator::Join(_) = &best_plan.childrens[0].operator {
+        if let Operator::Join(_) = &best_plan.childrens[0].childrens[0].operator {
         } else {
-            unreachable!("Should be a project operator")
+            unreachable!("Should be a join operator")
         }
 
-        if let Operator::Limit(op) = &best_plan.childrens[0].childrens[0].operator {
+        if let Operator::Limit(op) = &best_plan.childrens[0].childrens[0].childrens[0].operator {
             assert_eq!(op.limit, 1);
         } else {
-            unreachable!("Should be a project operator")
+            unreachable!("Should be a limit operator")
         }
 
         Ok(())

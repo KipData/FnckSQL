@@ -27,6 +27,7 @@ pub enum ConstantBinary {
 }
 
 impl ConstantBinary {
+    #[allow(dead_code)]
     fn is_null(&self) -> Result<bool, TypeError> {
         match self {
             ConstantBinary::Scope { min, max } => {
@@ -50,7 +51,7 @@ impl ConstantBinary {
 
     pub fn rearrange(self) -> Result<Vec<ConstantBinary>, TypeError> {
         match self {
-            ConstantBinary::Or(mut binaries) => {
+            ConstantBinary::Or(binaries) => {
                 let mut condition_binaries = Vec::new();
 
                 for binary in binaries {
@@ -622,51 +623,6 @@ mod test {
     use crate::types::errors::TypeError;
     use crate::types::LogicalType;
     use crate::types::value::DataValue;
-
-    fn build_test_expr() -> (ScalarExpression, ScalarExpression) {
-        let col_1 = Arc::new(ColumnCatalog {
-            id: Some(0),
-            name: "c1".to_string(),
-            table_name: None,
-            nullable: false,
-            desc: ColumnDesc {
-                column_datatype: LogicalType::Integer,
-                is_primary: false,
-                is_unique: false,
-            },
-        });
-
-        let c1_main_binary_expr = ScalarExpression::Binary {
-            op: BinaryOperator::Minus,
-            left_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
-            right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(1))))),
-            ty: LogicalType::Integer,
-        };
-        let val_main_binary_expr = ScalarExpression::Binary {
-            op: BinaryOperator::Minus,
-            left_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(1))))),
-            right_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
-            ty: LogicalType::Integer,
-        };
-
-        let comparison_expr_op = |expr| {
-            ScalarExpression::Binary {
-                op: BinaryOperator::GtEq,
-                left_expr: Box::new(ScalarExpression::Alias {
-                    expr: Box::from(expr),
-                    alias: "alias".to_string(),
-                }),
-                right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(2))))),
-                ty: LogicalType::Boolean,
-            }
-        };
-        // c1 - 1 >= 2
-        let c1_main_expr = comparison_expr_op(c1_main_binary_expr);
-        // 1 - c1 >= 2
-        let val_main_expr = comparison_expr_op(val_main_binary_expr);
-
-        (c1_main_expr, val_main_expr)
-    }
 
     #[test]
     fn test_convert_binary_simple() -> Result<(), TypeError> {

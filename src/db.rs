@@ -210,7 +210,7 @@ mod test {
         println!("{}", create_table(&tuples_full_fields_t2));
 
         println!("projection_and_filter:");
-        let tuples_projection_and_filter = kipsql.run("select a from t1 where a <= 1").await?;
+        let tuples_projection_and_filter = kipsql.run("select a from t1 where b > 1").await?;
         println!("{}", create_table(&tuples_projection_and_filter));
 
         println!("projection_and_sort:");
