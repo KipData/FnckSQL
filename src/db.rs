@@ -84,7 +84,16 @@ impl<S: Storage> Database<S> {
                 "Predicate Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
-                    RuleImpl::PushPredicateThroughJoin
+                    RuleImpl::PushPredicateThroughJoin,
+                    RuleImpl::PushPredicateIntoScan
+                ]
+            )
+            .batch(
+                "Column Pruning".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::PushProjectThroughChild,
+                    RuleImpl::PushProjectIntoScan
                 ]
             )
             .batch(
@@ -96,14 +105,6 @@ impl<S: Storage> Database<S> {
                     RuleImpl::PushLimitIntoTableScan,
                     RuleImpl::EliminateLimits,
                 ],
-            )
-            .batch(
-                "Column Pruning".to_string(),
-                HepBatchStrategy::fix_point_topdown(10),
-                vec![
-                    RuleImpl::PushProjectThroughChild,
-                    RuleImpl::PushProjectIntoScan
-                ]
             )
             .batch(
                 "Combine Operators".to_string(),

@@ -123,7 +123,7 @@ mod test {
                 desc: ColumnDesc {
                     column_datatype: LogicalType::Integer,
                     is_primary: true,
-                    is_unique: true,
+                    is_unique: false,
                 },
             };
             let c2_col = ColumnCatalog {
@@ -138,7 +138,7 @@ mod test {
                 desc: ColumnDesc {
                     column_datatype: LogicalType::Integer,
                     is_primary: false,
-                    is_unique: false,
+                    is_unique: true,
                 },
             };
 
