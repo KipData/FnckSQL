@@ -9,6 +9,7 @@ use kip_db::kernel::lsm::mvcc::TransactionIter;
 use kip_db::kernel::lsm::{mvcc, storage};
 use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
 use kip_db::kernel::lsm::storage::Config;
+use kip_db::kernel::Storage as KipDBStorage;
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::expression::simplify::ConstantBinary;
@@ -133,8 +134,7 @@ impl Storage for KipStorage {
             }
         }
 
-        let (k, v)= TableCodec::encode_root_table(table_name.as_str(), columns.len())
-            .ok_or(StorageError::Serialization)?;
+        let (k, v)= TableCodec::encode_root_table(table_name.as_str(), columns.len())?;
         self.inner.set(k, v).await?;
 
         tx.commit().await?;
@@ -165,9 +165,7 @@ impl Storage for KipStorage {
         for col_key in col_keys {
             tx.remove(&col_key)?
         }
-        let (k, _) = TableCodec::encode_root_table(name.as_str(),0)
-            .ok_or(StorageError::Serialization)?;
-        tx.remove(&k)?;
+        tx.remove(&TableCodec::encode_root_table_key(name.as_str()))?;
         tx.commit().await?;
 
         let _ = self.cache.remove(name);

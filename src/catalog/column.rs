@@ -29,11 +29,11 @@ impl ColumnCatalog {
 
     pub(crate) fn new_dummy(column_name: String)-> ColumnCatalog {
         ColumnCatalog {
-            id: 0,
+            id: Some(0),
             name: column_name,
             table_name: None,
             nullable: false,
-            desc: ColumnDesc::new(LogicalType::Varchar(None), false),
+            desc: ColumnDesc::new(LogicalType::Varchar(None), false, false),
         }
     }
 

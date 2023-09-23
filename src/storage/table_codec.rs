@@ -188,17 +188,19 @@ impl TableCodec {
 
     /// Key: RootCatalog_0_TableName
     /// Value: ColumnCount
-    pub fn encode_root_table(table_name: &str,column_count:usize) -> Option<(Bytes, Bytes)> {
-        let key = format!(
+    pub fn encode_root_table(table_name: &str,column_count:usize) -> Result<(Bytes, Bytes), TypeError> {
+        let key = Self::encode_root_table_key(table_name);
+        let bytes = bincode::serialize(&column_count)?;
+
+        Ok((Bytes::from(key), Bytes::from(bytes)))
+    }
+
+    pub fn encode_root_table_key(table_name: &str) -> Vec<u8> {
+        format!(
             "RootCatalog_{}_{}",
             BOUND_MIN_TAG,
             table_name,
-        );
-
-        bincode::serialize(&column_count).ok()
-            .map(|bytes| {
-                (Bytes::from(key.into_bytes()), Bytes::from(bytes))
-            })
+        ).into_bytes()
     }
 
     // TODO: value is reserved for saving meta-information

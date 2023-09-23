@@ -3,38 +3,10 @@ pub mod value;
 pub mod tuple;
 pub mod index;
 
-use std::sync::atomic::AtomicU32;
-use std::sync::atomic::Ordering::{Acquire, Release};
 use serde::{Deserialize, Serialize};
-
-use integer_encoding::FixedInt;
 use strum_macros::AsRefStr;
 
 use crate::types::errors::TypeError;
-
-static ID_BUF: AtomicU32 = AtomicU32::new(0);
-
-pub(crate) struct IdGenerator { }
-
-impl IdGenerator {
-    pub(crate) fn encode_to_raw() -> Vec<u8> {
-        ID_BUF
-            .load(Acquire)
-            .encode_fixed_vec()
-    }
-
-    pub(crate) fn from_raw(buf: &[u8]) {
-        Self::init(u32::decode_fixed(buf))
-    }
-
-    pub(crate) fn init(init_value: u32) {
-        ID_BUF.store(init_value, Release)
-    }
-
-    pub(crate) fn build() -> u32 {
-        ID_BUF.fetch_add(1, Release)
-    }
-}
 
 pub type ColumnId = u32;
 
@@ -307,34 +279,5 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
 impl std::fmt::Display for LogicalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_ref())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::sync::atomic::Ordering::Release;
-
-    use crate::types::{IdGenerator, ID_BUF};
-
-    /// Tips: 由于IdGenerator为static全局性质生成的id，因此需要单独测试避免其他测试方法干扰
-    #[test]
-    #[ignore]
-    fn test_id_generator() {
-        assert_eq!(IdGenerator::build(), 0);
-        assert_eq!(IdGenerator::build(), 1);
-
-        let buf = IdGenerator::encode_to_raw();
-        test_id_generator_reset();
-
-        assert_eq!(IdGenerator::build(), 0);
-
-        IdGenerator::from_raw(&buf);
-
-        assert_eq!(IdGenerator::build(), 2);
-        assert_eq!(IdGenerator::build(), 3);
-    }
-
-    fn test_id_generator_reset() {
-        ID_BUF.store(0, Release)
     }
 }

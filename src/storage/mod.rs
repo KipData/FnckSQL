@@ -145,10 +145,6 @@ pub enum StorageError {
 
     #[error("The column has been declared unique and the value already exists")]
     DuplicateUniqueValue,
-
-    #[error("Serialization error")]
-    Serialization,
-
 }
 
 impl From<KernelError> for StorageError {

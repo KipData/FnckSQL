@@ -10,13 +10,13 @@ use std::sync::Arc;
 use crate::types::value::{DataValue, ValueRef};
 
 pub struct ShowTables {
-    op: ShowTablesOperator,
+    _op: ShowTablesOperator,
 }
 
 impl From<ShowTablesOperator> for ShowTables {
     fn from(op: ShowTablesOperator) -> Self {
         ShowTables {
-            op
+            _op: op
         }
     }
 }

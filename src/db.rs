@@ -201,6 +201,10 @@ mod test {
         let _ = kipsql.run("insert into t1 (a, b, k) values (-99, 1, 1), (-1, 2, 2), (5, 3, 2)").await?;
         let _ = kipsql.run("insert into t2 (d, c, e) values (2, 1, '2021-05-20 21:00:00'), (3, 4, '2023-09-10 00:00:00')").await?;
 
+        println!("show tables:");
+        let tuples_show_tables = kipsql.run("show tables").await?;
+        println!("{}", create_table(&tuples_show_tables));
+
         println!("full t1:");
         let tuples_full_fields_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&tuples_full_fields_t1));
@@ -316,10 +320,6 @@ mod test {
 
         println!("drop t1:");
         let _ = kipsql.run("drop table t1").await?;
-
-        println!("show tables:");
-        let tuples_show_tables = kipsql.run("show tables").await?;
-        println!("{}", create_table(&tuples_show_tables));
 
         Ok(())
     }

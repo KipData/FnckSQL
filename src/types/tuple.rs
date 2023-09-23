@@ -135,7 +135,7 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c3".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Varchar(Some(2)), false)
+                ColumnDesc::new(LogicalType::Varchar(Some(2)), false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c4".to_string(),
