@@ -286,23 +286,11 @@ impl ScalarExpression {
         }
     }
 
-    fn unpack_col(&self, is_binary_then_return: bool) -> Option<ColumnRef> {
+    fn unpack_col(&self) -> Option<ColumnRef> {
         match self {
             ScalarExpression::ColumnRef(col) => Some(col.clone()),
-            ScalarExpression::Alias { expr, .. } => expr.unpack_col(is_binary_then_return),
-            ScalarExpression::Binary { left_expr, right_expr, .. } => {
-                if is_binary_then_return {
-                    return None;
-                }
-
-                match (left_expr.unpack_col(is_binary_then_return),
-                       right_expr.unpack_col(is_binary_then_return))
-                {
-                    (Some(col), None) | (None, Some(col)) => Some(col),
-                    _ => None
-                }
-            }
-            ScalarExpression::Unary { expr, .. } => expr.unpack_col(is_binary_then_return),
+            ScalarExpression::Alias { expr, .. } => expr.unpack_col(),
+            ScalarExpression::Unary { expr, .. } => expr.unpack_col(),
             _ => None
         }
     }
@@ -323,7 +311,7 @@ impl ScalarExpression {
                 if matches!(op, BinaryOperator::Plus | BinaryOperator::Divide
                     | BinaryOperator::Minus | BinaryOperator::Multiply)
                 {
-                    match (left_expr.unpack_col(true), right_expr.unpack_col(true)) {
+                    match (left_expr.unpack_col(), right_expr.unpack_col()) {
                         (Some(_), Some(_)) => (),
                         (Some(col), None) => {
                             fix_option.replace(Replace::Binary(ReplaceBinary{
@@ -539,19 +527,20 @@ impl ScalarExpression {
                     },
                     (None, None) => {
                         if let (Some(col), Some(val)) =
-                            (left_expr.unpack_col(false), right_expr.unpack_val())
+                            (left_expr.unpack_col(), right_expr.unpack_val())
                         {
                             return Ok(Self::new_binary(col_id, *op, col, val, false));
                         }
                         if let (Some(val), Some(col)) =
-                            (left_expr.unpack_val(), right_expr.unpack_col(false))
+                            (left_expr.unpack_val(), right_expr.unpack_col())
                         {
                             return Ok(Self::new_binary(col_id, *op, col, val, true));
                         }
 
                         return Ok(None);
                     }
-                    (Some(binary), None) | (None, Some(binary)) => return Ok(Some(binary)),
+                    (Some(binary), None) => Ok(Self::check_or(col_id, right_expr, op, binary)),
+                    (None, Some(binary)) => Ok(Self::check_or(col_id, left_expr, op, binary)),
                 }
             },
             ScalarExpression::Alias { expr, .. } => expr.convert_binary(col_id),
@@ -560,6 +549,27 @@ impl ScalarExpression {
             ScalarExpression::Unary { expr, .. } => expr.convert_binary(col_id),
             _ => Ok(None),
         }
+    }
+
+    /// check if: c1 > c2 or c1 > 1
+    /// this case it makes no sense to just extract c1 > 1
+    fn check_or(
+        col_id: &ColumnId,
+        right_expr: &Box<ScalarExpression>,
+        op: &BinaryOperator,
+        binary: ConstantBinary
+    ) -> Option<ConstantBinary> {
+        let check_func = |expr: &ScalarExpression, col_id: &ColumnId| {
+            expr.referenced_columns()
+                .iter()
+                .find(|col| col.id == Some(*col_id))
+                .is_some()
+        };
+        if matches!(op, BinaryOperator::Or) && check_func(right_expr, col_id) {
+            return None
+        }
+
+        Some(binary)
     }
 
     fn new_binary(col_id: &ColumnId, mut op: BinaryOperator, col: ColumnRef, val: ValueRef, is_flip: bool) -> Option<ConstantBinary> {

@@ -255,4 +255,35 @@ mod test {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_simplify_filter_multiple_column_in_or() -> Result<(), DatabaseError> {
+        // c1 + 1 < -1 => c1 < -2
+        let plan_1 = select_sql_run("select * from t1 where c1 > c2 or c1 > 1").await?;
+
+        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
+            let best_plan = HepOptimizer::new(plan.clone())
+                .batch(
+                    "test_simplify_filter".to_string(),
+                    HepBatchStrategy::once_topdown(),
+                    vec![RuleImpl::SimplifyFilter]
+                )
+                .find_best()?;
+            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+                println!("{expr}: {:#?}", filter_op);
+
+                Ok(Some(filter_op))
+            } else {
+                Ok(None)
+            }
+        };
+
+        let op_1 = op(plan_1, "c1 > c2 or c1 > 1")?.unwrap();
+
+        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        println!("op_1 => c1: {:#?}", cb_1_c1);
+        assert_eq!(cb_1_c1, None);
+
+        Ok(())
+    }
 }
