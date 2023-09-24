@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering::{Acquire, Release};
 use serde::{Deserialize, Serialize};
 
 use integer_encoding::FixedInt;
+use sqlparser::ast::ExactNumberInfo;
 use strum_macros::AsRefStr;
 
 use crate::types::errors::TypeError;
@@ -57,6 +58,8 @@ pub enum LogicalType {
     Varchar(Option<u32>),
     Date,
     DateTime,
+    // decimal (precision, scale)
+    Decimal(Option<u8>, Option<u8>),
 }
 
 impl LogicalType {
@@ -75,8 +78,9 @@ impl LogicalType {
             LogicalType::UBigint => Some(8),
             LogicalType::Float => Some(4),
             LogicalType::Double => Some(8),
-            /// Note: The non-fixed length type's raw_len is None
+            /// Note: The non-fixed length type's raw_len is None e.g. Varchar and Decimal
             LogicalType::Varchar(_)=>None,
+            LogicalType::Decimal(_, _) =>None,
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
         }
@@ -269,6 +273,7 @@ impl LogicalType {
             LogicalType::Varchar(_) => false,
             LogicalType::Date => matches!(to, LogicalType::DateTime | LogicalType::Varchar(_)),
             LogicalType::DateTime => matches!(to, LogicalType::Date | LogicalType::Varchar(_)),
+            LogicalType::Decimal(_, _) => false,
         }
     }
 }
@@ -296,6 +301,13 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
             sqlparser::ast::DataType::UnsignedBigInt(_) => Ok(LogicalType::UBigint),
             sqlparser::ast::DataType::Boolean => Ok(LogicalType::Boolean),
             sqlparser::ast::DataType::Datetime(_) => Ok(LogicalType::DateTime),
+            sqlparser::ast::DataType::Decimal(info) =>  match info {
+                    ExactNumberInfo::None => Ok(Self::Decimal(None, None)),
+                    ExactNumberInfo::Precision(p) => Ok(Self::Decimal(Some(p as u8), None)),
+                    ExactNumberInfo::PrecisionAndScale(p, s) => {
+                        Ok(Self::Decimal(Some(p as u8), Some(s as u8)))
+                    }
+            },
             other => Err(TypeError::NotImplementedSqlparserDataType(
                 other.to_string(),
             )),
@@ -313,7 +325,7 @@ impl std::fmt::Display for LogicalType {
 mod test {
     use std::sync::atomic::Ordering::Release;
 
-    use crate::types::{IdGenerator, ID_BUF, LogicalType};
+    use crate::types::{IdGenerator, ID_BUF};
 
     /// Tips: 由于IdGenerator为static全局性质生成的id，因此需要单独测试避免其他测试方法干扰
     #[test]
