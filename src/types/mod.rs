@@ -79,8 +79,8 @@ impl LogicalType {
             LogicalType::Float => Some(4),
             LogicalType::Double => Some(8),
             /// Note: The non-fixed length type's raw_len is None e.g. Varchar and Decimal
-            LogicalType::Varchar(_)=>None,
-            LogicalType::Decimal(_, _) =>None,
+            LogicalType::Varchar(_) => None,
+            LogicalType::Decimal(_, _) => Some(16),
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
         }
