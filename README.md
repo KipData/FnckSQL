@@ -43,6 +43,12 @@ Storage Support:
 ![demo](./static/images/demo.png)
 
 ### Features
+- SQL field options
+  - not null
+  - null
+  - unique
+- Supports index type
+  - Unique Index
 - Supports multiple primary key types
   - Tinyint
   - UTinyint
@@ -63,6 +69,8 @@ Storage Support:
   - [x] Truncate
 - DQL
   - [x] Select
+    - SeqScan
+    - IndexScan
   - [x] Where
   - [x] Distinct
   - [x] Alias
