@@ -46,4 +46,10 @@ pub enum TypeError {
         #[from]
         ParseError,
     ),
+    #[error("try from decimal")]
+    TryFromDecimal(
+        #[source]
+        #[from]
+        rust_decimal::Error,
+    ),
 }

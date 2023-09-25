@@ -146,6 +146,7 @@ mod tests {
     use std::ops::Bound;
     use std::sync::Arc;
     use itertools::Itertools;
+    use rust_decimal::Decimal;
     use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog};
     use crate::storage::table_codec::{COLUMNS_ID_LEN, TableCodec};
     use crate::types::errors::TypeError;
@@ -159,7 +160,12 @@ mod tests {
                 "c1".into(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true)
-            )
+            ),
+            ColumnCatalog::new(
+                "c2".into(),
+                false,
+                ColumnDesc::new(LogicalType::Decimal(None,None), false)
+            ),
         ];
         let table_catalog = TableCatalog::new(Arc::new("t1".to_string()), columns).unwrap();
         let codec = TableCodec { table: table_catalog.clone() };
@@ -175,6 +181,7 @@ mod tests {
             columns: table_catalog.all_columns(),
             values: vec![
                 Arc::new(DataValue::Int32(Some(0))),
+                Arc::new(DataValue::Decimal(Some(Decimal::new(1, 0)))),
             ]
         };
 
