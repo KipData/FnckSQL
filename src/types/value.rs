@@ -26,6 +26,9 @@ lazy_static! {
 pub const DATE_FMT: &str = "%Y-%m-%d";
 pub const DATE_TIME_FMT: &str = "%Y-%m-%d %H:%M:%S";
 
+const ENCODE_GROUP_SIZE: usize = 8;
+const ENCODE_MARKER: u8 = 0xFF;
+
 pub type ValueRef = Arc<DataValue>;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -383,6 +386,54 @@ impl DataValue {
         }
     }
 
+    // EncodeBytes guarantees the encoded value is in ascending order for comparison,
+    // encoding with the following rule:
+    //
+    //	[group1][marker1]...[groupN][markerN]
+    //	group is 8 bytes slice which is padding with 0.
+    //	marker is `0xFF - padding 0 count`
+    //
+    // For example:
+    //
+    //	[] -> [0, 0, 0, 0, 0, 0, 0, 0, 247]
+    //	[1, 2, 3] -> [1, 2, 3, 0, 0, 0, 0, 0, 250]
+    //	[1, 2, 3, 0] -> [1, 2, 3, 0, 0, 0, 0, 0, 251]
+    //	[1, 2, 3, 4, 5, 6, 7, 8] -> [1, 2, 3, 4, 5, 6, 7, 8, 255, 0, 0, 0, 0, 0, 0, 0, 0, 247]
+    //
+    // Refer: https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format#memcomparable-format
+    fn encode_bytes(b: &mut Vec<u8>, data: &[u8]) {
+        let d_len = data.len();
+        let realloc_size = (d_len / ENCODE_GROUP_SIZE + 1) * (ENCODE_GROUP_SIZE + 1);
+        Self::realloc_bytes(b, realloc_size);
+
+        let mut idx = 0;
+        while idx <= d_len {
+            let remain = d_len - idx;
+            let pad_count: usize;
+
+            if remain >= ENCODE_GROUP_SIZE {
+                b.extend_from_slice(&data[idx..idx + ENCODE_GROUP_SIZE]);
+                pad_count = 0;
+            } else {
+                pad_count = ENCODE_GROUP_SIZE - remain;
+                b.extend_from_slice(&data[idx..]);
+                b.extend_from_slice(&vec![0; pad_count]);
+            }
+
+            b.push(ENCODE_MARKER - pad_count as u8);
+            idx += ENCODE_GROUP_SIZE;
+        }
+    }
+
+    fn realloc_bytes(b: &mut Vec<u8>, size: usize) {
+        let len = b.len();
+
+        if size > len {
+            b.reserve(size - len);
+            b.resize(size, 0);
+        }
+    }
+
     pub fn to_primary_key(&self, b: &mut Vec<u8>) -> Result<(), TypeError> {
         match self {
             DataValue::Int8(Some(v)) => encode_u!(b, *v as u8 ^ 0x80_u8),
@@ -393,7 +444,7 @@ impl DataValue {
             DataValue::UInt16(Some(v)) => encode_u!(b, v),
             DataValue::UInt32(Some(v)) => encode_u!(b, v),
             DataValue::UInt64(Some(v)) => encode_u!(b, v),
-            DataValue::Utf8(Some(v)) => b.copy_from_slice(&mut v.as_bytes()),
+            DataValue::Utf8(Some(v)) => Self::encode_bytes(b, v.as_bytes()),
             value => {
                 return if value.is_null() {
                     Err(TypeError::NotNull)
@@ -420,7 +471,7 @@ impl DataValue {
             DataValue::UInt16(Some(v)) => encode_u!(b, v),
             DataValue::UInt32(Some(v)) => encode_u!(b, v),
             DataValue::UInt64(Some(v)) => encode_u!(b, v),
-            DataValue::Utf8(Some(v)) => b.copy_from_slice(&mut v.as_bytes()),
+            DataValue::Utf8(Some(v)) => Self::encode_bytes(b, v.as_bytes()),
             DataValue::Boolean(Some(v)) => b.push(if *v { b'1' } else { b'0' }),
             DataValue::Float32(Some(f)) => {
                 let mut u = f.to_bits();
