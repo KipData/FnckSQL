@@ -51,7 +51,7 @@ pub enum TypeError {
         #[source]
         #[from]
         Box<bincode::ErrorKind>
-    )
+    ),
     #[error("try from decimal")]
     TryFromDecimal(
         #[source]

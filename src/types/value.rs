@@ -210,12 +210,16 @@ impl DataValue {
             }
             (LogicalType::Decimal(full_len, scale_len), DataValue::Decimal(Some(val))) => {
                 if let Some(len) = full_len {
-                    val.mantissa().ilog10() + 1 > *len as u32
-                } else if let Some(len) = scale_len {
-                    val.scale() > *len as u32
-                } else {
-                    false
+                    if val.mantissa().ilog10() + 1 > *len as u32 {
+                        return Err(TypeError::TooLong)
+                    }
                 }
+                if let Some(len) = scale_len {
+                    if val.scale() > *len as u32 {
+                        return Err(TypeError::TooLong)
+                    }
+                }
+                false
             }
             _ => false
         };
@@ -414,6 +418,16 @@ impl DataValue {
             DataValue::Boolean(option) => option.map(|b| if b { "1" } else { "0" }.to_string()),
             DataValue::Float32(option) => option.map(|v| format!("{:0width$}", (unsafe { mem::transmute::<u32, i32>(v.to_bits()) }), width = 11)),
             DataValue::Float64(option) => option.map(|v| format!("{:0width$}", (unsafe { mem::transmute::<u64, i64>(v.to_bits()) }), width = 20)),
+            DataValue::Decimal(option) => option.map(|v| {
+                let i = signed_to_primary_key!(i128, v.mantissa());
+                let scale = v.scale();
+                let mut string = format!("{:0width$}", i, width = 40);
+
+                if scale != 0 {
+                    string.insert(40 - scale as usize, '.');
+                }
+                string
+            }),
             _ => return Err(TypeError::InvalidType),
         }.ok_or(TypeError::NotNull)
     }
@@ -886,6 +900,7 @@ impl fmt::Debug for DataValue {
 
 #[cfg(test)]
 mod test {
+    use rust_decimal::Decimal;
     use crate::types::errors::TypeError;
     use crate::types::value::DataValue;
 
@@ -931,7 +946,7 @@ mod test {
     }
 
     #[test]
-    fn test_to_index_key() -> Result<(), TypeError> {
+    fn test_to_index_key_f() -> Result<(), TypeError> {
         let key_f32_1 = DataValue::Float32(Some(f32::MIN)).to_index_key()?;
         let key_f32_2 = DataValue::Float32(Some(-1_f32)).to_index_key()?;
         let key_f32_3 = DataValue::Float32(Some(f32::MAX)).to_index_key()?;
@@ -949,6 +964,29 @@ mod test {
         println!("{} < {}", key_f64_2, key_f64_3);
         assert!(key_f64_1 < key_f64_2);
         assert!(key_f64_2 < key_f64_3);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_index_key_d() -> Result<(), TypeError> {
+        let key_scale_0_1 = DataValue::Decimal(Some(Decimal::new(i64::MIN, 0))).to_index_key()?;
+        let key_scale_0_2 = DataValue::Decimal(Some(Decimal::new(-1_i64, 0))).to_index_key()?;
+        let key_scale_0_3 = DataValue::Decimal(Some(Decimal::new(i64::MAX, 0))).to_index_key()?;
+
+        println!("{} < {}", key_scale_0_1, key_scale_0_2);
+        println!("{} < {}", key_scale_0_2, key_scale_0_3);
+        assert!(key_scale_0_1 < key_scale_0_2);
+        assert!(key_scale_0_2 < key_scale_0_3);
+
+        let key_scale_10_1 = DataValue::Decimal(Some(Decimal::new(i64::MIN, 10))).to_index_key()?;
+        let key_scale_10_2 = DataValue::Decimal(Some(Decimal::new(-1_i64, 10))).to_index_key()?;
+        let key_scale_10_3 = DataValue::Decimal(Some(Decimal::new(i64::MAX, 10))).to_index_key()?;
+
+        println!("{} < {}", key_scale_10_1, key_scale_10_2);
+        println!("{} < {}", key_scale_10_2, key_scale_10_3);
+        assert!(key_scale_10_1 < key_scale_10_2);
+        assert!(key_scale_10_2 < key_scale_10_3);
 
         Ok(())
     }

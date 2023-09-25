@@ -249,13 +249,11 @@ mod tests {
                 "c1".into(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false)
-            )
-                ColumnDesc::new(LogicalType::Integer, true, false)
             ),
             ColumnCatalog::new(
                 "c2".into(),
                 false,
-                ColumnDesc::new(LogicalType::Decimal(None,None), false)
+                ColumnDesc::new(LogicalType::Decimal(None,None), false, false)
             ),
         ];
         let table_catalog = TableCatalog::new(Arc::new("t1".to_string()), columns, vec![]).unwrap();

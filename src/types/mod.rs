@@ -5,7 +5,6 @@ pub mod index;
 
 use serde::{Deserialize, Serialize};
 
-use integer_encoding::FixedInt;
 use sqlparser::ast::ExactNumberInfo;
 use strum_macros::AsRefStr;
 
@@ -53,7 +52,7 @@ impl LogicalType {
             LogicalType::UBigint => Some(8),
             LogicalType::Float => Some(4),
             LogicalType::Double => Some(8),
-            /// Note: The non-fixed length type's raw_len is None e.g. Varchar and Decimal
+            /// Note: The non-fixed length type's raw_len is None e.g. Varchar
             LogicalType::Varchar(_) => None,
             LogicalType::Decimal(_, _) => Some(16),
             LogicalType::Date => Some(4),
