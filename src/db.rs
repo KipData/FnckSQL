@@ -200,6 +200,9 @@ mod test {
         let _ = kipsql.run("create table t2 (c int primary key, d int unsigned null, e datetime)").await?;
         let _ = kipsql.run("insert into t1 (a, b, k) values (-99, 1, 1), (-1, 2, 2), (5, 3, 2)").await?;
         let _ = kipsql.run("insert into t2 (d, c, e) values (2, 1, '2021-05-20 21:00:00'), (3, 4, '2023-09-10 00:00:00')").await?;
+        let _ = kipsql.run("create table t3 (a int primary key, b decimal(4,2))").await?;
+        let _ = kipsql.run("insert into t3 (a, b) values (1, 1111), (2, 2.01), (3, 3.00)").await?;
+        let _ = kipsql.run("insert into t3 (a, b) values (4, 4444), (5, 5222), (6, 1.00)").await?;
 
         println!("show tables:");
         let tuples_show_tables = kipsql.run("show tables").await?;
@@ -320,6 +323,10 @@ mod test {
 
         println!("drop t1:");
         let _ = kipsql.run("drop table t1").await?;
+
+        println!("decimal:");
+        let tuples_decimal = kipsql.run("select * from t3").await?;
+        println!("{}", create_table(&tuples_decimal));
 
         Ok(())
     }

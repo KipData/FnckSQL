@@ -50,7 +50,7 @@ impl<S: Storage> Binder<S> {
                     match &self.bind_expr(expr).await? {
                         ScalarExpression::Constant(value) => {
                             // Check if the value length is too long
-                            value.check_length(columns[i].datatype())?;
+                            value.check_len(columns[i].datatype())?;
                             let cast_value = DataValue::clone(value)
                                 .cast(columns[i].datatype())?;
                             row.push(Arc::new(cast_value))

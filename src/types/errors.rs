@@ -52,4 +52,10 @@ pub enum TypeError {
         #[from]
         Box<bincode::ErrorKind>
     )
+    #[error("try from decimal")]
+    TryFromDecimal(
+        #[source]
+        #[from]
+        rust_decimal::Error,
+    ),
 }
