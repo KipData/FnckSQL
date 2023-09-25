@@ -253,6 +253,20 @@ struct ReplaceUnary {
 }
 
 impl ScalarExpression {
+    pub fn exist_column(&self, col_id: &ColumnId) -> bool {
+        match self {
+            ScalarExpression::ColumnRef(col) => col.id == Some(*col_id),
+            ScalarExpression::Alias { expr, .. } => expr.exist_column(col_id),
+            ScalarExpression::TypeCast { expr, .. } => expr.exist_column(col_id),
+            ScalarExpression::IsNull { expr } => expr.exist_column(col_id),
+            ScalarExpression::Unary { expr, .. } => expr.exist_column(col_id),
+            ScalarExpression::Binary { left_expr, right_expr, .. } => {
+                left_expr.exist_column(col_id) || right_expr.exist_column(col_id)
+            }
+            _ => false
+        }
+    }
+
     fn unpack_val(&self) -> Option<ValueRef> {
         match self {
             ScalarExpression::Constant(val) => Some(val.clone()),
@@ -559,13 +573,7 @@ impl ScalarExpression {
         op: &BinaryOperator,
         binary: ConstantBinary
     ) -> Option<ConstantBinary> {
-        let check_func = |expr: &ScalarExpression, col_id: &ColumnId| {
-            expr.referenced_columns()
-                .iter()
-                .find(|col| col.id == Some(*col_id))
-                .is_some()
-        };
-        if matches!(op, BinaryOperator::Or) && check_func(right_expr, col_id) {
+        if matches!(op, BinaryOperator::Or) && right_expr.exist_column(col_id) {
             return None
         }
 
