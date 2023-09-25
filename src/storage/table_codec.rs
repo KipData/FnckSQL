@@ -90,13 +90,14 @@ impl TableCodec {
     }
 
     pub fn encode_tuple_key(&self, tuple_id: &TupleId) -> Result<Vec<u8>, TypeError> {
-        let string_key = format!(
-            "{}_Tuple_0_{}",
+        let mut string_key = format!(
+            "{}_Tuple_0_",
             self.table.name,
-            tuple_id.to_primary_key()?,
-        );
+        ).into_bytes();
 
-        Ok(string_key.into_bytes())
+        tuple_id.to_primary_key(&mut string_key)?;
+
+        Ok(string_key)
     }
 
     pub fn decode_tuple(&self, bytes: &[u8]) -> Tuple {
@@ -140,13 +141,13 @@ impl TableCodec {
             "{}_Index_0_{}_0",
             self.table.name,
             index.id
-        );
+        ).into_bytes();
 
         for col_v in &index.column_values {
-            string_key += &format!("_{}", col_v.to_index_key()?);
+            col_v.to_index_key(&mut string_key)?;
         }
 
-        Ok(string_key.into_bytes())
+        Ok(string_key)
     }
 
     pub fn decode_index(bytes: &[u8]) -> Result<Vec<TupleId>, TypeError> {
@@ -276,14 +277,10 @@ mod tests {
 
         let (key, bytes) = codec.encode_tuple(&tuple)?;
 
-        assert_eq!(
-            String::from_utf8(key.to_vec()).ok().unwrap(),
-            format!(
-                "{}_Tuple_0_{}",
-                table_catalog.name,
-                tuple.id.clone().unwrap().to_primary_key()?,
-            )
-        );
+        let mut test_key = format!("{}_Tuple_0_", table_catalog.name).into_bytes();
+        tuple.id.clone().unwrap().to_primary_key(&mut test_key)?;
+
+        assert_eq!(key.to_vec(), test_key);
         assert_eq!(codec.decode_tuple(&bytes), tuple);
 
         Ok(())
@@ -343,15 +340,14 @@ mod tests {
 
         let (key, bytes) = codec.encode_index(&index, &tuple_ids)?;
 
-        assert_eq!(
-            String::from_utf8(key.to_vec()).ok().unwrap(),
-            format!(
-                "{}_Index_0_{}_0_{}",
-                table_catalog.name,
-                index.id,
-                index.column_values[0].to_index_key()?
-            )
-        );
+        let mut test_key = format!(
+            "{}_Index_0_{}_0",
+            table_catalog.name,
+            index.id,
+        ).into_bytes();
+        index.column_values[0].to_index_key(&mut test_key)?;
+
+        assert_eq!(key.to_vec(), test_key);
         assert_eq!(TableCodec::decode_index(&bytes)?, tuple_ids);
 
         Ok(())

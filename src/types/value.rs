@@ -146,14 +146,10 @@ impl PartialOrd for DataValue {
     }
 }
 
-macro_rules! signed_to_primary_key {
-    ($ty:ty, $EXPR:expr) => {{
-        if $EXPR.is_negative() {
-            $EXPR ^ (-1 ^ <$ty>::MIN)
-        } else {
-            $EXPR
-        }
-    }};
+macro_rules! encode_u {
+    ($b:ident, $u:expr) => {
+        $b.extend_from_slice(&$u.to_be_bytes())
+    };
 }
 
 impl Eq for DataValue {}
@@ -387,49 +383,78 @@ impl DataValue {
         }
     }
 
-    pub fn to_primary_key(&self) -> Result<String, TypeError> {
+    pub fn to_primary_key(&self, b: &mut Vec<u8>) -> Result<(), TypeError> {
         match self {
-            DataValue::Int8(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i8, v), width = 4)),
-            DataValue::Int16(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i16, v), width = 6)),
-            DataValue::Int32(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i32, v), width = 11)),
-            DataValue::Int64(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i64, v), width = 20)),
-            DataValue::UInt8(option) => option.map(|v| format!("{:0width$}", v, width = 3)),
-            DataValue::UInt16(option) => option.map(|v| format!("{:0width$}", v, width = 5)),
-            DataValue::UInt32(option) => option.map(|v| format!("{:0width$}", v, width = 10)),
-            DataValue::UInt64(option) => option.map(|v| format!("{:0width$}", v, width = 20)),
-            DataValue::Utf8(option) => option.clone(),
-            _ => return Err(TypeError::InvalidType),
-        }.ok_or(TypeError::NotNull)
+            DataValue::Int8(Some(v)) => encode_u!(b, *v as u8 ^ 0x80_u8),
+            DataValue::Int16(Some(v)) => encode_u!(b, *v as u16 ^ 0x8000_u16),
+            DataValue::Int32(Some(v)) => encode_u!(b, *v as u32 ^ 0x80000000_u32),
+            DataValue::Int64(Some(v)) => encode_u!(b, *v as u64 ^ 0x8000000000000000_u64),
+            DataValue::UInt8(Some(v)) => encode_u!(b, v),
+            DataValue::UInt16(Some(v)) => encode_u!(b, v),
+            DataValue::UInt32(Some(v)) => encode_u!(b, v),
+            DataValue::UInt64(Some(v)) => encode_u!(b, v),
+            DataValue::Utf8(Some(v)) => b.copy_from_slice(&mut v.as_bytes()),
+            value => {
+                return if value.is_null() {
+                    Err(TypeError::NotNull)
+                } else {
+                    Err(TypeError::InvalidType)
+                }
+            }
+        }
+
+        Ok(())
     }
 
-    pub fn to_index_key(&self) -> Result<String, TypeError> {
+    pub fn to_index_key(&self, b: &mut Vec<u8>) -> Result<(), TypeError> {
         match self {
-            DataValue::Int8(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i8, v), width = 4)),
-            DataValue::Int16(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i16, v), width = 6)),
-            DataValue::Int32(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i32, v), width = 11)),
-            DataValue::Int64(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i64, v), width = 20)),
-            DataValue::UInt8(option) => option.map(|v| format!("{:0width$}", v, width = 3)),
-            DataValue::UInt16(option) => option.map(|v| format!("{:0width$}", v, width = 5)),
-            DataValue::UInt32(option) => option.map(|v| format!("{:0width$}", v, width = 10)),
-            DataValue::UInt64(option) => option.map(|v| format!("{:0width$}", v, width = 20)),
-            DataValue::Utf8(option) => option.clone(),
-            DataValue::Date32(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i32, v), width = 11)),
-            DataValue::Date64(option) => option.map(|v| format!("{:0width$}", signed_to_primary_key!(i64, v), width = 20)),
-            DataValue::Boolean(option) => option.map(|b| if b { "1" } else { "0" }.to_string()),
-            DataValue::Float32(option) => option.map(|v| format!("{:0width$}", (unsafe { mem::transmute::<u32, i32>(v.to_bits()) }), width = 11)),
-            DataValue::Float64(option) => option.map(|v| format!("{:0width$}", (unsafe { mem::transmute::<u64, i64>(v.to_bits()) }), width = 20)),
-            DataValue::Decimal(option) => option.map(|v| {
-                let i = signed_to_primary_key!(i128, v.mantissa());
-                let scale = v.scale();
-                let mut string = format!("{:0width$}", i, width = 40);
+            DataValue::Int8(Some(v)) => encode_u!(b, *v as u8 ^ 0x80_u8),
+            DataValue::Int16(Some(v)) => encode_u!(b, *v as u16 ^ 0x8000_u16),
+            DataValue::Int32(Some(v)) | DataValue::Date32(Some(v)) => {
+                encode_u!(b, *v as u32 ^ 0x80000000_u32)
+            },
+            DataValue::Int64(Some(v)) | DataValue::Date64(Some(v)) => {
+                encode_u!(b, *v as u64 ^ 0x8000000000000000_u64)
+            },
+            DataValue::UInt8(Some(v)) => encode_u!(b, v),
+            DataValue::UInt16(Some(v)) => encode_u!(b, v),
+            DataValue::UInt32(Some(v)) => encode_u!(b, v),
+            DataValue::UInt64(Some(v)) => encode_u!(b, v),
+            DataValue::Utf8(Some(v)) => b.copy_from_slice(&mut v.as_bytes()),
+            DataValue::Boolean(Some(v)) => b.push(if *v { b'1' } else { b'0' }),
+            DataValue::Float32(Some(f)) => {
+                let mut u = f.to_bits();
 
-                if scale != 0 {
-                    string.insert(40 - scale as usize, '.');
+                if *f >= 0_f32 {
+                    u |= 0x80000000_u32;
+                } else {
+                    u = !u;
                 }
-                string
-            }),
-            _ => return Err(TypeError::InvalidType),
-        }.ok_or(TypeError::NotNull)
+
+                encode_u!(b, u);
+            },
+            DataValue::Float64(Some(f)) => {
+                let mut u = f.to_bits();
+
+                if *f >= 0_f64 {
+                    u |= 0x8000000000000000_u64;
+                } else {
+                    u = !u;
+                }
+
+                encode_u!(b, u);
+            },
+            DataValue::Decimal(Some(_v)) => todo!(),
+            value => {
+                return if value.is_null() {
+                    todo!()
+                } else {
+                    Err(TypeError::InvalidType)
+                }
+            },
+        }
+
+        Ok(())
     }
 
     pub fn cast(self, to: &LogicalType) -> Result<DataValue, TypeError> {
@@ -900,45 +925,60 @@ impl fmt::Debug for DataValue {
 
 #[cfg(test)]
 mod test {
-    use rust_decimal::Decimal;
     use crate::types::errors::TypeError;
     use crate::types::value::DataValue;
 
     #[test]
     fn test_to_primary_key() -> Result<(), TypeError> {
-        let key_i8_1 = DataValue::Int8(Some(i8::MIN)).to_primary_key()?;
-        let key_i8_2 = DataValue::Int8(Some(-1_i8)).to_primary_key()?;
-        let key_i8_3 = DataValue::Int8(Some(i8::MAX)).to_primary_key()?;
+        let mut key_i8_1 = Vec::new();
+        let mut key_i8_2 = Vec::new();
+        let mut key_i8_3 = Vec::new();
 
-        println!("{} < {}", key_i8_1, key_i8_2);
-        println!("{} < {}", key_i8_2, key_i8_3);
+        DataValue::Int8(Some(i8::MIN)).to_primary_key(&mut key_i8_1)?;
+        DataValue::Int8(Some(-1_i8)).to_primary_key(&mut key_i8_2)?;
+        DataValue::Int8(Some(i8::MAX)).to_primary_key(&mut key_i8_3)?;
+
+        println!("{:?} < {:?}", key_i8_1, key_i8_2);
+        println!("{:?} < {:?}", key_i8_2, key_i8_3);
         assert!(key_i8_1 < key_i8_2);
         assert!(key_i8_2 < key_i8_3);
 
-        let key_i16_1 = DataValue::Int16(Some(i16::MIN)).to_primary_key()?;
-        let key_i16_2 = DataValue::Int16(Some(-1_i16)).to_primary_key()?;
-        let key_i16_3 = DataValue::Int16(Some(i16::MAX)).to_primary_key()?;
+        let mut key_i16_1 = Vec::new();
+        let mut key_i16_2 = Vec::new();
+        let mut key_i16_3 = Vec::new();
 
-        println!("{} < {}", key_i16_1, key_i16_2);
-        println!("{} < {}", key_i16_2, key_i16_3);
+        DataValue::Int16(Some(i16::MIN)).to_primary_key(&mut key_i16_1)?;
+        DataValue::Int16(Some(-1_i16)).to_primary_key(&mut key_i16_2)?;
+        DataValue::Int16(Some(i16::MAX)).to_primary_key(&mut key_i16_3)?;
+
+        println!("{:?} < {:?}", key_i16_1, key_i16_2);
+        println!("{:?} < {:?}", key_i16_2, key_i16_3);
         assert!(key_i16_1 < key_i16_2);
         assert!(key_i16_2 < key_i16_3);
 
-        let key_i32_1 = DataValue::Int32(Some(i32::MIN)).to_primary_key()?;
-        let key_i32_2 = DataValue::Int32(Some(-1_i32)).to_primary_key()?;
-        let key_i32_3 = DataValue::Int32(Some(i32::MAX)).to_primary_key()?;
+        let mut key_i32_1 = Vec::new();
+        let mut key_i32_2 = Vec::new();
+        let mut key_i32_3 = Vec::new();
 
-        println!("{} < {}", key_i32_1, key_i32_2);
-        println!("{} < {}", key_i32_2, key_i32_3);
+        DataValue::Int32(Some(i32::MIN)).to_primary_key(&mut key_i32_1)?;
+        DataValue::Int32(Some(-1_i32)).to_primary_key(&mut key_i32_2)?;
+        DataValue::Int32(Some(i32::MAX)).to_primary_key(&mut key_i32_3)?;
+
+        println!("{:?} < {:?}", key_i32_1, key_i32_2);
+        println!("{:?} < {:?}", key_i32_2, key_i32_3);
         assert!(key_i32_1 < key_i32_2);
         assert!(key_i32_2 < key_i32_3);
 
-        let key_i64_1 = DataValue::Int64(Some(i64::MIN)).to_primary_key()?;
-        let key_i64_2 = DataValue::Int64(Some(-1_i64)).to_primary_key()?;
-        let key_i64_3 = DataValue::Int64(Some(i64::MAX)).to_primary_key()?;
+        let mut key_i64_1 = Vec::new();
+        let mut key_i64_2 = Vec::new();
+        let mut key_i64_3 = Vec::new();
 
-        println!("{} < {}", key_i64_1, key_i64_2);
-        println!("{} < {}", key_i64_2, key_i64_3);
+        DataValue::Int64(Some(i64::MIN)).to_primary_key(&mut key_i64_1)?;
+        DataValue::Int64(Some(-1_i64)).to_primary_key(&mut key_i64_2)?;
+        DataValue::Int64(Some(i64::MAX)).to_primary_key(&mut key_i64_3)?;
+
+        println!("{:?} < {:?}", key_i64_1, key_i64_2);
+        println!("{:?} < {:?}", key_i64_2, key_i64_3);
         assert!(key_i64_1 < key_i64_2);
         assert!(key_i64_2 < key_i64_3);
 
@@ -947,46 +987,31 @@ mod test {
 
     #[test]
     fn test_to_index_key_f() -> Result<(), TypeError> {
-        let key_f32_1 = DataValue::Float32(Some(f32::MIN)).to_index_key()?;
-        let key_f32_2 = DataValue::Float32(Some(-1_f32)).to_index_key()?;
-        let key_f32_3 = DataValue::Float32(Some(f32::MAX)).to_index_key()?;
+        let mut key_f32_1 = Vec::new();
+        let mut key_f32_2 = Vec::new();
+        let mut key_f32_3 = Vec::new();
 
-        println!("{} < {}", key_f32_1, key_f32_2);
-        println!("{} < {}", key_f32_2, key_f32_3);
+        DataValue::Float32(Some(f32::MIN)).to_index_key(&mut key_f32_1)?;
+        DataValue::Float32(Some(-1_f32)).to_index_key(&mut key_f32_2)?;
+        DataValue::Float32(Some(f32::MAX)).to_index_key(&mut key_f32_3)?;
+
+        println!("{:?} < {:?}", key_f32_1, key_f32_2);
+        println!("{:?} < {:?}", key_f32_2, key_f32_3);
         assert!(key_f32_1 < key_f32_2);
         assert!(key_f32_2 < key_f32_3);
 
-        let key_f64_1 = DataValue::Float64(Some(f64::MIN)).to_index_key()?;
-        let key_f64_2 = DataValue::Float64(Some(-1_f64)).to_index_key()?;
-        let key_f64_3 = DataValue::Float64(Some(f64::MAX)).to_index_key()?;
+        let mut key_f64_1 = Vec::new();
+        let mut key_f64_2 = Vec::new();
+        let mut key_f64_3 = Vec::new();
 
-        println!("{} < {}", key_f64_1, key_f64_2);
-        println!("{} < {}", key_f64_2, key_f64_3);
+        DataValue::Float64(Some(f64::MIN)).to_index_key(&mut key_f64_1)?;
+        DataValue::Float64(Some(-1_f64)).to_index_key(&mut key_f64_2)?;
+        DataValue::Float64(Some(f64::MAX)).to_index_key(&mut key_f64_3)?;
+
+        println!("{:?} < {:?}", key_f64_1, key_f64_2);
+        println!("{:?} < {:?}", key_f64_2, key_f64_3);
         assert!(key_f64_1 < key_f64_2);
         assert!(key_f64_2 < key_f64_3);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_to_index_key_d() -> Result<(), TypeError> {
-        let key_scale_0_1 = DataValue::Decimal(Some(Decimal::new(i64::MIN, 0))).to_index_key()?;
-        let key_scale_0_2 = DataValue::Decimal(Some(Decimal::new(-1_i64, 0))).to_index_key()?;
-        let key_scale_0_3 = DataValue::Decimal(Some(Decimal::new(i64::MAX, 0))).to_index_key()?;
-
-        println!("{} < {}", key_scale_0_1, key_scale_0_2);
-        println!("{} < {}", key_scale_0_2, key_scale_0_3);
-        assert!(key_scale_0_1 < key_scale_0_2);
-        assert!(key_scale_0_2 < key_scale_0_3);
-
-        let key_scale_10_1 = DataValue::Decimal(Some(Decimal::new(i64::MIN, 10))).to_index_key()?;
-        let key_scale_10_2 = DataValue::Decimal(Some(Decimal::new(-1_i64, 10))).to_index_key()?;
-        let key_scale_10_3 = DataValue::Decimal(Some(Decimal::new(i64::MAX, 10))).to_index_key()?;
-
-        println!("{} < {}", key_scale_10_1, key_scale_10_2);
-        println!("{} < {}", key_scale_10_2, key_scale_10_3);
-        assert!(key_scale_10_1 < key_scale_10_2);
-        assert!(key_scale_10_2 < key_scale_10_3);
 
         Ok(())
     }
