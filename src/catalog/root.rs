@@ -35,8 +35,7 @@ impl RootCatalog {
         }
         let table = TableCatalog::new(
             table_name.clone(),
-            columns,
-            vec![]
+            columns
         )?;
 
         self.table_idxs.insert(table_name.clone(), table);

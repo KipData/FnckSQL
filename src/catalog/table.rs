@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use itertools::Itertools;
 
 use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::ColumnId;
@@ -73,20 +72,24 @@ impl TableCatalog {
         Ok(col_id)
     }
 
+    pub(crate) fn add_index_meta(&mut self, mut index: IndexMeta) -> &IndexMeta {
+        let index_id = self.indexes.len();
+
+        index.id = index_id as u32;
+        self.indexes.push(Arc::new(index));
+
+        &self.indexes[index_id]
+    }
+
     pub(crate) fn new(
         name: TableName,
-        columns: Vec<ColumnCatalog>,
-        indexes: Vec<IndexMeta>
+        columns: Vec<ColumnCatalog>
     ) -> Result<TableCatalog, CatalogError> {
-        let indexes = indexes.into_iter()
-            .map(Arc::new)
-            .collect_vec();
-
         let mut table_catalog = TableCatalog {
             name,
             column_idxs: BTreeMap::new(),
             columns: BTreeMap::new(),
-            indexes,
+            indexes: vec![],
         };
 
         for col_catalog in columns.into_iter() {
@@ -94,6 +97,17 @@ impl TableCatalog {
         }
 
         Ok(table_catalog)
+    }
+
+    pub(crate) fn new_with_indexes(
+        name: TableName,
+        columns: Vec<ColumnCatalog>,
+        indexes: Vec<IndexMetaRef>
+    ) -> Result<TableCatalog, CatalogError> {
+        let mut catalog = TableCatalog::new(name, columns)?;
+        catalog.indexes = indexes;
+
+        Ok(catalog)
     }
 }
 
@@ -112,7 +126,7 @@ mod tests {
         let col0 = ColumnCatalog::new("a".into(), false, ColumnDesc::new(LogicalType::Integer, false, false));
         let col1 = ColumnCatalog::new("b".into(), false, ColumnDesc::new(LogicalType::Boolean, false, false));
         let col_catalogs = vec![col0, col1];
-        let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs, vec![]).unwrap();
+        let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs).unwrap();
 
         assert_eq!(table_catalog.contains_column(&"a".to_string()), true);
         assert_eq!(table_catalog.contains_column(&"b".to_string()), true);

@@ -41,28 +41,30 @@ impl KipStorage {
         })
     }
 
-    fn column_collect(name: &String, tx: &mvcc::Transaction) -> Option<(Vec<ColumnCatalog>, Option<TableName>)> {
+    fn column_collect(name: &String, tx: &mvcc::Transaction) -> Result<(Vec<ColumnCatalog>, Option<TableName>), StorageError> {
         let (column_min, column_max) = TableCodec::columns_bound(name);
-        let mut column_iter = tx.iter(Bound::Included(&column_min), Bound::Included(&column_max)).ok()?;
+        let mut column_iter = tx.iter(Bound::Included(&column_min), Bound::Included(&column_max))?;
 
         let mut columns = vec![];
         let mut name_option = None;
 
-        while let Some((key, value_option)) = column_iter.try_next().ok().flatten() {
+        while let Some((_, value_option)) = column_iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
-                if let Some((table_name, column)) = TableCodec::decode_column(&key, &value) {
-                    if name != table_name.as_str() { return None; }
-                    let _ = name_option.insert(table_name);
+                let (table_name, column) = TableCodec::decode_column(&value)?;
 
-                    columns.push(column);
+                if name != table_name.as_str() {
+                    return Ok((vec![], None));
                 }
+                let _ = name_option.insert(table_name);
+
+                columns.push(column);
             }
         }
 
-        Some((columns, name_option))
+        Ok((columns, name_option))
     }
 
-    fn index_meta_collect(name: &String, tx: &mvcc::Transaction) -> Option<Vec<IndexMeta>> {
+    fn index_meta_collect(name: &String, tx: &mvcc::Transaction) -> Option<Vec<IndexMetaRef>> {
         let (index_min, index_max) = TableCodec::index_meta_bound(name);
         let mut index_metas = vec![];
         let mut index_iter = tx.iter(Bound::Included(&index_min), Bound::Included(&index_max)).ok()?;
@@ -70,7 +72,7 @@ impl KipStorage {
         while let Some((_, value_option)) = index_iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
                 if let Some(index_meta) = TableCodec::decode_index_meta(&value).ok() {
-                    index_metas.push(index_meta);
+                    index_metas.push(Arc::new(index_meta));
                 }
             }
         }
@@ -95,54 +97,54 @@ impl KipStorage {
 
         Ok(())
     }
+
+    fn create_index_meta_for_table(
+        tx: &mut mvcc::Transaction,
+        table: &mut TableCatalog
+    ) -> Result<(), StorageError> {
+        let table_name = table.name.clone();
+
+        for col in table.all_columns()
+            .into_iter()
+            .filter(|col| col.desc.is_unique)
+        {
+            if let Some(col_id) = col.id {
+                let meta = IndexMeta {
+                    id: 0,
+                    column_ids: vec![col_id],
+                    name: format!("uk_{}", col.name),
+                    is_unique: true,
+                };
+                let meta_ref = table.add_index_meta(meta);
+                let (key, value) = TableCodec::encode_index_meta(&table_name, meta_ref)?;
+
+                tx.set(key, value);
+            }
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl Storage for KipStorage {
     type TransactionType = KipTransaction;
 
-    async fn create_table(&self, table_name: TableName, mut columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
+    async fn create_table(&self, table_name: TableName, columns: Vec<ColumnCatalog>) -> Result<TableName, StorageError> {
         let mut tx = self.inner.new_transaction().await;
+        let mut table_catalog = TableCatalog::new(table_name.clone(), columns)?;
 
-        for (i, col) in columns.iter_mut().enumerate() {
-            col.id = Some(i as u32);
-        }
+        Self::create_index_meta_for_table(&mut tx, &mut table_catalog)?;
 
-        for (key, value) in columns
-            .iter()
-            .filter_map(|col| TableCodec::encode_column(&table_name, &col))
-        {
+        for (_, column) in &table_catalog.columns {
+            let (key, value) = TableCodec::encode_column(column)?;
             tx.set(key, value);
         }
-        let mut indexes = Vec::new();
 
-        for col in columns
-            .iter()
-            .filter(|col| col.desc.is_unique)
-        {
-            if let Some(col_id) = col.id {
-                let meta = IndexMeta {
-                    id: indexes.len() as u32,
-                    column_ids: vec![col_id],
-                    name: format!("uk_{}", col.name),
-                    is_unique: true,
-                };
-                let (key, value) = TableCodec::encode_index_meta(&table_name, &meta)?;
-
-                indexes.push(meta);
-                tx.set(key, value);
-            }
-        }
-
-        let (k, v)= TableCodec::encode_root_table(table_name.as_str(), columns.len())?;
+        let (k, v)= TableCodec::encode_root_table(&table_name)?;
         self.inner.set(k, v).await?;
 
         tx.commit().await?;
-
-        self.cache.put(
-            table_name.to_string(),
-            TableCatalog::new(table_name.clone(), columns, indexes)?
-        );
+        self.cache.put(table_name.to_string(), table_catalog);
 
         Ok(table_name)
     }
@@ -165,7 +167,7 @@ impl Storage for KipStorage {
         for col_key in col_keys {
             tx.remove(&col_key)?
         }
-        tx.remove(&TableCodec::encode_root_table_key(name.as_str()))?;
+        tx.remove(&TableCodec::encode_root_table_key(name))?;
         tx.commit().await?;
 
         let _ = self.cache.remove(name);
@@ -203,11 +205,11 @@ impl Storage for KipStorage {
         if option.is_none() {
             let tx = self.inner.new_transaction().await;
             // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
-            let (columns, name_option) = Self::column_collect(name, &tx)?;
+            let (columns, name_option) = Self::column_collect(name, &tx).ok()?;
             let indexes = Self::index_meta_collect(name, &tx)?;
 
             if let Some(catalog) = name_option
-                .and_then(|table_name| TableCatalog::new(table_name, columns, indexes).ok())
+                .and_then(|table_name| TableCatalog::new_with_indexes(table_name, columns, indexes).ok())
             {
                 option = self.cache.get_or_insert(name.to_string(), |_| Ok(catalog)).ok();
             }
@@ -216,22 +218,22 @@ impl Storage for KipStorage {
         option
     }
 
-    async fn show_tables(&self) -> Option<Vec<(String,usize)>> {
+    async fn show_tables(&self) -> Result<Vec<String>, StorageError> {
         let mut tables = vec![];
         let (min, max) = TableCodec::root_table_bound();
 
         let tx = self.inner.new_transaction().await;
-        let mut iter = tx.iter(Bound::Included(&min), Bound::Included(&max)).ok()?;
+        let mut iter = tx.iter(Bound::Included(&min), Bound::Included(&max))?;
 
-        while let Some((key, value_option))  = iter.try_next().ok().flatten() {
+        while let Some((_, value_option))  = iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
-                if let Some((table_name, column_count)) = TableCodec::decode_root_table(&key, &value) {
-                    tables.push((table_name,column_count));
-                }
+                let table_name = TableCodec::decode_root_table(&value)?;
+
+                tables.push(table_name);
             }
         }
 
-        Some(tables)
+        Ok(tables)
     }
 }
 

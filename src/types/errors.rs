@@ -1,5 +1,6 @@
 use std::num::{ParseFloatError, ParseIntError, TryFromIntError};
 use std::str::ParseBoolError;
+use std::string::FromUtf8Error;
 use chrono::ParseError;
 
 #[derive(thiserror::Error, Debug)]
@@ -58,4 +59,10 @@ pub enum TypeError {
         #[from]
         rust_decimal::Error,
     ),
+    #[error("from utf8")]
+    FromUtf8Error(
+        #[source]
+        #[from]
+        FromUtf8Error,
+    )
 }

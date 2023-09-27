@@ -32,7 +32,7 @@ pub trait Storage: Sync + Send + Clone + 'static {
     async fn transaction(&self, name: &String) -> Option<Self::TransactionType>;
     async fn table(&self, name: &String) -> Option<&TableCatalog>;
 
-    async fn show_tables(&self) -> Option<Vec<(String,usize)>>;
+    async fn show_tables(&self) -> Result<Vec<String>, StorageError>;
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).

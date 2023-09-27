@@ -117,7 +117,7 @@ impl Storage for MemStorage {
         }
     }
 
-    async fn show_tables(&self) -> Option<Vec<(String, usize)>> {
+    async fn show_tables(&self) -> Result<Vec<String>, StorageError> {
         todo!()
     }
 }
