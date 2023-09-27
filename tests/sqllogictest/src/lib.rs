@@ -1,26 +1,35 @@
-#![feature(iterator_try_collect)]
-use std::sync::Arc;
-
+use sqllogictest::{AsyncDB, DBOutput, DefaultColumnType};
 use kip_sql::db::{Database, DatabaseError};
-use sqllogictest::{AsyncDB, Runner};
-use kip_sql::types::tuple::create_table;
+use kip_sql::storage::kip::KipStorage;
 
-pub fn test_run(sqlfile: &str) {
-    let db = Arc::new(Database::new("./test"));
-    let mut tester = Runner::new(DatabaseWrapper { db });
-    tester.run_file(sqlfile).unwrap()
-}
-
-struct DatabaseWrapper {
-    db: Arc<Database>,
+pub struct KipSQL {
+    pub db: Database<KipStorage>,
 }
 
 #[async_trait::async_trait]
-impl AsyncDB for DatabaseWrapper {
+impl AsyncDB for KipSQL {
     type Error = DatabaseError;
-    async fn run(&mut self, sql: &str) -> Result<String, Self::Error> {
-        let table = create_table(&self.db.run(sql).await?);
+    type ColumnType = DefaultColumnType;
 
-        Ok(format!("{}", table))
+    async fn run(&mut self, sql: &str) -> Result<DBOutput<Self::ColumnType>, Self::Error> {
+        let tuples = self.db.run(sql).await?;
+        let types = vec![DefaultColumnType::Any; tuples[0].columns.len()];
+
+        if tuples.is_empty() {
+            return Ok(DBOutput::StatementComplete(0));
+        }
+
+        let rows = tuples
+            .into_iter()
+            .map(|tuple| {
+                tuple
+                    .values
+                    .into_iter()
+                    .map(|value| format!("{}", value))
+                    .collect()
+            })
+            .collect();
+
+        Ok(DBOutput::Rows { types, rows })
     }
 }
