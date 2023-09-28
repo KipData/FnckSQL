@@ -1,0 +1,77 @@
+statement ok
+create table t(id int primary key,v1 int not null, v2 int not null, v3 double not null)
+
+statement ok
+insert into t values(0,1,4,2.5), (1,2,3,3.2), (2,3,4,4.7), (3,4,3,5.1)
+
+query I
+select sum(v1) + sum(v2) from t
+----
+24
+
+query I
+select sum(v1) as a from t
+----
+10
+
+query IR
+select sum(v1), sum(v3) from t
+----
+10 15.499999761581421
+
+# query IR
+# select sum(v1+v2),sum(v1+v3) from t
+# ----
+# 24 25.5
+
+# SimpleMinTest
+
+query I
+select min(v1) from t
+----
+1
+
+# SimpleMaxTest
+
+query I
+select max(v1) from t
+----
+4
+
+# SimpleMaxTest1
+
+query I
+select max(v1) from t where v2>3
+----
+3
+
+# SimpleCountTest
+
+query I
+select count(v1) from t
+----
+4
+
+# SimpleAvgTest
+
+# query R
+# select avg(v2) from t
+# ----
+# 3.5
+
+# SumGroupTest
+
+query II rowsort
+select sum(v1), v2 from t group by v2
+----
+4 4
+6 3
+
+query II
+select sum(v1) as a, v2 from t group by v2 order by a
+----
+4 4
+6 3
+
+statement ok
+drop table t
