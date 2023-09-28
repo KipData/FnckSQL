@@ -167,7 +167,7 @@ impl<S: Storage> Binder<S> {
                 distinct: func.distinct,
                 kind: AggKind::Count,
                 args,
-                ty: LogicalType::UInteger,
+                ty: LogicalType::Integer,
             },
             "sum" => ScalarExpression::AggCall{
                 distinct: func.distinct,

@@ -1,5 +1,5 @@
 use std::path::Path;
-use sqllogictest::{Runner, TestError};
+use sqllogictest::Runner;
 use tempfile::TempDir;
 use kip_sql::db::Database;
 use sqllogictest_test::KipSQL;
@@ -9,7 +9,7 @@ async fn main() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
     std::env::set_current_dir(path).unwrap();
 
-    println!("Test Start!");
+    println!("KipSQL Test Start!\n");
     const SLT_PATTERN: &str = "tests/slt/**/*.slt";
 
     let slt_files = glob::glob(SLT_PATTERN).expect("failed to find slt files");
@@ -28,8 +28,8 @@ async fn main() {
         let mut tester = Runner::new(KipSQL { db });
 
         if let Err(err) = tester.run_file_async(filepath).await {
-            panic!("logic error: {}", err);
+            panic!("test error: {}", err);
         }
-        println!("-> Pass!")
+        println!("-> Pass!\n\n")
     }
 }

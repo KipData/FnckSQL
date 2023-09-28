@@ -229,6 +229,22 @@ impl ScalarExpression {
                     ColumnDesc::new(ty.clone(), false, false)
                 ))
             }
+            ScalarExpression::Unary {
+                expr,
+                op,
+                ty
+            } => {
+                let column_name = format!(
+                    "{} {}",
+                    op,
+                    expr.output_columns(tuple).name,
+                );
+                Arc::new(ColumnCatalog::new(
+                    column_name,
+                    true,
+                    ColumnDesc::new(ty.clone(), false, false)
+                ))
+            },
             _ => unreachable!()
         }
     }
@@ -294,6 +310,16 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::And => write!(f, "&&"),
             BinaryOperator::Or => write!(f, "||"),
             BinaryOperator::Xor => write!(f, "^"),
+        }
+    }
+}
+
+impl fmt::Display for UnaryOperator {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            UnaryOperator::Plus => write!(f, "+"),
+            UnaryOperator::Minus => write!(f, "-"),
+            UnaryOperator::Not => write!(f, "not")
         }
     }
 }

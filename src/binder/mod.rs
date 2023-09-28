@@ -168,9 +168,9 @@ pub enum BindError {
     SubqueryMustHaveAlias,
     #[error("agg miss: {0}")]
     AggMiss(String),
-    #[error("catalog error")]
+    #[error("catalog error: {0}")]
     CatalogError(#[from] CatalogError),
-    #[error("type error")]
+    #[error("type error: {0}")]
     TypeError(#[from] TypeError)
 }
 

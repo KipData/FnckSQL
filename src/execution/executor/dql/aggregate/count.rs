@@ -6,7 +6,7 @@ use crate::execution::ExecutorError;
 use crate::types::value::{DataValue, ValueRef};
 
 pub struct CountAccumulator {
-    result: u32,
+    result: i32,
 }
 
 impl CountAccumulator {
@@ -25,7 +25,7 @@ impl Accumulator for CountAccumulator {
     }
 
     fn evaluate(&self) -> Result<ValueRef, ExecutorError> {
-        Ok(Arc::new(DataValue::UInt32(Some(self.result))))
+        Ok(Arc::new(DataValue::Int32(Some(self.result))))
     }
 }
 
@@ -51,6 +51,6 @@ impl Accumulator for DistinctCountAccumulator {
     }
 
     fn evaluate(&self) -> Result<ValueRef, ExecutorError> {
-        Ok(Arc::new(DataValue::UInt32(Some(self.distinct_values.len() as u32))))
+        Ok(Arc::new(DataValue::Int32(Some(self.distinct_values.len() as i32))))
     }
 }
