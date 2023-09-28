@@ -13,12 +13,12 @@ impl AsyncDB for KipSQL {
 
     async fn run(&mut self, sql: &str) -> Result<DBOutput<Self::ColumnType>, Self::Error> {
         let tuples = self.db.run(sql).await?;
-        let types = vec![DefaultColumnType::Any; tuples[0].columns.len()];
 
         if tuples.is_empty() {
             return Ok(DBOutput::StatementComplete(0));
         }
 
+        let types = vec![DefaultColumnType::Any; tuples[0].columns.len()];
         let rows = tuples
             .into_iter()
             .map(|tuple| {

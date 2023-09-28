@@ -1,6 +1,0 @@
-
-statement ok
-CREATE TABLE mytable ( title varchar(256) primary key, cost decimal(4,2));
-
-statement ok
-INSERT INTO mytable (title, cost) VALUES ('A', 1.00);
