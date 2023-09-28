@@ -102,7 +102,7 @@ impl Rule for PushProjectThroughChild {
                             }
 
                             if let ScalarExpression::InputRef { index, .. } = expr {
-                                Some(agg_calls[*index].clone())
+                                agg_calls.get(*index).cloned()
                             } else {
                                 None
                             }

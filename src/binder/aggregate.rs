@@ -169,10 +169,12 @@ impl<S: Storage> Binder<S> {
         }
         let mut group_raw_set: HashSet<&ScalarExpression, RandomState> = HashSet::from_iter(group_raw_exprs.iter());
 
-        for expr in select_items {
+        for mut expr in select_items {
             if expr.has_agg_call(&self.context) {
                 continue;
             }
+            expr = expr.unpack_alias();
+
             group_raw_set.remove(expr);
 
             if !group_raw_exprs.iter().contains(expr) {
@@ -225,7 +227,7 @@ impl<S: Storage> Binder<S> {
             }
         }
 
-        if let Some(i) = select_list.iter().position(|column| column == expr) {
+        if let Some(i) = select_list.iter().position(|column| column.unpack_alias() == expr) {
             let expr = &mut select_list[i];
             match expr {
                 ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {
