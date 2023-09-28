@@ -82,7 +82,9 @@ impl<S: Storage> Binder<S> {
     pub async fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query).await?,
-            Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
+            Statement::CreateTable { name, columns, constraints, .. } => {
+                self.bind_create_table(name, &columns, &constraints)?
+            },
             Statement::Drop { object_type, names, .. } => {
                 match object_type {
                     ObjectType::Table => {

@@ -162,10 +162,12 @@ impl Transaction for MemTable {
         }
     }
 
+    #[allow(unused_variables)]
     fn read_by_index(&self, bounds: Bounds, projection: Projections, index_meta: IndexMetaRef, binaries: Vec<ConstantBinary>) -> Result<IndexIter<'_>, StorageError> {
         todo!()
     }
 
+    #[allow(unused_variables)]
     fn add_index(&mut self, index: Index, tuple_ids: Vec<TupleId>, is_unique: bool) -> Result<(), StorageError> {
         todo!()
     }

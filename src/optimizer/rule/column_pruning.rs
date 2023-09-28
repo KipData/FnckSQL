@@ -97,6 +97,10 @@ impl Rule for PushProjectThroughChild {
                         .project_input_refs()
                         .iter()
                         .filter_map(|expr| {
+                            if agg_calls.is_empty() {
+                                return None;
+                            }
+
                             if let ScalarExpression::InputRef { index, .. } = expr {
                                 Some(agg_calls[*index].clone())
                             } else {

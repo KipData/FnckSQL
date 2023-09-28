@@ -23,10 +23,12 @@ impl TableCatalog {
             .find(|meta| meta.is_unique && &meta.column_ids[0] == col_id)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_column_by_id(&self, id: &ColumnId) -> Option<&ColumnRef> {
         self.columns.get(id)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_column_id_by_name(&self, name: &String) -> Option<ColumnId> {
         self.column_idxs.get(name).cloned()
     }

@@ -15,9 +15,9 @@ impl AsyncDB for KipSQL {
     async fn run(&mut self, sql: &str) -> Result<DBOutput<Self::ColumnType>, Self::Error> {
         let start = Instant::now();
         let tuples = self.db.run(sql).await?;
-        println!("Input SQL:");
-        println!("|- {}", sql);
-        println!("|- Time consuming: {:?}", start.elapsed());
+        println!("|— Input SQL:");
+        println!(" |— {}", sql);
+        println!(" |— Time consuming: {:?}", start.elapsed());
 
         if tuples.is_empty() {
             return Ok(DBOutput::StatementComplete(0));
