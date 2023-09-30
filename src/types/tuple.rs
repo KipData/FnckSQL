@@ -125,62 +125,74 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false)
+                ColumnDesc::new(LogicalType::Integer, true, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UInteger, false, false)
+                ColumnDesc::new(LogicalType::UInteger, false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c3".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Varchar(Some(2)), false, false)
+                ColumnDesc::new(LogicalType::Varchar(Some(2)), false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c4".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Smallint, false, false)
+                ColumnDesc::new(LogicalType::Smallint, false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c5".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::USmallint, false, false)
+                ColumnDesc::new(LogicalType::USmallint, false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c6".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Float, false, false)
+                ColumnDesc::new(LogicalType::Float, false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c7".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Double, false, false)
+                ColumnDesc::new(LogicalType::Double, false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c8".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Tinyint, false, false)
+                ColumnDesc::new(LogicalType::Tinyint, false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c9".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UTinyint, false, false)
+                ColumnDesc::new(LogicalType::UTinyint, false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c10".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false)
+                ColumnDesc::new(LogicalType::Boolean, false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c11".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::DateTime, false, false)
+                ColumnDesc::new(LogicalType::DateTime, false, false),
+                None
             )),
             Arc::new(ColumnCatalog::new(
                 "c12".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Date, false, false)
+                ColumnDesc::new(LogicalType::Date, false, false),
+                None
             )),
         ];
 

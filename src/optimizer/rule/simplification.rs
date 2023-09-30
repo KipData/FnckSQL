@@ -147,6 +147,7 @@ mod test {
                     is_primary: true,
                     is_unique: false,
                 },
+                ref_expr: None,
             };
             let c2_col = ColumnCatalog {
                 id: Some(
@@ -162,24 +163,25 @@ mod test {
                     is_primary: false,
                     is_unique: true,
                 },
+                ref_expr: None,
             };
 
             // -(c1 + 1) > c2 => c1 < -c2 - 1
             assert_eq!(
                 filter_op.predicate,
                 ScalarExpression::Binary {
-                    op: BinaryOperator::Lt,
-                    left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c1_col))),
-                    right_expr: Box::new(ScalarExpression::Binary {
-                        op: BinaryOperator::Minus,
-                        left_expr: Box::new(ScalarExpression::Unary {
-                            op: UnaryOperator::Minus,
-                            expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
+                    op: BinaryOperator::Gt,
+                    left_expr: Box::new(ScalarExpression::Unary {
+                        op: UnaryOperator::Minus,
+                        expr: Box::new(ScalarExpression::Binary {
+                            op: BinaryOperator::Plus,
+                            left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c1_col))),
+                            right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(1))))),
                             ty: LogicalType::Integer,
                         }),
-                        right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(1))))),
                         ty: LogicalType::Integer,
                     }),
+                    right_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
                     ty: LogicalType::Boolean,
                 }
             )

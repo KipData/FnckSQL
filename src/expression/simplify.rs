@@ -703,6 +703,7 @@ mod test {
                 is_primary: false,
                 is_unique: false,
             },
+            ref_expr: None,
         });
         let val_1 = Arc::new(DataValue::Int32(Some(1)));
 
