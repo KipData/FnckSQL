@@ -30,6 +30,7 @@ pub struct HepBatchStrategy {
 }
 
 impl HepBatchStrategy {
+    #[allow(dead_code)]
     pub fn once_topdown() -> Self {
         HepBatchStrategy {
             max_iteration: 1,
@@ -52,5 +53,6 @@ pub enum HepMatchOrder {
     TopDown,
     /// Match from leaves up. A match attempt at a descendant precedes all match attempts at its
     /// ancestors.
+    #[allow(dead_code)]
     BottomUp,
 }

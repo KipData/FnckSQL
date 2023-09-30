@@ -64,6 +64,10 @@ impl Operator {
                     .iter()
                     .map(ScalarExpression::unpack_alias)
                     .filter(|expr| matches!(expr, ScalarExpression::InputRef { .. }))
+                    .sorted_by_key(|expr| match expr {
+                        ScalarExpression::InputRef { index, .. } => index,
+                        _ => unreachable!()
+                    })
                     .cloned()
                     .collect_vec()
             }

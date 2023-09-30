@@ -85,7 +85,7 @@ impl<S: Storage> Binder<S> {
             }
             if got_column.is_none() {
                 if let Some(expr) = self.context.aliases.get(column_name) {
-                    return Ok(expr.clone());
+                    return Ok(ScalarExpression::Alias { expr: Box::new(expr.clone()), alias: column_name.clone() });
                 }
             }
             let column_catalog =
@@ -167,7 +167,7 @@ impl<S: Storage> Binder<S> {
                 distinct: func.distinct,
                 kind: AggKind::Count,
                 args,
-                ty: LogicalType::UInteger,
+                ty: LogicalType::Integer,
             },
             "sum" => ScalarExpression::AggCall{
                 distinct: func.distinct,

@@ -234,15 +234,15 @@ mod test {
         let desc = ColumnDesc::new(LogicalType::Integer, false, false);
 
         let t1_columns = vec![
-            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone(), None)),
+            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone(), None)),
+            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone(), None)),
         ];
 
         let t2_columns = vec![
-            Arc::new(ColumnCatalog::new("c4".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c5".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c6".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c4".to_string(), true, desc.clone(), None)),
+            Arc::new(ColumnCatalog::new("c5".to_string(), true, desc.clone(), None)),
+            Arc::new(ColumnCatalog::new("c6".to_string(), true, desc.clone(), None)),
         ];
 
         let on_keys = vec![

@@ -3,15 +3,15 @@ use crate::expression::ScalarExpression;
 #[derive(Debug, PartialEq, Clone)]
 pub struct SortField {
     pub expr: ScalarExpression,
-    pub desc: bool,
+    pub asc: bool,
     pub nulls_first: bool,
 }
 
 impl SortField {
-    pub fn new(expr: ScalarExpression, desc: bool, nulls_first: bool) -> Self {
+    pub fn new(expr: ScalarExpression, asc: bool, nulls_first: bool) -> Self {
         SortField {
             expr,
-            desc,
+            asc,
             nulls_first,
         }
     }

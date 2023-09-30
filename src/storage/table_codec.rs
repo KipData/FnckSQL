@@ -260,12 +260,14 @@ mod tests {
             ColumnCatalog::new(
                 "c1".into(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false)
+                ColumnDesc::new(LogicalType::Integer, true, false),
+                None
             ),
             ColumnCatalog::new(
                 "c2".into(),
                 false,
-                ColumnDesc::new(LogicalType::Decimal(None,None), false, false)
+                ColumnDesc::new(LogicalType::Decimal(None,None), false, false),
+                None
             ),
         ];
         let table_catalog = TableCatalog::new(Arc::new("t1".to_string()), columns).unwrap();
@@ -356,7 +358,8 @@ mod tests {
                     column_datatype: LogicalType::Invalid,
                     is_primary: false,
                     is_unique: false,
-                }
+                },
+                None
             );
 
             col.table_name = Some(Arc::new(table_name.to_string()));

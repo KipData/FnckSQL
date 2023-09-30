@@ -97,8 +97,12 @@ impl Rule for PushProjectThroughChild {
                         .project_input_refs()
                         .iter()
                         .filter_map(|expr| {
+                            if agg_calls.is_empty() {
+                                return None;
+                            }
+
                             if let ScalarExpression::InputRef { index, .. } = expr {
-                                Some(agg_calls[*index].clone())
+                                agg_calls.get(*index).cloned()
                             } else {
                                 None
                             }
@@ -142,9 +146,13 @@ impl Rule for PushProjectThroughChild {
                     }
                 }
                 _ => {
-                    let grandson_id = graph.children_at(child_index)[0];
-                    let mut columns = node_operator.project_input_refs();
+                    let grandson_ids = graph.children_at(child_index);
 
+                    if grandson_ids.is_empty() {
+                        return Ok(())
+                    }
+                    let grandson_id = grandson_ids[0];
+                    let mut columns = node_operator.project_input_refs();
                     let mut referenced_columns = node_referenced_columns
                         .into_iter()
                         .chain(child_referenced_columns.into_iter())

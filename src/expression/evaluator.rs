@@ -1,26 +1,37 @@
 use std::sync::Arc;
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use crate::expression::value_compute::{binary_op, unary_op};
 use crate::expression::ScalarExpression;
 use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 
+lazy_static! {
+    static ref NULL_VALUE: ValueRef = {
+        Arc::new(DataValue::Null)
+    };
+}
+
 impl ScalarExpression {
     pub fn eval_column(&self, tuple: &Tuple) -> Result<ValueRef, TypeError> {
         match &self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
             ScalarExpression::ColumnRef(col) => {
-                let (index, _) = tuple
-                    .columns
-                    .iter()
-                    .find_position(|tul_col| tul_col.name == col.name)
-                    .unwrap();
+                let value = Self::eval_with_name(&tuple, &col.name)
+                    .unwrap_or(&NULL_VALUE)
+                    .clone();
 
-                Ok(tuple.values[index].clone())
+                Ok(value)
             },
             ScalarExpression::InputRef{ index, .. } => Ok(tuple.values[*index].clone()),
-            ScalarExpression::Alias{ expr, .. } => expr.eval_column(tuple),
+            ScalarExpression::Alias{ expr, alias } => {
+                if let Some(value) = Self::eval_with_name(&tuple, alias) {
+                    return Ok(value.clone());
+                }
+
+                expr.eval_column(tuple)
+            },
             ScalarExpression::TypeCast{ expr, ty, .. } => {
                 let value = expr.eval_column(tuple)?;
 
@@ -44,5 +55,13 @@ impl ScalarExpression {
             },
             ScalarExpression::AggCall{ .. } => todo!()
         }
+    }
+
+    fn eval_with_name<'a>(tuple: &'a Tuple, name: &String) -> Option<&'a ValueRef> {
+        tuple
+            .columns
+            .iter()
+            .find_position(|tul_col| &tul_col.name == name)
+            .map(|(i, _)| &tuple.values[i])
     }
 }

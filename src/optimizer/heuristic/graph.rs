@@ -53,6 +53,7 @@ impl HepGraph {
             .next()
     }
 
+    #[allow(dead_code)]
     pub fn add_root(&mut self, new_node: OptExprNode) {
         let old_root_id = mem::replace(
             &mut self.root_index,
@@ -145,6 +146,7 @@ impl HepGraph {
         }
     }
 
+    #[allow(dead_code)]
     pub fn node(&self, node_id: HepNodeId) -> Option<&OptExprNode> {
         self.graph.node_weight(node_id)
     }

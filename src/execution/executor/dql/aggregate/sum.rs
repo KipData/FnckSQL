@@ -23,7 +23,7 @@ impl SumAccumulator {
 impl Accumulator for SumAccumulator {
     fn update_value(&mut self, value: &ValueRef) -> Result<(), ExecutorError> {
         if !value.is_null() {
-            self.result  = binary_op(
+            self.result = binary_op(
                 &self.result,
                 value,
                 &BinaryOperator::Plus

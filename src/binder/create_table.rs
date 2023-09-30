@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 use itertools::Itertools;
-use sqlparser::ast::{ColumnDef, ObjectName};
+use sqlparser::ast::{ColumnDef, ObjectName, TableConstraint};
 
 use super::Binder;
 use crate::binder::{BindError, lower_case_name, split_name};
@@ -12,10 +12,12 @@ use crate::planner::operator::Operator;
 use crate::storage::Storage;
 
 impl<S: Storage> Binder<S> {
+    // TODO: TableConstraint
     pub(crate) fn bind_create_table(
         &mut self,
         name: &ObjectName,
         columns: &[ColumnDef],
+        constraints: &[TableConstraint]
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
         let (_, name) = split_name(&name)?;

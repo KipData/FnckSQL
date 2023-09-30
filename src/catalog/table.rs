@@ -23,10 +23,12 @@ impl TableCatalog {
             .find(|meta| meta.is_unique && &meta.column_ids[0] == col_id)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_column_by_id(&self, id: &ColumnId) -> Option<&ColumnRef> {
         self.columns.get(id)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_column_id_by_name(&self, name: &String) -> Option<ColumnId> {
         self.column_idxs.get(name).cloned()
     }
@@ -123,8 +125,8 @@ mod tests {
     // | 1         | true     |
     // | 2         | false    |
     fn test_table_catalog() {
-        let col0 = ColumnCatalog::new("a".into(), false, ColumnDesc::new(LogicalType::Integer, false, false));
-        let col1 = ColumnCatalog::new("b".into(), false, ColumnDesc::new(LogicalType::Boolean, false, false));
+        let col0 = ColumnCatalog::new("a".into(), false, ColumnDesc::new(LogicalType::Integer, false, false), None);
+        let col1 = ColumnCatalog::new("b".into(), false, ColumnDesc::new(LogicalType::Boolean, false, false), None);
         let col_catalogs = vec![col0, col1];
         let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs).unwrap();
 

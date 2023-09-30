@@ -42,7 +42,7 @@ impl Sort {
         tuples.sort_by(|tuple_1, tuple_2| {
             let mut ordering = Ordering::Equal;
 
-            for SortField { expr, desc, nulls_first } in &sort_fields {
+            for SortField { expr, asc, nulls_first } in &sort_fields {
                 let value_1 = expr.eval_column(tuple_1).unwrap();
                 let value_2 = expr.eval_column(tuple_2).unwrap();
 
@@ -53,7 +53,7 @@ impl Sort {
                         _ => Ordering::Equal,
                     });
 
-                if *desc {
+                if !*asc {
                     ordering = ordering.reverse();
                 }
 

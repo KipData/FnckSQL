@@ -82,7 +82,9 @@ impl<S: Storage> Binder<S> {
     pub async fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query).await?,
-            Statement::CreateTable { name, columns, .. } => self.bind_create_table(name, &columns)?,
+            Statement::CreateTable { name, columns, constraints, .. } => {
+                self.bind_create_table(name, &columns, &constraints)?
+            },
             Statement::Drop { object_type, names, .. } => {
                 match object_type {
                     ObjectType::Table => {
@@ -168,9 +170,9 @@ pub enum BindError {
     SubqueryMustHaveAlias,
     #[error("agg miss: {0}")]
     AggMiss(String),
-    #[error("catalog error")]
+    #[error("catalog error: {0}")]
     CatalogError(#[from] CatalogError),
-    #[error("type error")]
+    #[error("type error: {0}")]
     TypeError(#[from] TypeError)
 }
 
@@ -193,16 +195,16 @@ pub mod test {
         let _ = storage.create_table(
             Arc::new("t1".to_string()),
             vec![
-                ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true, false)),
-                ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false, true)),
+                ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true, false), None),
+                ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false, true), None),
             ]
         ).await?;
 
         let _ = storage.create_table(
             Arc::new("t2".to_string()),
             vec![
-                ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true, false)),
-                ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false, false)),
+                ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true, false), None),
+                ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false, false), None),
             ]
         ).await?;
 
