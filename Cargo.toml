@@ -4,6 +4,13 @@
 name = "kip-sql"
 version = "0.0.1-alpha.0"
 edition = "2021"
+authors = ["Kould <kould2333@gmail.com>", "Xwg <loloxwg@gmail.com>"]
+description = "build the SQL layer of KipDB database"
+license = "Apache-2.0"
+repository = "https://github.com/KipData/KipSQL"
+readme = "README.md"
+keywords = ["async", "SQL", "Persistence"]
+categories = ["development-tools", "database"]
 
 [lib]
 doctest = false
@@ -29,7 +36,7 @@ futures = "0.3.25"
 ahash = "0.8.3"
 lazy_static = "1.4.0"
 comfy-table = "7.0.1"
-bytes = "*"
+bytes = "1.5.0"
 kip_db = "0.1.2-alpha.15"
 async-recursion = "1.0.5"
 rust_decimal = "1"

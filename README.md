@@ -6,6 +6,11 @@
 ![architecture](./static/images/architecture.png)
 
 ### Get Started
+#### 组件引入
+``` toml
+kip-sql = "0.0.1-alpha.0"
+```
+
 Install rust toolchain first.
 ```
 cargo run
