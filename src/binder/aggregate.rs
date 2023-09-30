@@ -30,7 +30,7 @@ impl<S: Storage> Binder<S> {
         select_items: &mut [ScalarExpression],
     ) -> Result<(), BindError> {
         for column in select_items {
-            self.visit_column_agg_expr(column);
+            self.visit_column_agg_expr(column, true)?;
         }
         Ok(())
     }
@@ -57,7 +57,8 @@ impl<S: Storage> Binder<S> {
         // Extract having expression.
         let return_having = if let Some(having) = having {
             let mut having = self.bind_expr(having).await?;
-            self.visit_column_agg_expr(&mut having);
+            self.visit_column_agg_expr(&mut having, false)?;
+
             Some(having)
         } else {
             None
@@ -73,11 +74,11 @@ impl<S: Storage> Binder<S> {
                     nulls_first,
                 } = orderby;
                 let mut expr = self.bind_expr(expr).await?;
-                self.visit_column_agg_expr(&mut expr);
+                self.visit_column_agg_expr(&mut expr, false)?;
 
                 return_orderby.push(SortField::new(
                     expr,
-                    asc.map_or(true, |asc| !asc),
+                    asc.map_or(true, |asc| asc),
                     nulls_first.map_or(false, |first| first),
                 ));
             }
@@ -88,50 +89,67 @@ impl<S: Storage> Binder<S> {
         Ok((return_having, return_orderby))
     }
 
-    fn visit_column_agg_expr(&mut self, expr: &mut ScalarExpression) {
+    fn visit_column_agg_expr(&mut self, expr: &mut ScalarExpression, is_select: bool) -> Result<(), BindError> {
         match expr {
             ScalarExpression::AggCall {
                 ty: return_type, ..
             } => {
-                let index = self.context.input_ref_index(InputRefType::AggCall);
-                let input_ref = ScalarExpression::InputRef {
-                    index,
-                    ty: return_type.clone(),
-                };
-                match std::mem::replace(expr, input_ref) {
-                    ScalarExpression::AggCall {
-                        kind,
-                        args,
+                let ty = return_type.clone();
+                if is_select {
+                    let index = self.context.input_ref_index(InputRefType::AggCall);
+                    let input_ref = ScalarExpression::InputRef {
+                        index,
                         ty,
-                        distinct
-                    } => {
-                        self.context.agg_calls.push(ScalarExpression::AggCall {
-                            distinct,
+                    };
+                    match std::mem::replace(expr, input_ref) {
+                        ScalarExpression::AggCall {
                             kind,
                             args,
                             ty,
-                        });
+                            distinct
+                        } => {
+                            self.context.agg_calls.push(ScalarExpression::AggCall {
+                                distinct,
+                                kind,
+                                args,
+                                ty,
+                            });
+                        }
+                        _ => unreachable!(),
                     }
-                    _ => unreachable!(),
+                } else {
+                    let (index, _) = self
+                        .context
+                        .agg_calls
+                        .iter()
+                        .find_position(|agg_expr| agg_expr == &expr)
+                        .ok_or_else(|| BindError::AggMiss(format!("{:?}", expr)))?;
+
+                    let _ = std::mem::replace(expr, ScalarExpression::InputRef {
+                        index,
+                        ty,
+                    });
                 }
             }
 
-            ScalarExpression::TypeCast { expr, .. } => self.visit_column_agg_expr(expr),
-            ScalarExpression::IsNull { expr } => self.visit_column_agg_expr(expr),
-            ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr),
-            ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr),
+            ScalarExpression::TypeCast { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
+            ScalarExpression::IsNull { expr } => self.visit_column_agg_expr(expr, is_select)?,
+            ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
+            ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
                 ..
             } => {
-                self.visit_column_agg_expr(left_expr);
-                self.visit_column_agg_expr(right_expr);
+                self.visit_column_agg_expr(left_expr, is_select)?;
+                self.visit_column_agg_expr(right_expr, is_select)?;
             }
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef { .. }
             | ScalarExpression::InputRef { .. } => {}
         }
+
+        Ok(())
     }
 
     /// Validate select exprs must appear in the GROUP BY clause or be used in
