@@ -15,6 +15,7 @@ use crate::execution::executor::dql::aggregate::hash_agg::HashAggExecutor;
 use crate::execution::executor::dql::aggregate::simple_agg::SimpleAggExecutor;
 use crate::execution::executor::dql::dummy::Dummy;
 use crate::execution::executor::dql::filter::Filter;
+use crate::execution::executor::dql::index_scan::IndexScan;
 use crate::execution::executor::dql::join::hash_join::HashJoin;
 use crate::execution::executor::dql::limit::Limit;
 use crate::execution::executor::dql::projection::Projection;
@@ -65,7 +66,11 @@ pub fn build<S: Storage>(plan: LogicalPlan, storage: &S) -> BoxedExecutor {
             Projection::from((op, input)).execute(storage)
         }
         Operator::Scan(op) => {
-            SeqScan::from(op).execute(storage)
+            if op.index_by.is_some() {
+                IndexScan::from(op).execute(storage)
+            } else {
+                SeqScan::from(op).execute(storage)
+            }
         }
         Operator::Sort(op) => {
             let input = build(childrens.remove(0), storage);

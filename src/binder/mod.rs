@@ -193,16 +193,16 @@ pub mod test {
         let _ = storage.create_table(
             Arc::new("t1".to_string()),
             vec![
-                ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true)),
-                ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false)),
+                ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true, false)),
+                ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false, true)),
             ]
         ).await?;
 
         let _ = storage.create_table(
             Arc::new("t2".to_string()),
             vec![
-                ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true)),
-                ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false)),
+                ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true, false)),
+                ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false, false)),
             ]
         ).await?;
 
@@ -211,7 +211,6 @@ pub mod test {
 
     pub async fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-
         let storage = build_test_catalog(temp_dir.path()).await?;
         let binder = Binder::new(BinderContext::new(storage));
         let stmt = crate::parser::parse_sql(sql)?;

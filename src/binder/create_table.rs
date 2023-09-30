@@ -34,8 +34,15 @@ impl<S: Storage> Binder<S> {
             .map(|col| ColumnCatalog::from(col.clone()))
             .collect_vec();
 
-        if columns.iter().find(|col| col.desc.is_primary).is_none() {
-            return Err(BindError::InvalidTable("At least one primary key field exists".to_string()));
+        let primary_key_count = columns
+            .iter()
+            .filter(|col| col.desc.is_primary)
+            .count();
+
+        if primary_key_count != 1 {
+            return Err(BindError::InvalidTable(
+                "The primary key field must exist and have at least one".to_string()
+            ));
         }
 
         let plan = LogicalPlan {
@@ -75,10 +82,10 @@ mod tests {
                 assert_eq!(op.table_name, Arc::new("t1".to_string()));
                 assert_eq!(op.columns[0].name, "id".to_string());
                 assert_eq!(op.columns[0].nullable, false);
-                assert_eq!(op.columns[0].desc, ColumnDesc::new(LogicalType::Integer, true));
+                assert_eq!(op.columns[0].desc, ColumnDesc::new(LogicalType::Integer, true, false));
                 assert_eq!(op.columns[1].name, "name".to_string());
                 assert_eq!(op.columns[1].nullable, true);
-                assert_eq!(op.columns[1].desc, ColumnDesc::new(LogicalType::Varchar(Some(10)), false));
+                assert_eq!(op.columns[1].desc, ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false));
             }
             _ => unreachable!()
         }

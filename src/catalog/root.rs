@@ -67,12 +67,12 @@ mod tests {
         let col0 = ColumnCatalog::new(
             "a".to_string(),
             false,
-            ColumnDesc::new(LogicalType::Integer, false),
+            ColumnDesc::new(LogicalType::Integer, false, false),
         );
         let col1 = ColumnCatalog::new(
             "b".to_string(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false),
+            ColumnDesc::new(LogicalType::Boolean, false, false),
         );
         let col_catalogs = vec![col0, col1];
 

@@ -24,7 +24,7 @@ impl<S: Storage> Binder<S> {
         let (_, name) = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 
-        if let Some(table) = self.context.storage.table_catalog(&table_name).await {
+        if let Some(table) = self.context.storage.table(&table_name).await {
             let mut columns = Vec::new();
 
             if idents.is_empty() {

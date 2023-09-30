@@ -64,7 +64,7 @@ impl<S: Storage> Binder<S> {
             let table_catalog = self
                 .context
                 .storage
-                .table_catalog(table)
+                .table(table)
                 .await
                 .ok_or_else(|| BindError::InvalidTable(table.to_string()))?;
 

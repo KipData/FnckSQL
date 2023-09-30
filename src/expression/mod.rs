@@ -16,6 +16,7 @@ use crate::types::tuple::Tuple;
 pub mod agg;
 mod evaluator;
 pub mod value_compute;
+pub mod simplify;
 
 /// ScalarExpression represnet all scalar expression in SQL.
 /// SELECT a+1, b FROM t1.
@@ -36,7 +37,6 @@ pub enum ScalarExpression {
     TypeCast {
         expr: Box<ScalarExpression>,
         ty: LogicalType,
-        is_try: bool,
     },
     IsNull {
         expr: Box<ScalarExpression>,
@@ -173,14 +173,14 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     format!("{}", value),
                     true,
-                    ColumnDesc::new(value.logical_type(), false)
+                    ColumnDesc::new(value.logical_type(), false, false)
                 ))
             }
             ScalarExpression::Alias { expr, alias } => {
                 Arc::new(ColumnCatalog::new(
                     alias.to_string(),
                     true,
-                    ColumnDesc::new(expr.return_type(), false)
+                    ColumnDesc::new(expr.return_type(), false, false)
                 ))
             }
             ScalarExpression::AggCall { kind, args, ty, distinct } => {
@@ -204,7 +204,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(ty.clone(), false)
+                    ColumnDesc::new(ty.clone(), false, false)
                 ))
             }
             ScalarExpression::InputRef { index, .. } => {
@@ -226,7 +226,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(ty.clone(), false)
+                    ColumnDesc::new(ty.clone(), false, false)
                 ))
             }
             _ => unreachable!()
@@ -258,8 +258,10 @@ pub enum BinaryOperator {
     Minus,
     Multiply,
     Divide,
+
     Modulo,
     StringConcat,
+
     Gt,
     Lt,
     GtEq,
@@ -267,6 +269,7 @@ pub enum BinaryOperator {
     Spaceship,
     Eq,
     NotEq,
+
     And,
     Or,
     Xor,

@@ -1,24 +1,26 @@
 use itertools::Itertools;
 use crate::catalog::{TableCatalog, TableName};
 use crate::expression::ScalarExpression;
+use crate::expression::simplify::ConstantBinary;
 use crate::planner::LogicalPlan;
 use crate::storage::Bounds;
+use crate::types::index::IndexMetaRef;
 
-use super::{sort::SortField, Operator};
+use super::Operator;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ScanOperator {
+    pub index_metas: Vec<IndexMetaRef>,
+
     pub table_name: TableName,
     pub columns: Vec<ScalarExpression>,
     // Support push down limit.
     pub limit: Bounds,
 
     // IndexScan only
-    pub sort_fields: Vec<SortField>,
-    // IndexScan only
     // Support push down predicate.
     // If pre_where is simple predicate, for example:  a > 1 then can calculate directly when read data.
-    pub pre_where: Vec<ScalarExpression>,
+    pub index_by: Option<(IndexMetaRef, Vec<ConstantBinary>)>,
 }
 impl ScanOperator {
     pub fn new(table_name: TableName, table_catalog: &TableCatalog) -> LogicalPlan {
@@ -31,11 +33,12 @@ impl ScanOperator {
 
         LogicalPlan {
             operator: Operator::Scan(ScanOperator {
+                index_metas: table_catalog.indexes.clone(),
                 table_name,
                 columns,
-                sort_fields: vec![],
-                pre_where: vec![],
+
                 limit: (None, None),
+                index_by: None,
             }),
             childrens: vec![],
         }

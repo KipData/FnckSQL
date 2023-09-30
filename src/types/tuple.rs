@@ -18,7 +18,7 @@ pub struct Tuple {
 
 impl Tuple {
     pub fn deserialize_from(columns: Vec<ColumnRef>, bytes: &[u8]) -> Self {
-        fn bit_index(bits: u8, i: usize) -> bool {
+        fn is_none(bits: u8, i: usize) -> bool {
             bits & (1 << (7 - i)) > 0
         }
 
@@ -32,7 +32,7 @@ impl Tuple {
         for (i, col) in columns.iter().enumerate() {
             let logic_type = col.datatype();
 
-            if bit_index(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
+            if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
                 values.push(Arc::new(DataValue::none(logic_type)));
             } else if let Some(len) = logic_type.raw_len() {
                 /// fixed length (e.g.: int)
@@ -125,62 +125,62 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true)
+                ColumnDesc::new(LogicalType::Integer, true, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UInteger, false)
+                ColumnDesc::new(LogicalType::UInteger, false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c3".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Varchar(Some(2)), false)
+                ColumnDesc::new(LogicalType::Varchar(Some(2)), false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c4".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Smallint, false)
+                ColumnDesc::new(LogicalType::Smallint, false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c5".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::USmallint, false)
+                ColumnDesc::new(LogicalType::USmallint, false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c6".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Float, false)
+                ColumnDesc::new(LogicalType::Float, false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c7".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Double, false)
+                ColumnDesc::new(LogicalType::Double, false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c8".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Tinyint, false)
+                ColumnDesc::new(LogicalType::Tinyint, false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c9".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UTinyint, false)
+                ColumnDesc::new(LogicalType::UTinyint, false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c10".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false)
+                ColumnDesc::new(LogicalType::Boolean, false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c11".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::DateTime, false)
+                ColumnDesc::new(LogicalType::DateTime, false, false)
             )),
             Arc::new(ColumnCatalog::new(
                 "c12".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Date, false)
+                ColumnDesc::new(LogicalType::Date, false, false)
             )),
         ];
 

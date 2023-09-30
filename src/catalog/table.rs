@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::ColumnId;
+use crate::types::index::{IndexMeta, IndexMetaRef};
 
 pub type TableName = Arc<String>;
 
@@ -12,9 +13,16 @@ pub struct TableCatalog {
     /// Mapping from column names to column ids
     column_idxs: BTreeMap<String, ColumnId>,
     pub(crate) columns: BTreeMap<ColumnId, ColumnRef>,
+    pub indexes: Vec<IndexMetaRef>
 }
 
 impl TableCatalog {
+    pub(crate) fn get_unique_index(&self, col_id: &ColumnId) -> Option<&IndexMetaRef> {
+        self.indexes
+            .iter()
+            .find(|meta| meta.is_unique && &meta.column_ids[0] == col_id)
+    }
+
     pub(crate) fn get_column_by_id(&self, id: &ColumnId) -> Option<&ColumnRef> {
         self.columns.get(id)
     }
@@ -54,8 +62,9 @@ impl TableCatalog {
             return Err(CatalogError::Duplicated("column", col.name.clone()));
         }
 
-        let col_id = col.id;
+        let col_id = self.columns.len() as u32;
 
+        col.id = Some(col_id);
         col.table_name = Some(self.name.clone());
         self.column_idxs.insert(col.name.clone(), col_id);
         self.columns.insert(col_id, Arc::new(col));
@@ -63,14 +72,24 @@ impl TableCatalog {
         Ok(col_id)
     }
 
+    pub(crate) fn add_index_meta(&mut self, mut index: IndexMeta) -> &IndexMeta {
+        let index_id = self.indexes.len();
+
+        index.id = index_id as u32;
+        self.indexes.push(Arc::new(index));
+
+        &self.indexes[index_id]
+    }
+
     pub(crate) fn new(
         name: TableName,
-        columns: Vec<ColumnCatalog>,
+        columns: Vec<ColumnCatalog>
     ) -> Result<TableCatalog, CatalogError> {
         let mut table_catalog = TableCatalog {
             name,
             column_idxs: BTreeMap::new(),
             columns: BTreeMap::new(),
+            indexes: vec![],
         };
 
         for col_catalog in columns.into_iter() {
@@ -78,6 +97,17 @@ impl TableCatalog {
         }
 
         Ok(table_catalog)
+    }
+
+    pub(crate) fn new_with_indexes(
+        name: TableName,
+        columns: Vec<ColumnCatalog>,
+        indexes: Vec<IndexMetaRef>
+    ) -> Result<TableCatalog, CatalogError> {
+        let mut catalog = TableCatalog::new(name, columns)?;
+        catalog.indexes = indexes;
+
+        Ok(catalog)
     }
 }
 
@@ -93,8 +123,8 @@ mod tests {
     // | 1         | true     |
     // | 2         | false    |
     fn test_table_catalog() {
-        let col0 = ColumnCatalog::new("a".into(), false, ColumnDesc::new(LogicalType::Integer, false));
-        let col1 = ColumnCatalog::new("b".into(), false, ColumnDesc::new(LogicalType::Boolean, false));
+        let col0 = ColumnCatalog::new("a".into(), false, ColumnDesc::new(LogicalType::Integer, false, false));
+        let col1 = ColumnCatalog::new("b".into(), false, ColumnDesc::new(LogicalType::Boolean, false, false));
         let col_catalogs = vec![col0, col1];
         let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs).unwrap();
 

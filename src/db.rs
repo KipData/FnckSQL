@@ -6,6 +6,7 @@ use crate::execution::ExecutorError;
 use crate::execution::executor::{build, try_collect};
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
+use crate::optimizer::OptimizerError;
 use crate::optimizer::rule::RuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
@@ -64,7 +65,7 @@ impl<S: Storage> Database<S> {
         // println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan = Self::default_optimizer(source_plan)
-            .find_best();
+            .find_best()?;
         // println!("best_plan plan: {:#?}", best_plan);
 
         let mut stream = build(best_plan, &self.storage);
@@ -75,14 +76,28 @@ impl<S: Storage> Database<S> {
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
             .batch(
-                "Predicate pushdown".to_string(),
+                "Simplify Filter".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![RuleImpl::SimplifyFilter]
+            )
+            .batch(
+                "Predicate Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
-                    RuleImpl::PushPredicateThroughJoin
+                    RuleImpl::PushPredicateThroughJoin,
+                    RuleImpl::PushPredicateIntoScan
                 ]
             )
             .batch(
-                "Limit pushdown".to_string(),
+                "Column Pruning".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    RuleImpl::PushProjectThroughChild,
+                    RuleImpl::PushProjectIntoScan
+                ]
+            )
+            .batch(
+                "Limit Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::LimitProjectTranspose,
@@ -92,15 +107,7 @@ impl<S: Storage> Database<S> {
                 ],
             )
             .batch(
-                "Column pruning".to_string(),
-                HepBatchStrategy::fix_point_topdown(10),
-                vec![
-                    RuleImpl::PushProjectThroughChild,
-                    RuleImpl::PushProjectIntoScan
-                ]
-            )
-            .batch(
-                "Combine operators".to_string(),
+                "Combine Operators".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::CollapseProject,
@@ -138,6 +145,12 @@ pub enum DatabaseError {
     ),
     #[error("Internal error: {0}")]
     InternalError(String),
+    #[error("optimizer error: {0}")]
+    OptimizerError(
+        #[source]
+        #[from]
+        OptimizerError
+    )
 }
 
 #[cfg(test)]
@@ -155,12 +168,12 @@ mod test {
             ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true)
+                ColumnDesc::new(LogicalType::Integer, true, false)
             ),
             ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false)
+                ColumnDesc::new(LogicalType::Boolean, false, false)
             ),
         ];
 
@@ -182,13 +195,18 @@ mod test {
     async fn test_crud_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let kipsql = Database::with_kipdb(temp_dir.path()).await?;
-        let _ = kipsql.run("create table t1 (a int primary key, b int, k int)").await?;
+
+        let _ = kipsql.run("create table t1 (a int primary key, b int unique null, k int, z varchar unique null)").await?;
         let _ = kipsql.run("create table t2 (c int primary key, d int unsigned null, e datetime)").await?;
-        let _ = kipsql.run("insert into t1 (a, b, k) values (-99, 1, 1), (-1, 2, 2), (5, 2, 2)").await?;
+        let _ = kipsql.run("insert into t1 (a, b, k, z) values (-99, 1, 1, 'k'), (-1, 2, 2, 'i'), (5, 3, 2, 'p')").await?;
         let _ = kipsql.run("insert into t2 (d, c, e) values (2, 1, '2021-05-20 21:00:00'), (3, 4, '2023-09-10 00:00:00')").await?;
         let _ = kipsql.run("create table t3 (a int primary key, b decimal(4,2))").await?;
         let _ = kipsql.run("insert into t3 (a, b) values (1, 1111), (2, 2.01), (3, 3.00)").await?;
         let _ = kipsql.run("insert into t3 (a, b) values (4, 4444), (5, 5222), (6, 1.00)").await?;
+
+        println!("show tables:");
+        let tuples_show_tables = kipsql.run("show tables").await?;
+        println!("{}", create_table(&tuples_show_tables));
 
         println!("full t1:");
         let tuples_full_fields_t1 = kipsql.run("select * from t1").await?;
@@ -199,7 +217,7 @@ mod test {
         println!("{}", create_table(&tuples_full_fields_t2));
 
         println!("projection_and_filter:");
-        let tuples_projection_and_filter = kipsql.run("select a from t1 where a <= 1").await?;
+        let tuples_projection_and_filter = kipsql.run("select a from t1 where b > 1").await?;
         println!("{}", create_table(&tuples_projection_and_filter));
 
         println!("projection_and_sort:");
@@ -281,19 +299,21 @@ mod test {
         println!("{}", create_table(&tuples_distinct_t1));
 
         println!("update t1 with filter:");
-        let _ = kipsql.run("update t1 set b = 0 where b > 1").await?;
+        let _ = kipsql.run("update t1 set b = 0 where b = 1").await?;
         println!("after t1:");
         let update_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&update_after_full_t1));
 
         println!("insert overwrite t1:");
-        let _ = kipsql.run("insert overwrite t1 (a, b, k) values (-1, 1, 1)").await?;
+        let _ = kipsql.run("insert overwrite t1 (a, b, k) values (-99, 1, 0)").await?;
         println!("after t1:");
         let insert_overwrite_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&insert_overwrite_after_full_t1));
 
+        assert!(kipsql.run("insert overwrite t1 (a, b, k) values (-1, 1, 0)").await.is_err());
+
         println!("delete t1 with filter:");
-        let _ = kipsql.run("delete from t1 where b > 1").await?;
+        let _ = kipsql.run("delete from t1 where b = 0").await?;
         println!("after t1:");
         let delete_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&delete_after_full_t1));
@@ -303,10 +323,6 @@ mod test {
 
         println!("drop t1:");
         let _ = kipsql.run("drop table t1").await?;
-
-        println!("show tables:");
-        let tuples_show_tables = kipsql.run("show tables").await?;
-        println!("{}", create_table(&tuples_show_tables));
 
         println!("decimal:");
         let tuples_decimal = kipsql.run("select * from t3").await?;

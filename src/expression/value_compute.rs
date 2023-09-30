@@ -1184,7 +1184,7 @@ mod test {
     }
     
     #[test]
-    fn test_binary_op_Utf8_compare()->Result<(),TypeError>{
+    fn test_binary_op_utf8_compare()->Result<(),TypeError>{
         assert_eq!(binary_op(&DataValue::Utf8(Some("a".to_string())), &DataValue::Utf8(Some("b".to_string())), &BinaryOperator::Gt)?, DataValue::Boolean(Some(false)));
         assert_eq!(binary_op(&DataValue::Utf8(Some("a".to_string())), &DataValue::Utf8(Some("b".to_string())), &BinaryOperator::Lt)?, DataValue::Boolean(Some(true)));
         assert_eq!(binary_op(&DataValue::Utf8(Some("a".to_string())), &DataValue::Utf8(Some("a".to_string())), &BinaryOperator::GtEq)?, DataValue::Boolean(Some(true)));

@@ -231,7 +231,7 @@ mod test {
     use crate::types::value::DataValue;
 
     fn build_join_values<S: Storage>(_s: &S) -> (Vec<(ScalarExpression, ScalarExpression)>, BoxedExecutor, BoxedExecutor) {
-        let desc = ColumnDesc::new(LogicalType::Integer, false);
+        let desc = ColumnDesc::new(LogicalType::Integer, false, false);
 
         let t1_columns = vec![
             Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),

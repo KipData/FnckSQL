@@ -10,13 +10,13 @@ use std::sync::Arc;
 use crate::types::value::{DataValue, ValueRef};
 
 pub struct ShowTables {
-    op: ShowTablesOperator,
+    _op: ShowTablesOperator,
 }
 
 impl From<ShowTablesOperator> for ShowTables {
     fn from(op: ShowTablesOperator) -> Self {
         ShowTables {
-            op
+            _op: op
         }
     }
 }
@@ -30,23 +30,21 @@ impl<S: Storage> Executor<S> for ShowTables {
 impl ShowTables {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn _execute<S: Storage>(self, storage: S) {
-        if let Some(tables) = storage.show_tables().await {
-            for (table,column_count) in tables {
-                let columns: Vec<ColumnRef> = vec![
-                    Arc::new(ColumnCatalog::new_dummy("TABLES".to_string())),
-                    Arc::new(ColumnCatalog::new_dummy("COLUMN_COUNT".to_string())),
-                ];
-                let values: Vec<ValueRef> = vec![
-                    Arc::new(DataValue::Utf8(Some(table))),
-                    Arc::new(DataValue::UInt32(Some(column_count as u32))),
-                ];
+        let tables = storage.show_tables().await?;
 
-                yield Tuple {
-                    id: None,
-                    columns,
-                    values,
-                };
-            }
+        for table in tables {
+            let columns: Vec<ColumnRef> = vec![
+                Arc::new(ColumnCatalog::new_dummy("TABLES".to_string())),
+            ];
+            let values: Vec<ValueRef> = vec![
+                Arc::new(DataValue::Utf8(Some(table))),
+            ];
+
+            yield Tuple {
+                id: None,
+                columns,
+                values,
+            };
         }
     }
 }

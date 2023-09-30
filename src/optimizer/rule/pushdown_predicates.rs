@@ -7,6 +7,7 @@ use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
+use crate::optimizer::OptimizerError;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
@@ -18,6 +19,16 @@ lazy_static! {
             predicate: |op| matches!(op, Operator::Filter(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
                 predicate: |op| matches!(op, Operator::Join(_)),
+                children: PatternChildrenPredicate::None,
+            }]),
+        }
+    };
+
+    static ref PUSH_PREDICATE_INTO_SCAN: Pattern = {
+        Pattern {
+            predicate: |op| matches!(op, Operator::Filter(_)),
+            children: PatternChildrenPredicate::Predicate(vec![Pattern {
+                predicate: |op| matches!(op, Operator::Scan(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
@@ -92,11 +103,11 @@ impl Rule for PushPredicateThroughJoin {
     }
 
     // TODO: pushdown_predicates need to consider output columns
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         let child_id = graph.children_at(node_id)[0];
         if let Operator::Join(child_op) = graph.operator(child_id) {
             if !matches!(child_op.join_type, JoinType::Inner | JoinType::Left | JoinType::Right) {
-                return ;
+                return Ok(());
             }
 
             let join_childs = graph.children_at(child_id);
@@ -194,22 +205,109 @@ impl Rule for PushPredicateThroughJoin {
                 graph.remove_node(node_id, false);
             }
         }
+
+        Ok(())
+    }
+}
+
+pub struct PushPredicateIntoScan {
+
+}
+
+impl Rule for PushPredicateIntoScan {
+    fn pattern(&self) -> &Pattern {
+        &PUSH_PREDICATE_INTO_SCAN
+    }
+
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+        if let Operator::Filter(op) = graph.operator(node_id) {
+            let child_id = graph.children_at(node_id)[0];
+            if let Operator::Scan(child_op) = graph.operator(child_id) {
+                if child_op.index_by.is_some() {
+                    return Ok(())
+                }
+
+                //FIXME: now only support unique
+                for meta in &child_op.index_metas {
+                    let mut option = op.predicate.convert_binary(&meta.column_ids[0])?;
+
+                    if let Some(mut binary) = option.take() {
+                        binary.scope_aggregation()?;
+                        let rearrange_binaries = binary.rearrange()?;
+
+                        if !rearrange_binaries.is_empty() {
+                            let mut scan_by_index = child_op.clone();
+                            scan_by_index.index_by = Some((meta.clone(), rearrange_binaries));
+
+                            // The constant expression extracted in prewhere is used to
+                            // reduce the data scanning range and cannot replace the role of Filter.
+                            graph.replace_node(
+                                child_id,
+                                OptExprNode::OperatorRef(
+                                    Operator::Scan(scan_by_index)
+                                )
+                            );
+
+                            return Ok(())
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::Bound;
+    use std::sync::Arc;
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::db::DatabaseError;
     use crate::expression::{BinaryOperator, ScalarExpression};
+    use crate::expression::simplify::ConstantBinary::Scope;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::RuleImpl;
     use crate::planner::operator::Operator;
     use crate::types::LogicalType;
+    use crate::types::value::DataValue;
 
     #[tokio::test]
-    async fn test_push_predicate_through_join_in_left_join() -> Result<(), ExecutorError> {
+    async fn test_push_predicate_into_scan() -> Result<(), DatabaseError> {
+        // 1 - c2 < 0 => c2 > 1
+        let plan = select_sql_run("select * from t1 where -(1 - c2) > 0").await?;
+
+        let best_plan = HepOptimizer::new(plan)
+            .batch(
+                "simplify_filter".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![RuleImpl::SimplifyFilter]
+            )
+            .batch(
+                "test_push_predicate_into_scan".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![RuleImpl::PushPredicateIntoScan]
+            )
+            .find_best()?;
+
+        if let Operator::Scan(op) = &best_plan.childrens[0].childrens[0].operator {
+            let mock_binaries = vec![Scope {
+                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
+                max: Bound::Unbounded
+            }];
+
+            assert_eq!(op.index_by.clone().unwrap().1, mock_binaries);
+        } else {
+            unreachable!("Should be a filter operator")
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_push_predicate_through_join_in_left_join() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
 
         let best_plan = HepOptimizer::new(plan)
@@ -218,7 +316,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![RuleImpl::PushPredicateThroughJoin]
             )
-            .find_best();
+            .find_best()?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -250,7 +348,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_push_predicate_through_join_in_right_join() -> Result<(), ExecutorError> {
+    async fn test_push_predicate_through_join_in_right_join() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
 
         let best_plan = HepOptimizer::new(plan)
@@ -259,7 +357,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![RuleImpl::PushPredicateThroughJoin]
             )
-            .find_best();
+            .find_best()?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -291,7 +389,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_push_predicate_through_join_in_inner_join() -> Result<(), ExecutorError> {
+    async fn test_push_predicate_through_join_in_inner_join() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
 
         let best_plan = HepOptimizer::new(plan)
@@ -300,7 +398,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![RuleImpl::PushPredicateThroughJoin]
             )
-            .find_best();
+            .find_best()?;
 
         if let Operator::Join(_) = &best_plan.childrens[0].operator {
 
