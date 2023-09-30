@@ -2,6 +2,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ColumnDef, ColumnOption};
 use crate::catalog::TableName;
+use crate::expression::ScalarExpression;
 
 use crate::types::{ColumnId, LogicalType};
 
@@ -14,16 +15,23 @@ pub struct ColumnCatalog {
     pub table_name: Option<TableName>,
     pub nullable: bool,
     pub desc: ColumnDesc,
+    pub ref_expr: Option<ScalarExpression>,
 }
 
 impl ColumnCatalog {
-    pub(crate) fn new(column_name: String, nullable: bool, column_desc: ColumnDesc) -> ColumnCatalog {
+    pub(crate) fn new(
+        column_name: String,
+        nullable: bool,
+        column_desc: ColumnDesc,
+        ref_expr: Option<ScalarExpression>
+    ) -> ColumnCatalog {
         ColumnCatalog {
             id: None,
             name: column_name,
             table_name: None,
             nullable,
             desc: column_desc,
+            ref_expr,
         }
     }
 
@@ -34,6 +42,7 @@ impl ColumnCatalog {
             table_name: None,
             nullable: false,
             desc: ColumnDesc::new(LogicalType::Varchar(None), false, false),
+            ref_expr: None,
         }
     }
 
@@ -75,7 +84,7 @@ impl From<ColumnDef> for ColumnCatalog {
             }
         }
 
-        ColumnCatalog::new(column_name, nullable, column_desc)
+        ColumnCatalog::new(column_name, nullable, column_desc, None)
     }
 }
 

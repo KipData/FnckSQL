@@ -9,7 +9,10 @@ lazy_static! {
     static ref SIMPLIFY_FILTER_RULE: Pattern = {
         Pattern {
             predicate: |op| matches!(op, Operator::Filter(_)),
-            children: PatternChildrenPredicate::None,
+            children: PatternChildrenPredicate::Predicate(vec![Pattern {
+                predicate: |op| !matches!(op, Operator::Aggregate(_)),
+                children: PatternChildrenPredicate::Recursive,
+            }]),
         }
     };
 }
@@ -43,7 +46,7 @@ mod test {
     use crate::binder::test::select_sql_run;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::DatabaseError;
-    use crate::expression::{BinaryOperator, ScalarExpression};
+    use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
     use crate::expression::simplify::ConstantBinary;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -74,6 +77,12 @@ mod test {
         // c1 > 0
         let plan_8 = select_sql_run("select * from t1 where 1 < c1 + 1").await?;
 
+        // c1 < 24
+        let plan_9 = select_sql_run("select * from t1 where (-1 - c1) + 1 > 24").await?;
+
+        // c1 < 24
+        let plan_10 = select_sql_run("select * from t1 where 24 < (-1 - c1) + 1").await?;
+
         let op = |plan: LogicalPlan, expr: &str| -> Result<Option<ConstantBinary>, DatabaseError> {
             let best_plan = HepOptimizer::new(plan.clone())
                 .batch(
@@ -91,10 +100,23 @@ mod test {
             }
         };
 
-        assert_eq!(op(plan_1, "-(c1 + 1) > 1")?, op(plan_5, "1 < -(c1 + 1)")?);
-        assert_eq!(op(plan_2, "-(1 - c1) > 1")?, op(plan_6, "1 < -(1 - c1)")?);
-        assert_eq!(op(plan_3, "-c1 > 1")?, op(plan_7, "1 < -c1")?);
-        assert_eq!(op(plan_4, "c1 + 1 > 1")?, op(plan_8, "1 < c1 + 1")?);
+        let op_1 = op(plan_1, "-(c1 + 1) > 1")?;
+        let op_2 = op(plan_2, "-(1 - c1) > 1")?;
+        let op_3 = op(plan_3, "-c1 > 1")?;
+        let op_4 = op(plan_4, "c1 + 1 > 1")?;
+        let op_5 = op(plan_9, "(-1 - c1) + 1 > 24")?;
+
+        assert!(op_1.is_some());
+        assert!(op_2.is_some());
+        assert!(op_3.is_some());
+        assert!(op_4.is_some());
+        assert!(op_5.is_some());
+
+        assert_eq!(op_1, op(plan_5, "1 < -(c1 + 1)")?);
+        assert_eq!(op_2, op(plan_6, "1 < -(1 - c1)")?);
+        assert_eq!(op_3, op(plan_7, "1 < -c1")?);
+        assert_eq!(op_4, op(plan_8, "1 < c1 + 1")?);
+        assert_eq!(op_5, op(plan_10, "24 < (-1 - c1) + 1")?);
 
         Ok(())
     }
@@ -147,13 +169,17 @@ mod test {
                 filter_op.predicate,
                 ScalarExpression::Binary {
                     op: BinaryOperator::Lt,
-                    left_expr: Box::new(ScalarExpression::Binary {
+                    left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c1_col))),
+                    right_expr: Box::new(ScalarExpression::Binary {
                         op: BinaryOperator::Minus,
-                        left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c1_col))),
-                        right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(-1))))),
+                        left_expr: Box::new(ScalarExpression::Unary {
+                            op: UnaryOperator::Minus,
+                            expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
+                            ty: LogicalType::Integer,
+                        }),
+                        right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(1))))),
                         ty: LogicalType::Integer,
                     }),
-                    right_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
                     ty: LogicalType::Boolean,
                 }
             )

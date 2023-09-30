@@ -233,11 +233,13 @@ impl ConstantBinary {
     }
 }
 
+#[derive(Debug)]
 enum Replace {
     Binary(ReplaceBinary),
     Unary(ReplaceUnary),
 }
 
+#[derive(Debug)]
 struct ReplaceBinary {
     column_expr: ScalarExpression,
     val_expr: ScalarExpression,
@@ -246,6 +248,7 @@ struct ReplaceBinary {
     is_column_left: bool
 }
 
+#[derive(Debug)]
 struct ReplaceUnary {
     child_expr: ScalarExpression,
     op: UnaryOperator,
@@ -300,35 +303,40 @@ impl ScalarExpression {
         }
     }
 
-    fn unpack_col(&self) -> Option<ColumnRef> {
+    fn unpack_col(&self, is_deep: bool) -> Option<ColumnRef> {
         match self {
             ScalarExpression::ColumnRef(col) => Some(col.clone()),
-            ScalarExpression::Alias { expr, .. } => expr.unpack_col(),
-            ScalarExpression::Unary { expr, .. } => expr.unpack_col(),
+            ScalarExpression::Alias { expr, .. } => expr.unpack_col(is_deep),
+            ScalarExpression::Unary { expr, .. } => expr.unpack_col(is_deep),
+            ScalarExpression::Binary { left_expr, right_expr, .. } => {
+                if !is_deep {
+                    return None;
+                }
+
+                left_expr.unpack_col(true)
+                    .or_else(|| right_expr.unpack_col(true))
+            }
             _ => None
         }
     }
 
     pub fn simplify(&mut self) -> Result<(), TypeError> {
-        self._simplify(&mut None)
+        self._simplify(&mut Vec::new())
     }
 
     // Tips: Indirect expressions like `ScalarExpression:：Alias` will be lost
-    fn _simplify(&mut self, fix_option: &mut Option<Replace>) -> Result<(), TypeError> {
+    fn _simplify(&mut self, replaces: &mut Vec<Replace>) -> Result<(), TypeError> {
         match self {
             ScalarExpression::Binary { left_expr, right_expr, op, ty } => {
-                Self::fix_expr(fix_option, left_expr, right_expr, op)?;
+                Self::fix_expr(replaces, left_expr, right_expr, op)?;
 
                 // `(c1 - 1) and (c1 + 2)` cannot fix!
-                Self::fix_expr(fix_option, right_expr, left_expr, op)?;
+                Self::fix_expr(replaces, right_expr, left_expr, op)?;
 
-                if matches!(op, BinaryOperator::Plus | BinaryOperator::Divide
-                    | BinaryOperator::Minus | BinaryOperator::Multiply)
-                {
-                    match (left_expr.unpack_col(), right_expr.unpack_col()) {
-                        (Some(_), Some(_)) => (),
+                if Self::is_arithmetic(op) {
+                    match (left_expr.unpack_col(false), right_expr.unpack_col(false)) {
                         (Some(col), None) => {
-                            fix_option.replace(Replace::Binary(ReplaceBinary{
+                            replaces.push(Replace::Binary(ReplaceBinary{
                                 column_expr: ScalarExpression::ColumnRef(col),
                                 val_expr: right_expr.as_ref().clone(),
                                 op: *op,
@@ -337,7 +345,7 @@ impl ScalarExpression {
                             }));
                         }
                         (None, Some(col)) => {
-                            fix_option.replace(Replace::Binary(ReplaceBinary{
+                            replaces.push(Replace::Binary(ReplaceBinary{
                                 column_expr: ScalarExpression::ColumnRef(col),
                                 val_expr: left_expr.as_ref().clone(),
                                 op: *op,
@@ -345,11 +353,38 @@ impl ScalarExpression {
                                 is_column_left: false,
                             }));
                         }
+                        (None, None) => {
+                            if replaces.is_empty() {
+                               return Ok(());
+                            }
+
+                            match (left_expr.unpack_col(true), right_expr.unpack_col(true)) {
+                                (Some(col), None) => {
+                                    replaces.push(Replace::Binary(ReplaceBinary{
+                                        column_expr: ScalarExpression::ColumnRef(col),
+                                        val_expr: right_expr.as_ref().clone(),
+                                        op: *op,
+                                        ty: *ty,
+                                        is_column_left: true,
+                                    }));
+                                }
+                                (None, Some(col)) => {
+                                    replaces.push(Replace::Binary(ReplaceBinary{
+                                        column_expr: ScalarExpression::ColumnRef(col),
+                                        val_expr: left_expr.as_ref().clone(),
+                                        op: *op,
+                                        ty: *ty,
+                                        is_column_left: false,
+                                    }));
+                                }
+                                _ => (),
+                            }
+                        }
                         _ => ()
                     }
                 }
             }
-            ScalarExpression::Alias { expr, .. } => expr._simplify(fix_option)?,
+            ScalarExpression::Alias { expr, .. } => expr._simplify(replaces)?,
             ScalarExpression::TypeCast { expr, .. } => {
                 if let Some(val) = expr.unpack_val() {
                     let _ = mem::replace(self, ScalarExpression::Constant(val));
@@ -369,7 +404,7 @@ impl ScalarExpression {
                     );
                     let _ = mem::replace(self, new_expr);
                 } else {
-                    let _ = fix_option.replace(Replace::Unary(
+                    let _ = replaces.push(Replace::Unary(
                         ReplaceUnary {
                             child_expr: expr.as_ref().clone(),
                             op: *op,
@@ -384,23 +419,37 @@ impl ScalarExpression {
         Ok(())
     }
 
+    fn is_arithmetic(op: &mut BinaryOperator) -> bool {
+        matches!(op, BinaryOperator::Plus
+                    | BinaryOperator::Divide
+                    | BinaryOperator::Minus
+                    | BinaryOperator::Multiply)
+    }
+
     fn fix_expr(
-        fix_option: &mut Option<Replace>,
+        replaces: &mut Vec<Replace>,
         left_expr: &mut Box<ScalarExpression>,
         right_expr: &mut Box<ScalarExpression>,
         op: &mut BinaryOperator,
     ) -> Result<(), TypeError> {
-        left_expr._simplify(fix_option)?;
+        left_expr._simplify(replaces)?;
 
-        if let Some(replace) = fix_option.take() {
+        if Self::is_arithmetic(op) {
+            return Ok(());
+        }
+
+        while let Some(replace) = replaces.pop() {
             match replace {
-                Replace::Binary(binary) => Self::fix_binary(binary, left_expr, right_expr, op),
+                Replace::Binary(binary) => {
+                    Self::fix_binary(binary, left_expr, right_expr, op)
+                },
                 Replace::Unary(unary) => {
                     Self::fix_unary(unary, left_expr, right_expr, op);
-                    Self::fix_expr(fix_option, left_expr, right_expr, op)?;
+                    Self::fix_expr(replaces, left_expr, right_expr, op)?;
                 },
             }
         }
+
         Ok(())
     }
 
@@ -541,12 +590,12 @@ impl ScalarExpression {
                     },
                     (None, None) => {
                         if let (Some(col), Some(val)) =
-                            (left_expr.unpack_col(), right_expr.unpack_val())
+                            (left_expr.unpack_col(false), right_expr.unpack_val())
                         {
                             return Ok(Self::new_binary(col_id, *op, col, val, false));
                         }
                         if let (Some(val), Some(col)) =
-                            (left_expr.unpack_val(), right_expr.unpack_col())
+                            (left_expr.unpack_val(), right_expr.unpack_col(false))
                         {
                             return Ok(Self::new_binary(col_id, *op, col, val, true));
                         }

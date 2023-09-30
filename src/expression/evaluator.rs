@@ -18,18 +18,20 @@ impl ScalarExpression {
         match &self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
             ScalarExpression::ColumnRef(col) => {
-                let value = tuple
-                    .columns
-                    .iter()
-                    .find_position(|tul_col| tul_col.name == col.name)
-                    .map(|(i, _)| &tuple.values[i])
+                let value = Self::eval_with_name(&tuple, &col.name)
                     .unwrap_or(&NULL_VALUE)
                     .clone();
 
                 Ok(value)
             },
             ScalarExpression::InputRef{ index, .. } => Ok(tuple.values[*index].clone()),
-            ScalarExpression::Alias{ expr, .. } => expr.eval_column(tuple),
+            ScalarExpression::Alias{ expr, alias } => {
+                if let Some(value) = Self::eval_with_name(&tuple, alias) {
+                    return Ok(value.clone());
+                }
+
+                expr.eval_column(tuple)
+            },
             ScalarExpression::TypeCast{ expr, ty, .. } => {
                 let value = expr.eval_column(tuple)?;
 
@@ -53,5 +55,13 @@ impl ScalarExpression {
             },
             ScalarExpression::AggCall{ .. } => todo!()
         }
+    }
+
+    fn eval_with_name<'a>(tuple: &'a Tuple, name: &String) -> Option<&'a ValueRef> {
+        tuple
+            .columns
+            .iter()
+            .find_position(|tul_col| &tul_col.name == name)
+            .map(|(i, _)| &tuple.values[i])
     }
 }

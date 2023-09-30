@@ -169,11 +169,10 @@ impl<S: Storage> Binder<S> {
         }
         let mut group_raw_set: HashSet<&ScalarExpression, RandomState> = HashSet::from_iter(group_raw_exprs.iter());
 
-        for mut expr in select_items {
+        for expr in select_items {
             if expr.has_agg_call(&self.context) {
                 continue;
             }
-            expr = expr.unpack_alias();
 
             group_raw_set.remove(expr);
 
@@ -227,7 +226,7 @@ impl<S: Storage> Binder<S> {
             }
         }
 
-        if let Some(i) = select_list.iter().position(|column| column.unpack_alias() == expr) {
+        if let Some(i) = select_list.iter().position(|column| column == expr) {
             let expr = &mut select_list[i];
             match expr {
                 ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {
@@ -272,6 +271,9 @@ impl<S: Storage> Binder<S> {
             ScalarExpression::ColumnRef { .. } | ScalarExpression::Alias { .. } => {
                 if self.context.group_by_exprs.contains(expr) {
                     return Ok(());
+                }
+                if matches!(expr, ScalarExpression::Alias { .. }) {
+                    return self.validate_having_orderby(expr.unpack_alias());
                 }
 
                 Err(BindError::AggMiss(

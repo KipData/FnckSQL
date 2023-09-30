@@ -2,6 +2,7 @@ use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
 use crate::binder::BinderContext;
@@ -22,7 +23,7 @@ pub mod simplify;
 /// SELECT a+1, b FROM t1.
 /// a+1 -> ScalarExpression::Unary(a + 1)
 /// b   -> ScalarExpression::ColumnRef()
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub enum ScalarExpression {
     Constant(ValueRef),
     ColumnRef(ColumnRef),
@@ -173,14 +174,16 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     format!("{}", value),
                     true,
-                    ColumnDesc::new(value.logical_type(), false, false)
+                    ColumnDesc::new(value.logical_type(), false, false),
+                    Some(self.clone())
                 ))
             }
             ScalarExpression::Alias { expr, alias } => {
                 Arc::new(ColumnCatalog::new(
                     alias.to_string(),
                     true,
-                    ColumnDesc::new(expr.return_type(), false, false)
+                    ColumnDesc::new(expr.return_type(), false, false),
+                    Some(self.clone())
                 ))
             }
             ScalarExpression::AggCall { kind, args, ty, distinct } => {
@@ -204,7 +207,8 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(ty.clone(), false, false)
+                    ColumnDesc::new(ty.clone(), false, false),
+                    Some(self.clone())
                 ))
             }
             ScalarExpression::InputRef { index, .. } => {
@@ -226,7 +230,8 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(ty.clone(), false, false)
+                    ColumnDesc::new(ty.clone(), false, false),
+                    Some(self.clone())
                 ))
             }
             ScalarExpression::Unary {
@@ -242,7 +247,8 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(ty.clone(), false, false)
+                    ColumnDesc::new(ty.clone(), false, false),
+                    Some(self.clone())
                 ))
             },
             _ => unreachable!()
@@ -250,7 +256,7 @@ impl ScalarExpression {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnaryOperator {
     Plus,
     Minus,
@@ -268,7 +274,7 @@ impl From<SqlUnaryOperator> for UnaryOperator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BinaryOperator {
     Plus,
     Minus,
