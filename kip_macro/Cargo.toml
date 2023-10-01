@@ -1,0 +1,16 @@
+[package]
+name = "kip_macro"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+syn = "1.0"
+quote = "1.0"
+"kip-sql" = { path = ".." }
+
+chrono = "0.4.26"
+rust_decimal = "1"

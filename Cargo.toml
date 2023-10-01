@@ -51,5 +51,6 @@ tempfile = "3.0.7"
 
 [workspace]
 members = [
+  "kip_macro",
   "tests/sqllogictest",
 ]

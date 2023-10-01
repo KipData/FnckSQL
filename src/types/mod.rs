@@ -3,6 +3,9 @@ pub mod value;
 pub mod tuple;
 pub mod index;
 
+use std::any::TypeId;
+use chrono::{NaiveDate, NaiveDateTime};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use sqlparser::ast::ExactNumberInfo;
@@ -37,6 +40,42 @@ pub enum LogicalType {
 }
 
 impl LogicalType {
+    pub fn type_trans<T: 'static>() -> Option<LogicalType> {
+        let type_id = TypeId::of::<T>();
+
+        if type_id == TypeId::of::<i8>() {
+            Some(LogicalType::Tinyint)
+        } else if type_id == TypeId::of::<i16>() {
+            Some(LogicalType::Smallint)
+        } else if type_id == TypeId::of::<i32>() {
+            Some(LogicalType::Integer)
+        } else if type_id == TypeId::of::<i64>() {
+            Some(LogicalType::Bigint)
+        } else if type_id == TypeId::of::<u8>() {
+            Some(LogicalType::UTinyint)
+        } else if type_id == TypeId::of::<u16>() {
+            Some(LogicalType::USmallint)
+        } else if type_id == TypeId::of::<u32>() {
+            Some(LogicalType::UInteger)
+        } else if type_id == TypeId::of::<u64>() {
+            Some(LogicalType::UBigint)
+        } else if type_id == TypeId::of::<f32>() {
+            Some(LogicalType::Float)
+        } else if type_id == TypeId::of::<f64>() {
+            Some(LogicalType::Double)
+        } else if type_id == TypeId::of::<NaiveDate>() {
+            Some(LogicalType::Date)
+        } else if type_id == TypeId::of::<NaiveDateTime>() {
+            Some(LogicalType::DateTime)
+        } else if type_id == TypeId::of::<Decimal>() {
+            Some(LogicalType::Decimal(None, None))
+        } else if type_id == TypeId::of::<String>() {
+            Some(LogicalType::Varchar(None))
+        } else {
+            None
+        }
+    }
+
     pub fn raw_len(&self) -> Option<usize> {
         match self {
             LogicalType::Invalid => Some(0),
