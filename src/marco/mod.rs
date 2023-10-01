@@ -24,10 +24,6 @@
 #[macro_export]
 macro_rules! implement_from_tuple {
     ($struct_name:ident, ($($field_name:ident : $field_type:ty => $closure:expr),+)) => {
-        use crate::types::tuple::Tuple;
-        use crate::types::LogicalType;
-        use crate::types::value::DataValue;
-
         impl From<Tuple> for $struct_name {
             fn from(tuple: Tuple) -> Self {
                 fn try_get<T: 'static>(tuple: &Tuple, field_name: &str) -> Option<DataValue> {
@@ -61,6 +57,9 @@ macro_rules! implement_from_tuple {
 mod test {
     use std::sync::Arc;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::types::LogicalType;
+    use crate::types::tuple::Tuple;
+    use crate::types::value::DataValue;
 
     fn build_tuple() -> Tuple {
         let columns = vec![
