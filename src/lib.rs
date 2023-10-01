@@ -16,38 +16,4 @@ pub mod types;
 mod optimizer;
 pub mod execution;
 pub mod storage;
-
-pub mod mock {
-    use std::sync::Arc;
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::types::LogicalType;
-    use crate::types::tuple::Tuple;
-    use crate::types::value::DataValue;
-
-    pub fn build_tuple() -> Tuple {
-        let columns = vec![
-            Arc::new(ColumnCatalog::new(
-                "c1".to_string(),
-                false,
-                ColumnDesc::new(LogicalType::Integer, true, false),
-                None
-            )),
-            Arc::new(ColumnCatalog::new(
-                "c2".to_string(),
-                false,
-                ColumnDesc::new(LogicalType::Varchar(None), false, false),
-                None
-            )),
-        ];
-        let values = vec![
-            Arc::new(DataValue::Int32(Some(9))),
-            Arc::new(DataValue::Utf8(Some("LOL".to_string()))),
-        ];
-
-        Tuple {
-            id: None,
-            columns,
-            values,
-        }
-    }
-}
+pub mod marco;

@@ -1,4 +1,3 @@
-
 /// # Examples
 ///
 /// ```
@@ -22,11 +21,12 @@
 ///     )
 /// );
 /// ```
+#[macro_export]
 macro_rules! implement_from_tuple {
     ($struct_name:ident, ($($field_name:ident : $field_type:ty => $closure:expr),+)) => {
-        use kip_sql::types::tuple::Tuple;
-        use kip_sql::types::LogicalType;
-        use kip_sql::types::value::DataValue;
+        use crate::types::tuple::Tuple;
+        use crate::types::LogicalType;
+        use crate::types::value::DataValue;
 
         impl From<Tuple> for $struct_name {
             fn from(tuple: Tuple) -> Self {
@@ -59,7 +59,35 @@ macro_rules! implement_from_tuple {
 
 #[cfg(test)]
 mod test {
-    use kip_sql::mock::build_tuple;
+    use std::sync::Arc;
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
+
+    fn build_tuple() -> Tuple {
+        let columns = vec![
+            Arc::new(ColumnCatalog::new(
+                "c1".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Integer, true, false),
+                None
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c2".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Varchar(None), false, false),
+                None
+            )),
+        ];
+        let values = vec![
+            Arc::new(DataValue::Int32(Some(9))),
+            Arc::new(DataValue::Utf8(Some("LOL".to_string()))),
+        ];
+
+        Tuple {
+            id: None,
+            columns,
+            values,
+        }
+    }
 
     #[derive(Default, Debug, PartialEq)]
     struct MyStruct {
