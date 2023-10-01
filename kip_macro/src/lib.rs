@@ -1,5 +1,27 @@
 
-/// e.g. implement_from_tuple!(MyStruct, (name: String, age: u32, address: String));
+/// # Examples
+///
+/// ```
+///struct MyStruct {
+///   c1: i32,
+///   c2: String,
+///}
+///
+///implement_from_tuple!(
+///     MyStruct, (
+///         c1: i32 => |inner: &mut MyStruct, value| {
+///             if let DataValue::Int32(Some(val)) = value {
+///                 inner.c1 = val;
+///             }
+///         },
+///         c2: String => |inner: &mut MyStruct, value| {
+///             if let DataValue::Utf8(Some(val)) = value {
+///                 inner.c2 = val;
+///             }
+///         }
+///     )
+/// );
+/// ```
 macro_rules! implement_from_tuple {
     ($struct_name:ident, ($($field_name:ident : $field_type:ty => $closure:expr),+)) => {
         use kip_sql::types::tuple::Tuple;
