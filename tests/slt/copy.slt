@@ -1,0 +1,17 @@
+statement ok
+create table test_copy (a int primary key, b float, c varchar(10))
+
+
+
+# copy data from tbl file
+query I
+COPY test_copy FROM 'tests/data/copy.tbl' ( DELIMITER '|' );
+----
+import 2 rows
+
+
+query I
+SELECT * FROM test_copy
+----
+0 1.5 one
+1 2.5 two

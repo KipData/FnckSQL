@@ -2,6 +2,7 @@ pub mod errors;
 pub mod value;
 pub mod tuple;
 pub mod index;
+pub mod tuple_builder;
 
 use serde::{Deserialize, Serialize};
 

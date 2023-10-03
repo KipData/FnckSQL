@@ -8,6 +8,7 @@ use futures::TryStreamExt;
 use crate::execution::executor::ddl::create_table::CreateTable;
 use crate::execution::executor::ddl::drop_table::DropTable;
 use crate::execution::executor::ddl::truncate::Truncate;
+use crate::execution::executor::dml::copy_from_file::CopyFromFile;
 use crate::execution::executor::dml::delete::Delete;
 use crate::execution::executor::dml::insert::Insert;
 use crate::execution::executor::dml::update::Update;
@@ -112,6 +113,13 @@ pub fn build<S: Storage>(plan: LogicalPlan, storage: &S) -> BoxedExecutor {
         }
         Operator::Show(op) => {
             ShowTables::from(op).execute(storage)
+        }
+        Operator::CopyFromFile(op) => {
+            CopyFromFile::from(op).execute(storage)
+        }
+        #[warn(unused_assignments)]
+        Operator::CopyToFile(_op) => {
+            todo!()
         }
     }
 }

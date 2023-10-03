@@ -9,6 +9,7 @@ mod drop_table;
 mod truncate;
 mod distinct;
 mod show;
+pub mod copy;
 
 use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
@@ -22,7 +23,7 @@ use crate::types::errors::TypeError;
 
 pub enum InputRefType {
     AggCall,
-    GroupBy
+    GroupBy,
 }
 
 #[derive(Clone)]
@@ -121,12 +122,15 @@ impl<S: Storage> Binder<S> {
                     self.bind_delete(table, selection).await?
                 }
             }
-            Statement::Truncate { table_name, .. } => {
-                self.bind_truncate(table_name).await?
-            }
-            Statement::ShowTables { .. } => {
-                self.bind_show_tables()?
-            }
+            Statement::Truncate { table_name, .. } => self.bind_truncate(table_name).await?,
+            Statement::ShowTables { .. } => self.bind_show_tables()?,
+            Statement::Copy {
+                source,
+                to,
+                target,
+                options,
+                ..
+            } => self.bind_copy(source.clone(), *to, target.clone(), &options).await?,
             _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
@@ -173,7 +177,9 @@ pub enum BindError {
     #[error("catalog error: {0}")]
     CatalogError(#[from] CatalogError),
     #[error("type error: {0}")]
-    TypeError(#[from] TypeError)
+    TypeError(#[from] TypeError),
+    #[error("copy error: {0}")]
+    UnsupportedCopySource(String),
 }
 
 #[cfg(test)]

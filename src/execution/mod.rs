@@ -40,4 +40,20 @@ pub enum ExecutorError {
     ),
     #[error("Internal error: {0}")]
     InternalError(String),
+    #[error("io error")]
+    Io(
+        #[from]
+        #[source]
+        std::io::Error,
+    ),
+    #[error("csv error")]
+    Csv(
+        #[from]
+        #[source]
+        csv::Error,
+    ),
+    #[error("tuple length mismatch: expected {expected} but got {actual}")]
+    LengthMismatch { expected: usize, actual: usize },
+    #[error("abort")]
+    Abort,
 }
