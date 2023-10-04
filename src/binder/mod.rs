@@ -1,4 +1,5 @@
 pub mod aggregate;
+pub mod copy;
 mod create_table;
 mod delete;
 mod distinct;
@@ -129,6 +130,16 @@ impl<S: Storage> Binder<S> {
             }
             Statement::Truncate { table_name, .. } => self.bind_truncate(table_name).await?,
             Statement::ShowTables { .. } => self.bind_show_tables()?,
+            Statement::Copy {
+                source,
+                to,
+                target,
+                options,
+                ..
+            } => {
+                self.bind_copy(source.clone(), *to, target.clone(), &options)
+                    .await?
+            }
             _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
@@ -176,6 +187,8 @@ pub enum BindError {
     CatalogError(#[from] CatalogError),
     #[error("type error: {0}")]
     TypeError(#[from] TypeError),
+    #[error("copy error: {0}")]
+    UnsupportedCopySource(String),
 }
 
 #[cfg(test)]

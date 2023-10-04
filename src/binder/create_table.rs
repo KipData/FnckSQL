@@ -17,7 +17,7 @@ impl<S: Storage> Binder<S> {
         &mut self,
         name: &ObjectName,
         columns: &[ColumnDef],
-        constraints: &[TableConstraint],
+        _constraints: &[TableConstraint],
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
         let (_, name) = split_name(&name)?;

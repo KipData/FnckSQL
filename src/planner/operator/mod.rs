@@ -1,4 +1,6 @@
 pub mod aggregate;
+pub mod copy_from_file;
+pub mod copy_to_file;
 pub mod create_table;
 pub mod delete;
 pub mod drop_table;
@@ -16,6 +18,8 @@ pub mod values;
 
 use crate::catalog::ColumnRef;
 use crate::expression::ScalarExpression;
+use crate::planner::operator::copy_from_file::CopyFromFileOperator;
+use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
@@ -54,6 +58,9 @@ pub enum Operator {
     Truncate(TruncateOperator),
     // Show
     Show(ShowTablesOperator),
+    // Copy
+    CopyFromFile(CopyFromFileOperator),
+    CopyToFile(CopyToFileOperator),
 }
 
 impl Operator {

@@ -3,6 +3,7 @@ use crate::execution::ExecutorError;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
+use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
 
 pub struct CreateTable {
@@ -28,7 +29,10 @@ impl CreateTable {
             table_name,
             columns,
         } = self.op;
-
-        let _ = storage.create_table(table_name, columns).await?;
+        let _ = storage.create_table(table_name.clone(), columns).await?;
+        let tuple_builder = TupleBuilder::new_result();
+        let tuple = tuple_builder
+            .push_result("CREATE TABLE SUCCESS", format!("{}", table_name).as_str())?;
+        yield tuple;
     }
 }
