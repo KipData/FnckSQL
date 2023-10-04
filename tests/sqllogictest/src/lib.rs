@@ -1,7 +1,7 @@
-use std::time::Instant;
-use sqllogictest::{AsyncDB, DBOutput, DefaultColumnType};
 use kip_sql::db::{Database, DatabaseError};
 use kip_sql::storage::kip::KipStorage;
+use sqllogictest::{AsyncDB, DBOutput, DefaultColumnType};
+use std::time::Instant;
 
 pub struct KipSQL {
     pub db: Database<KipStorage>,

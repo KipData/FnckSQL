@@ -3,8 +3,8 @@ use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::batch::{HepBatch, HepBatchStrategy};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
-use crate::optimizer::OptimizerError;
 use crate::optimizer::rule::RuleImpl;
+use crate::optimizer::OptimizerError;
 use crate::planner::LogicalPlan;
 
 pub struct HepOptimizer {
@@ -44,7 +44,12 @@ impl HepOptimizer {
         Ok(self.graph.to_plan())
     }
 
-    fn apply_batch(&mut self, HepBatch{ rules, strategy, .. }: &HepBatch) -> Result<bool, OptimizerError> {
+    fn apply_batch(
+        &mut self,
+        HepBatch {
+            rules, strategy, ..
+        }: &HepBatch,
+    ) -> Result<bool, OptimizerError> {
         let start_ver = self.graph.version;
 
         for rule in rules {
@@ -67,5 +72,4 @@ impl HepOptimizer {
 
         Ok(after_version != self.graph.version)
     }
-
 }

@@ -55,11 +55,11 @@ macro_rules! implement_from_tuple {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::types::LogicalType;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
+    use crate::types::LogicalType;
+    use std::sync::Arc;
 
     fn build_tuple() -> Tuple {
         let columns = vec![
@@ -67,13 +67,13 @@ mod test {
                 "c1".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Varchar(None), false, false),
-                None
+                None,
             )),
         ];
         let values = vec![

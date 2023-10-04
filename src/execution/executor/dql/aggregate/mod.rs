@@ -1,12 +1,14 @@
+mod avg;
 mod count;
+pub mod hash_agg;
+mod min_max;
 pub mod simple_agg;
 mod sum;
-mod min_max;
-mod avg;
-pub mod hash_agg;
 
 use crate::execution::executor::dql::aggregate::avg::AvgAccumulator;
-use crate::execution::executor::dql::aggregate::count::{CountAccumulator, DistinctCountAccumulator};
+use crate::execution::executor::dql::aggregate::count::{
+    CountAccumulator, DistinctCountAccumulator,
+};
 use crate::execution::executor::dql::aggregate::min_max::MinMaxAccumulator;
 use crate::execution::executor::dql::aggregate::sum::{DistinctSumAccumulator, SumAccumulator};
 use crate::execution::ExecutorError;
@@ -26,7 +28,10 @@ pub trait Accumulator: Send + Sync {
 }
 
 fn create_accumulator(expr: &ScalarExpression) -> Box<dyn Accumulator> {
-    if let ScalarExpression::AggCall { kind, ty, distinct, .. } = expr {
+    if let ScalarExpression::AggCall {
+        kind, ty, distinct, ..
+    } = expr
+    {
         match (kind, distinct) {
             (AggKind::Count, false) => Box::new(CountAccumulator::new()),
             (AggKind::Count, true) => Box::new(DistinctCountAccumulator::new()),

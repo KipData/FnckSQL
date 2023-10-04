@@ -1,18 +1,18 @@
-use std::path::PathBuf;
 use sqlparser::parser::ParserError;
+use std::path::PathBuf;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution::ExecutorError;
 use crate::execution::executor::{build, try_collect};
+use crate::execution::ExecutorError;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
-use crate::optimizer::OptimizerError;
 use crate::optimizer::rule::RuleImpl;
+use crate::optimizer::OptimizerError;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
-use crate::storage::{Storage, StorageError};
 use crate::storage::kip::KipStorage;
 use crate::storage::memory::MemStorage;
+use crate::storage::{Storage, StorageError};
 use crate::types::tuple::Tuple;
 
 pub struct Database<S: Storage> {
@@ -64,8 +64,7 @@ impl<S: Storage> Database<S> {
         let source_plan = binder.bind(&stmts[0]).await?;
         // println!("source_plan plan: {:#?}", source_plan);
 
-        let best_plan = Self::default_optimizer(source_plan)
-            .find_best()?;
+        let best_plan = Self::default_optimizer(source_plan).find_best()?;
         // println!("best_plan plan: {:#?}", best_plan);
 
         let mut stream = build(best_plan, &self.storage);
@@ -78,23 +77,23 @@ impl<S: Storage> Database<S> {
             .batch(
                 "Simplify Filter".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::SimplifyFilter]
+                vec![RuleImpl::SimplifyFilter],
             )
             .batch(
                 "Predicate Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::PushPredicateThroughJoin,
-                    RuleImpl::PushPredicateIntoScan
-                ]
+                    RuleImpl::PushPredicateIntoScan,
+                ],
             )
             .batch(
                 "Column Pruning".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::PushProjectThroughChild,
-                    RuleImpl::PushProjectIntoScan
-                ]
+                    RuleImpl::PushProjectIntoScan,
+                ],
             )
             .batch(
                 "Limit Pushdown".to_string(),
@@ -109,10 +108,7 @@ impl<S: Storage> Database<S> {
             .batch(
                 "Combine Operators".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![
-                    RuleImpl::CollapseProject,
-                    RuleImpl::CombineFilter
-                ]
+                vec![RuleImpl::CollapseProject, RuleImpl::CombineFilter],
             )
     }
 }
@@ -141,7 +137,7 @@ pub enum DatabaseError {
     ExecutorError(
         #[source]
         #[from]
-        ExecutorError
+        ExecutorError,
     ),
     #[error("Internal error: {0}")]
     InternalError(String),
@@ -149,19 +145,19 @@ pub enum DatabaseError {
     OptimizerError(
         #[source]
         #[from]
-        OptimizerError
-    )
+        OptimizerError,
+    ),
 }
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-    use tempfile::TempDir;
     use crate::catalog::{ColumnCatalog, ColumnDesc, TableName};
     use crate::db::{Database, DatabaseError};
     use crate::storage::{Storage, StorageError};
-    use crate::types::LogicalType;
     use crate::types::tuple::create_table;
+    use crate::types::LogicalType;
+    use std::sync::Arc;
+    use tempfile::TempDir;
 
     async fn build_table(storage: &impl Storage) -> Result<TableName, StorageError> {
         let columns = vec![
@@ -169,17 +165,19 @@ mod test {
                 "c1".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false),
-                None
+                None,
             ),
             ColumnCatalog::new(
                 "c2".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Boolean, false, false),
-                None
+                None,
             ),
         ];
 
-        Ok(storage.create_table(Arc::new("t1".to_string()), columns).await?)
+        Ok(storage
+            .create_table(Arc::new("t1".to_string()), columns)
+            .await?)
     }
 
     #[tokio::test]
@@ -199,12 +197,20 @@ mod test {
         let kipsql = Database::with_kipdb(temp_dir.path()).await?;
 
         let _ = kipsql.run("create table t1 (a int primary key, b int unique null, k int, z varchar unique null)").await?;
-        let _ = kipsql.run("create table t2 (c int primary key, d int unsigned null, e datetime)").await?;
+        let _ = kipsql
+            .run("create table t2 (c int primary key, d int unsigned null, e datetime)")
+            .await?;
         let _ = kipsql.run("insert into t1 (a, b, k, z) values (-99, 1, 1, 'k'), (-1, 2, 2, 'i'), (5, 3, 2, 'p')").await?;
         let _ = kipsql.run("insert into t2 (d, c, e) values (2, 1, '2021-05-20 21:00:00'), (3, 4, '2023-09-10 00:00:00')").await?;
-        let _ = kipsql.run("create table t3 (a int primary key, b decimal(4,2))").await?;
-        let _ = kipsql.run("insert into t3 (a, b) values (1, 1111), (2, 2.01), (3, 3.00)").await?;
-        let _ = kipsql.run("insert into t3 (a, b) values (4, 4444), (5, 5222), (6, 1.00)").await?;
+        let _ = kipsql
+            .run("create table t3 (a int primary key, b decimal(4,2))")
+            .await?;
+        let _ = kipsql
+            .run("insert into t3 (a, b) values (1, 1111), (2, 2.01), (3, 3.00)")
+            .await?;
+        let _ = kipsql
+            .run("insert into t3 (a, b) values (4, 4444), (5, 5222), (6, 1.00)")
+            .await?;
 
         println!("show tables:");
         let tuples_show_tables = kipsql.run("show tables").await?;
@@ -231,7 +237,9 @@ mod test {
         println!("{}", create_table(&tuples_limit));
 
         println!("inner join:");
-        let tuples_inner_join = kipsql.run("select * from t1 inner join t2 on a = c").await?;
+        let tuples_inner_join = kipsql
+            .run("select * from t1 inner join t2 on a = c")
+            .await?;
         println!("{}", create_table(&tuples_inner_join));
 
         println!("left join:");
@@ -239,7 +247,9 @@ mod test {
         println!("{}", create_table(&tuples_left_join));
 
         println!("right join:");
-        let tuples_right_join = kipsql.run("select * from t1 right join t2 on a = c").await?;
+        let tuples_right_join = kipsql
+            .run("select * from t1 right join t2 on a = c")
+            .await?;
         println!("{}", create_table(&tuples_right_join));
 
         println!("full join:");
@@ -275,7 +285,9 @@ mod test {
         println!("{}", create_table(&tuples_min_max_agg));
 
         println!("group agg:");
-        let tuples_group_agg = kipsql.run("select c, max(d) from t2 group by c having c = 1").await?;
+        let tuples_group_agg = kipsql
+            .run("select c, max(d) from t2 group by c having c = 1")
+            .await?;
         println!("{}", create_table(&tuples_group_agg));
 
         println!("alias:");
@@ -283,7 +295,9 @@ mod test {
         println!("{}", create_table(&tuples_group_agg));
 
         println!("alias agg:");
-        let tuples_group_agg = kipsql.run("select c, max(d) as max_d from t2 group by c having c = 1").await?;
+        let tuples_group_agg = kipsql
+            .run("select c, max(d) as max_d from t2 group by c having c = 1")
+            .await?;
         println!("{}", create_table(&tuples_group_agg));
 
         println!("time max:");
@@ -291,10 +305,15 @@ mod test {
         println!("{}", create_table(&tuples_time_max));
 
         println!("time where:");
-        let tuples_time_where_t2 = kipsql.run("select (c + 1) from t2 where e > '2021-05-20'").await?;
+        let tuples_time_where_t2 = kipsql
+            .run("select (c + 1) from t2 where e > '2021-05-20'")
+            .await?;
         println!("{}", create_table(&tuples_time_where_t2));
 
-        assert!(kipsql.run("select max(d) from t2 group by c").await.is_err());
+        assert!(kipsql
+            .run("select max(d) from t2 group by c")
+            .await
+            .is_err());
 
         println!("distinct t1:");
         let tuples_distinct_t1 = kipsql.run("select distinct b, k from t1").await?;
@@ -307,12 +326,17 @@ mod test {
         println!("{}", create_table(&update_after_full_t1));
 
         println!("insert overwrite t1:");
-        let _ = kipsql.run("insert overwrite t1 (a, b, k) values (-99, 1, 0)").await?;
+        let _ = kipsql
+            .run("insert overwrite t1 (a, b, k) values (-99, 1, 0)")
+            .await?;
         println!("after t1:");
         let insert_overwrite_after_full_t1 = kipsql.run("select * from t1").await?;
         println!("{}", create_table(&insert_overwrite_after_full_t1));
 
-        assert!(kipsql.run("insert overwrite t1 (a, b, k) values (-1, 1, 0)").await.is_err());
+        assert!(kipsql
+            .run("insert overwrite t1 (a, b, k) values (-1, 1, 0)")
+            .await
+            .is_err());
 
         println!("delete t1 with filter:");
         let _ = kipsql.run("delete from t1 where b = 0").await?;

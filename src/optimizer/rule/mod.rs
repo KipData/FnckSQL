@@ -2,13 +2,15 @@ use crate::expression::ScalarExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
-use crate::optimizer::OptimizerError;
 use crate::optimizer::rule::column_pruning::{PushProjectIntoScan, PushProjectThroughChild};
 use crate::optimizer::rule::combine_operators::{CollapseProject, CombineFilter};
-use crate::optimizer::rule::pushdown_limit::{LimitProjectTranspose, EliminateLimits, PushLimitThroughJoin, PushLimitIntoScan};
-use crate::optimizer::rule::pushdown_predicates::PushPredicateThroughJoin;
+use crate::optimizer::rule::pushdown_limit::{
+    EliminateLimits, LimitProjectTranspose, PushLimitIntoScan, PushLimitThroughJoin,
+};
 use crate::optimizer::rule::pushdown_predicates::PushPredicateIntoScan;
+use crate::optimizer::rule::pushdown_predicates::PushPredicateThroughJoin;
 use crate::optimizer::rule::simplification::SimplifyFilter;
+use crate::optimizer::OptimizerError;
 
 mod column_pruning;
 mod combine_operators;
@@ -34,7 +36,7 @@ pub enum RuleImpl {
     // Tips: need to be used with `SimplifyFilter`
     PushPredicateIntoScan,
     // Simplification
-    SimplifyFilter
+    SimplifyFilter,
 }
 
 impl Rule for RuleImpl {
@@ -54,7 +56,7 @@ impl Rule for RuleImpl {
         }
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError>{
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         match self {
             RuleImpl::PushProjectIntoScan => PushProjectIntoScan {}.apply(node_id, graph),
             RuleImpl::PushProjectThroughChild => PushProjectThroughChild {}.apply(node_id, graph),
@@ -66,7 +68,7 @@ impl Rule for RuleImpl {
             RuleImpl::PushLimitIntoTableScan => PushLimitIntoScan {}.apply(node_id, graph),
             RuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin {}.apply(node_id, graph),
             RuleImpl::SimplifyFilter => SimplifyFilter {}.apply(node_id, graph),
-            RuleImpl::PushPredicateIntoScan => PushPredicateIntoScan {}.apply(node_id, graph)
+            RuleImpl::PushPredicateIntoScan => PushPredicateIntoScan {}.apply(node_id, graph),
         }
     }
 }

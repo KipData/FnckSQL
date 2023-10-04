@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use futures_async_stream::try_stream;
 use crate::catalog::TableName;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
@@ -7,19 +5,27 @@ use crate::planner::operator::update::UpdateOperator;
 use crate::storage::{Storage, Transaction};
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
+use futures_async_stream::try_stream;
+use std::collections::HashMap;
 
 pub struct Update {
     table_name: TableName,
     input: BoxedExecutor,
-    values: BoxedExecutor
+    values: BoxedExecutor,
 }
 
 impl From<(UpdateOperator, BoxedExecutor, BoxedExecutor)> for Update {
-    fn from((UpdateOperator { table_name }, input, values): (UpdateOperator, BoxedExecutor, BoxedExecutor)) -> Self {
+    fn from(
+        (UpdateOperator { table_name }, input, values): (
+            UpdateOperator,
+            BoxedExecutor,
+            BoxedExecutor,
+        ),
+    ) -> Self {
         Update {
             table_name,
             input,
-            values
+            values,
         }
     }
 }
@@ -33,7 +39,11 @@ impl<S: Storage> Executor<S> for Update {
 impl Update {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn _execute<S: Storage>(self, storage: S) {
-        let Update { table_name, input, values } = self;
+        let Update {
+            table_name,
+            input,
+            values,
+        } = self;
 
         if let Some(mut transaction) = storage.transaction(&table_name).await {
             let table_catalog = storage.table(&table_name).await.unwrap();
@@ -42,7 +52,9 @@ impl Update {
             // only once
             #[for_await]
             for tuple in values {
-                let Tuple { columns, values, .. } = tuple?;
+                let Tuple {
+                    columns, values, ..
+                } = tuple?;
                 for i in 0..columns.len() {
                     value_map.insert(columns[i].id, values[i].clone());
                 }
@@ -61,7 +73,9 @@ impl Update {
                             is_overwrite = false;
                         }
                         if column.desc.is_unique && value != &tuple.values[i] {
-                            if let Some(index_meta) = table_catalog.get_unique_index(&column.id.unwrap()) {
+                            if let Some(index_meta) =
+                                table_catalog.get_unique_index(&column.id.unwrap())
+                            {
                                 let mut index = Index {
                                     id: index_meta.id,
                                     column_values: vec![tuple.values[i].clone()],
@@ -70,7 +84,11 @@ impl Update {
 
                                 if !value.is_null() {
                                     index.column_values[0] = value.clone();
-                                    transaction.add_index(index, vec![tuple.id.clone().unwrap()], true)?;
+                                    transaction.add_index(
+                                        index,
+                                        vec![tuple.id.clone().unwrap()],
+                                        true,
+                                    )?;
                                 }
                             }
                         }

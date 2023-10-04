@@ -1,7 +1,7 @@
+use async_recursion::async_recursion;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::Arc;
-use async_recursion::async_recursion;
 
 use crate::{
     expression::ScalarExpression,
@@ -17,18 +17,23 @@ use crate::{
 
 use super::Binder;
 
-use crate::catalog::{ColumnCatalog, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, TableCatalog, TableName};
-use itertools::Itertools;
-use sqlparser::ast;
-use sqlparser::ast::{Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select, SelectItem, SetExpr, TableFactor, TableWithJoins};
 use crate::binder::BindError;
+use crate::catalog::{
+    ColumnCatalog, TableCatalog, TableName, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME,
+};
 use crate::execution::executor::dql::join::joins_nullable;
 use crate::expression::BinaryOperator;
-use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
+use crate::planner::LogicalPlan;
 use crate::storage::Storage;
 use crate::types::LogicalType;
+use itertools::Itertools;
+use sqlparser::ast;
+use sqlparser::ast::{
+    Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
+    SelectItem, SetExpr, TableFactor, TableWithJoins,
+};
 
 impl<S: Storage> Binder<S> {
     #[async_recursion]
@@ -74,13 +79,16 @@ impl<S: Storage> Binder<S> {
         self.extract_select_aggregate(&mut select_list)?;
 
         if !select.group_by.is_empty() {
-            self.extract_group_by_aggregate(&mut select_list, &select.group_by).await?;
+            self.extract_group_by_aggregate(&mut select_list, &select.group_by)
+                .await?;
         }
 
         let mut having_orderby = (None, None);
 
         if select.having.is_some() || !orderby.is_empty() {
-            having_orderby = self.extract_having_orderby_aggregate(&select.having, orderby).await?;
+            having_orderby = self
+                .extract_having_orderby_aggregate(&select.having, orderby)
+                .await?;
         }
 
         if !self.context.agg_calls.is_empty() || !self.context.group_by_exprs.is_empty() {
@@ -108,7 +116,10 @@ impl<S: Storage> Binder<S> {
         Ok(plan)
     }
 
-    pub(crate) async fn bind_table_ref(&mut self, from: &[TableWithJoins]) -> Result<LogicalPlan, BindError> {
+    pub(crate) async fn bind_table_ref(
+        &mut self,
+        from: &[TableWithJoins],
+    ) -> Result<LogicalPlan, BindError> {
         assert!(from.len() < 2, "not support yet.");
         if from.is_empty() {
             return Ok(LogicalPlan {
@@ -129,7 +140,11 @@ impl<S: Storage> Binder<S> {
         Ok(plan)
     }
 
-    async fn bind_single_table_ref(&mut self, table: &TableFactor, joint_type: Option<JoinType>) -> Result<(TableName, LogicalPlan), BindError> {
+    async fn bind_single_table_ref(
+        &mut self,
+        table: &TableFactor,
+        joint_type: Option<JoinType>,
+    ) -> Result<(TableName, LogicalPlan), BindError> {
         let plan_with_name = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
@@ -157,7 +172,11 @@ impl<S: Storage> Binder<S> {
         Ok(plan_with_name)
     }
 
-    pub(crate) async fn _bind_single_table_ref(&mut self, joint_type: Option<JoinType>, table: &str) -> Result<(Arc<String>, LogicalPlan), BindError> {
+    pub(crate) async fn _bind_single_table_ref(
+        &mut self,
+        joint_type: Option<JoinType>,
+        table: &str,
+    ) -> Result<(Arc<String>, LogicalPlan), BindError> {
         let table_name = Arc::new(table.to_string());
 
         if self.context.bind_table.contains_key(&table_name) {
@@ -171,9 +190,14 @@ impl<S: Storage> Binder<S> {
             .await
             .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
 
-        self.context.bind_table.insert(table_name.clone(), (table_catalog.clone(), joint_type));
+        self.context
+            .bind_table
+            .insert(table_name.clone(), (table_catalog.clone(), joint_type));
 
-        Ok((table_name.clone(), ScanOperator::new(table_name, &table_catalog)))
+        Ok((
+            table_name.clone(),
+            ScanOperator::new(table_name, &table_catalog),
+        ))
     }
 
     /// Normalize select item.
@@ -182,7 +206,10 @@ impl<S: Storage> Binder<S> {
     /// - Qualified name with wildcard, e.g. `SELECT t.* FROM t,t1`
     /// - Scalar expression or aggregate expression, e.g. `SELECT COUNT(*) + 1 AS count FROM t`
     ///  
-    async fn normalize_select_item(&mut self, items: &[SelectItem]) -> Result<Vec<ScalarExpression>, BindError> {
+    async fn normalize_select_item(
+        &mut self,
+        items: &[SelectItem],
+    ) -> Result<Vec<ScalarExpression>, BindError> {
         let mut select_items = vec![];
 
         for item in items.iter().enumerate() {
@@ -213,7 +240,8 @@ impl<S: Storage> Binder<S> {
     async fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>, BindError> {
         let mut exprs = vec![];
         for table_name in self.context.bind_table.keys().cloned() {
-            let table = self.context
+            let table = self
+                .context
                 .storage
                 .table(&table_name)
                 .await
@@ -226,7 +254,12 @@ impl<S: Storage> Binder<S> {
         Ok(exprs)
     }
 
-    async fn bind_join(&mut self, left_table: TableName, left: LogicalPlan, join: &Join) -> Result<LogicalPlan, BindError> {
+    async fn bind_join(
+        &mut self,
+        left_table: TableName,
+        left: LogicalPlan,
+        join: &Join,
+    ) -> Result<LogicalPlan, BindError> {
         let Join {
             relation,
             join_operator,
@@ -241,25 +274,30 @@ impl<S: Storage> Binder<S> {
             _ => unimplemented!(),
         };
 
-        let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type)).await?;
+        let (right_table, right) = self
+            .bind_single_table_ref(relation, Some(join_type))
+            .await?;
 
-        let left_table = self.context.storage
+        let left_table = self
+            .context
+            .storage
             .table(&left_table)
             .await
             .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("Left: {} not found", left_table)))?;
-        let right_table = self.context.storage
+        let right_table = self
+            .context
+            .storage
             .table(&right_table)
             .await
             .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("Right: {} not found", right_table)))?;
 
         let on = match joint_condition {
-            Some(constraint) => self.bind_join_constraint(
-                &left_table,
-                &right_table,
-                constraint
-            ).await?,
+            Some(constraint) => {
+                self.bind_join_constraint(&left_table, &right_table, constraint)
+                    .await?
+            }
             None => JoinCondition::None,
         };
 
@@ -300,11 +338,7 @@ impl<S: Storage> Binder<S> {
         }
     }
 
-    fn bind_sort(
-        &mut self,
-        children: LogicalPlan,
-        sort_fields: Vec<SortField>,
-    ) -> LogicalPlan {
+    fn bind_sort(&mut self, children: LogicalPlan, sort_fields: Vec<SortField>) -> LogicalPlan {
         LogicalPlan {
             operator: Operator::Sort(SortOperator {
                 sort_fields,
@@ -328,9 +362,17 @@ impl<S: Storage> Binder<S> {
                 ScalarExpression::Constant(dv) => match dv.as_ref() {
                     DataValue::Int32(Some(v)) if *v > 0 => limit = *v as usize,
                     DataValue::Int64(Some(v)) if *v > 0 => limit = *v as usize,
-                    _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
+                    _ => {
+                        return Err(BindError::InvalidColumn(
+                            "invalid limit expression.".to_owned(),
+                        ))
+                    }
                 },
-                _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
+                _ => {
+                    return Err(BindError::InvalidColumn(
+                        "invalid limit expression.".to_owned(),
+                    ))
+                }
             }
         }
 
@@ -340,9 +382,17 @@ impl<S: Storage> Binder<S> {
                 ScalarExpression::Constant(dv) => match dv.as_ref() {
                     DataValue::Int32(Some(v)) if *v > 0 => offset = *v as usize,
                     DataValue::Int64(Some(v)) if *v > 0 => offset = *v as usize,
-                    _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
+                    _ => {
+                        return Err(BindError::InvalidColumn(
+                            "invalid limit expression.".to_owned(),
+                        ))
+                    }
                 },
-                _ => return Err(BindError::InvalidColumn("invalid limit expression.".to_owned())),
+                _ => {
+                    return Err(BindError::InvalidColumn(
+                        "invalid limit expression.".to_owned(),
+                    ))
+                }
             }
         }
 
@@ -351,10 +401,7 @@ impl<S: Storage> Binder<S> {
         Ok(LimitOperator::new(offset, limit, children))
     }
 
-    pub fn extract_select_join(
-        &mut self,
-        select_items: &mut [ScalarExpression],
-    ) {
+    pub fn extract_select_join(&mut self, select_items: &mut [ScalarExpression]) {
         let bind_tables = &self.context.bind_table;
         if bind_tables.len() < 2 {
             return;
@@ -403,7 +450,8 @@ impl<S: Storage> Binder<S> {
                 // expression that didn't match equi-join pattern
                 let mut filter = vec![];
 
-                self.extract_join_keys(expr, &mut on_keys, &mut filter, left_table, right_table).await?;
+                self.extract_join_keys(expr, &mut on_keys, &mut filter, left_table, right_table)
+                    .await?;
 
                 // combine multiple filter exprs into one BinaryExpr
                 let join_filter = filter
@@ -481,14 +529,16 @@ impl<S: Storage> Binder<S> {
                             accum_filter,
                             left_schema,
                             right_schema,
-                        ).await?;
+                        )
+                        .await?;
                         self.extract_join_keys(
                             right,
                             accum,
                             accum_filter,
                             left_schema,
                             right_schema,
-                        ).await?;
+                        )
+                        .await?;
                     }
                 }
                 _other => {
@@ -513,53 +563,28 @@ mod tests {
     #[tokio::test]
     async fn test_select_bind() -> Result<(), ExecutorError> {
         let plan_1 = select_sql_run("select * from t1").await?;
-        println!(
-            "just_col:\n {:#?}",
-            plan_1
-        );
+        println!("just_col:\n {:#?}", plan_1);
         let plan_2 = select_sql_run("select t1.c1, t1.c2 from t1").await?;
-        println!(
-            "table_with_col:\n {:#?}",
-            plan_2
-        );
+        println!("table_with_col:\n {:#?}", plan_2);
         let plan_3 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > 2").await?;
-        println!(
-            "table_with_col_and_c1_compare_constant:\n {:#?}",
-            plan_3
-        );
+        println!("table_with_col_and_c1_compare_constant:\n {:#?}", plan_3);
         let plan_4 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > c2").await?;
-        println!(
-            "table_with_col_and_c1_compare_c2:\n {:#?}",
-           plan_4
-        );
+        println!("table_with_col_and_c1_compare_c2:\n {:#?}", plan_4);
         let plan_5 = select_sql_run("select avg(t1.c1) from t1").await?;
-        println!(
-            "table_with_col_and_c1_avg:\n {:#?}",
-            plan_5
-        );
-        let plan_6 = select_sql_run("select t1.c1, t1.c2 from t1 where (t1.c1 - t1.c2) > 1").await?;
-        println!(
-            "table_with_col_nested:\n {:#?}",
-            plan_6
-        );
+        println!("table_with_col_and_c1_avg:\n {:#?}", plan_5);
+        let plan_6 =
+            select_sql_run("select t1.c1, t1.c2 from t1 where (t1.c1 - t1.c2) > 1").await?;
+        println!("table_with_col_nested:\n {:#?}", plan_6);
 
         let plan_7 = select_sql_run("select * from t1 limit 1").await?;
-        println!(
-            "limit:\n {:#?}",
-            plan_7
-        );
+        println!("limit:\n {:#?}", plan_7);
 
         let plan_8 = select_sql_run("select * from t1 offset 2").await?;
-        println!(
-            "offset:\n {:#?}",
-            plan_8
-        );
+        println!("offset:\n {:#?}", plan_8);
 
-        let plan_9 = select_sql_run("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1").await?;
-        println!(
-            "join:\n {:#?}",
-            plan_9
-        );
+        let plan_9 =
+            select_sql_run("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1").await?;
+        println!("join:\n {:#?}", plan_9);
 
         Ok(())
     }

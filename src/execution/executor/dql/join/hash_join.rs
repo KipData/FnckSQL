@@ -1,9 +1,5 @@
-use std::sync::Arc;
-use ahash::{HashMap, HashMapExt, HashSet, HashSetExt, RandomState};
-use futures_async_stream::try_stream;
-use itertools::Itertools;
-use crate::execution::executor::dql::join::joins_nullable;
 use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::execution::executor::dql::join::joins_nullable;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
@@ -12,16 +8,26 @@ use crate::storage::Storage;
 use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
+use ahash::{HashMap, HashMapExt, HashSet, HashSetExt, RandomState};
+use futures_async_stream::try_stream;
+use itertools::Itertools;
+use std::sync::Arc;
 
 pub struct HashJoin {
     on: JoinCondition,
     ty: JoinType,
     left_input: BoxedExecutor,
-    right_input: BoxedExecutor
+    right_input: BoxedExecutor,
 }
 
 impl From<(JoinOperator, BoxedExecutor, BoxedExecutor)> for HashJoin {
-    fn from((JoinOperator { on, join_type }, left_input, right_input): (JoinOperator, BoxedExecutor, BoxedExecutor)) -> Self {
+    fn from(
+        (JoinOperator { on, join_type }, left_input, right_input): (
+            JoinOperator,
+            BoxedExecutor,
+            BoxedExecutor,
+        ),
+    ) -> Self {
         HashJoin {
             on,
             ty: join_type,
@@ -40,14 +46,22 @@ impl<S: Storage> Executor<S> for HashJoin {
 impl HashJoin {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn _execute(self) {
-        let HashJoin { on, ty, left_input, right_input } = self;
+        let HashJoin {
+            on,
+            ty,
+            left_input,
+            right_input,
+        } = self;
 
         if ty == JoinType::Cross {
             unreachable!("Cross join should not be in HashJoinExecutor");
         }
-        let ((on_left_keys, on_right_keys), filter): ((Vec<ScalarExpression>, Vec<ScalarExpression>), _) = match on {
+        let ((on_left_keys, on_right_keys), filter): (
+            (Vec<ScalarExpression>, Vec<ScalarExpression>),
+            _,
+        ) = match on {
             JoinCondition::On { on, filter } => (on.into_iter().unzip(), filter),
-            JoinCondition::None => unreachable!("HashJoin must has on condition")
+            JoinCondition::None => unreachable!("HashJoin must has on condition"),
         };
 
         let mut join_columns = Vec::new();
@@ -71,10 +85,7 @@ impl HashJoin {
                 left_init_flag = true;
             }
 
-            left_map
-                .entry(hash)
-                .or_insert(Vec::new())
-                .push(tuple);
+            left_map.entry(hash).or_insert(Vec::new()).push(tuple);
         }
 
         // probe phase
@@ -102,7 +113,11 @@ impl HashJoin {
                             .chain(tuple.values.clone())
                             .collect_vec();
 
-                        Tuple { id: None, columns: join_columns.clone(), values: full_values }
+                        Tuple {
+                            id: None,
+                            columns: join_columns.clone(),
+                            values: full_values,
+                        }
                     })
                     .collect_vec()
             } else if matches!(ty, JoinType::Right | JoinType::Full) {
@@ -113,13 +128,20 @@ impl HashJoin {
                     .chain(tuple.values)
                     .collect_vec();
 
-                vec![Tuple { id: None, columns: join_columns.clone(), values }]
+                vec![Tuple {
+                    id: None,
+                    columns: join_columns.clone(),
+                    values,
+                }]
             } else {
                 vec![]
             };
 
             // on filter
-            if let (Some(expr), false) = (&filter, join_tuples.is_empty() || matches!(ty, JoinType::Full | JoinType::Cross)) {
+            if let (Some(expr), false) = (
+                &filter,
+                join_tuples.is_empty() || matches!(ty, JoinType::Full | JoinType::Cross),
+            ) {
                 let mut filter_tuples = Vec::with_capacity(join_tuples.len());
 
                 for mut tuple in join_tuples {
@@ -145,7 +167,7 @@ impl HashJoin {
                                     }
                                     filter_tuples.push(tuple)
                                 }
-                                _ => ()
+                                _ => (),
                             }
                         } else {
                             filter_tuples.push(tuple)
@@ -166,10 +188,15 @@ impl HashJoin {
         if matches!(ty, JoinType::Left | JoinType::Full) {
             for (hash, tuples) in left_map {
                 if used_set.contains(&hash) {
-                    continue
+                    continue;
                 }
 
-                for Tuple { mut values, columns, ..} in tuples {
+                for Tuple {
+                    mut values,
+                    columns,
+                    ..
+                } in tuples
+                {
                     let mut right_empties = join_columns[columns.len()..]
                         .iter()
                         .map(|col| Arc::new(DataValue::none(col.datatype())))
@@ -177,14 +204,20 @@ impl HashJoin {
 
                     values.append(&mut right_empties);
 
-                    yield Tuple { id: None, columns: join_columns.clone(), values }
+                    yield Tuple {
+                        id: None,
+                        columns: join_columns.clone(),
+                        values,
+                    }
                 }
             }
         }
     }
 
     fn columns_filling(tuple: &Tuple, join_columns: &mut Vec<ColumnRef>, force_nullable: bool) {
-        let mut new_columns = tuple.columns.iter()
+        let mut new_columns = tuple
+            .columns
+            .iter()
             .cloned()
             .map(|col| {
                 let mut new_catalog = ColumnCatalog::clone(&col);
@@ -200,7 +233,7 @@ impl HashJoin {
     fn hash_row(
         on_keys: &[ScalarExpression],
         hash_random_state: &RandomState,
-        tuple: &Tuple
+        tuple: &Tuple,
     ) -> Result<u64, TypeError> {
         let mut values = Vec::with_capacity(on_keys.len());
 
@@ -214,40 +247,77 @@ impl HashJoin {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::execution::executor::{BoxedExecutor, Executor, try_collect};
     use crate::execution::executor::dql::join::hash_join::HashJoin;
     use crate::execution::executor::dql::test::build_integers;
     use crate::execution::executor::dql::values::Values;
+    use crate::execution::executor::{try_collect, BoxedExecutor, Executor};
     use crate::execution::ExecutorError;
     use crate::expression::ScalarExpression;
     use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
     use crate::planner::operator::values::ValuesOperator;
     use crate::storage::memory::MemStorage;
     use crate::storage::Storage;
-    use crate::types::LogicalType;
     use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
+    use crate::types::LogicalType;
+    use std::sync::Arc;
 
-    fn build_join_values<S: Storage>(_s: &S) -> (Vec<(ScalarExpression, ScalarExpression)>, BoxedExecutor, BoxedExecutor) {
+    fn build_join_values<S: Storage>(
+        _s: &S,
+    ) -> (
+        Vec<(ScalarExpression, ScalarExpression)>,
+        BoxedExecutor,
+        BoxedExecutor,
+    ) {
         let desc = ColumnDesc::new(LogicalType::Integer, false, false);
 
         let t1_columns = vec![
-            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone(), None)),
-            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone(), None)),
-            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone(), None)),
+            Arc::new(ColumnCatalog::new(
+                "c1".to_string(),
+                true,
+                desc.clone(),
+                None,
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c2".to_string(),
+                true,
+                desc.clone(),
+                None,
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c3".to_string(),
+                true,
+                desc.clone(),
+                None,
+            )),
         ];
 
         let t2_columns = vec![
-            Arc::new(ColumnCatalog::new("c4".to_string(), true, desc.clone(), None)),
-            Arc::new(ColumnCatalog::new("c5".to_string(), true, desc.clone(), None)),
-            Arc::new(ColumnCatalog::new("c6".to_string(), true, desc.clone(), None)),
+            Arc::new(ColumnCatalog::new(
+                "c4".to_string(),
+                true,
+                desc.clone(),
+                None,
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c5".to_string(),
+                true,
+                desc.clone(),
+                None,
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c6".to_string(),
+                true,
+                desc.clone(),
+                None,
+            )),
         ];
 
-        let on_keys = vec![
-            (ScalarExpression::ColumnRef(t1_columns[0].clone()), ScalarExpression::ColumnRef(t2_columns[0].clone()))
-        ];
+        let on_keys = vec![(
+            ScalarExpression::ColumnRef(t1_columns[0].clone()),
+            ScalarExpression::ColumnRef(t2_columns[0].clone()),
+        )];
 
         let values_t1 = Values::from(ValuesOperator {
             rows: vec![
@@ -265,7 +335,7 @@ mod test {
                     Arc::new(DataValue::Int32(Some(3))),
                     Arc::new(DataValue::Int32(Some(5))),
                     Arc::new(DataValue::Int32(Some(7))),
-                ]
+                ],
             ],
             columns: t1_columns,
         });
@@ -296,8 +366,6 @@ mod test {
             columns: t2_columns,
         });
 
-
-
         (on_keys, values_t1.execute(_s), values_t2.execute(_s))
     }
 
@@ -307,7 +375,10 @@ mod test {
         let (keys, left, right) = build_join_values(&mem_storage);
 
         let op = JoinOperator {
-            on: JoinCondition::On { on: keys, filter: None },
+            on: JoinCondition::On {
+                on: keys,
+                filter: None,
+            },
             join_type: JoinType::Inner,
         };
         let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
@@ -317,9 +388,18 @@ mod test {
 
         assert_eq!(tuples.len(), 3);
 
-        assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
-        assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
-        assert_eq!(tuples[2].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)]));
+        assert_eq!(
+            tuples[0].values,
+            build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
+        );
+        assert_eq!(
+            tuples[1].values,
+            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
+        );
+        assert_eq!(
+            tuples[2].values,
+            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
+        );
 
         Ok(())
     }
@@ -330,7 +410,10 @@ mod test {
         let (keys, left, right) = build_join_values(&mem_storage);
 
         let op = JoinOperator {
-            on: JoinCondition::On { on: keys, filter: None },
+            on: JoinCondition::On {
+                on: keys,
+                filter: None,
+            },
             join_type: JoinType::Left,
         };
         let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
@@ -340,10 +423,22 @@ mod test {
 
         assert_eq!(tuples.len(), 4);
 
-        assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
-        assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
-        assert_eq!(tuples[2].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)]));
-        assert_eq!(tuples[3].values, build_integers(vec![Some(3), Some(5), Some(7), None, None, None]));
+        assert_eq!(
+            tuples[0].values,
+            build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
+        );
+        assert_eq!(
+            tuples[1].values,
+            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
+        );
+        assert_eq!(
+            tuples[2].values,
+            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
+        );
+        assert_eq!(
+            tuples[3].values,
+            build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
+        );
 
         Ok(())
     }
@@ -354,7 +449,10 @@ mod test {
         let (keys, left, right) = build_join_values(&mem_storage);
 
         let op = JoinOperator {
-            on: JoinCondition::On { on: keys, filter: None },
+            on: JoinCondition::On {
+                on: keys,
+                filter: None,
+            },
             join_type: JoinType::Right,
         };
         let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
@@ -364,10 +462,22 @@ mod test {
 
         assert_eq!(tuples.len(), 4);
 
-        assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
-        assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
-        assert_eq!(tuples[2].values, build_integers(vec![None, None, None, Some(4), Some(6), Some(8)]));
-        assert_eq!(tuples[3].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)]));
+        assert_eq!(
+            tuples[0].values,
+            build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
+        );
+        assert_eq!(
+            tuples[1].values,
+            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
+        );
+        assert_eq!(
+            tuples[2].values,
+            build_integers(vec![None, None, None, Some(4), Some(6), Some(8)])
+        );
+        assert_eq!(
+            tuples[3].values,
+            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
+        );
 
         Ok(())
     }
@@ -378,7 +488,10 @@ mod test {
         let (keys, left, right) = build_join_values(&mem_storage);
 
         let op = JoinOperator {
-            on: JoinCondition::On { on: keys, filter: None },
+            on: JoinCondition::On {
+                on: keys,
+                filter: None,
+            },
             join_type: JoinType::Full,
         };
         let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
@@ -388,11 +501,26 @@ mod test {
 
         assert_eq!(tuples.len(), 5);
 
-        assert_eq!(tuples[0].values, build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)]));
-        assert_eq!(tuples[1].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)]));
-        assert_eq!(tuples[2].values, build_integers(vec![None, None, None, Some(4), Some(6), Some(8)]));
-        assert_eq!(tuples[3].values, build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)]));
-        assert_eq!(tuples[4].values, build_integers(vec![Some(3), Some(5), Some(7), None, None, None]));
+        assert_eq!(
+            tuples[0].values,
+            build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
+        );
+        assert_eq!(
+            tuples[1].values,
+            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
+        );
+        assert_eq!(
+            tuples[2].values,
+            build_integers(vec![None, None, None, Some(4), Some(6), Some(8)])
+        );
+        assert_eq!(
+            tuples[3].values,
+            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
+        );
+        assert_eq!(
+            tuples[4].values,
+            build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
+        );
 
         Ok(())
     }

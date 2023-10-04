@@ -1,8 +1,8 @@
-use std::path::Path;
-use sqllogictest::Runner;
-use tempfile::TempDir;
 use kip_sql::db::Database;
+use sqllogictest::Runner;
 use sqllogictest_test::KipSQL;
+use std::path::Path;
+use tempfile::TempDir;
 
 #[tokio::main]
 async fn main() {
@@ -23,7 +23,8 @@ async fn main() {
             .to_string();
         println!("-> Now the test file is: {}", filepath);
 
-        let db = Database::with_kipdb(temp_dir.path()).await
+        let db = Database::with_kipdb(temp_dir.path())
+            .await
             .expect("init db error");
         let mut tester = Runner::new(KipSQL { db });
 

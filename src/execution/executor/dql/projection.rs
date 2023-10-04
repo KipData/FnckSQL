@@ -1,14 +1,14 @@
-use futures_async_stream::try_stream;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::project::ProjectOperator;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
+use futures_async_stream::try_stream;
 
 pub struct Projection {
     exprs: Vec<ScalarExpression>,
-    input: BoxedExecutor
+    input: BoxedExecutor,
 }
 
 impl From<(ProjectOperator, BoxedExecutor)> for Projection {
@@ -43,7 +43,11 @@ impl Projection {
                 columns.push(expr.output_columns(&tuple));
             }
 
-            yield Tuple { id: None, columns, values, };
+            yield Tuple {
+                id: None,
+                columns,
+                values,
+            };
         }
     }
 }

@@ -1,15 +1,15 @@
-use std::cmp::Ordering;
-use futures_async_stream::try_stream;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
+use futures_async_stream::try_stream;
+use std::cmp::Ordering;
 
 pub struct Sort {
     sort_fields: Vec<SortField>,
     limit: Option<usize>,
-    input: BoxedExecutor
+    input: BoxedExecutor,
 }
 
 impl From<(SortOperator, BoxedExecutor)> for Sort {
@@ -31,7 +31,11 @@ impl<S: Storage> Executor<S> for Sort {
 impl Sort {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn _execute(self) {
-        let Sort { sort_fields, limit, input } = self;
+        let Sort {
+            sort_fields,
+            limit,
+            input,
+        } = self;
         let mut tuples: Vec<Tuple> = vec![];
 
         #[for_await]
@@ -42,23 +46,41 @@ impl Sort {
         tuples.sort_by(|tuple_1, tuple_2| {
             let mut ordering = Ordering::Equal;
 
-            for SortField { expr, asc, nulls_first } in &sort_fields {
+            for SortField {
+                expr,
+                asc,
+                nulls_first,
+            } in &sort_fields
+            {
                 let value_1 = expr.eval_column(tuple_1).unwrap();
                 let value_2 = expr.eval_column(tuple_2).unwrap();
 
-                ordering = value_1.partial_cmp(&value_2)
-                    .unwrap_or_else(|| match (value_1.is_null(), value_2.is_null()) {
-                        (false, true) => if *nulls_first { Ordering::Less } else { Ordering::Greater },
-                        (true, false) => if *nulls_first { Ordering::Greater } else { Ordering::Less },
+                ordering = value_1.partial_cmp(&value_2).unwrap_or_else(|| {
+                    match (value_1.is_null(), value_2.is_null()) {
+                        (false, true) => {
+                            if *nulls_first {
+                                Ordering::Less
+                            } else {
+                                Ordering::Greater
+                            }
+                        }
+                        (true, false) => {
+                            if *nulls_first {
+                                Ordering::Greater
+                            } else {
+                                Ordering::Less
+                            }
+                        }
                         _ => Ordering::Equal,
-                    });
+                    }
+                });
 
                 if !*asc {
                     ordering = ordering.reverse();
                 }
 
                 if ordering != Ordering::Equal {
-                   break
+                    break;
                 }
             }
 

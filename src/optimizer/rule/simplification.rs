@@ -1,10 +1,10 @@
-use lazy_static::lazy_static;
 use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
+use lazy_static::lazy_static;
 lazy_static! {
     static ref SIMPLIFY_FILTER_RULE: Pattern = {
         Pattern {
@@ -31,7 +31,7 @@ impl Rule for SimplifyFilter {
 
             graph.replace_node(
                 node_id,
-                OptExprNode::OperatorRef(Operator::Filter(filter_op))
+                OptExprNode::OperatorRef(Operator::Filter(filter_op)),
             )
         }
 
@@ -41,21 +41,21 @@ impl Rule for SimplifyFilter {
 
 #[cfg(test)]
 mod test {
-    use std::collections::Bound;
-    use std::sync::Arc;
     use crate::binder::test::select_sql_run;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::DatabaseError;
-    use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
     use crate::expression::simplify::ConstantBinary;
+    use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::RuleImpl;
-    use crate::planner::LogicalPlan;
     use crate::planner::operator::filter::FilterOperator;
     use crate::planner::operator::Operator;
-    use crate::types::LogicalType;
+    use crate::planner::LogicalPlan;
     use crate::types::value::DataValue;
+    use crate::types::LogicalType;
+    use std::collections::Bound;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_simplify_filter_single_column() -> Result<(), DatabaseError> {
@@ -88,11 +88,14 @@ mod test {
                 .batch(
                     "test_simplify_filter".to_string(),
                     HepBatchStrategy::once_topdown(),
-                    vec![RuleImpl::SimplifyFilter]
+                    vec![RuleImpl::SimplifyFilter],
                 )
                 .find_best()?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                println!("{expr}: {:#?}", filter_op.predicate.convert_binary(&0).unwrap());
+                println!(
+                    "{expr}: {:#?}",
+                    filter_op.predicate.convert_binary(&0).unwrap()
+                );
 
                 Ok(filter_op.predicate.convert_binary(&0).unwrap())
             } else {
@@ -129,18 +132,14 @@ mod test {
             .batch(
                 "test_simplify_filter".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::SimplifyFilter]
+                vec![RuleImpl::SimplifyFilter],
             )
             .find_best()?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
             let c1_col = ColumnCatalog {
-                id: Some(
-                    0,
-                ),
+                id: Some(0),
                 name: "c1".to_string(),
-                table_name: Some(
-                    Arc::new("t1".to_string()),
-                ),
+                table_name: Some(Arc::new("t1".to_string())),
                 nullable: false,
                 desc: ColumnDesc {
                     column_datatype: LogicalType::Integer,
@@ -150,13 +149,9 @@ mod test {
                 ref_expr: None,
             };
             let c2_col = ColumnCatalog {
-                id: Some(
-                    1,
-                ),
+                id: Some(1),
                 name: "c2".to_string(),
-                table_name: Some(
-                    Arc::new("t1".to_string()),
-                ),
+                table_name: Some(Arc::new("t1".to_string())),
                 nullable: false,
                 desc: ColumnDesc {
                     column_datatype: LogicalType::Integer,
@@ -176,7 +171,9 @@ mod test {
                         expr: Box::new(ScalarExpression::Binary {
                             op: BinaryOperator::Plus,
                             left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c1_col))),
-                            right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(1))))),
+                            right_expr: Box::new(ScalarExpression::Constant(Arc::new(
+                                DataValue::Int32(Some(1))
+                            ))),
                             ty: LogicalType::Integer,
                         }),
                         ty: LogicalType::Integer,
@@ -195,9 +192,11 @@ mod test {
     #[tokio::test]
     async fn test_simplify_filter_multiple_column() -> Result<(), DatabaseError> {
         // c1 + 1 < -1 => c1 < -2
-        let plan_1 = select_sql_run("select * from t1 where -(c1 + 1) > 1 and -(1 - c2) > 1").await?;
+        let plan_1 =
+            select_sql_run("select * from t1 where -(c1 + 1) > 1 and -(1 - c2) > 1").await?;
         // 1 - c1 < -1 => c1 > 2
-        let plan_2 = select_sql_run("select * from t1 where -(1 - c1) > 1 and -(c2 + 1) > 1").await?;
+        let plan_2 =
+            select_sql_run("select * from t1 where -(1 - c1) > 1 and -(c2 + 1) > 1").await?;
         // c1 < -1
         let plan_3 = select_sql_run("select * from t1 where -c1 > 1 and c2 + 1 > 1").await?;
         // c1 > 0
@@ -208,7 +207,7 @@ mod test {
                 .batch(
                     "test_simplify_filter".to_string(),
                     HepBatchStrategy::once_topdown(),
-                    vec![RuleImpl::SimplifyFilter]
+                    vec![RuleImpl::SimplifyFilter],
                 )
                 .find_best()?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
@@ -227,59 +226,83 @@ mod test {
 
         let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
-        assert_eq!(cb_1_c1, Some(ConstantBinary::Scope {
-            min: Bound::Unbounded,
-            max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
-        }));
+        assert_eq!(
+            cb_1_c1,
+            Some(ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
+            })
+        );
 
         let cb_1_c2 = op_1.predicate.convert_binary(&1).unwrap();
         println!("op_1 => c2: {:#?}", cb_1_c2);
-        assert_eq!(cb_1_c2, Some(ConstantBinary::Scope {
-            min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
-            max: Bound::Unbounded
-        }));
+        assert_eq!(
+            cb_1_c2,
+            Some(ConstantBinary::Scope {
+                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
+                max: Bound::Unbounded
+            })
+        );
 
         let cb_2_c1 = op_2.predicate.convert_binary(&0).unwrap();
         println!("op_2 => c1: {:#?}", cb_2_c1);
-        assert_eq!(cb_2_c1, Some(ConstantBinary::Scope {
-            min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
-            max: Bound::Unbounded
-        }));
+        assert_eq!(
+            cb_2_c1,
+            Some(ConstantBinary::Scope {
+                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
+                max: Bound::Unbounded
+            })
+        );
 
         let cb_2_c2 = op_2.predicate.convert_binary(&1).unwrap();
         println!("op_2 => c2: {:#?}", cb_2_c2);
-        assert_eq!(cb_1_c1, Some(ConstantBinary::Scope {
-            min: Bound::Unbounded,
-            max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
-        }));
+        assert_eq!(
+            cb_1_c1,
+            Some(ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
+            })
+        );
 
         let cb_3_c1 = op_3.predicate.convert_binary(&0).unwrap();
         println!("op_3 => c1: {:#?}", cb_3_c1);
-        assert_eq!(cb_3_c1, Some(ConstantBinary::Scope {
-            min: Bound::Unbounded,
-            max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1))))
-        }));
+        assert_eq!(
+            cb_3_c1,
+            Some(ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1))))
+            })
+        );
 
         let cb_3_c2 = op_3.predicate.convert_binary(&1).unwrap();
         println!("op_3 => c2: {:#?}", cb_3_c2);
-        assert_eq!(cb_3_c2, Some(ConstantBinary::Scope {
-            min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
-            max: Bound::Unbounded
-        }));
+        assert_eq!(
+            cb_3_c2,
+            Some(ConstantBinary::Scope {
+                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
+                max: Bound::Unbounded
+            })
+        );
 
         let cb_4_c1 = op_4.predicate.convert_binary(&0).unwrap();
         println!("op_4 => c1: {:#?}", cb_4_c1);
-        assert_eq!(cb_4_c1, Some(ConstantBinary::Scope {
-            min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
-            max: Bound::Unbounded
-        }));
+        assert_eq!(
+            cb_4_c1,
+            Some(ConstantBinary::Scope {
+                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
+                max: Bound::Unbounded
+            })
+        );
 
         let cb_4_c2 = op_4.predicate.convert_binary(&1).unwrap();
         println!("op_4 => c2: {:#?}", cb_4_c2);
-        assert_eq!(cb_4_c2, Some(ConstantBinary::Scope {
-            min: Bound::Unbounded,
-            max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1))))
-        }));
+        assert_eq!(
+            cb_4_c2,
+            Some(ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1))))
+            })
+        );
 
         Ok(())
     }
@@ -294,7 +317,7 @@ mod test {
                 .batch(
                     "test_simplify_filter".to_string(),
                     HepBatchStrategy::once_topdown(),
-                    vec![RuleImpl::SimplifyFilter]
+                    vec![RuleImpl::SimplifyFilter],
                 )
                 .find_best()?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {

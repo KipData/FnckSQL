@@ -1,16 +1,16 @@
-use std::slice;
-use std::sync::Arc;
-use sqlparser::ast::{Expr, Ident, ObjectName};
-use crate::binder::{Binder, BindError, lower_case_name, split_name};
+use crate::binder::{lower_case_name, split_name, BindError, Binder};
 use crate::catalog::ColumnRef;
-use crate::expression::ScalarExpression;
 use crate::expression::value_compute::unary_op;
-use crate::planner::LogicalPlan;
+use crate::expression::ScalarExpression;
 use crate::planner::operator::insert::InsertOperator;
-use crate::planner::operator::Operator;
 use crate::planner::operator::values::ValuesOperator;
+use crate::planner::operator::Operator;
+use crate::planner::LogicalPlan;
 use crate::storage::Storage;
 use crate::types::value::{DataValue, ValueRef};
+use sqlparser::ast::{Expr, Ident, ObjectName};
+use std::slice;
+use std::sync::Arc;
 
 impl<S: Storage> Binder<S> {
     pub(crate) async fn bind_insert(
@@ -18,7 +18,7 @@ impl<S: Storage> Binder<S> {
         name: ObjectName,
         idents: &[Ident],
         expr_rows: &Vec<Vec<Expr>>,
-        is_overwrite: bool
+        is_overwrite: bool,
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(&name);
         let (_, name) = split_name(&name)?;
@@ -32,12 +32,15 @@ impl<S: Storage> Binder<S> {
             } else {
                 let bind_table_name = Some(table_name.to_string());
                 for ident in idents {
-                    match self.bind_column_ref_from_identifiers(
-                        slice::from_ref(ident),
-                        bind_table_name.as_ref()
-                    ).await? {
+                    match self
+                        .bind_column_ref_from_identifiers(
+                            slice::from_ref(ident),
+                            bind_table_name.as_ref(),
+                        )
+                        .await?
+                    {
                         ScalarExpression::ColumnRef(catalog) => columns.push(catalog),
-                        _ => unreachable!()
+                        _ => unreachable!(),
                     }
                 }
             }
@@ -51,10 +54,9 @@ impl<S: Storage> Binder<S> {
                         ScalarExpression::Constant(value) => {
                             // Check if the value length is too long
                             value.check_len(columns[i].datatype())?;
-                            let cast_value = DataValue::clone(value)
-                                .cast(columns[i].datatype())?;
+                            let cast_value = DataValue::clone(value).cast(columns[i].datatype())?;
                             row.push(Arc::new(cast_value))
-                        },
+                        }
                         ScalarExpression::Unary { expr, op, .. } => {
                             if let ScalarExpression::Constant(value) = expr.as_ref() {
                                 row.push(Arc::new(unary_op(value, op)?))
@@ -71,29 +73,27 @@ impl<S: Storage> Binder<S> {
             let values_plan = self.bind_values(rows, columns);
 
             Ok(LogicalPlan {
-                operator: Operator::Insert(
-                    InsertOperator {
-                        table_name,
-                        is_overwrite,
-                    }
-                ),
+                operator: Operator::Insert(InsertOperator {
+                    table_name,
+                    is_overwrite,
+                }),
                 childrens: vec![values_plan],
             })
         } else {
-            Err(BindError::InvalidTable(format!("not found table {}", table_name)))
+            Err(BindError::InvalidTable(format!(
+                "not found table {}",
+                table_name
+            )))
         }
     }
 
     pub(crate) fn bind_values(
         &mut self,
         rows: Vec<Vec<ValueRef>>,
-        columns: Vec<ColumnRef>
+        columns: Vec<ColumnRef>,
     ) -> LogicalPlan {
         LogicalPlan {
-            operator: Operator::Values(ValuesOperator {
-                rows,
-                columns,
-            }),
+            operator: Operator::Values(ValuesOperator { rows, columns }),
             childrens: vec![],
         }
     }

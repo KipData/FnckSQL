@@ -1,19 +1,17 @@
-use futures_async_stream::try_stream;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::truncate::TruncateOperator;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
+use futures_async_stream::try_stream;
 
 pub struct Truncate {
-    op: TruncateOperator
+    op: TruncateOperator,
 }
 
 impl From<TruncateOperator> for Truncate {
     fn from(op: TruncateOperator) -> Self {
-        Truncate {
-            op
-        }
+        Truncate { op }
     }
 }
 

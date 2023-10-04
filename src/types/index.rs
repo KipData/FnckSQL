@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use crate::types::ColumnId;
 use crate::types::value::ValueRef;
+use crate::types::ColumnId;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub type IndexId = u32;
 pub type IndexMetaRef = Arc<IndexMeta>;
@@ -11,7 +11,7 @@ pub struct IndexMeta {
     pub id: IndexId,
     pub column_ids: Vec<ColumnId>,
     pub name: String,
-    pub is_unique:bool
+    pub is_unique: bool,
 }
 
 pub struct Index {
@@ -21,9 +21,6 @@ pub struct Index {
 
 impl Index {
     pub fn new(id: IndexId, column_values: Vec<ValueRef>) -> Self {
-        Index {
-            id,
-            column_values,
-        }
+        Index { id, column_values }
     }
 }

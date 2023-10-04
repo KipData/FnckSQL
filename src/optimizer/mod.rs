@@ -2,7 +2,6 @@ use crate::types::errors::TypeError;
 
 /// The architecture and some components,
 /// such as (/core) are referenced from sqlrs
-
 mod core;
 pub mod heuristic;
 pub mod rule;
@@ -13,6 +12,6 @@ pub enum OptimizerError {
     TypeError(
         #[source]
         #[from]
-        TypeError
-    )
+        TypeError,
+    ),
 }

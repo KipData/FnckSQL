@@ -1,14 +1,14 @@
-use std::cmp;
-use lazy_static::lazy_static;
 use crate::optimizer::core::opt_expr::OptExprNode;
-use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::core::pattern::Pattern;
+use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::Operator;
+use lazy_static::lazy_static;
+use std::cmp;
 lazy_static! {
     static ref LIMIT_PROJECT_TRANSPOSE_RULE: Pattern = {
         Pattern {
@@ -56,10 +56,7 @@ impl Rule for LimitProjectTranspose {
     }
 
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
-        graph.swap_node(
-            node_id,
-            graph.children_at(node_id)[0]
-        );
+        graph.swap_node(node_id, graph.children_at(node_id)[0]);
 
         Ok(())
     }
@@ -86,9 +83,7 @@ impl Rule for EliminateLimits {
                 graph.remove_node(child_id, false);
                 graph.replace_node(
                     node_id,
-                    OptExprNode::OperatorRef(
-                        Operator::Limit(new_limit_op)
-                    )
+                    OptExprNode::OperatorRef(Operator::Limit(new_limit_op)),
                 );
             }
         }
@@ -123,12 +118,12 @@ impl Rule for PushLimitThroughJoin {
                 if let Some(grandson_id) = match ty {
                     JoinType::Left => Some(graph.children_at(child_id)[0]),
                     JoinType::Right => Some(graph.children_at(child_id)[1]),
-                    _ => None
+                    _ => None,
                 } {
                     graph.add_node(
                         child_id,
                         Some(grandson_id),
-                        OptExprNode::OperatorRef(Operator::Limit(op.clone()))
+                        OptExprNode::OperatorRef(Operator::Limit(op.clone())),
                     );
                 }
             }
@@ -157,7 +152,7 @@ impl Rule for PushLimitIntoScan {
                 graph.remove_node(node_id, false);
                 graph.replace_node(
                     child_index,
-                    OptExprNode::OperatorRef(Operator::Scan(new_scan_op))
+                    OptExprNode::OperatorRef(Operator::Scan(new_scan_op)),
                 );
             }
         }
@@ -185,18 +180,16 @@ mod tests {
             .batch(
                 "test_limit_project_transpose".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::LimitProjectTranspose]
+                vec![RuleImpl::LimitProjectTranspose],
             )
-             .find_best()?;
+            .find_best()?;
 
         if let Operator::Project(_) = &best_plan.operator {
-
         } else {
             unreachable!("Should be a project operator")
         }
 
         if let Operator::Limit(_) = &best_plan.childrens[0].operator {
-
         } else {
             unreachable!("Should be a limit operator")
         }
@@ -208,21 +201,20 @@ mod tests {
     async fn test_eliminate_limits() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select c1, c2 from t1 limit 1 offset 1").await?;
 
-        let mut optimizer = HepOptimizer::new(plan.clone())
-            .batch(
-                "test_eliminate_limits".to_string(),
-                HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::EliminateLimits]
-            );
+        let mut optimizer = HepOptimizer::new(plan.clone()).batch(
+            "test_eliminate_limits".to_string(),
+            HepBatchStrategy::once_topdown(),
+            vec![RuleImpl::EliminateLimits],
+        );
 
         let new_limit_op = LimitOperator {
             offset: 2,
             limit: 1,
         };
 
-        optimizer.graph.add_root(
-            OptExprNode::OperatorRef(Operator::Limit(new_limit_op))
-        );
+        optimizer
+            .graph
+            .add_root(OptExprNode::OperatorRef(Operator::Limit(new_limit_op)));
 
         let best_plan = optimizer.find_best()?;
 
@@ -250,8 +242,8 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![
                     RuleImpl::LimitProjectTranspose,
-                    RuleImpl::PushLimitThroughJoin
-                ]
+                    RuleImpl::PushLimitThroughJoin,
+                ],
             )
             .find_best()?;
 
@@ -279,8 +271,8 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![
                     RuleImpl::LimitProjectTranspose,
-                    RuleImpl::PushLimitIntoTableScan
-                ]
+                    RuleImpl::PushLimitIntoTableScan,
+                ],
             )
             .find_best()?;
 
