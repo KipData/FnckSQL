@@ -11,7 +11,6 @@ pub mod scan;
 pub mod show;
 pub mod sort;
 pub mod truncate;
-pub mod show;
 pub mod copy_from_file;
 pub mod copy_to_file;
 pub mod update;
