@@ -1,15 +1,15 @@
-use std::sync::Arc;
 use crate::execution::executor::dql::aggregate::Accumulator;
 use crate::execution::ExecutorError;
-use crate::expression::BinaryOperator;
 use crate::expression::value_compute::binary_op;
-use crate::types::LogicalType;
+use crate::expression::BinaryOperator;
 use crate::types::value::{DataValue, ValueRef};
+use crate::types::LogicalType;
+use std::sync::Arc;
 
 pub struct MinMaxAccumulator {
     inner: Option<ValueRef>,
     op: BinaryOperator,
-    ty: LogicalType
+    ty: LogicalType,
 }
 
 impl MinMaxAccumulator {
@@ -32,21 +32,24 @@ impl Accumulator for MinMaxAccumulator {
     fn update_value(&mut self, value: &ValueRef) -> Result<(), ExecutorError> {
         if !value.is_null() {
             if let Some(inner_value) = &self.inner {
-                if let DataValue::Boolean(Some(result)) = binary_op(&inner_value, value, &self.op)? {
+                if let DataValue::Boolean(Some(result)) = binary_op(&inner_value, value, &self.op)?
+                {
                     result
                 } else {
                     unreachable!()
                 }
             } else {
                 true
-            }.then(|| self.inner = Some(value.clone()));
+            }
+            .then(|| self.inner = Some(value.clone()));
         }
 
         Ok(())
     }
 
     fn evaluate(&self) -> Result<ValueRef, ExecutorError> {
-        Ok(self.inner
+        Ok(self
+            .inner
             .clone()
             .unwrap_or_else(|| Arc::new(DataValue::none(&self.ty))))
     }

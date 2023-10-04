@@ -1,10 +1,13 @@
 pub mod errors;
-pub mod value;
-pub mod tuple;
 pub mod index;
 pub mod tuple_builder;
+pub mod tuple;
+pub mod value;
 
+use chrono::{NaiveDate, NaiveDateTime};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::any::TypeId;
 
 use sqlparser::ast::ExactNumberInfo;
 use strum_macros::AsRefStr;
@@ -15,7 +18,9 @@ pub type ColumnId = u32;
 
 /// Sqlrs type conversion:
 /// sqlparser::ast::DataType -> LogicalType -> arrow::datatypes::DataType
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, AsRefStr, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, AsRefStr, Serialize, Deserialize,
+)]
 pub enum LogicalType {
     Invalid,
     SqlNull,
@@ -38,6 +43,42 @@ pub enum LogicalType {
 }
 
 impl LogicalType {
+    pub fn type_trans<T: 'static>() -> Option<LogicalType> {
+        let type_id = TypeId::of::<T>();
+
+        if type_id == TypeId::of::<i8>() {
+            Some(LogicalType::Tinyint)
+        } else if type_id == TypeId::of::<i16>() {
+            Some(LogicalType::Smallint)
+        } else if type_id == TypeId::of::<i32>() {
+            Some(LogicalType::Integer)
+        } else if type_id == TypeId::of::<i64>() {
+            Some(LogicalType::Bigint)
+        } else if type_id == TypeId::of::<u8>() {
+            Some(LogicalType::UTinyint)
+        } else if type_id == TypeId::of::<u16>() {
+            Some(LogicalType::USmallint)
+        } else if type_id == TypeId::of::<u32>() {
+            Some(LogicalType::UInteger)
+        } else if type_id == TypeId::of::<u64>() {
+            Some(LogicalType::UBigint)
+        } else if type_id == TypeId::of::<f32>() {
+            Some(LogicalType::Float)
+        } else if type_id == TypeId::of::<f64>() {
+            Some(LogicalType::Double)
+        } else if type_id == TypeId::of::<NaiveDate>() {
+            Some(LogicalType::Date)
+        } else if type_id == TypeId::of::<NaiveDateTime>() {
+            Some(LogicalType::DateTime)
+        } else if type_id == TypeId::of::<Decimal>() {
+            Some(LogicalType::Decimal(None, None))
+        } else if type_id == TypeId::of::<String>() {
+            Some(LogicalType::Varchar(None))
+        } else {
+            None
+        }
+    }
+
     pub fn raw_len(&self) -> Option<usize> {
         match self {
             LogicalType::Invalid => Some(0),
@@ -113,11 +154,7 @@ impl LogicalType {
     }
 
     pub fn is_floating_point_numeric(&self) -> bool {
-        matches!(
-            self,
-            LogicalType::Float
-                | LogicalType::Double
-        )
+        matches!(self, LogicalType::Float | LogicalType::Double)
     }
 
     pub fn max_logical_type(
@@ -136,13 +173,24 @@ impl LogicalType {
         if left.is_numeric() && right.is_numeric() {
             return LogicalType::combine_numeric_types(left, right);
         }
-        if matches!((left, right), (LogicalType::Date, LogicalType::Varchar(_)) | (LogicalType::Varchar(_), LogicalType::Date)) {
+        if matches!(
+            (left, right),
+            (LogicalType::Date, LogicalType::Varchar(_))
+                | (LogicalType::Varchar(_), LogicalType::Date)
+        ) {
             return Ok(LogicalType::Date);
         }
-        if matches!((left, right), (LogicalType::Date, LogicalType::DateTime) | (LogicalType::DateTime, LogicalType::Date)) {
+        if matches!(
+            (left, right),
+            (LogicalType::Date, LogicalType::DateTime) | (LogicalType::DateTime, LogicalType::Date)
+        ) {
             return Ok(LogicalType::DateTime);
         }
-        if matches!((left, right), (LogicalType::DateTime, LogicalType::Varchar(_)) | (LogicalType::Varchar(_), LogicalType::DateTime)) {
+        if matches!(
+            (left, right),
+            (LogicalType::DateTime, LogicalType::Varchar(_))
+                | (LogicalType::Varchar(_), LogicalType::DateTime)
+        ) {
             return Ok(LogicalType::DateTime);
         }
         Err(TypeError::InternalError(format!(
@@ -259,8 +307,9 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
 
     fn try_from(value: sqlparser::ast::DataType) -> Result<Self, Self::Error> {
         match value {
-            sqlparser::ast::DataType::Char(len)
-            | sqlparser::ast::DataType::Varchar(len)=> Ok(LogicalType::Varchar(len.map(|len| len.length as u32))),
+            sqlparser::ast::DataType::Char(len) | sqlparser::ast::DataType::Varchar(len) => {
+                Ok(LogicalType::Varchar(len.map(|len| len.length as u32)))
+            }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
             sqlparser::ast::DataType::Double => Ok(LogicalType::Double),
             sqlparser::ast::DataType::TinyInt(_) => Ok(LogicalType::Tinyint),
@@ -276,12 +325,12 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
             sqlparser::ast::DataType::UnsignedBigInt(_) => Ok(LogicalType::UBigint),
             sqlparser::ast::DataType::Boolean => Ok(LogicalType::Boolean),
             sqlparser::ast::DataType::Datetime(_) => Ok(LogicalType::DateTime),
-            sqlparser::ast::DataType::Decimal(info) =>  match info {
-                    ExactNumberInfo::None => Ok(Self::Decimal(None, None)),
-                    ExactNumberInfo::Precision(p) => Ok(Self::Decimal(Some(p as u8), None)),
-                    ExactNumberInfo::PrecisionAndScale(p, s) => {
-                        Ok(Self::Decimal(Some(p as u8), Some(s as u8)))
-                    }
+            sqlparser::ast::DataType::Decimal(info) => match info {
+                ExactNumberInfo::None => Ok(Self::Decimal(None, None)),
+                ExactNumberInfo::Precision(p) => Ok(Self::Decimal(Some(p as u8), None)),
+                ExactNumberInfo::PrecisionAndScale(p, s) => {
+                    Ok(Self::Decimal(Some(p as u8), Some(s as u8)))
+                }
             },
             other => Err(TypeError::NotImplementedSqlparserDataType(
                 other.to_string(),

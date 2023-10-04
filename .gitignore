@@ -18,3 +18,4 @@ Cargo.lock
 /.vscode
 /.idea
 /.obsidian
+.DS_Store

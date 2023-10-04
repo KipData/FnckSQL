@@ -1,14 +1,14 @@
-use ahash::{HashMap, HashMapExt};
-use futures_async_stream::try_stream;
-use itertools::Itertools;
-use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::executor::dql::aggregate::create_accumulators;
+use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
+use ahash::{HashMap, HashMapExt};
+use futures_async_stream::try_stream;
+use itertools::Itertools;
 
 pub struct HashAggExecutor {
     pub agg_calls: Vec<ScalarExpression>,
@@ -17,7 +17,15 @@ pub struct HashAggExecutor {
 }
 
 impl From<(AggregateOperator, BoxedExecutor)> for HashAggExecutor {
-    fn from((AggregateOperator { agg_calls, groupby_exprs }, input): (AggregateOperator, BoxedExecutor)) -> Self {
+    fn from(
+        (
+            AggregateOperator {
+                agg_calls,
+                groupby_exprs,
+            },
+            input,
+        ): (AggregateOperator, BoxedExecutor),
+    ) -> Self {
         HashAggExecutor {
             agg_calls,
             groupby_exprs,
@@ -53,7 +61,8 @@ impl HashAggExecutor {
             });
 
             // 2.1 evaluate agg exprs and collect the result values for later accumulators.
-            let values: Vec<ValueRef> = self.agg_calls
+            let values: Vec<ValueRef> = self
+                .agg_calls
                 .iter()
                 .map(|expr| {
                     if let ScalarExpression::AggCall { args, .. } = expr {
@@ -64,7 +73,8 @@ impl HashAggExecutor {
                 })
                 .try_collect()?;
 
-            let group_keys: Vec<ValueRef> = self.groupby_exprs
+            let group_keys: Vec<ValueRef> = self
+                .groupby_exprs
                 .iter()
                 .map(|expr| expr.eval_column(&tuple))
                 .try_collect()?;
@@ -82,11 +92,10 @@ impl HashAggExecutor {
         if let Some(group_and_agg_columns) = group_and_agg_columns_option {
             for (group_keys, accs) in group_hash_accs {
                 // Tips: Accumulator First
-                let values: Vec<ValueRef> = accs.iter()
+                let values: Vec<ValueRef> = accs
+                    .iter()
                     .map(|acc| acc.evaluate())
-                    .chain(group_keys
-                        .into_iter()
-                        .map(|key| Ok(key)))
+                    .chain(group_keys.into_iter().map(|key| Ok(key)))
                     .try_collect()?;
 
                 yield Tuple {
@@ -101,23 +110,22 @@ impl HashAggExecutor {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-    use itertools::Itertools;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::execution::executor::dql::aggregate::hash_agg::HashAggExecutor;
-    use crate::execution::executor::dql::values::Values;
-    use crate::execution::executor::{Executor, try_collect};
     use crate::execution::executor::dql::test::build_integers;
+    use crate::execution::executor::dql::values::Values;
+    use crate::execution::executor::{try_collect, Executor};
     use crate::execution::ExecutorError;
     use crate::expression::agg::AggKind;
     use crate::expression::ScalarExpression;
     use crate::planner::operator::aggregate::AggregateOperator;
     use crate::planner::operator::values::ValuesOperator;
     use crate::storage::memory::MemStorage;
-    use crate::types::LogicalType;
     use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
-
+    use crate::types::LogicalType;
+    use itertools::Itertools;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_hash_agg() -> Result<(), ExecutorError> {
@@ -125,25 +133,34 @@ mod test {
         let desc = ColumnDesc::new(LogicalType::Integer, false, false);
 
         let t1_columns = vec![
-            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone(), None)),
-            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone(), None)),
-            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone(), None)),
+            Arc::new(ColumnCatalog::new(
+                "c1".to_string(),
+                true,
+                desc.clone(),
+                None,
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c2".to_string(),
+                true,
+                desc.clone(),
+                None,
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c3".to_string(),
+                true,
+                desc.clone(),
+                None,
+            )),
         ];
 
         let operator = AggregateOperator {
-            groupby_exprs: vec![
-                ScalarExpression::ColumnRef(t1_columns[0].clone())
-            ],
-            agg_calls: vec![
-                ScalarExpression::AggCall {
-                    distinct: false,
-                    kind: AggKind::Sum,
-                    args: vec![
-                        ScalarExpression::ColumnRef(t1_columns[1].clone())
-                    ],
-                    ty: LogicalType::Integer,
-                }
-            ],
+            groupby_exprs: vec![ScalarExpression::ColumnRef(t1_columns[0].clone())],
+            agg_calls: vec![ScalarExpression::AggCall {
+                distinct: false,
+                kind: AggKind::Sum,
+                args: vec![ScalarExpression::ColumnRef(t1_columns[1].clone())],
+                ty: LogicalType::Integer,
+            }],
         };
 
         let input = Values::from(ValuesOperator {
@@ -167,21 +184,21 @@ mod test {
                     Arc::new(DataValue::Int32(Some(1))),
                     Arc::new(DataValue::Int32(Some(2))),
                     Arc::new(DataValue::Int32(Some(3))),
-                ]
+                ],
             ],
             columns: t1_columns,
-        }).execute(&mem_storage);
+        })
+        .execute(&mem_storage);
 
-        let tuples = try_collect(&mut HashAggExecutor::from((operator, input)).execute(&mem_storage)).await?;
+        let tuples =
+            try_collect(&mut HashAggExecutor::from((operator, input)).execute(&mem_storage))
+                .await?;
 
         println!("hash_agg_test: \n{}", create_table(&tuples));
 
         assert_eq!(tuples.len(), 2);
 
-        let vec_values = tuples
-            .into_iter()
-            .map(|tuple| tuple.values)
-            .collect_vec();
+        let vec_values = tuples.into_iter().map(|tuple| tuple.values).collect_vec();
 
         assert!(vec_values.contains(&build_integers(vec![Some(3), Some(0)])));
         assert!(vec_values.contains(&build_integers(vec![Some(5), Some(1)])));

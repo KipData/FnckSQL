@@ -30,7 +30,10 @@ impl PatternMatcher for HepMatcher<'_, '_> {
         match &self.pattern.children {
             PatternChildrenPredicate::Recursive => {
                 // check
-                for node_id in self.graph.nodes_iter(HepMatchOrder::TopDown, Some(self.start_id)) {
+                for node_id in self
+                    .graph
+                    .nodes_iter(HepMatchOrder::TopDown, Some(self.start_id))
+                {
                     if !(self.pattern.predicate)(&self.graph.operator(node_id)) {
                         return false;
                     }
@@ -45,7 +48,7 @@ impl PatternMatcher for HepMatcher<'_, '_> {
                     }
                 }
             }
-            PatternChildrenPredicate::None => ()
+            PatternChildrenPredicate::None => (),
         }
 
         true
@@ -59,8 +62,8 @@ mod tests {
     use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate, PatternMatcher};
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::optimizer::heuristic::matcher::HepMatcher;
-    use crate::planner::LogicalPlan;
     use crate::planner::operator::Operator;
+    use crate::planner::LogicalPlan;
 
     #[tokio::test]
     async fn test_predicate() -> Result<(), ExecutorError> {
@@ -96,17 +99,15 @@ mod tests {
             childrens: vec![
                 LogicalPlan {
                     operator: Operator::Dummy,
-                    childrens: vec![
-                        LogicalPlan {
-                            operator: Operator::Dummy,
-                            childrens: vec![],
-                        }
-                    ],
+                    childrens: vec![LogicalPlan {
+                        operator: Operator::Dummy,
+                        childrens: vec![],
+                    }],
                 },
                 LogicalPlan {
                     operator: Operator::Dummy,
                     childrens: vec![],
-                }
+                },
             ],
         };
         let graph = HepGraph::new(all_dummy_plan.clone());
@@ -119,9 +120,6 @@ mod tests {
             children: PatternChildrenPredicate::Recursive,
         };
 
-        assert!(
-            HepMatcher::new(&only_dummy_pattern, HepNodeId::new(0), &graph)
-                .match_opt_expr()
-        );
+        assert!(HepMatcher::new(&only_dummy_pattern, HepNodeId::new(0), &graph).match_opt_expr());
     }
 }

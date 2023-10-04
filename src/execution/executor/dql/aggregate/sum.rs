@@ -1,12 +1,12 @@
-use std::collections::HashSet;
-use std::sync::Arc;
-use ahash::RandomState;
 use crate::execution::executor::dql::aggregate::Accumulator;
 use crate::execution::ExecutorError;
-use crate::expression::BinaryOperator;
 use crate::expression::value_compute::binary_op;
-use crate::types::LogicalType;
+use crate::expression::BinaryOperator;
 use crate::types::value::{DataValue, ValueRef};
+use crate::types::LogicalType;
+use ahash::RandomState;
+use std::collections::HashSet;
+use std::sync::Arc;
 
 pub struct SumAccumulator {
     result: DataValue,
@@ -16,18 +16,16 @@ impl SumAccumulator {
     pub fn new(ty: &LogicalType) -> Self {
         assert!(ty.is_numeric());
 
-        Self { result: DataValue::init(&ty) }
+        Self {
+            result: DataValue::init(&ty),
+        }
     }
 }
 
 impl Accumulator for SumAccumulator {
     fn update_value(&mut self, value: &ValueRef) -> Result<(), ExecutorError> {
         if !value.is_null() {
-            self.result = binary_op(
-                &self.result,
-                value,
-                &BinaryOperator::Plus
-            )?;
+            self.result = binary_op(&self.result, value, &BinaryOperator::Plus)?;
         }
 
         Ok(())
@@ -40,7 +38,7 @@ impl Accumulator for SumAccumulator {
 
 pub struct DistinctSumAccumulator {
     distinct_values: HashSet<ValueRef, RandomState>,
-    inner: SumAccumulator
+    inner: SumAccumulator,
 }
 
 impl DistinctSumAccumulator {

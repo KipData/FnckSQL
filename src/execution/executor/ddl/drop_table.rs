@@ -1,19 +1,17 @@
-use futures_async_stream::try_stream;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
+use futures_async_stream::try_stream;
 
 pub struct DropTable {
-    op: DropTableOperator
+    op: DropTableOperator,
 }
 
 impl From<DropTableOperator> for DropTable {
     fn from(op: DropTableOperator) -> Self {
-        DropTable {
-            op
-        }
+        DropTable { op }
     }
 }
 

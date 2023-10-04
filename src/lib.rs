@@ -6,14 +6,14 @@
 #![feature(slice_pattern)]
 #![feature(bound_map)]
 extern crate core;
-
 pub mod binder;
 pub mod catalog;
 pub mod db;
+pub mod execution;
 pub mod expression;
+pub mod marco;
+mod optimizer;
 pub mod parser;
 pub mod planner;
-pub mod types;
-mod optimizer;
-pub mod execution;
 pub mod storage;
+pub mod types;

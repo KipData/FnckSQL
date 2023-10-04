@@ -47,7 +47,7 @@ async fn server_run() -> Result<(), Box<dyn Error>> {
 
         if input.len() >= 4 && input.to_lowercase()[..4].eq("quit") {
             println!("{}", BLOOM);
-            break
+            break;
         }
 
         match db.run(&input).await {

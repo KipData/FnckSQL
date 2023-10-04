@@ -1,10 +1,10 @@
 pub mod executor;
 
-use sqlparser::parser::ParserError;
 use crate::binder::BindError;
 use crate::catalog::CatalogError;
 use crate::storage::StorageError;
 use crate::types::errors::TypeError;
+use sqlparser::parser::ParserError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ExecutorError {
@@ -24,19 +24,19 @@ pub enum ExecutorError {
     StorageError(
         #[source]
         #[from]
-        StorageError
+        StorageError,
     ),
     #[error("bind error: {0}")]
     BindError(
         #[source]
         #[from]
-        BindError
+        BindError,
     ),
     #[error("parser error: {0}")]
     ParserError(
         #[source]
         #[from]
-        ParserError
+        ParserError,
     ),
     #[error("Internal error: {0}")]
     InternalError(String),

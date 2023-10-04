@@ -1,17 +1,15 @@
-use std::collections::HashSet;
 use ahash::RandomState;
 use itertools::Itertools;
 use sqlparser::ast::{Expr, OrderByExpr};
+use std::collections::HashSet;
 
-use crate::{
-    expression::ScalarExpression,
-    planner::{
-        operator::{aggregate::AggregateOperator, sort::SortField},
-    },
-};
 use crate::binder::{BindError, InputRefType};
 use crate::planner::LogicalPlan;
 use crate::storage::Storage;
+use crate::{
+    expression::ScalarExpression,
+    planner::operator::{aggregate::AggregateOperator, sort::SortField},
+};
 
 use super::Binder;
 
@@ -40,7 +38,8 @@ impl<S: Storage> Binder<S> {
         select_list: &mut [ScalarExpression],
         groupby: &[Expr],
     ) -> Result<(), BindError> {
-        self.validate_groupby_illegal_column(select_list, groupby).await?;
+        self.validate_groupby_illegal_column(select_list, groupby)
+            .await?;
 
         for gb in groupby {
             let mut expr = self.bind_expr(gb).await?;
@@ -89,7 +88,11 @@ impl<S: Storage> Binder<S> {
         Ok((return_having, return_orderby))
     }
 
-    fn visit_column_agg_expr(&mut self, expr: &mut ScalarExpression, is_select: bool) -> Result<(), BindError> {
+    fn visit_column_agg_expr(
+        &mut self,
+        expr: &mut ScalarExpression,
+        is_select: bool,
+    ) -> Result<(), BindError> {
         match expr {
             ScalarExpression::AggCall {
                 ty: return_type, ..
@@ -97,16 +100,13 @@ impl<S: Storage> Binder<S> {
                 let ty = return_type.clone();
                 if is_select {
                     let index = self.context.input_ref_index(InputRefType::AggCall);
-                    let input_ref = ScalarExpression::InputRef {
-                        index,
-                        ty,
-                    };
+                    let input_ref = ScalarExpression::InputRef { index, ty };
                     match std::mem::replace(expr, input_ref) {
                         ScalarExpression::AggCall {
                             kind,
                             args,
                             ty,
-                            distinct
+                            distinct,
                         } => {
                             self.context.agg_calls.push(ScalarExpression::AggCall {
                                 distinct,
@@ -125,14 +125,13 @@ impl<S: Storage> Binder<S> {
                         .find_position(|agg_expr| agg_expr == &expr)
                         .ok_or_else(|| BindError::AggMiss(format!("{:?}", expr)))?;
 
-                    let _ = std::mem::replace(expr, ScalarExpression::InputRef {
-                        index,
-                        ty,
-                    });
+                    let _ = std::mem::replace(expr, ScalarExpression::InputRef { index, ty });
                 }
             }
 
-            ScalarExpression::TypeCast { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
+            ScalarExpression::TypeCast { expr, .. } => {
+                self.visit_column_agg_expr(expr, is_select)?
+            }
             ScalarExpression::IsNull { expr } => self.visit_column_agg_expr(expr, is_select)?,
             ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
             ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
@@ -185,7 +184,8 @@ impl<S: Storage> Binder<S> {
                 group_raw_exprs.push(expr);
             }
         }
-        let mut group_raw_set: HashSet<&ScalarExpression, RandomState> = HashSet::from_iter(group_raw_exprs.iter());
+        let mut group_raw_set: HashSet<&ScalarExpression, RandomState> =
+            HashSet::from_iter(group_raw_exprs.iter());
 
         for expr in select_items {
             if expr.has_agg_call(&self.context) {
@@ -195,19 +195,17 @@ impl<S: Storage> Binder<S> {
             group_raw_set.remove(expr);
 
             if !group_raw_exprs.iter().contains(expr) {
-                return Err(BindError::AggMiss(
-                    format!(
-                        "{:?} must appear in the GROUP BY clause or be used in an aggregate function",
-                        expr
-                    )
-                ));
+                return Err(BindError::AggMiss(format!(
+                    "{:?} must appear in the GROUP BY clause or be used in an aggregate function",
+                    expr
+                )));
             }
         }
 
         if !group_raw_set.is_empty() {
-            return Err(BindError::AggMiss(
-                format!("In the GROUP BY clause the field must be in the select clause")
-            ));
+            return Err(BindError::AggMiss(format!(
+                "In the GROUP BY clause the field must be in the select clause"
+            )));
         }
 
         Ok(())

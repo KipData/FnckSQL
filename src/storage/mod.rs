@@ -1,20 +1,20 @@
+pub mod kip;
 pub mod memory;
 mod table_codec;
-pub mod kip;
 
-use std::collections::VecDeque;
-use std::ops::SubAssign;
-use async_trait::async_trait;
-use kip_db::error::CacheError;
-use kip_db::kernel::lsm::mvcc;
-use kip_db::KernelError;
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
-use crate::expression::ScalarExpression;
 use crate::expression::simplify::ConstantBinary;
+use crate::expression::ScalarExpression;
 use crate::storage::table_codec::TableCodec;
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
+use async_trait::async_trait;
+use kip_db::error::CacheError;
+use kip_db::kernel::lsm::mvcc;
+use kip_db::KernelError;
+use std::collections::VecDeque;
+use std::ops::SubAssign;
 
 #[async_trait]
 pub trait Storage: Sync + Send + Clone + 'static {
@@ -23,7 +23,7 @@ pub trait Storage: Sync + Send + Clone + 'static {
     async fn create_table(
         &self,
         table_name: TableName,
-        columns: Vec<ColumnCatalog>
+        columns: Vec<ColumnCatalog>,
     ) -> Result<TableName, StorageError>;
 
     async fn drop_table(&self, name: &String) -> Result<(), StorageError>;
@@ -57,10 +57,15 @@ pub trait Transaction: Sync + Send + 'static {
         bounds: Bounds,
         projection: Projections,
         index_meta: IndexMetaRef,
-        binaries: Vec<ConstantBinary>
+        binaries: Vec<ConstantBinary>,
     ) -> Result<IndexIter<'_>, StorageError>;
 
-    fn add_index(&mut self, index: Index, tuple_ids: Vec<TupleId>, is_unique: bool) -> Result<(), StorageError>;
+    fn add_index(
+        &mut self,
+        index: Index,
+        tuple_ids: Vec<TupleId>,
+        is_unique: bool,
+    ) -> Result<(), StorageError>;
 
     fn del_index(&mut self, index: &Index) -> Result<(), StorageError>;
 
@@ -76,7 +81,7 @@ pub struct IndexIter<'a> {
     projections: Projections,
     table_codec: &'a TableCodec,
     tuple_ids: VecDeque<TupleId>,
-    tx: &'a mvcc::Transaction
+    tx: &'a mvcc::Transaction,
 }
 
 impl Iter for IndexIter<'_> {
@@ -84,12 +89,16 @@ impl Iter for IndexIter<'_> {
         if let Some(tuple_id) = self.tuple_ids.pop_front() {
             let key = self.table_codec.encode_tuple_key(&tuple_id)?;
 
-            Ok(self.tx.get(&key)?
-                .map(|bytes| tuple_projection(
-                    &mut None,
-                    &self.projections,
-                    self.table_codec.decode_tuple(&bytes)
-                ))
+            Ok(self
+                .tx
+                .get(&key)?
+                .map(|bytes| {
+                    tuple_projection(
+                        &mut None,
+                        &self.projections,
+                        self.table_codec.decode_tuple(&bytes),
+                    )
+                })
                 .transpose()?)
         } else {
             Ok(None)
@@ -104,7 +113,7 @@ pub trait Iter: Sync + Send {
 pub(crate) fn tuple_projection(
     limit: &mut Option<usize>,
     projections: &Projections,
-    tuple: Tuple
+    tuple: Tuple,
 ) -> Result<Tuple, StorageError> {
     let projection_len = projections.len();
     let mut columns = Vec::with_capacity(projection_len);

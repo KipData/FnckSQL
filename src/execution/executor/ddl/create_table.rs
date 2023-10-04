@@ -1,20 +1,18 @@
-use futures_async_stream::try_stream;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
+use futures_async_stream::try_stream;
 
 pub struct CreateTable {
-    op: CreateTableOperator
+    op: CreateTableOperator,
 }
 
 impl From<CreateTableOperator> for CreateTable {
     fn from(op: CreateTableOperator) -> Self {
-        CreateTable {
-            op
-        }
+        CreateTable { op }
     }
 }
 

@@ -1,21 +1,19 @@
-use bytes::Bytes;
-use lazy_static::lazy_static;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexId, IndexMeta};
 use crate::types::tuple::{Tuple, TupleId};
+use bytes::Bytes;
+use lazy_static::lazy_static;
 
 const BOUND_MIN_TAG: u8 = 0;
 const BOUND_MAX_TAG: u8 = 1;
 lazy_static! {
-    static ref ROOT_BYTES: Vec<u8> = {
-        b"Root".to_vec()
-    };
+    static ref ROOT_BYTES: Vec<u8> = { b"Root".to_vec() };
 }
 
 #[derive(Clone)]
 pub struct TableCodec {
-    pub table: TableCatalog
+    pub table: TableCatalog,
 }
 
 #[derive(Copy, Clone)]
@@ -32,9 +30,7 @@ impl TableCodec {
     ///
     /// Tips: Root full key = key_prefix
     fn key_prefix(ty: CodecType, table_name: &String) -> Vec<u8> {
-        let mut table_bytes = table_name
-            .clone()
-            .into_bytes();
+        let mut table_bytes = table_name.clone().into_bytes();
 
         match ty {
             CodecType::Column => {
@@ -132,10 +128,7 @@ impl TableCodec {
     /// Key: TableName_Tuple_0_RowID(Sorted)
     /// Value: Tuple
     pub fn encode_tuple(&self, tuple: &Tuple) -> Result<(Bytes, Bytes), TypeError> {
-        let tuple_id = tuple
-            .id
-            .clone()
-            .ok_or(TypeError::NotNull)?;
+        let tuple_id = tuple.id.clone().ok_or(TypeError::NotNull)?;
         let key = self.encode_tuple_key(&tuple_id)?;
 
         Ok((Bytes::from(key), Bytes::from(tuple.serialize_to())))
@@ -156,12 +149,18 @@ impl TableCodec {
 
     /// Key: TableName_IndexMeta_0_IndexID
     /// Value: IndexMeta
-    pub fn encode_index_meta(name: &String, index_meta: &IndexMeta) -> Result<(Bytes, Bytes), TypeError> {
+    pub fn encode_index_meta(
+        name: &String,
+        index_meta: &IndexMeta,
+    ) -> Result<(Bytes, Bytes), TypeError> {
         let mut key_prefix = Self::key_prefix(CodecType::IndexMeta, &name);
         key_prefix.push(BOUND_MIN_TAG);
         key_prefix.append(&mut index_meta.id.to_be_bytes().to_vec());
 
-        Ok((Bytes::from(key_prefix), Bytes::from(bincode::serialize(&index_meta)?)))
+        Ok((
+            Bytes::from(key_prefix),
+            Bytes::from(bincode::serialize(&index_meta)?),
+        ))
     }
 
     pub fn decode_index_meta(bytes: &[u8]) -> Result<IndexMeta, TypeError> {
@@ -178,10 +177,17 @@ impl TableCodec {
     ///
     /// Tips: The unique index has only one ColumnID and one corresponding DataValue,
     /// so it can be positioned directly.
-    pub fn encode_index(&self, index: &Index, tuple_ids: &[TupleId]) -> Result<(Bytes, Bytes), TypeError> {
+    pub fn encode_index(
+        &self,
+        index: &Index,
+        tuple_ids: &[TupleId],
+    ) -> Result<(Bytes, Bytes), TypeError> {
         let key = self.encode_index_key(index)?;
 
-        Ok((Bytes::from(key), Bytes::from(bincode::serialize(tuple_ids)?)))
+        Ok((
+            Bytes::from(key),
+            Bytes::from(bincode::serialize(tuple_ids)?),
+        ))
     }
 
     pub fn encode_index_key(&self, index: &Index) -> Result<Vec<u8>, TypeError> {
@@ -221,13 +227,15 @@ impl TableCodec {
         Ok((column.table_name.clone().unwrap(), column))
     }
 
-
     /// Key: RootCatalog_0_TableName
     /// Value: TableName
     pub fn encode_root_table(table_name: &String) -> Result<(Bytes, Bytes), TypeError> {
         let key = Self::encode_root_table_key(table_name);
 
-        Ok((Bytes::from(key), Bytes::from(table_name.clone().into_bytes())))
+        Ok((
+            Bytes::from(key),
+            Bytes::from(table_name.clone().into_bytes()),
+        ))
     }
 
     pub fn encode_root_table_key(table_name: &String) -> Vec<u8> {
@@ -241,19 +249,19 @@ impl TableCodec {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-    use std::ops::Bound;
-    use std::sync::Arc;
-    use bytes::Bytes;
-    use itertools::Itertools;
-    use rust_decimal::Decimal;
     use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog};
     use crate::storage::table_codec::TableCodec;
     use crate::types::errors::TypeError;
     use crate::types::index::{Index, IndexMeta};
-    use crate::types::LogicalType;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
+    use crate::types::LogicalType;
+    use bytes::Bytes;
+    use itertools::Itertools;
+    use rust_decimal::Decimal;
+    use std::collections::BTreeSet;
+    use std::ops::Bound;
+    use std::sync::Arc;
 
     fn build_table_codec() -> (TableCatalog, TableCodec) {
         let columns = vec![
@@ -261,17 +269,19 @@ mod tests {
                 "c1".into(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false),
-                None
+                None,
             ),
             ColumnCatalog::new(
                 "c2".into(),
                 false,
-                ColumnDesc::new(LogicalType::Decimal(None,None), false, false),
-                None
+                ColumnDesc::new(LogicalType::Decimal(None, None), false, false),
+                None,
             ),
         ];
         let table_catalog = TableCatalog::new(Arc::new("t1".to_string()), columns).unwrap();
-        let codec = TableCodec { table: table_catalog.clone() };
+        let codec = TableCodec {
+            table: table_catalog.clone(),
+        };
         (table_catalog, codec)
     }
 
@@ -285,7 +295,7 @@ mod tests {
             values: vec![
                 Arc::new(DataValue::Int32(Some(0))),
                 Arc::new(DataValue::Decimal(Some(Decimal::new(1, 0)))),
-            ]
+            ],
         };
         let (_, bytes) = codec.encode_tuple(&tuple)?;
 
@@ -359,7 +369,7 @@ mod tests {
                     is_primary: false,
                     is_unique: false,
                 },
-                None
+                None,
             );
 
             col.table_name = Some(Arc::new(table_name.to_string()));
@@ -381,14 +391,12 @@ mod tests {
         set.insert(op(0, "T2"));
         set.insert(op(0, "T2"));
 
-        let (min, max) = TableCodec::columns_bound(
-            &Arc::new("T1".to_string())
-        );
+        let (min, max) = TableCodec::columns_bound(&Arc::new("T1".to_string()));
 
         let vec = set
             .range::<Bytes, (Bound<&Bytes>, Bound<&Bytes>)>((
                 Bound::Included(&Bytes::from(min)),
-                Bound::Included(&Bytes::from(max))
+                Bound::Included(&Bytes::from(max)),
             ))
             .collect_vec();
 
@@ -410,7 +418,8 @@ mod tests {
                 is_unique: false,
             };
 
-            let (key, _) = TableCodec::encode_index_meta(&table_name.to_string(), &index_meta).unwrap();
+            let (key, _) =
+                TableCodec::encode_index_meta(&table_name.to_string(), &index_meta).unwrap();
             key
         };
 
@@ -431,7 +440,7 @@ mod tests {
         let vec = set
             .range::<Bytes, (Bound<&Bytes>, Bound<&Bytes>)>((
                 Bound::Included(&Bytes::from(min)),
-                Bound::Included(&Bytes::from(max))
+                Bound::Included(&Bytes::from(max)),
             ))
             .collect_vec();
 
@@ -478,7 +487,10 @@ mod tests {
         println!("{:?}", max);
 
         let vec = set
-            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
+            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((
+                Bound::Included(&min),
+                Bound::Included(&max),
+            ))
             .collect_vec();
 
         assert_eq!(vec.len(), 3);
@@ -498,8 +510,10 @@ mod tests {
             };
 
             TableCodec {
-                table: TableCatalog::new(Arc::new(table_name.to_string()), vec![]).unwrap()
-            }.encode_index_key(&index).unwrap()
+                table: TableCatalog::new(Arc::new(table_name.to_string()), vec![]).unwrap(),
+            }
+            .encode_index_key(&index)
+            .unwrap()
         };
 
         set.insert(op(DataValue::Int32(Some(0)), 0, "T0"));
@@ -520,7 +534,10 @@ mod tests {
         let (min, max) = table_codec.all_index_bound();
 
         let vec = set
-            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
+            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((
+                Bound::Included(&min),
+                Bound::Included(&max),
+            ))
             .collect_vec();
 
         assert_eq!(vec.len(), 3);
@@ -535,8 +552,10 @@ mod tests {
         let mut set = BTreeSet::new();
         let op = |tuple_id: DataValue, table_name: &str| {
             TableCodec {
-                table: TableCatalog::new(Arc::new(table_name.to_string()), vec![]).unwrap()
-            }.encode_tuple_key(&Arc::new(tuple_id)).unwrap()
+                table: TableCatalog::new(Arc::new(table_name.to_string()), vec![]).unwrap(),
+            }
+            .encode_tuple_key(&Arc::new(tuple_id))
+            .unwrap()
         };
 
         set.insert(op(DataValue::Int32(Some(0)), "T0"));
@@ -557,7 +576,10 @@ mod tests {
         let (min, max) = table_codec.tuple_bound();
 
         let vec = set
-            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
+            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((
+                Bound::Included(&min),
+                Bound::Included(&max),
+            ))
             .collect_vec();
 
         assert_eq!(vec.len(), 3);
@@ -568,11 +590,9 @@ mod tests {
     }
 
     #[test]
-    fn test_root_codec_name_bound(){
+    fn test_root_codec_name_bound() {
         let mut set = BTreeSet::new();
-        let op = |table_name: &str| {
-            TableCodec::encode_root_table_key(&table_name.to_string())
-        };
+        let op = |table_name: &str| TableCodec::encode_root_table_key(&table_name.to_string());
 
         set.insert(b"A".to_vec());
 
@@ -585,12 +605,14 @@ mod tests {
         let (min, max) = TableCodec::root_table_bound();
 
         let vec = set
-            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((Bound::Included(&min), Bound::Included(&max)))
+            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((
+                Bound::Included(&min),
+                Bound::Included(&max),
+            ))
             .collect_vec();
 
         assert_eq!(vec[0], &op("T0"));
         assert_eq!(vec[1], &op("T1"));
         assert_eq!(vec[2], &op("T2"));
-
     }
 }

@@ -10,7 +10,6 @@ pub struct LogicalPlan {
 
 impl LogicalPlan {
     pub fn child(&self, index: usize) -> Option<&LogicalPlan> {
-        self.childrens
-            .get(index)
+        self.childrens.get(index)
     }
 }

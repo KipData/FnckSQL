@@ -1,14 +1,14 @@
-use std::collections::HashSet;
-use std::sync::Arc;
 use itertools::Itertools;
 use sqlparser::ast::{ColumnDef, ObjectName, TableConstraint};
+use std::collections::HashSet;
+use std::sync::Arc;
 
 use super::Binder;
-use crate::binder::{BindError, lower_case_name, split_name};
+use crate::binder::{lower_case_name, split_name, BindError};
 use crate::catalog::ColumnCatalog;
-use crate::planner::LogicalPlan;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
+use crate::planner::LogicalPlan;
 use crate::storage::Storage;
 
 impl<S: Storage> Binder<S> {
@@ -36,24 +36,19 @@ impl<S: Storage> Binder<S> {
             .map(|col| ColumnCatalog::from(col.clone()))
             .collect_vec();
 
-        let primary_key_count = columns
-            .iter()
-            .filter(|col| col.desc.is_primary)
-            .count();
+        let primary_key_count = columns.iter().filter(|col| col.desc.is_primary).count();
 
         if primary_key_count != 1 {
             return Err(BindError::InvalidTable(
-                "The primary key field must exist and have at least one".to_string()
+                "The primary key field must exist and have at least one".to_string(),
             ));
         }
 
         let plan = LogicalPlan {
-            operator: Operator::CreateTable(
-                CreateTableOperator {
-                    table_name,
-                    columns
-                }
-            ),
+            operator: Operator::CreateTable(CreateTableOperator {
+                table_name,
+                columns,
+            }),
             childrens: vec![],
         };
         Ok(plan)
@@ -62,12 +57,12 @@ impl<S: Storage> Binder<S> {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::TempDir;
     use super::*;
     use crate::binder::BinderContext;
     use crate::catalog::ColumnDesc;
     use crate::storage::kip::KipStorage;
     use crate::types::LogicalType;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_create_bind() {
@@ -84,13 +79,18 @@ mod tests {
                 assert_eq!(op.table_name, Arc::new("t1".to_string()));
                 assert_eq!(op.columns[0].name, "id".to_string());
                 assert_eq!(op.columns[0].nullable, false);
-                assert_eq!(op.columns[0].desc, ColumnDesc::new(LogicalType::Integer, true, false));
+                assert_eq!(
+                    op.columns[0].desc,
+                    ColumnDesc::new(LogicalType::Integer, true, false)
+                );
                 assert_eq!(op.columns[1].name, "name".to_string());
                 assert_eq!(op.columns[1].nullable, true);
-                assert_eq!(op.columns[1].desc, ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false));
+                assert_eq!(
+                    op.columns[1].desc,
+                    ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false)
+                );
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
-
     }
 }

@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use sqlparser::ast::{ColumnDef, ColumnOption};
 use crate::catalog::TableName;
 use crate::expression::ScalarExpression;
+use serde::{Deserialize, Serialize};
+use sqlparser::ast::{ColumnDef, ColumnOption};
+use std::sync::Arc;
 
 use crate::types::{ColumnId, LogicalType};
 
@@ -23,7 +23,7 @@ impl ColumnCatalog {
         column_name: String,
         nullable: bool,
         column_desc: ColumnDesc,
-        ref_expr: Option<ScalarExpression>
+        ref_expr: Option<ScalarExpression>,
     ) -> ColumnCatalog {
         ColumnCatalog {
             id: None,
@@ -35,7 +35,7 @@ impl ColumnCatalog {
         }
     }
 
-    pub(crate) fn new_dummy(column_name: String)-> ColumnCatalog {
+    pub(crate) fn new_dummy(column_name: String) -> ColumnCatalog {
         ColumnCatalog {
             id: Some(0),
             name: column_name,
@@ -61,7 +61,7 @@ impl From<ColumnDef> for ColumnCatalog {
         let mut column_desc = ColumnDesc::new(
             LogicalType::try_from(column_def.data_type).unwrap(),
             false,
-            false
+            false,
         );
         let mut nullable = false;
 
@@ -79,8 +79,8 @@ impl From<ColumnDef> for ColumnCatalog {
                     } else {
                         column_desc.is_unique = true;
                     }
-                },
-                _ => todo!()
+                }
+                _ => todo!(),
             }
         }
 
@@ -97,7 +97,11 @@ pub struct ColumnDesc {
 }
 
 impl ColumnDesc {
-    pub(crate) const fn new(column_datatype: LogicalType, is_primary: bool, is_unique: bool) -> ColumnDesc {
+    pub(crate) const fn new(
+        column_datatype: LogicalType,
+        is_primary: bool,
+        is_unique: bool,
+    ) -> ColumnDesc {
         ColumnDesc {
             column_datatype,
             is_primary,

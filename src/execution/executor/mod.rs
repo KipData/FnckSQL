@@ -1,10 +1,8 @@
+pub(crate) mod ddl;
+pub(crate) mod dml;
 pub(crate) mod dql;
-pub(crate)mod ddl;
-pub(crate)mod dml;
 pub(crate) mod show;
 
-use futures::stream::BoxStream;
-use futures::TryStreamExt;
 use crate::execution::executor::ddl::create_table::CreateTable;
 use crate::execution::executor::ddl::drop_table::DropTable;
 use crate::execution::executor::ddl::truncate::Truncate;
@@ -25,10 +23,12 @@ use crate::execution::executor::dql::sort::Sort;
 use crate::execution::executor::dql::values::Values;
 use crate::execution::executor::show::show_table::ShowTables;
 use crate::execution::ExecutorError;
-use crate::planner::LogicalPlan;
 use crate::planner::operator::Operator;
+use crate::planner::LogicalPlan;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
+use futures::stream::BoxStream;
+use futures::TryStreamExt;
 
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
@@ -37,10 +37,13 @@ pub trait Executor<S: Storage> {
 }
 
 pub fn build<S: Storage>(plan: LogicalPlan, storage: &S) -> BoxedExecutor {
-    let LogicalPlan { operator, mut childrens } = plan;
+    let LogicalPlan {
+        operator,
+        mut childrens,
+    } = plan;
 
     match operator {
-        Operator::Dummy => Dummy{ }.execute(storage),
+        Operator::Dummy => Dummy {}.execute(storage),
         Operator::Aggregate(op) => {
             let input = build(childrens.remove(0), storage);
 

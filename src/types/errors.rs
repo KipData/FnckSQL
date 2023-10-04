@@ -1,7 +1,7 @@
+use chrono::ParseError;
 use std::num::{ParseFloatError, ParseIntError, TryFromIntError};
 use std::str::ParseBoolError;
 use std::string::FromUtf8Error;
-use chrono::ParseError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum TypeError {
@@ -51,7 +51,7 @@ pub enum TypeError {
     Bincode(
         #[source]
         #[from]
-        Box<bincode::ErrorKind>
+        Box<bincode::ErrorKind>,
     ),
     #[error("try from decimal")]
     TryFromDecimal(
@@ -64,5 +64,5 @@ pub enum TypeError {
         #[source]
         #[from]
         FromUtf8Error,
-    )
+    ),
 }

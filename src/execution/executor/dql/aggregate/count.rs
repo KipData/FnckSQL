@@ -1,9 +1,9 @@
-use std::collections::HashSet;
-use std::sync::Arc;
-use ahash::RandomState;
 use crate::execution::executor::dql::aggregate::Accumulator;
 use crate::execution::ExecutorError;
 use crate::types::value::{DataValue, ValueRef};
+use ahash::RandomState;
+use std::collections::HashSet;
+use std::sync::Arc;
 
 pub struct CountAccumulator {
     result: i32,
@@ -51,6 +51,8 @@ impl Accumulator for DistinctCountAccumulator {
     }
 
     fn evaluate(&self) -> Result<ValueRef, ExecutorError> {
-        Ok(Arc::new(DataValue::Int32(Some(self.distinct_values.len() as i32))))
+        Ok(Arc::new(DataValue::Int32(Some(
+            self.distinct_values.len() as i32
+        ))))
     }
 }

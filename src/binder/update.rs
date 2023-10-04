@@ -1,20 +1,20 @@
-use std::slice;
-use std::sync::Arc;
-use sqlparser::ast::{Assignment, Expr, TableFactor, TableWithJoins};
-use crate::binder::{Binder, BindError, lower_case_name, split_name};
+use crate::binder::{lower_case_name, split_name, BindError, Binder};
 use crate::expression::ScalarExpression;
-use crate::planner::LogicalPlan;
-use crate::planner::operator::Operator;
 use crate::planner::operator::update::UpdateOperator;
+use crate::planner::operator::Operator;
+use crate::planner::LogicalPlan;
 use crate::storage::Storage;
 use crate::types::value::ValueRef;
+use sqlparser::ast::{Assignment, Expr, TableFactor, TableWithJoins};
+use std::slice;
+use std::sync::Arc;
 
 impl<S: Storage> Binder<S> {
     pub(crate) async fn bind_update(
         &mut self,
         to: &TableWithJoins,
         selection: &Option<Expr>,
-        assignments: &[Assignment]
+        assignments: &[Assignment],
     ) -> Result<LogicalPlan, BindError> {
         if let TableFactor::Table { name, .. } = &to.relation {
             let name = lower_case_name(&name);
@@ -39,16 +39,19 @@ impl<S: Storage> Binder<S> {
                 }?;
 
                 for ident in &assignment.id {
-                    match self.bind_column_ref_from_identifiers(
-                        slice::from_ref(&ident),
-                        bind_table_name.as_ref()
-                    ).await? {
+                    match self
+                        .bind_column_ref_from_identifiers(
+                            slice::from_ref(&ident),
+                            bind_table_name.as_ref(),
+                        )
+                        .await?
+                    {
                         ScalarExpression::ColumnRef(catalog) => {
                             value.check_len(catalog.datatype())?;
                             columns.push(catalog);
                             row.push(value.clone());
-                        },
-                        _ => unreachable!()
+                        }
+                        _ => unreachable!(),
                     }
                 }
             }
@@ -56,11 +59,7 @@ impl<S: Storage> Binder<S> {
             let values_plan = self.bind_values(vec![row], columns);
 
             Ok(LogicalPlan {
-                operator: Operator::Update(
-                    UpdateOperator {
-                        table_name
-                    }
-                ),
+                operator: Operator::Update(UpdateOperator { table_name }),
                 childrens: vec![plan, values_plan],
             })
         } else {

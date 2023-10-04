@@ -1,17 +1,17 @@
-use itertools::Itertools;
-use lazy_static::lazy_static;
 use crate::catalog::ColumnRef;
 use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::Pattern;
+use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
-use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
 use crate::types::LogicalType;
+use itertools::Itertools;
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref PUSH_PREDICATE_THROUGH_JOIN: Pattern = {
@@ -57,7 +57,7 @@ fn split_conjunctive_predicates(expr: &ScalarExpression) -> Vec<ScalarExpression
             .into_iter()
             .chain(split_conjunctive_predicates(right_expr))
             .collect_vec(),
-        _ => vec![expr.clone()]
+        _ => vec![expr.clone()],
     }
 }
 
@@ -66,17 +66,15 @@ fn split_conjunctive_predicates(expr: &ScalarExpression) -> Vec<ScalarExpression
 fn reduce_filters(filters: Vec<ScalarExpression>, having: bool) -> Option<FilterOperator> {
     filters
         .into_iter()
-        .reduce(|a, b| {
-            ScalarExpression::Binary {
-                op: BinaryOperator::And,
-                left_expr: Box::new(a),
-                right_expr: Box::new(b),
-                ty: LogicalType::Boolean
-            }
+        .reduce(|a, b| ScalarExpression::Binary {
+            op: BinaryOperator::And,
+            left_expr: Box::new(a),
+            right_expr: Box::new(b),
+            ty: LogicalType::Boolean,
         })
         .map(|f| FilterOperator {
             predicate: f,
-            having
+            having,
         })
 }
 
@@ -106,17 +104,16 @@ impl Rule for PushPredicateThroughJoin {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         let child_id = graph.children_at(node_id)[0];
         if let Operator::Join(child_op) = graph.operator(child_id) {
-            if !matches!(child_op.join_type, JoinType::Inner | JoinType::Left | JoinType::Right) {
+            if !matches!(
+                child_op.join_type,
+                JoinType::Inner | JoinType::Left | JoinType::Right
+            ) {
                 return Ok(());
             }
 
             let join_childs = graph.children_at(child_id);
-            let left_columns = graph
-                .operator(join_childs[0])
-                .referenced_columns();
-            let right_columns = graph
-                .operator(join_childs[1])
-                .referenced_columns();
+            let left_columns = graph.operator(join_childs[0]).referenced_columns();
+            let right_columns = graph.operator(join_childs[1]).referenced_columns();
 
             let mut new_ops = (None, None, None);
 
@@ -139,7 +136,8 @@ impl Rule for PushPredicateThroughJoin {
                         }
 
                         if !right_filters.is_empty() {
-                            if let Some(right_filter_op) = reduce_filters(right_filters, op.having) {
+                            if let Some(right_filter_op) = reduce_filters(right_filters, op.having)
+                            {
                                 new_ops.1 = Some(Operator::Filter(right_filter_op));
                             }
                         }
@@ -160,17 +158,15 @@ impl Rule for PushPredicateThroughJoin {
                     }
                     JoinType::Right => {
                         if !right_filters.is_empty() {
-                            if let Some(right_filter_op) = reduce_filters(right_filters, op.having) {
+                            if let Some(right_filter_op) = reduce_filters(right_filters, op.having)
+                            {
                                 new_ops.1 = Some(Operator::Filter(right_filter_op));
                             }
                         }
 
-                        common_filters
-                            .into_iter()
-                            .chain(left_filters)
-                            .collect_vec()
+                        common_filters.into_iter().chain(left_filters).collect_vec()
                     }
-                    _ => vec![]
+                    _ => vec![],
                 };
 
                 if !replace_filters.is_empty() {
@@ -184,7 +180,7 @@ impl Rule for PushPredicateThroughJoin {
                 graph.add_node(
                     child_id,
                     Some(join_childs[0]),
-                    OptExprNode::OperatorRef(left_op)
+                    OptExprNode::OperatorRef(left_op),
                 );
             }
 
@@ -192,15 +188,12 @@ impl Rule for PushPredicateThroughJoin {
                 graph.add_node(
                     child_id,
                     Some(join_childs[1]),
-                    OptExprNode::OperatorRef(right_op)
+                    OptExprNode::OperatorRef(right_op),
                 );
             }
 
             if let Some(common_op) = new_ops.2 {
-                graph.replace_node(
-                    node_id,
-                    OptExprNode::OperatorRef(common_op)
-                );
+                graph.replace_node(node_id, OptExprNode::OperatorRef(common_op));
             } else {
                 graph.remove_node(node_id, false);
             }
@@ -210,9 +203,7 @@ impl Rule for PushPredicateThroughJoin {
     }
 }
 
-pub struct PushPredicateIntoScan {
-
-}
+pub struct PushPredicateIntoScan {}
 
 impl Rule for PushPredicateIntoScan {
     fn pattern(&self) -> &Pattern {
@@ -224,7 +215,7 @@ impl Rule for PushPredicateIntoScan {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Scan(child_op) = graph.operator(child_id) {
                 if child_op.index_by.is_some() {
-                    return Ok(())
+                    return Ok(());
                 }
 
                 //FIXME: now only support unique
@@ -243,12 +234,10 @@ impl Rule for PushPredicateIntoScan {
                             // reduce the data scanning range and cannot replace the role of Filter.
                             graph.replace_node(
                                 child_id,
-                                OptExprNode::OperatorRef(
-                                    Operator::Scan(scan_by_index)
-                                )
+                                OptExprNode::OperatorRef(Operator::Scan(scan_by_index)),
                             );
 
-                            return Ok(())
+                            return Ok(());
                         }
                     }
                 }
@@ -261,18 +250,18 @@ impl Rule for PushPredicateIntoScan {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::Bound;
-    use std::sync::Arc;
     use crate::binder::test::select_sql_run;
     use crate::db::DatabaseError;
-    use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::expression::simplify::ConstantBinary::Scope;
+    use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::RuleImpl;
     use crate::planner::operator::Operator;
-    use crate::types::LogicalType;
     use crate::types::value::DataValue;
+    use crate::types::LogicalType;
+    use std::collections::Bound;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_push_predicate_into_scan() -> Result<(), DatabaseError> {
@@ -283,19 +272,19 @@ mod tests {
             .batch(
                 "simplify_filter".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::SimplifyFilter]
+                vec![RuleImpl::SimplifyFilter],
             )
             .batch(
                 "test_push_predicate_into_scan".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushPredicateIntoScan]
+                vec![RuleImpl::PushPredicateIntoScan],
             )
             .find_best()?;
 
         if let Operator::Scan(op) = &best_plan.childrens[0].childrens[0].operator {
             let mock_binaries = vec![Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
-                max: Bound::Unbounded
+                max: Bound::Unbounded,
             }];
 
             assert_eq!(op.index_by.clone().unwrap().1, mock_binaries);
@@ -308,13 +297,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_push_predicate_through_join_in_left_join() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
+        let plan =
+            select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2")
+                .await?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
                 "test_push_predicate_through_join".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushPredicateThroughJoin]
+                vec![RuleImpl::PushPredicateThroughJoin],
             )
             .find_best()?;
 
@@ -325,7 +316,7 @@ mod tests {
                     ty: LogicalType::Boolean,
                     ..
                 } => (),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         } else {
             unreachable!("Should be a filter operator")
@@ -338,7 +329,7 @@ mod tests {
                     ty: LogicalType::Boolean,
                     ..
                 } => (),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         } else {
             unreachable!("Should be a filter operator")
@@ -349,13 +340,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_push_predicate_through_join_in_right_join() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
+        let plan =
+            select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2")
+                .await?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
                 "test_push_predicate_through_join".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushPredicateThroughJoin]
+                vec![RuleImpl::PushPredicateThroughJoin],
             )
             .find_best()?;
 
@@ -366,7 +359,7 @@ mod tests {
                     ty: LogicalType::Boolean,
                     ..
                 } => (),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         } else {
             unreachable!("Should be a filter operator")
@@ -379,7 +372,7 @@ mod tests {
                     ty: LogicalType::Boolean,
                     ..
                 } => (),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         } else {
             unreachable!("Should be a filter operator")
@@ -390,18 +383,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_push_predicate_through_join_in_inner_join() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2").await?;
+        let plan =
+            select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2")
+                .await?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
                 "test_push_predicate_through_join".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushPredicateThroughJoin]
+                vec![RuleImpl::PushPredicateThroughJoin],
             )
             .find_best()?;
 
         if let Operator::Join(_) = &best_plan.childrens[0].operator {
-
         } else {
             unreachable!("Should be a filter operator")
         }
@@ -413,7 +407,7 @@ mod tests {
                     ty: LogicalType::Boolean,
                     ..
                 } => (),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         } else {
             unreachable!("Should be a filter operator")
@@ -426,7 +420,7 @@ mod tests {
                     ty: LogicalType::Boolean,
                     ..
                 } => (),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         } else {
             unreachable!("Should be a filter operator")
