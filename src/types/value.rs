@@ -53,6 +53,38 @@ pub enum DataValue {
     Decimal(Option<Decimal>),
 }
 
+macro_rules! generate_get_option {
+    ($data_value:ident, $($prefix:ident : $variant:ident($field:ty)),*) => {
+        impl $data_value {
+            $(
+                pub fn $prefix(&self) -> $field {
+                    if let $data_value::$variant(Some(val)) = self {
+                        Some(val.clone())
+                    } else {
+                        None
+                    }
+                }
+            )*
+        }
+    };
+}
+
+generate_get_option!(DataValue,
+    bool : Boolean(Option<bool>),
+    float : Float32(Option<f32>),
+    double : Float64(Option<f64>),
+    i8 : Int8(Option<i8>),
+    i16 : Int16(Option<i16>),
+    i32 : Int32(Option<i32>),
+    i64 : Int64(Option<i64>),
+    u8 : UInt8(Option<u8>),
+    u16 : UInt16(Option<u16>),
+    u32 : UInt32(Option<u32>),
+    u64 : UInt64(Option<u64>),
+    utf8 : Utf8(Option<String>),
+    decimal : Decimal(Option<Decimal>)
+);
+
 impl PartialEq for DataValue {
     fn eq(&self, other: &Self) -> bool {
         use DataValue::*;
@@ -202,6 +234,22 @@ macro_rules! varchar_cast {
 }
 
 impl DataValue {
+    pub fn date(&self) -> Option<NaiveDate> {
+        if let DataValue::Date32(Some(val)) = self {
+            NaiveDate::from_num_days_from_ce_opt(*val)
+        } else {
+            None
+        }
+    }
+
+    pub fn datetime(&self) -> Option<NaiveDateTime> {
+        if let DataValue::Date64(Some(val)) = self {
+            NaiveDateTime::from_timestamp_opt(*val, 0)
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn check_len(&self, logic_type: &LogicalType) -> Result<(), TypeError> {
         let is_over_len = match (logic_type, self) {
             (LogicalType::Varchar(Some(len)), DataValue::Utf8(Some(val))) => {

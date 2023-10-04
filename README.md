@@ -48,6 +48,33 @@ Storage Support:
 ![demo](./static/images/demo.png)
 
 ### Features
+- ORM Mapping
+```rust
+#[derive(Debug, Clone, Default)]
+pub struct Post {
+    pub post_title: String,
+    pub post_date: NaiveDateTime,
+    pub post_body: String,
+}
+
+implement_from_tuple!(Post, (
+    post_title: String => |post: &mut Post, value: DataValue| {
+        if let Some(title) = value.utf8() {
+            post.post_title = title;
+        }
+    },
+    post_date: NaiveDateTime => |post: &mut Post, value: DataValue| {
+        if let Some(date_time) = value.datetime() {
+            post.post_date = date_time;
+        }
+    },
+    post_body: String => |post: &mut Post, value: DataValue| {
+        if let Some(body) = value.utf8() {
+            post.post_body = body;
+        }
+    }
+));
+```
 - SQL field options
   - not null
   - null
