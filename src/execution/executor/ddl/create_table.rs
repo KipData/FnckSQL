@@ -25,10 +25,14 @@ impl<S: Storage> Executor<S> for CreateTable {
 impl CreateTable {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     pub async fn _execute<S: Storage>(self, storage: S) {
-        let CreateTableOperator { table_name, columns } = self.op;
+        let CreateTableOperator {
+            table_name,
+            columns,
+        } = self.op;
         let _ = storage.create_table(table_name.clone(), columns).await?;
         let tuple_builder = TupleBuilder::new_result();
-        let tuple = tuple_builder.push_result("CREATE TABLE SUCCESS", format!("{}", table_name).as_str())?;
+        let tuple = tuple_builder
+            .push_result("CREATE TABLE SUCCESS", format!("{}", table_name).as_str())?;
         yield tuple;
     }
 }

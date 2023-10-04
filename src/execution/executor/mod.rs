@@ -102,24 +102,12 @@ pub fn build<S: Storage>(plan: LogicalPlan, storage: &S) -> BoxedExecutor {
 
             Delete::from((op, input)).execute(storage)
         }
-        Operator::Values(op) => {
-            Values::from(op).execute(storage)
-        }
-        Operator::CreateTable(op) => {
-            CreateTable::from(op).execute(storage)
-        }
-        Operator::DropTable(op) => {
-            DropTable::from(op).execute(storage)
-        }
-        Operator::Truncate(op) => {
-            Truncate::from(op).execute(storage)
-        }
-        Operator::Show(op) => {
-            ShowTables::from(op).execute(storage)
-        }
-        Operator::CopyFromFile(op) => {
-            CopyFromFile::from(op).execute(storage)
-        }
+        Operator::Values(op) => Values::from(op).execute(storage),
+        Operator::CreateTable(op) => CreateTable::from(op).execute(storage),
+        Operator::DropTable(op) => DropTable::from(op).execute(storage),
+        Operator::Truncate(op) => Truncate::from(op).execute(storage),
+        Operator::Show(op) => ShowTables::from(op).execute(storage),
+        Operator::CopyFromFile(op) => CopyFromFile::from(op).execute(storage),
         #[warn(unused_assignments)]
         Operator::CopyToFile(_op) => {
             todo!()

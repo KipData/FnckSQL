@@ -1,4 +1,5 @@
 pub mod aggregate;
+pub mod copy;
 mod create_table;
 mod delete;
 mod distinct;
@@ -7,7 +8,6 @@ pub mod expr;
 mod insert;
 mod select;
 mod show;
-pub mod copy;
 mod truncate;
 mod update;
 
@@ -136,7 +136,10 @@ impl<S: Storage> Binder<S> {
                 target,
                 options,
                 ..
-            } => self.bind_copy(source.clone(), *to, target.clone(), &options).await?,
+            } => {
+                self.bind_copy(source.clone(), *to, target.clone(), &options)
+                    .await?
+            }
             _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)

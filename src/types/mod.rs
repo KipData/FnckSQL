@@ -1,7 +1,7 @@
 pub mod errors;
 pub mod index;
-pub mod tuple_builder;
 pub mod tuple;
+pub mod tuple_builder;
 pub mod value;
 
 use chrono::{NaiveDate, NaiveDateTime};

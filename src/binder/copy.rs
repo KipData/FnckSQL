@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-use sqlparser::ast::{CopyOption, CopySource, CopyTarget};
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::Operator;
+use serde::{Deserialize, Serialize};
+use sqlparser::ast::{CopyOption, CopySource, CopyTarget};
 
 use super::*;
 
@@ -57,7 +57,7 @@ impl<S: Storage> Binder<S> {
         target: CopyTarget,
         options: &[CopyOption],
     ) -> Result<LogicalPlan, BindError> {
-        let (table_name,..) = match source {
+        let (table_name, ..) = match source {
             CopySource::Table {
                 table_name,
                 columns,
@@ -83,30 +83,27 @@ impl<S: Storage> Binder<S> {
             let copy = if to {
                 // COPY <source_table> TO <dest_file>
                 LogicalPlan {
-                    operator: Operator::CopyToFile(
-                        CopyToFileOperator {
-                            source: ext_source,
-                        }
-                    ),
+                    operator: Operator::CopyToFile(CopyToFileOperator { source: ext_source }),
                     childrens: vec![],
                 }
             } else {
                 // COPY <dest_table> FROM <source_file>
                 LogicalPlan {
-                    operator: Operator::CopyFromFile(
-                        CopyFromFileOperator {
-                            source: ext_source,
-                            types,
-                            columns: cols,
-                            table: table_name.to_string()
-                        }
-                    ),
+                    operator: Operator::CopyFromFile(CopyFromFileOperator {
+                        source: ext_source,
+                        types,
+                        columns: cols,
+                        table: table_name.to_string(),
+                    }),
                     childrens: vec![],
                 }
             };
             Ok(copy)
         } else {
-            Err(BindError::InvalidTable(format!("not found table {}", table_name)))
+            Err(BindError::InvalidTable(format!(
+                "not found table {}",
+                table_name
+            )))
         }
     }
 }

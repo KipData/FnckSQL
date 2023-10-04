@@ -1,4 +1,6 @@
 pub mod aggregate;
+pub mod copy_from_file;
+pub mod copy_to_file;
 pub mod create_table;
 pub mod delete;
 pub mod drop_table;
@@ -11,8 +13,6 @@ pub mod scan;
 pub mod show;
 pub mod sort;
 pub mod truncate;
-pub mod copy_from_file;
-pub mod copy_to_file;
 pub mod update;
 pub mod values;
 
