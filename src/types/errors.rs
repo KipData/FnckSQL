@@ -7,6 +7,8 @@ use std::string::FromUtf8Error;
 pub enum TypeError {
     #[error("invalid type")]
     InvalidType,
+    #[error("Must contain PrimaryKey!")]
+    PrimaryKeyNotFound,
     #[error("not implemented sqlparser datatype: {0}")]
     NotImplementedSqlparserDataType(String),
     #[error("internal error: {0}")]

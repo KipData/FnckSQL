@@ -57,16 +57,17 @@ impl TupleBuilder {
                 .map(|col_id| tuple_map.insert(col_id, Arc::new(cast_data_value.clone())));
             if col.desc.is_primary {
                 primary_key_index = Some(i);
+                break;
             }
         }
 
         let primary_col_id = primary_key_index
             .map(|i| columns[i].id.unwrap())
-            .ok_or_else(|| TypeError::InvalidType)?;
+            .ok_or_else(|| TypeError::PrimaryKeyNotFound)?;
 
         let tuple_id = tuple_map
             .get(&primary_col_id)
-            .ok_or_else(|| TypeError::InvalidType)?
+            .ok_or_else(|| TypeError::PrimaryKeyNotFound)?
             .clone();
 
         let tuple = if self.data_values.len() == self.data_types.len() {
