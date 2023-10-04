@@ -1,4 +1,3 @@
-use futures_async_stream::try_stream;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
@@ -6,18 +5,16 @@ use crate::planner::operator::filter::FilterOperator;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
+use futures_async_stream::try_stream;
 
 pub struct Filter {
     predicate: ScalarExpression,
-    input: BoxedExecutor
+    input: BoxedExecutor,
 }
 
 impl From<(FilterOperator, BoxedExecutor)> for Filter {
     fn from((FilterOperator { predicate, .. }, input): (FilterOperator, BoxedExecutor)) -> Self {
-        Filter {
-            predicate,
-            input
-        }
+        Filter { predicate, input }
     }
 }
 
@@ -39,7 +36,7 @@ impl Filter {
                 if let Some(true) = option {
                     yield tuple;
                 } else {
-                    continue
+                    continue;
                 }
             } else {
                 unreachable!("only bool");

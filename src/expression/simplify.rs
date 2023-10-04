@@ -1,21 +1,21 @@
+use crate::catalog::ColumnRef;
+use crate::expression::value_compute::{binary_op, unary_op};
+use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
+use crate::types::errors::TypeError;
+use crate::types::value::{DataValue, ValueRef};
+use crate::types::{ColumnId, LogicalType};
+use ahash::RandomState;
+use itertools::Itertools;
 use std::cmp::Ordering;
 use std::collections::{Bound, HashSet};
 use std::mem;
 use std::sync::Arc;
-use ahash::RandomState;
-use itertools::Itertools;
-use crate::catalog::ColumnRef;
-use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
-use crate::expression::value_compute::{binary_op, unary_op};
-use crate::types::{ColumnId, LogicalType};
-use crate::types::errors::TypeError;
-use crate::types::value::{DataValue, ValueRef};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ConstantBinary {
     Scope {
         min: Bound<ValueRef>,
-        max: Bound<ValueRef>
+        max: Bound<ValueRef>,
     },
     Eq(ValueRef),
     NotEq(ValueRef),
@@ -23,7 +23,7 @@ pub enum ConstantBinary {
     // ConstantBinary in And can only be Scope\Eq\NotEq
     And(Vec<ConstantBinary>),
     // ConstantBinary in Or can only be Scope\Eq\NotEq\And
-    Or(Vec<ConstantBinary>)
+    Or(Vec<ConstantBinary>),
 }
 
 impl ConstantBinary {
@@ -43,7 +43,7 @@ impl ConstantBinary {
                 }
 
                 Ok(matches!((min, max), (Bound::Unbounded, Bound::Unbounded)))
-            },
+            }
             ConstantBinary::Eq(val) | ConstantBinary::NotEq(val) => Ok(val.is_null()),
             _ => Err(TypeError::InvalidType),
         }
@@ -60,35 +60,35 @@ impl ConstantBinary {
                         ConstantBinary::And(mut and_binaries) => {
                             condition_binaries.append(&mut and_binaries);
                         }
-                        ConstantBinary::Scope { min: Bound::Unbounded, max: Bound::Unbounded } => (),
+                        ConstantBinary::Scope {
+                            min: Bound::Unbounded,
+                            max: Bound::Unbounded,
+                        } => (),
                         source => condition_binaries.push(source),
                     }
                 }
                 // Sort
                 condition_binaries.sort_by(|a, b| {
-                    let op = |binary: &ConstantBinary| {
-                        match binary {
-                            ConstantBinary::Scope { min, .. } => min.clone(),
-                            ConstantBinary::Eq(val) => Bound::Included(val.clone()),
-                            ConstantBinary::NotEq(val) => Bound::Excluded(val.clone()),
-                            _ => unreachable!()
-                        }
+                    let op = |binary: &ConstantBinary| match binary {
+                        ConstantBinary::Scope { min, .. } => min.clone(),
+                        ConstantBinary::Eq(val) => Bound::Included(val.clone()),
+                        ConstantBinary::NotEq(val) => Bound::Excluded(val.clone()),
+                        _ => unreachable!(),
                     };
 
-                    Self::bound_compared(&op(a), &op(b), true)
-                        .unwrap_or(Ordering::Equal)
+                    Self::bound_compared(&op(a), &op(b), true).unwrap_or(Ordering::Equal)
                 });
 
                 let mut merged_binaries: Vec<ConstantBinary> = Vec::new();
 
                 for condition in condition_binaries {
-                    let op = |binary: &ConstantBinary| {
-                        match binary {
-                            ConstantBinary::Scope { min, max } => (min.clone(), max.clone()),
-                            ConstantBinary::Eq(val) => (Bound::Unbounded, Bound::Included(val.clone())),
-                            ConstantBinary::NotEq(val) => (Bound::Unbounded, Bound::Excluded(val.clone())),
-                            _ => unreachable!()
+                    let op = |binary: &ConstantBinary| match binary {
+                        ConstantBinary::Scope { min, max } => (min.clone(), max.clone()),
+                        ConstantBinary::Eq(val) => (Bound::Unbounded, Bound::Included(val.clone())),
+                        ConstantBinary::NotEq(val) => {
+                            (Bound::Unbounded, Bound::Excluded(val.clone()))
                         }
+                        _ => unreachable!(),
                     };
                     let mut is_push = merged_binaries.is_empty();
 
@@ -104,13 +104,13 @@ impl ConstantBinary {
 
                             if !is_lt_min && is_lt_max {
                                 let _ = mem::replace(max, condition_max);
-                            } else if !matches!(condition, ConstantBinary::Scope {..}) {
+                            } else if !matches!(condition, ConstantBinary::Scope { .. }) {
                                 is_push = is_lt_max;
                             } else if is_lt_min && is_lt_max {
                                 is_push = true
                             }
 
-                            break
+                            break;
                         }
                     }
 
@@ -120,7 +120,7 @@ impl ConstantBinary {
                 }
 
                 Ok(merged_binaries)
-            },
+            }
             ConstantBinary::And(binaries) => Ok(binaries),
             source => Ok(vec![source]),
         }
@@ -133,13 +133,17 @@ impl ConstantBinary {
                     binary.scope_aggregation()?
                 }
             }
-            binary => binary._scope_aggregation()?
+            binary => binary._scope_aggregation()?,
         }
 
         Ok(())
     }
 
-    fn bound_compared(left_bound: &Bound<ValueRef>, right_bound: &Bound<ValueRef>, is_min: bool) -> Option<Ordering> {
+    fn bound_compared(
+        left_bound: &Bound<ValueRef>,
+        right_bound: &Bound<ValueRef>,
+        is_min: bool,
+    ) -> Option<Ordering> {
         let op = |is_min, order: Ordering| {
             if is_min {
                 order
@@ -153,15 +157,13 @@ impl ConstantBinary {
             (Bound::Unbounded, _) => Some(op(is_min, Ordering::Less)),
             (_, Bound::Unbounded) => Some(op(is_min, Ordering::Greater)),
             (Bound::Included(left), Bound::Included(right)) => left.partial_cmp(right),
-            (Bound::Included(left), Bound::Excluded(right)) => {
-                left.partial_cmp(right)
-                    .map(|order| order.then(op(is_min, Ordering::Less)))
-            },
+            (Bound::Included(left), Bound::Excluded(right)) => left
+                .partial_cmp(right)
+                .map(|order| order.then(op(is_min, Ordering::Less))),
             (Bound::Excluded(left), Bound::Excluded(right)) => left.partial_cmp(right),
-            (Bound::Excluded(left), Bound::Included(right)) => {
-                left.partial_cmp(right)
-                    .map(|order| order.then(op(is_min, Ordering::Greater)))
-            },
+            (Bound::Excluded(left), Bound::Included(right)) => left
+                .partial_cmp(right)
+                .map(|order| order.then(op(is_min, Ordering::Greater))),
         }
     }
 
@@ -172,13 +174,11 @@ impl ConstantBinary {
             let mut scope_max = Bound::Unbounded;
             let mut eq_set = HashSet::with_hasher(RandomState::new());
 
-            let sort_op = |binary: &&ConstantBinary| {
-                match binary {
-                    ConstantBinary::Scope { .. } => 3,
-                    ConstantBinary::NotEq(_) => 2,
-                    ConstantBinary::Eq(_) => 1,
-                    ConstantBinary::And(_) | ConstantBinary::Or(_) => 0
-                }
+            let sort_op = |binary: &&ConstantBinary| match binary {
+                ConstantBinary::Scope { .. } => 3,
+                ConstantBinary::NotEq(_) => 2,
+                ConstantBinary::Eq(_) => 1,
+                ConstantBinary::And(_) | ConstantBinary::Or(_) => 0,
             };
 
             // Aggregate various ranges to get the minimum range
@@ -186,7 +186,9 @@ impl ConstantBinary {
                 match binary {
                     ConstantBinary::Scope { min, max } => {
                         // Skip if eq or noteq exists
-                        if !eq_set.is_empty() { continue }
+                        if !eq_set.is_empty() {
+                            continue;
+                        }
 
                         if let Some(order) = Self::bound_compared(&scope_min, &min, true) {
                             if order.is_lt() {
@@ -202,22 +204,28 @@ impl ConstantBinary {
                     }
                     ConstantBinary::Eq(val) => {
                         let _ = eq_set.insert(val.clone());
-                    },
+                    }
                     ConstantBinary::NotEq(val) => {
                         let _ = eq_set.remove(val);
-                    },
-                    ConstantBinary::Or(_) | ConstantBinary::And(_) => return Err(TypeError::InvalidType)
+                    }
+                    ConstantBinary::Or(_) | ConstantBinary::And(_) => {
+                        return Err(TypeError::InvalidType)
+                    }
                 }
             }
 
-            let eq_option = eq_set.into_iter()
+            let eq_option = eq_set
+                .into_iter()
                 .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
                 .next()
                 .map(|val| ConstantBinary::Eq(val));
 
             if let Some(eq) = eq_option {
                 let _ = mem::replace(self, eq);
-            } else if !matches!((&scope_min, &scope_max), (Bound::Unbounded, Bound::Unbounded)) {
+            } else if !matches!(
+                (&scope_min, &scope_max),
+                (Bound::Unbounded, Bound::Unbounded)
+            ) {
                 let scope_binary = ConstantBinary::Scope {
                     min: scope_min,
                     max: scope_max,
@@ -245,7 +253,7 @@ struct ReplaceBinary {
     val_expr: ScalarExpression,
     op: BinaryOperator,
     ty: LogicalType,
-    is_column_left: bool
+    is_column_left: bool,
 }
 
 #[derive(Debug)]
@@ -263,10 +271,12 @@ impl ScalarExpression {
             ScalarExpression::TypeCast { expr, .. } => expr.exist_column(col_id),
             ScalarExpression::IsNull { expr } => expr.exist_column(col_id),
             ScalarExpression::Unary { expr, .. } => expr.exist_column(col_id),
-            ScalarExpression::Binary { left_expr, right_expr, .. } => {
-                left_expr.exist_column(col_id) || right_expr.exist_column(col_id)
-            }
-            _ => false
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                ..
+            } => left_expr.exist_column(col_id) || right_expr.exist_column(col_id),
+            _ => false,
         }
     }
 
@@ -274,32 +284,31 @@ impl ScalarExpression {
         match self {
             ScalarExpression::Constant(val) => Some(val.clone()),
             ScalarExpression::Alias { expr, .. } => expr.unpack_val(),
-            ScalarExpression::TypeCast { expr, ty, .. } => {
-                expr.unpack_val()
-                    .and_then(|val| DataValue::clone(&val)
-                        .cast(ty).ok()
-                        .map(Arc::new))
-            }
+            ScalarExpression::TypeCast { expr, ty, .. } => expr
+                .unpack_val()
+                .and_then(|val| DataValue::clone(&val).cast(ty).ok().map(Arc::new)),
             ScalarExpression::IsNull { expr } => {
                 let is_null = expr.unpack_val().map(|val| val.is_null());
 
                 Some(Arc::new(DataValue::Boolean(is_null)))
-            },
+            }
             ScalarExpression::Unary { expr, op, .. } => {
                 let val = expr.unpack_val()?;
 
-                unary_op(&val, op).ok()
-                    .map(Arc::new)
-
+                unary_op(&val, op).ok().map(Arc::new)
             }
-            ScalarExpression::Binary { left_expr, right_expr, op, .. } => {
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                op,
+                ..
+            } => {
                 let left = left_expr.unpack_val()?;
                 let right = right_expr.unpack_val()?;
 
-                binary_op(&left, &right, op).ok()
-                    .map(Arc::new)
+                binary_op(&left, &right, op).ok().map(Arc::new)
             }
-            _ => None
+            _ => None,
         }
     }
 
@@ -308,15 +317,20 @@ impl ScalarExpression {
             ScalarExpression::ColumnRef(col) => Some(col.clone()),
             ScalarExpression::Alias { expr, .. } => expr.unpack_col(is_deep),
             ScalarExpression::Unary { expr, .. } => expr.unpack_col(is_deep),
-            ScalarExpression::Binary { left_expr, right_expr, .. } => {
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                ..
+            } => {
                 if !is_deep {
                     return None;
                 }
 
-                left_expr.unpack_col(true)
+                left_expr
+                    .unpack_col(true)
                     .or_else(|| right_expr.unpack_col(true))
             }
-            _ => None
+            _ => None,
         }
     }
 
@@ -327,7 +341,12 @@ impl ScalarExpression {
     // Tips: Indirect expressions like `ScalarExpression:：Alias` will be lost
     fn _simplify(&mut self, replaces: &mut Vec<Replace>) -> Result<(), TypeError> {
         match self {
-            ScalarExpression::Binary { left_expr, right_expr, op, ty } => {
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                op,
+                ty,
+            } => {
                 Self::fix_expr(replaces, left_expr, right_expr, op)?;
 
                 // `(c1 - 1) and (c1 + 2)` cannot fix!
@@ -336,7 +355,7 @@ impl ScalarExpression {
                 if Self::is_arithmetic(op) {
                     match (left_expr.unpack_col(false), right_expr.unpack_col(false)) {
                         (Some(col), None) => {
-                            replaces.push(Replace::Binary(ReplaceBinary{
+                            replaces.push(Replace::Binary(ReplaceBinary {
                                 column_expr: ScalarExpression::ColumnRef(col),
                                 val_expr: right_expr.as_ref().clone(),
                                 op: *op,
@@ -345,7 +364,7 @@ impl ScalarExpression {
                             }));
                         }
                         (None, Some(col)) => {
-                            replaces.push(Replace::Binary(ReplaceBinary{
+                            replaces.push(Replace::Binary(ReplaceBinary {
                                 column_expr: ScalarExpression::ColumnRef(col),
                                 val_expr: left_expr.as_ref().clone(),
                                 op: *op,
@@ -355,12 +374,12 @@ impl ScalarExpression {
                         }
                         (None, None) => {
                             if replaces.is_empty() {
-                               return Ok(());
+                                return Ok(());
                             }
 
                             match (left_expr.unpack_col(true), right_expr.unpack_col(true)) {
                                 (Some(col), None) => {
-                                    replaces.push(Replace::Binary(ReplaceBinary{
+                                    replaces.push(Replace::Binary(ReplaceBinary {
                                         column_expr: ScalarExpression::ColumnRef(col),
                                         val_expr: right_expr.as_ref().clone(),
                                         op: *op,
@@ -369,7 +388,7 @@ impl ScalarExpression {
                                     }));
                                 }
                                 (None, Some(col)) => {
-                                    replaces.push(Replace::Binary(ReplaceBinary{
+                                    replaces.push(Replace::Binary(ReplaceBinary {
                                         column_expr: ScalarExpression::ColumnRef(col),
                                         val_expr: left_expr.as_ref().clone(),
                                         op: *op,
@@ -380,7 +399,7 @@ impl ScalarExpression {
                                 _ => (),
                             }
                         }
-                        _ => ()
+                        _ => (),
                     }
                 }
             }
@@ -389,41 +408,43 @@ impl ScalarExpression {
                 if let Some(val) = expr.unpack_val() {
                     let _ = mem::replace(self, ScalarExpression::Constant(val));
                 }
-            },
+            }
             ScalarExpression::IsNull { expr, .. } => {
                 if let Some(val) = expr.unpack_val() {
-                    let _ = mem::replace(self, ScalarExpression::Constant(
-                        Arc::new(DataValue::Boolean(Some(val.is_null())))
-                    ));
+                    let _ = mem::replace(
+                        self,
+                        ScalarExpression::Constant(Arc::new(DataValue::Boolean(Some(
+                            val.is_null(),
+                        )))),
+                    );
                 }
-            },
+            }
             ScalarExpression::Unary { expr, op, ty } => {
                 if let Some(val) = expr.unpack_val() {
-                    let new_expr = ScalarExpression::Constant(
-                        Arc::new(unary_op(&val, op)?)
-                    );
+                    let new_expr = ScalarExpression::Constant(Arc::new(unary_op(&val, op)?));
                     let _ = mem::replace(self, new_expr);
                 } else {
-                    let _ = replaces.push(Replace::Unary(
-                        ReplaceUnary {
-                            child_expr: expr.as_ref().clone(),
-                            op: *op,
-                            ty: *ty,
-                        }
-                    ));
+                    let _ = replaces.push(Replace::Unary(ReplaceUnary {
+                        child_expr: expr.as_ref().clone(),
+                        op: *op,
+                        ty: *ty,
+                    }));
                 }
-            },
-            _ => ()
+            }
+            _ => (),
         }
 
         Ok(())
     }
 
     fn is_arithmetic(op: &mut BinaryOperator) -> bool {
-        matches!(op, BinaryOperator::Plus
-                    | BinaryOperator::Divide
-                    | BinaryOperator::Minus
-                    | BinaryOperator::Multiply)
+        matches!(
+            op,
+            BinaryOperator::Plus
+                | BinaryOperator::Divide
+                | BinaryOperator::Minus
+                | BinaryOperator::Multiply
+        )
     }
 
     fn fix_expr(
@@ -440,13 +461,11 @@ impl ScalarExpression {
 
         while let Some(replace) = replaces.pop() {
             match replace {
-                Replace::Binary(binary) => {
-                    Self::fix_binary(binary, left_expr, right_expr, op)
-                },
+                Replace::Binary(binary) => Self::fix_binary(binary, left_expr, right_expr, op),
                 Replace::Unary(unary) => {
                     Self::fix_unary(unary, left_expr, right_expr, op);
                     Self::fix_expr(replaces, left_expr, right_expr, op)?;
-                },
+                }
             }
         }
 
@@ -457,19 +476,27 @@ impl ScalarExpression {
         replace_unary: ReplaceUnary,
         col_expr: &mut Box<ScalarExpression>,
         val_expr: &mut Box<ScalarExpression>,
-        op: &mut BinaryOperator
+        op: &mut BinaryOperator,
     ) {
-        let ReplaceUnary { child_expr, op: fix_op, ty: fix_ty } = replace_unary;
-        let _ = mem::replace(col_expr, Box::new(child_expr));
-        let _ = mem::replace(val_expr, Box::new(ScalarExpression::Unary {
+        let ReplaceUnary {
+            child_expr,
             op: fix_op,
-            expr: val_expr.clone(),
             ty: fix_ty,
-        }));
-        let _ = mem::replace(op, match fix_op {
-            UnaryOperator::Plus => *op,
-            UnaryOperator::Minus => {
-                match *op {
+        } = replace_unary;
+        let _ = mem::replace(col_expr, Box::new(child_expr));
+        let _ = mem::replace(
+            val_expr,
+            Box::new(ScalarExpression::Unary {
+                op: fix_op,
+                expr: val_expr.clone(),
+                ty: fix_ty,
+            }),
+        );
+        let _ = mem::replace(
+            op,
+            match fix_op {
+                UnaryOperator::Plus => *op,
+                UnaryOperator::Minus => match *op {
                     BinaryOperator::Plus => BinaryOperator::Minus,
                     BinaryOperator::Minus => BinaryOperator::Plus,
                     BinaryOperator::Multiply => BinaryOperator::Divide,
@@ -478,45 +505,45 @@ impl ScalarExpression {
                     BinaryOperator::Lt => BinaryOperator::Gt,
                     BinaryOperator::GtEq => BinaryOperator::LtEq,
                     BinaryOperator::LtEq => BinaryOperator::GtEq,
-                    source_op => source_op
-                }
-            }
-            UnaryOperator::Not => {
-                match *op {
+                    source_op => source_op,
+                },
+                UnaryOperator::Not => match *op {
                     BinaryOperator::Gt => BinaryOperator::Lt,
                     BinaryOperator::Lt => BinaryOperator::Gt,
                     BinaryOperator::GtEq => BinaryOperator::LtEq,
                     BinaryOperator::LtEq => BinaryOperator::GtEq,
-                    source_op => source_op
-                }
-            }
-        });
+                    source_op => source_op,
+                },
+            },
+        );
     }
 
     fn fix_binary(
         replace_binary: ReplaceBinary,
         left_expr: &mut Box<ScalarExpression>,
         right_expr: &mut Box<ScalarExpression>,
-        op: &mut BinaryOperator
+        op: &mut BinaryOperator,
     ) {
-        let ReplaceBinary { column_expr, val_expr, op: fix_op, ty: fix_ty, is_column_left } = replace_binary;
-        let op_flip = |op: BinaryOperator| {
-            match op {
-                BinaryOperator::Plus => BinaryOperator::Minus,
-                BinaryOperator::Minus => BinaryOperator::Plus,
-                BinaryOperator::Multiply => BinaryOperator::Divide,
-                BinaryOperator::Divide => BinaryOperator::Multiply,
-                _ => unreachable!()
-            }
+        let ReplaceBinary {
+            column_expr,
+            val_expr,
+            op: fix_op,
+            ty: fix_ty,
+            is_column_left,
+        } = replace_binary;
+        let op_flip = |op: BinaryOperator| match op {
+            BinaryOperator::Plus => BinaryOperator::Minus,
+            BinaryOperator::Minus => BinaryOperator::Plus,
+            BinaryOperator::Multiply => BinaryOperator::Divide,
+            BinaryOperator::Divide => BinaryOperator::Multiply,
+            _ => unreachable!(),
         };
-        let comparison_flip = |op: BinaryOperator| {
-            match op {
-                BinaryOperator::Gt => BinaryOperator::Lt,
-                BinaryOperator::GtEq => BinaryOperator::LtEq,
-                BinaryOperator::Lt => BinaryOperator::Gt,
-                BinaryOperator::LtEq => BinaryOperator::GtEq,
-                source_op => source_op
-            }
+        let comparison_flip = |op: BinaryOperator| match op {
+            BinaryOperator::Gt => BinaryOperator::Lt,
+            BinaryOperator::GtEq => BinaryOperator::LtEq,
+            BinaryOperator::Lt => BinaryOperator::Gt,
+            BinaryOperator::LtEq => BinaryOperator::GtEq,
+            source_op => source_op,
         };
         let (fixed_op, fixed_left_expr, fixed_right_expr) = if is_column_left {
             (op_flip(fix_op), right_expr.clone(), Box::new(val_expr))
@@ -528,12 +555,15 @@ impl ScalarExpression {
         };
 
         let _ = mem::replace(left_expr, Box::new(column_expr));
-        let _ = mem::replace(right_expr, Box::new(ScalarExpression::Binary {
-            op: fixed_op,
-            left_expr: fixed_left_expr,
-            right_expr: fixed_right_expr,
-            ty: fix_ty,
-        }));
+        let _ = mem::replace(
+            right_expr,
+            Box::new(ScalarExpression::Binary {
+                op: fixed_op,
+                left_expr: fixed_left_expr,
+                right_expr: fixed_right_expr,
+                ty: fix_ty,
+            }),
+        );
     }
 
     /// The definition of Or is not the Or in the Where condition.
@@ -542,51 +572,51 @@ impl ScalarExpression {
     /// - `ConstantBinary::Or`: Rearrange and sort the range of each OR data
     pub fn convert_binary(&self, col_id: &ColumnId) -> Result<Option<ConstantBinary>, TypeError> {
         match self {
-            ScalarExpression::Binary { left_expr, right_expr, op, .. } => {
-                match (left_expr.convert_binary(col_id)?, right_expr.convert_binary(col_id)?) {
-                    (Some(left_binary), Some(right_binary)) => {
-                        match (left_binary, right_binary) {
-                            (ConstantBinary::And(mut left), ConstantBinary::And(mut right))
-                            | (ConstantBinary::Or(mut left), ConstantBinary::Or(mut right)) => {
-                                left.append(&mut right);
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                op,
+                ..
+            } => {
+                match (
+                    left_expr.convert_binary(col_id)?,
+                    right_expr.convert_binary(col_id)?,
+                ) {
+                    (Some(left_binary), Some(right_binary)) => match (left_binary, right_binary) {
+                        (ConstantBinary::And(mut left), ConstantBinary::And(mut right))
+                        | (ConstantBinary::Or(mut left), ConstantBinary::Or(mut right)) => {
+                            left.append(&mut right);
 
-                                Ok(Some(ConstantBinary::And(left)))
-                            }
-                            (ConstantBinary::And(mut left), ConstantBinary::Or(mut right)) => {
-                                right.append(&mut left);
-
-                                Ok(Some(ConstantBinary::Or(right)))
-                            }
-                            (ConstantBinary::Or(mut left), ConstantBinary::And(mut right)) => {
-                                left.append(&mut right);
-
-                                Ok(Some(ConstantBinary::Or(left)))
-                            }
-                            (ConstantBinary::And(mut binaries), binary)
-                            | (binary, ConstantBinary::And(mut binaries)) => {
-                                binaries.push(binary);
-
-                                Ok(Some(ConstantBinary::And(binaries)))
-                            }
-                            (ConstantBinary::Or(mut binaries), binary)
-                            | (binary, ConstantBinary::Or(mut binaries)) => {
-                                binaries.push(binary);
-
-                                Ok(Some(ConstantBinary::Or(binaries)))
-                            }
-                            (left, right) => {
-                                match op {
-                                    BinaryOperator::And => {
-                                        Ok(Some(ConstantBinary::And(vec![left, right])))
-                                    }
-                                    BinaryOperator::Or => {
-                                        Ok(Some(ConstantBinary::Or(vec![left, right])))
-                                    }
-                                    BinaryOperator::Xor => todo!(),
-                                    _ => Ok(None)
-                                }
-                            }
+                            Ok(Some(ConstantBinary::And(left)))
                         }
+                        (ConstantBinary::And(mut left), ConstantBinary::Or(mut right)) => {
+                            right.append(&mut left);
+
+                            Ok(Some(ConstantBinary::Or(right)))
+                        }
+                        (ConstantBinary::Or(mut left), ConstantBinary::And(mut right)) => {
+                            left.append(&mut right);
+
+                            Ok(Some(ConstantBinary::Or(left)))
+                        }
+                        (ConstantBinary::And(mut binaries), binary)
+                        | (binary, ConstantBinary::And(mut binaries)) => {
+                            binaries.push(binary);
+
+                            Ok(Some(ConstantBinary::And(binaries)))
+                        }
+                        (ConstantBinary::Or(mut binaries), binary)
+                        | (binary, ConstantBinary::Or(mut binaries)) => {
+                            binaries.push(binary);
+
+                            Ok(Some(ConstantBinary::Or(binaries)))
+                        }
+                        (left, right) => match op {
+                            BinaryOperator::And => Ok(Some(ConstantBinary::And(vec![left, right]))),
+                            BinaryOperator::Or => Ok(Some(ConstantBinary::Or(vec![left, right]))),
+                            BinaryOperator::Xor => todo!(),
+                            _ => Ok(None),
+                        },
                     },
                     (None, None) => {
                         if let (Some(col), Some(val)) =
@@ -605,7 +635,7 @@ impl ScalarExpression {
                     (Some(binary), None) => Ok(Self::check_or(col_id, right_expr, op, binary)),
                     (None, Some(binary)) => Ok(Self::check_or(col_id, left_expr, op, binary)),
                 }
-            },
+            }
             ScalarExpression::Alias { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::TypeCast { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::IsNull { expr } => expr.convert_binary(col_id),
@@ -620,16 +650,22 @@ impl ScalarExpression {
         col_id: &ColumnId,
         right_expr: &Box<ScalarExpression>,
         op: &BinaryOperator,
-        binary: ConstantBinary
+        binary: ConstantBinary,
     ) -> Option<ConstantBinary> {
         if matches!(op, BinaryOperator::Or) && right_expr.exist_column(col_id) {
-            return None
+            return None;
         }
 
         Some(binary)
     }
 
-    fn new_binary(col_id: &ColumnId, mut op: BinaryOperator, col: ColumnRef, val: ValueRef, is_flip: bool) -> Option<ConstantBinary> {
+    fn new_binary(
+        col_id: &ColumnId,
+        mut op: BinaryOperator,
+        col: ColumnRef,
+        val: ValueRef,
+        is_flip: bool,
+    ) -> Option<ConstantBinary> {
         if col.id.unwrap() != *col_id {
             return None;
         }
@@ -640,56 +676,44 @@ impl ScalarExpression {
                 BinaryOperator::Lt => BinaryOperator::Gt,
                 BinaryOperator::GtEq => BinaryOperator::LtEq,
                 BinaryOperator::LtEq => BinaryOperator::GtEq,
-                source_op => source_op
+                source_op => source_op,
             };
         }
 
         match op {
-            BinaryOperator::Gt => {
-                Some(ConstantBinary::Scope {
-                    min: Bound::Excluded(val.clone()),
-                    max: Bound::Unbounded
-                })
-            }
-            BinaryOperator::Lt => {
-                Some(ConstantBinary::Scope {
-                    min: Bound::Unbounded,
-                    max: Bound::Excluded(val.clone()),
-                })
-            }
-            BinaryOperator::GtEq => {
-                Some(ConstantBinary::Scope {
-                    min: Bound::Included(val.clone()),
-                    max: Bound::Unbounded
-                })
-            }
-            BinaryOperator::LtEq => {
-                Some(ConstantBinary::Scope {
-                    min: Bound::Unbounded,
-                    max: Bound::Included(val.clone()),
-                })
-            }
-            BinaryOperator::Eq | BinaryOperator::Spaceship => {
-                Some(ConstantBinary::Eq(val.clone()))
-            },
-            BinaryOperator::NotEq => {
-                Some(ConstantBinary::NotEq(val.clone()))
-            },
-            _ => None
+            BinaryOperator::Gt => Some(ConstantBinary::Scope {
+                min: Bound::Excluded(val.clone()),
+                max: Bound::Unbounded,
+            }),
+            BinaryOperator::Lt => Some(ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Excluded(val.clone()),
+            }),
+            BinaryOperator::GtEq => Some(ConstantBinary::Scope {
+                min: Bound::Included(val.clone()),
+                max: Bound::Unbounded,
+            }),
+            BinaryOperator::LtEq => Some(ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Included(val.clone()),
+            }),
+            BinaryOperator::Eq | BinaryOperator::Spaceship => Some(ConstantBinary::Eq(val.clone())),
+            BinaryOperator::NotEq => Some(ConstantBinary::NotEq(val.clone())),
+            _ => None,
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::expression::simplify::ConstantBinary;
+    use crate::expression::{BinaryOperator, ScalarExpression};
+    use crate::types::errors::TypeError;
+    use crate::types::value::DataValue;
+    use crate::types::LogicalType;
     use std::collections::Bound;
     use std::sync::Arc;
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::expression::{BinaryOperator, ScalarExpression};
-    use crate::expression::simplify::ConstantBinary;
-    use crate::types::errors::TypeError;
-    use crate::types::LogicalType;
-    use crate::types::value::DataValue;
 
     #[test]
     fn test_convert_binary_simple() -> Result<(), TypeError> {
@@ -712,7 +736,9 @@ mod test {
             left_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             right_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
             ty: LogicalType::Boolean,
-        }.convert_binary(&0)?.unwrap();
+        }
+        .convert_binary(&0)?
+        .unwrap();
 
         assert_eq!(binary_eq, ConstantBinary::Eq(val_1.clone()));
 
@@ -721,7 +747,9 @@ mod test {
             left_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             right_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
             ty: LogicalType::Boolean,
-        }.convert_binary(&0)?.unwrap();
+        }
+        .convert_binary(&0)?
+        .unwrap();
 
         assert_eq!(binary_not_eq, ConstantBinary::NotEq(val_1.clone()));
 
@@ -730,48 +758,68 @@ mod test {
             left_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
             right_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             ty: LogicalType::Boolean,
-        }.convert_binary(&0)?.unwrap();
+        }
+        .convert_binary(&0)?
+        .unwrap();
 
-        assert_eq!(binary_lt, ConstantBinary::Scope {
-            min: Bound::Unbounded,
-            max: Bound::Excluded(val_1.clone())
-        });
+        assert_eq!(
+            binary_lt,
+            ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Excluded(val_1.clone())
+            }
+        );
 
         let binary_lteq = ScalarExpression::Binary {
             op: BinaryOperator::LtEq,
             left_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
             right_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             ty: LogicalType::Boolean,
-        }.convert_binary(&0)?.unwrap();
+        }
+        .convert_binary(&0)?
+        .unwrap();
 
-        assert_eq!(binary_lteq, ConstantBinary::Scope {
-            min: Bound::Unbounded,
-            max: Bound::Included(val_1.clone())
-        });
+        assert_eq!(
+            binary_lteq,
+            ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Included(val_1.clone())
+            }
+        );
 
         let binary_gt = ScalarExpression::Binary {
             op: BinaryOperator::Gt,
             left_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
             right_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             ty: LogicalType::Boolean,
-        }.convert_binary(&0)?.unwrap();
+        }
+        .convert_binary(&0)?
+        .unwrap();
 
-        assert_eq!(binary_gt, ConstantBinary::Scope {
-            min: Bound::Excluded(val_1.clone()),
-            max: Bound::Unbounded
-        });
+        assert_eq!(
+            binary_gt,
+            ConstantBinary::Scope {
+                min: Bound::Excluded(val_1.clone()),
+                max: Bound::Unbounded
+            }
+        );
 
         let binary_gteq = ScalarExpression::Binary {
             op: BinaryOperator::GtEq,
             left_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
             right_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             ty: LogicalType::Boolean,
-        }.convert_binary(&0)?.unwrap();
+        }
+        .convert_binary(&0)?
+        .unwrap();
 
-        assert_eq!(binary_gteq, ConstantBinary::Scope {
-            min: Bound::Included(val_1.clone()),
-            max: Bound::Unbounded
-        });
+        assert_eq!(
+            binary_gteq,
+            ConstantBinary::Scope {
+                min: Bound::Included(val_1.clone()),
+                max: Bound::Unbounded
+            }
+        );
 
         Ok(())
     }
@@ -792,10 +840,7 @@ mod test {
 
         binary.scope_aggregation()?;
 
-        assert_eq!(
-            binary,
-            ConstantBinary::Eq(val_0)
-        );
+        assert_eq!(binary, ConstantBinary::Eq(val_0));
 
         Ok(())
     }
@@ -812,7 +857,6 @@ mod test {
             ConstantBinary::NotEq(val_1.clone()),
             ConstantBinary::Eq(val_2.clone()),
             ConstantBinary::NotEq(val_3.clone()),
-
             ConstantBinary::NotEq(val_0.clone()),
             ConstantBinary::NotEq(val_1.clone()),
             ConstantBinary::NotEq(val_2.clone()),
@@ -821,10 +865,7 @@ mod test {
 
         binary.scope_aggregation()?;
 
-        assert_eq!(
-            binary,
-            ConstantBinary::And(vec![])
-        );
+        assert_eq!(binary, ConstantBinary::And(vec![]));
 
         Ok(())
     }
@@ -839,19 +880,19 @@ mod test {
         let mut binary = ConstantBinary::And(vec![
             ConstantBinary::Scope {
                 min: Bound::Excluded(val_0.clone()),
-                max: Bound::Included(val_3.clone())
+                max: Bound::Included(val_3.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Included(val_1.clone()),
-                max: Bound::Excluded(val_2.clone())
+                max: Bound::Excluded(val_2.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Excluded(val_1.clone()),
-                max: Bound::Included(val_2.clone())
+                max: Bound::Included(val_2.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Included(val_0.clone()),
-                max: Bound::Excluded(val_3.clone())
+                max: Bound::Excluded(val_3.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Unbounded,
@@ -882,19 +923,19 @@ mod test {
         let mut binary = ConstantBinary::And(vec![
             ConstantBinary::Scope {
                 min: Bound::Excluded(val_0.clone()),
-                max: Bound::Included(val_3.clone())
+                max: Bound::Included(val_3.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Included(val_1.clone()),
-                max: Bound::Excluded(val_2.clone())
+                max: Bound::Excluded(val_2.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Excluded(val_1.clone()),
-                max: Bound::Included(val_2.clone())
+                max: Bound::Included(val_2.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Included(val_0.clone()),
-                max: Bound::Excluded(val_3.clone())
+                max: Bound::Excluded(val_3.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Unbounded,
@@ -907,10 +948,7 @@ mod test {
 
         binary.scope_aggregation()?;
 
-        assert_eq!(
-            binary,
-            ConstantBinary::Eq(val_0.clone())
-        );
+        assert_eq!(binary, ConstantBinary::Eq(val_0.clone()));
 
         Ok(())
     }
@@ -933,27 +971,27 @@ mod test {
         let binary = ConstantBinary::Or(vec![
             ConstantBinary::Scope {
                 min: Bound::Excluded(val_6.clone()),
-                max: Bound::Included(val_10.clone())
+                max: Bound::Included(val_10.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Excluded(val_0.clone()),
-                max: Bound::Included(val_3.clone())
+                max: Bound::Included(val_3.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Included(val_1.clone()),
-                max: Bound::Excluded(val_2.clone())
+                max: Bound::Excluded(val_2.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Excluded(val_1.clone()),
-                max: Bound::Included(val_2.clone())
+                max: Bound::Included(val_2.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Included(val_0.clone()),
-                max: Bound::Excluded(val_3.clone())
+                max: Bound::Excluded(val_3.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Included(val_6.clone()),
-                max: Bound::Included(val_7.clone())
+                max: Bound::Included(val_7.clone()),
             },
             ConstantBinary::Scope {
                 min: Bound::Unbounded,

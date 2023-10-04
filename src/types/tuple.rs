@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use crate::catalog::ColumnRef;
+use crate::types::value::{DataValue, ValueRef};
 use comfy_table::{Cell, Table};
 use integer_encoding::FixedInt;
 use itertools::Itertools;
-use crate::catalog::ColumnRef;
-use crate::types::value::{DataValue, ValueRef};
+use std::sync::Arc;
 
 const BITS_MAX_INDEX: usize = 8;
 
@@ -36,13 +36,19 @@ impl Tuple {
                 values.push(Arc::new(DataValue::none(logic_type)));
             } else if let Some(len) = logic_type.raw_len() {
                 /// fixed length (e.g.: int)
-                values.push(Arc::new(DataValue::from_raw(&bytes[pos..pos + len], logic_type)));
+                values.push(Arc::new(DataValue::from_raw(
+                    &bytes[pos..pos + len],
+                    logic_type,
+                )));
                 pos += len;
             } else {
                 /// variable length (e.g.: varchar)
                 let len = u32::decode_fixed(&bytes[pos..pos + 4]) as usize;
                 pos += 4;
-                values.push(Arc::new(DataValue::from_raw(&bytes[pos..pos + len], logic_type)));
+                values.push(Arc::new(DataValue::from_raw(
+                    &bytes[pos..pos + len],
+                    logic_type,
+                )));
                 pos += len;
             }
 
@@ -100,7 +106,8 @@ pub fn create_table(tuples: &[Tuple]) -> Table {
     table.set_header(header);
 
     for tuple in tuples {
-        let cells = tuple.values
+        let cells = tuple
+            .values
             .iter()
             .map(|value| Cell::new(format!("{value}")))
             .collect_vec();
@@ -113,11 +120,11 @@ pub fn create_table(tuples: &[Tuple]) -> Table {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::types::LogicalType;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
+    use crate::types::LogicalType;
+    use std::sync::Arc;
 
     #[test]
     fn test_tuple_serialize_to_and_deserialize_from() {
@@ -126,73 +133,73 @@ mod tests {
                 "c1".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::UInteger, false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c3".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Varchar(Some(2)), false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c4".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Smallint, false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c5".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::USmallint, false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c6".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Float, false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c7".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Double, false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c8".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Tinyint, false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c9".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::UTinyint, false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c10".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Boolean, false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c11".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::DateTime, false, false),
-                None
+                None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c12".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Date, false, false),
-                None
+                None,
             )),
         ];
 
@@ -213,7 +220,7 @@ mod tests {
                     Arc::new(DataValue::Boolean(Some(true))),
                     Arc::new(DataValue::Date64(Some(0))),
                     Arc::new(DataValue::Date32(Some(0))),
-                ]
+                ],
             },
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(1)))),
@@ -230,19 +237,13 @@ mod tests {
                     Arc::new(DataValue::UInt8(None)),
                     Arc::new(DataValue::Boolean(None)),
                     Arc::new(DataValue::Date64(None)),
-                    Arc::new(DataValue::Date32(None))
+                    Arc::new(DataValue::Date32(None)),
                 ],
-            }
+            },
         ];
 
-        let tuple_0 = Tuple::deserialize_from(
-            columns.clone(),
-            &tuples[0].serialize_to()
-        );
-        let tuple_1 = Tuple::deserialize_from(
-            columns.clone(),
-            &tuples[1].serialize_to()
-        );
+        let tuple_0 = Tuple::deserialize_from(columns.clone(), &tuples[0].serialize_to());
+        let tuple_1 = Tuple::deserialize_from(columns.clone(), &tuples[1].serialize_to());
 
         assert_eq!(tuples[0], tuple_0);
         assert_eq!(tuples[1], tuple_1);

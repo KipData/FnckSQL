@@ -33,21 +33,16 @@ impl RootCatalog {
         if self.table_idxs.contains_key(&table_name) {
             return Err(CatalogError::Duplicated("column", table_name.to_string()));
         }
-        let table = TableCatalog::new(
-            table_name.clone(),
-            columns
-        )?;
+        let table = TableCatalog::new(table_name.clone(), columns)?;
 
         self.table_idxs.insert(table_name.clone(), table);
 
         Ok(table_name)
     }
 
-    pub(crate) fn drop_table(
-        &mut self,
-        table_name: &String,
-    ) -> Result<(), CatalogError> {
-        self.table_idxs.retain(|name, _| name.as_str() != table_name);
+    pub(crate) fn drop_table(&mut self, table_name: &String) -> Result<(), CatalogError> {
+        self.table_idxs
+            .retain(|name, _| name.as_str() != table_name);
 
         Ok(())
     }
@@ -55,10 +50,10 @@ impl RootCatalog {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use super::*;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::types::LogicalType;
+    use std::sync::Arc;
 
     #[test]
     fn test_root_catalog() {
@@ -68,13 +63,13 @@ mod tests {
             "a".to_string(),
             false,
             ColumnDesc::new(LogicalType::Integer, false, false),
-            None
+            None,
         );
         let col1 = ColumnCatalog::new(
             "b".to_string(),
             false,
             ColumnDesc::new(LogicalType::Boolean, false, false),
-            None
+            None,
         );
         let col_catalogs = vec![col0, col1];
 

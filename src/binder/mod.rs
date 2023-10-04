@@ -1,28 +1,28 @@
 pub mod aggregate;
 mod create_table;
-pub mod expr;
-mod select;
-mod insert;
-mod update;
 mod delete;
-mod drop_table;
-mod truncate;
 mod distinct;
+mod drop_table;
+pub mod expr;
+mod insert;
+mod select;
 mod show;
+mod truncate;
+mod update;
 
-use std::collections::BTreeMap;
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
+use std::collections::BTreeMap;
 
-use crate::catalog::{DEFAULT_SCHEMA_NAME, CatalogError, TableName, TableCatalog};
+use crate::catalog::{CatalogError, TableCatalog, TableName, DEFAULT_SCHEMA_NAME};
 use crate::expression::ScalarExpression;
-use crate::planner::LogicalPlan;
 use crate::planner::operator::join::JoinType;
+use crate::planner::LogicalPlan;
 use crate::storage::Storage;
 use crate::types::errors::TypeError;
 
 pub enum InputRefType {
     AggCall,
-    GroupBy
+    GroupBy,
 }
 
 #[derive(Clone)]
@@ -48,12 +48,8 @@ impl<S: Storage> BinderContext<S> {
     // Tips: The order of this index is based on Aggregate being bound first.
     pub fn input_ref_index(&self, ty: InputRefType) -> usize {
         match ty {
-            InputRefType::AggCall => {
-                self.agg_calls.len()
-            },
-            InputRefType::GroupBy => {
-                self.agg_calls.len() + self.group_by_exprs.len()
-            }
+            InputRefType::AggCall => self.agg_calls.len(),
+            InputRefType::GroupBy => self.agg_calls.len() + self.group_by_exprs.len(),
         }
     }
 
@@ -82,37 +78,47 @@ impl<S: Storage> Binder<S> {
     pub async fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query).await?,
-            Statement::CreateTable { name, columns, constraints, .. } => {
-                self.bind_create_table(name, &columns, &constraints)?
+            Statement::CreateTable {
+                name,
+                columns,
+                constraints,
+                ..
+            } => self.bind_create_table(name, &columns, &constraints)?,
+            Statement::Drop {
+                object_type, names, ..
+            } => match object_type {
+                ObjectType::Table => self.bind_drop_table(&names[0])?,
+                _ => todo!(),
             },
-            Statement::Drop { object_type, names, .. } => {
-                match object_type {
-                    ObjectType::Table => {
-                        self.bind_drop_table(&names[0])?
-                    }
-                    _ => todo!()
-                }
-            }
-            Statement::Insert { table_name, columns, source, overwrite, .. } => {
+            Statement::Insert {
+                table_name,
+                columns,
+                source,
+                overwrite,
+                ..
+            } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
-                    self.bind_insert(
-                        table_name.to_owned(),
-                        columns,
-                        &values.rows,
-                        *overwrite
-                    ).await?
+                    self.bind_insert(table_name.to_owned(), columns, &values.rows, *overwrite)
+                        .await?
                 } else {
                     todo!()
                 }
             }
-            Statement::Update { table, selection, assignments, .. } => {
+            Statement::Update {
+                table,
+                selection,
+                assignments,
+                ..
+            } => {
                 if !table.joins.is_empty() {
                     unimplemented!()
                 } else {
                     self.bind_update(table, selection, assignments).await?
                 }
             }
-            Statement::Delete { from, selection, .. } => {
+            Statement::Delete {
+                from, selection, ..
+            } => {
                 let table = &from[0];
 
                 if !table.joins.is_empty() {
@@ -121,12 +127,8 @@ impl<S: Storage> Binder<S> {
                     self.bind_delete(table, selection).await?
                 }
             }
-            Statement::Truncate { table_name, .. } => {
-                self.bind_truncate(table_name).await?
-            }
-            Statement::ShowTables { .. } => {
-                self.bind_show_tables()?
-            }
+            Statement::Truncate { table_name, .. } => self.bind_truncate(table_name).await?,
+            Statement::ShowTables { .. } => self.bind_show_tables()?,
             _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
@@ -173,40 +175,66 @@ pub enum BindError {
     #[error("catalog error: {0}")]
     CatalogError(#[from] CatalogError),
     #[error("type error: {0}")]
-    TypeError(#[from] TypeError)
+    TypeError(#[from] TypeError),
 }
 
 #[cfg(test)]
 pub mod test {
+    use crate::binder::{Binder, BinderContext};
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::execution::ExecutorError;
+    use crate::planner::LogicalPlan;
+    use crate::storage::kip::KipStorage;
+    use crate::storage::{Storage, StorageError};
+    use crate::types::LogicalType::Integer;
     use std::path::PathBuf;
     use std::sync::Arc;
     use tempfile::TempDir;
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::planner::LogicalPlan;
-    use crate::types::LogicalType::Integer;
-    use crate::binder::{Binder, BinderContext};
-    use crate::execution::ExecutorError;
-    use crate::storage::kip::KipStorage;
-    use crate::storage::{Storage, StorageError};
 
-    pub(crate) async fn build_test_catalog(path: impl Into<PathBuf> + Send) -> Result<KipStorage, StorageError> {
+    pub(crate) async fn build_test_catalog(
+        path: impl Into<PathBuf> + Send,
+    ) -> Result<KipStorage, StorageError> {
         let storage = KipStorage::new(path).await?;
 
-        let _ = storage.create_table(
-            Arc::new("t1".to_string()),
-            vec![
-                ColumnCatalog::new("c1".to_string(), false, ColumnDesc::new(Integer, true, false), None),
-                ColumnCatalog::new("c2".to_string(), false, ColumnDesc::new(Integer, false, true), None),
-            ]
-        ).await?;
+        let _ = storage
+            .create_table(
+                Arc::new("t1".to_string()),
+                vec![
+                    ColumnCatalog::new(
+                        "c1".to_string(),
+                        false,
+                        ColumnDesc::new(Integer, true, false),
+                        None,
+                    ),
+                    ColumnCatalog::new(
+                        "c2".to_string(),
+                        false,
+                        ColumnDesc::new(Integer, false, true),
+                        None,
+                    ),
+                ],
+            )
+            .await?;
 
-        let _ = storage.create_table(
-            Arc::new("t2".to_string()),
-            vec![
-                ColumnCatalog::new("c3".to_string(), false, ColumnDesc::new(Integer, true, false), None),
-                ColumnCatalog::new("c4".to_string(), false, ColumnDesc::new(Integer, false, false), None),
-            ]
-        ).await?;
+        let _ = storage
+            .create_table(
+                Arc::new("t2".to_string()),
+                vec![
+                    ColumnCatalog::new(
+                        "c3".to_string(),
+                        false,
+                        ColumnDesc::new(Integer, true, false),
+                        None,
+                    ),
+                    ColumnCatalog::new(
+                        "c4".to_string(),
+                        false,
+                        ColumnDesc::new(Integer, false, false),
+                        None,
+                    ),
+                ],
+            )
+            .await?;
 
         Ok(storage)
     }

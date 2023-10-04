@@ -1,10 +1,10 @@
-use itertools::Itertools;
 use crate::catalog::{TableCatalog, TableName};
-use crate::expression::ScalarExpression;
 use crate::expression::simplify::ConstantBinary;
+use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::storage::Bounds;
 use crate::types::index::IndexMetaRef;
+use itertools::Itertools;
 
 use super::Operator;
 

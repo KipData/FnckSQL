@@ -1,11 +1,11 @@
-use std::mem;
+use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
+use crate::optimizer::heuristic::batch::HepMatchOrder;
+use crate::planner::operator::Operator;
+use crate::planner::LogicalPlan;
 use itertools::Itertools;
 use petgraph::stable_graph::{NodeIndex, StableDiGraph};
 use petgraph::visit::{Bfs, EdgeRef};
-use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
-use crate::optimizer::heuristic::batch::HepMatchOrder;
-use crate::planner::LogicalPlan;
-use crate::planner::operator::Operator;
+use std::mem;
 
 /// HepNodeId is used in optimizer to identify a node.
 pub type HepNodeId = NodeIndex<OptExprNodeId>;
@@ -21,7 +21,10 @@ impl HepGraph {
     pub fn new(root: LogicalPlan) -> Self {
         fn graph_filling(
             graph: &mut StableDiGraph<OptExprNode, usize, usize>,
-            LogicalPlan{ operator, childrens }: LogicalPlan,
+            LogicalPlan {
+                operator,
+                childrens,
+            }: LogicalPlan,
         ) -> HepNodeId {
             let index = graph.add_node(OptExprNode::OperatorRef(operator));
 
@@ -35,10 +38,7 @@ impl HepGraph {
 
         let mut graph = StableDiGraph::<OptExprNode, usize, usize>::default();
 
-        let root_index = graph_filling(
-            &mut graph,
-            root,
-        );
+        let root_index = graph_filling(&mut graph, root);
 
         HepGraph {
             graph,
@@ -55,28 +55,27 @@ impl HepGraph {
 
     #[allow(dead_code)]
     pub fn add_root(&mut self, new_node: OptExprNode) {
-        let old_root_id = mem::replace(
-            &mut self.root_index,
-            self.graph.add_node(new_node)
-        );
+        let old_root_id = mem::replace(&mut self.root_index, self.graph.add_node(new_node));
 
         self.graph.add_edge(self.root_index, old_root_id, 0);
         self.version += 1;
     }
 
-    pub fn add_node(&mut self, source_id: HepNodeId, children_option: Option<HepNodeId>, new_node: OptExprNode) {
+    pub fn add_node(
+        &mut self,
+        source_id: HepNodeId,
+        children_option: Option<HepNodeId>,
+        new_node: OptExprNode,
+    ) {
         let new_index = self.graph.add_node(new_node);
 
-        let mut order = self.graph
-            .edges(source_id)
-            .count();
+        let mut order = self.graph.edges(source_id).count();
 
         if let Some(children_id) = children_option {
-            self.graph.find_edge(source_id, children_id)
+            self.graph
+                .find_edge(source_id, children_id)
                 .map(|old_edge_id| {
-                    order = self.graph
-                        .remove_edge(old_edge_id)
-                        .unwrap_or(0);
+                    order = self.graph.remove_edge(old_edge_id).unwrap_or(0);
 
                     self.graph.add_edge(new_index, children_id, 0);
                 });
@@ -94,24 +93,26 @@ impl HepGraph {
     pub fn swap_node(&mut self, a: HepNodeId, b: HepNodeId) {
         let tmp = self.graph[a].clone();
 
-        self.graph[a] = mem::replace(
-            &mut self.graph[b],
-            tmp
-        );
+        self.graph[a] = mem::replace(&mut self.graph[b], tmp);
         self.version += 1;
     }
 
-    pub fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) -> Option<OptExprNode> {
+    pub fn remove_node(
+        &mut self,
+        source_id: HepNodeId,
+        with_childrens: bool,
+    ) -> Option<OptExprNode> {
         if !with_childrens {
-            let children_ids = self.graph.edges(source_id)
+            let children_ids = self
+                .graph
+                .edges(source_id)
                 .sorted_by_key(|edge_ref| edge_ref.weight())
                 .map(|edge_ref| edge_ref.target())
                 .collect_vec();
 
             if let Some(parent_id) = self.parent_id(source_id) {
                 if let Some(edge) = self.graph.find_edge(parent_id, source_id) {
-                    let weight = *self.graph.edge_weight(edge)
-                        .unwrap_or(&0);
+                    let weight = *self.graph.edge_weight(edge).unwrap_or(&0);
 
                     for (order, children_id) in children_ids.into_iter().enumerate() {
                         let _ = self.graph.add_edge(parent_id, children_id, weight + order);
@@ -138,7 +139,11 @@ impl HepGraph {
     }
 
     /// Use bfs to traverse the graph and return node ids
-    pub fn nodes_iter(&self, order: HepMatchOrder, start_option: Option<HepNodeId>) -> Box<dyn Iterator<Item = HepNodeId>> {
+    pub fn nodes_iter(
+        &self,
+        order: HepMatchOrder,
+        start_option: Option<HepNodeId>,
+    ) -> Box<dyn Iterator<Item = HepNodeId>> {
         let ids = self.bfs(start_option.unwrap_or(self.root_index));
         match order {
             HepMatchOrder::TopDown => Box::new(ids.into_iter()),
@@ -164,8 +169,7 @@ impl HepGraph {
 
     /// If input node is join, we use the edge weight to control the join chilren order.
     pub fn children_at(&self, id: HepNodeId) -> Vec<HepNodeId> {
-        self
-            .graph
+        self.graph
             .edges(id)
             .sorted_by_key(|edge| edge.weight())
             .map(|edge| edge.target())
@@ -183,11 +187,7 @@ impl HepGraph {
         root_plan
     }
 
-    fn build_childrens(
-        &self,
-        plan: &mut LogicalPlan,
-        start: HepNodeId,
-    ) {
+    fn build_childrens(&self, plan: &mut LogicalPlan, start: HepNodeId) {
         for child_id in self.children_at(start) {
             let mut child_plan = LogicalPlan {
                 operator: self.operator(child_id).clone(),
@@ -202,21 +202,27 @@ impl HepGraph {
 
 #[cfg(test)]
 mod tests {
-    use petgraph::stable_graph::{EdgeIndex, NodeIndex};
     use crate::binder::test::select_sql_run;
     use crate::execution::ExecutorError;
     use crate::optimizer::core::opt_expr::OptExprNode;
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;
+    use petgraph::stable_graph::{EdgeIndex, NodeIndex};
 
     #[tokio::test]
     async fn test_graph_for_plan() -> Result<(), ExecutorError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let graph = HepGraph::new(plan);
 
-        assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(2)));
-        assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(3)));
-        assert!(graph.graph.contains_edge(NodeIndex::new(0), NodeIndex::new(1)));
+        assert!(graph
+            .graph
+            .contains_edge(NodeIndex::new(1), NodeIndex::new(2)));
+        assert!(graph
+            .graph
+            .contains_edge(NodeIndex::new(1), NodeIndex::new(3)));
+        assert!(graph
+            .graph
+            .contains_edge(NodeIndex::new(0), NodeIndex::new(1)));
 
         assert_eq!(graph.graph.edge_weight(EdgeIndex::new(0)), Some(&0));
         assert_eq!(graph.graph.edge_weight(EdgeIndex::new(1)), Some(&1));
@@ -233,24 +239,30 @@ mod tests {
         graph.add_node(
             HepNodeId::new(1),
             None,
-            OptExprNode::OperatorRef(Operator::Dummy)
+            OptExprNode::OperatorRef(Operator::Dummy),
         );
 
         graph.add_node(
             HepNodeId::new(1),
             Some(HepNodeId::new(4)),
-            OptExprNode::OperatorRef(Operator::Dummy)
+            OptExprNode::OperatorRef(Operator::Dummy),
         );
 
         graph.add_node(
             HepNodeId::new(5),
             None,
-            OptExprNode::OperatorRef(Operator::Dummy)
+            OptExprNode::OperatorRef(Operator::Dummy),
         );
 
-        assert!(graph.graph.contains_edge(NodeIndex::new(5), NodeIndex::new(4)));
-        assert!(graph.graph.contains_edge(NodeIndex::new(1), NodeIndex::new(5)));
-        assert!(graph.graph.contains_edge(NodeIndex::new(5), NodeIndex::new(6)));
+        assert!(graph
+            .graph
+            .contains_edge(NodeIndex::new(5), NodeIndex::new(4)));
+        assert!(graph
+            .graph
+            .contains_edge(NodeIndex::new(1), NodeIndex::new(5)));
+        assert!(graph
+            .graph
+            .contains_edge(NodeIndex::new(5), NodeIndex::new(6)));
 
         assert_eq!(graph.graph.edge_weight(EdgeIndex::new(3)), Some(&0));
         assert_eq!(graph.graph.edge_weight(EdgeIndex::new(4)), Some(&2));
@@ -280,8 +292,12 @@ mod tests {
 
         assert_eq!(graph.graph.edge_count(), 2);
 
-        assert!(graph.graph.contains_edge(NodeIndex::new(0), NodeIndex::new(2)));
-        assert!(graph.graph.contains_edge(NodeIndex::new(0), NodeIndex::new(3)));
+        assert!(graph
+            .graph
+            .contains_edge(NodeIndex::new(0), NodeIndex::new(2)));
+        assert!(graph
+            .graph
+            .contains_edge(NodeIndex::new(0), NodeIndex::new(3)));
 
         Ok(())
     }
@@ -325,7 +341,9 @@ mod tests {
         graph.add_root(OptExprNode::OperatorRef(Operator::Dummy));
 
         assert_eq!(graph.graph.edge_count(), 4);
-        assert!(graph.graph.contains_edge(NodeIndex::new(4), NodeIndex::new(0)));
+        assert!(graph
+            .graph
+            .contains_edge(NodeIndex::new(4), NodeIndex::new(0)));
         assert_eq!(graph.graph.edge_weight(EdgeIndex::new(3)), Some(&0));
 
         Ok(())

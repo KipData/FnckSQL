@@ -1,5 +1,5 @@
-use sqlparser::{ast::Statement, dialect::PostgreSqlDialect, parser::Parser};
 use sqlparser::parser::ParserError;
+use sqlparser::{ast::Statement, dialect::PostgreSqlDialect, parser::Parser};
 
 /// Parse a string to a collection of statements.
 ///

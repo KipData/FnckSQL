@@ -1,13 +1,13 @@
-use futures_async_stream::try_stream;
-use itertools::Itertools;
-use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::executor::dql::aggregate::create_accumulators;
+use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
+use futures_async_stream::try_stream;
+use itertools::Itertools;
 
 pub struct SimpleAggExecutor {
     pub agg_calls: Vec<ScalarExpression>,
@@ -15,11 +15,10 @@ pub struct SimpleAggExecutor {
 }
 
 impl From<(AggregateOperator, BoxedExecutor)> for SimpleAggExecutor {
-    fn from((AggregateOperator { agg_calls, .. }, input): (AggregateOperator, BoxedExecutor)) -> Self {
-        SimpleAggExecutor {
-            agg_calls,
-            input,
-        }
+    fn from(
+        (AggregateOperator { agg_calls, .. }, input): (AggregateOperator, BoxedExecutor),
+    ) -> Self {
+        SimpleAggExecutor { agg_calls, input }
     }
 }
 
@@ -46,13 +45,12 @@ impl SimpleAggExecutor {
                     .collect_vec()
             });
 
-            let values: Vec<ValueRef> = self.agg_calls
+            let values: Vec<ValueRef> = self
+                .agg_calls
                 .iter()
                 .map(|expr| match expr {
-                    ScalarExpression::AggCall { args, .. } => {
-                        args[0].eval_column(&tuple)
-                    }
-                    _ => unreachable!()
+                    ScalarExpression::AggCall { args, .. } => args[0].eval_column(&tuple),
+                    _ => unreachable!(),
                 })
                 .try_collect()?;
 
@@ -62,10 +60,7 @@ impl SimpleAggExecutor {
         }
 
         if let Some(columns) = columns_option {
-            let values: Vec<ValueRef> = accs
-                .into_iter()
-                .map(|acc| acc.evaluate())
-                .try_collect()?;
+            let values: Vec<ValueRef> = accs.into_iter().map(|acc| acc.evaluate()).try_collect()?;
 
             yield Tuple {
                 id: None,

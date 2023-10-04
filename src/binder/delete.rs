@@ -1,9 +1,9 @@
-use sqlparser::ast::{Expr, TableFactor, TableWithJoins};
-use crate::binder::{Binder, BindError, lower_case_name, split_name};
-use crate::planner::LogicalPlan;
+use crate::binder::{lower_case_name, split_name, BindError, Binder};
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::Operator;
+use crate::planner::LogicalPlan;
 use crate::storage::Storage;
+use sqlparser::ast::{Expr, TableFactor, TableWithJoins};
 
 impl<S: Storage> Binder<S> {
     pub(crate) async fn bind_delete(
@@ -21,11 +21,7 @@ impl<S: Storage> Binder<S> {
             }
 
             Ok(LogicalPlan {
-                operator: Operator::Delete(
-                    DeleteOperator {
-                        table_name
-                    }
-                ),
+                operator: Operator::Delete(DeleteOperator { table_name }),
                 childrens: vec![plan],
             })
         } else {

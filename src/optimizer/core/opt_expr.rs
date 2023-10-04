@@ -1,6 +1,6 @@
-use std::fmt::Debug;
-use crate::planner::LogicalPlan;
 use crate::planner::operator::Operator;
+use crate::planner::LogicalPlan;
+use std::fmt::Debug;
 
 pub type OptExprNodeId = usize;
 
@@ -29,7 +29,6 @@ pub struct OptExpr {
     /// The root's children expressions.
     pub childrens: Vec<OptExpr>,
 }
-
 
 impl OptExpr {
     #[allow(dead_code)]

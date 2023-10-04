@@ -1,19 +1,17 @@
-use futures_async_stream::try_stream;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::values::ValuesOperator;
 use crate::storage::Storage;
 use crate::types::tuple::Tuple;
+use futures_async_stream::try_stream;
 
 pub struct Values {
-    op: ValuesOperator
+    op: ValuesOperator,
 }
 
 impl From<ValuesOperator> for Values {
     fn from(op: ValuesOperator) -> Self {
-        Values {
-            op
-        }
+        Values { op }
     }
 }
 
@@ -34,6 +32,6 @@ impl Values {
                 columns: columns.clone(),
                 values,
             };
-        };
+        }
     }
 }

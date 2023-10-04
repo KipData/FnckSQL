@@ -1,15 +1,15 @@
-use std::sync::Arc;
-use crate::execution::executor::dql::aggregate::Accumulator;
 use crate::execution::executor::dql::aggregate::sum::SumAccumulator;
+use crate::execution::executor::dql::aggregate::Accumulator;
 use crate::execution::ExecutorError;
-use crate::expression::BinaryOperator;
 use crate::expression::value_compute::binary_op;
-use crate::types::LogicalType;
+use crate::expression::BinaryOperator;
 use crate::types::value::{DataValue, ValueRef};
+use crate::types::LogicalType;
+use std::sync::Arc;
 
 pub struct AvgAccumulator {
     inner: SumAccumulator,
-    count: usize
+    count: usize,
 }
 
 impl AvgAccumulator {
@@ -32,8 +32,7 @@ impl Accumulator for AvgAccumulator {
     }
 
     fn evaluate(&self) -> Result<ValueRef, ExecutorError> {
-        let value = self.inner
-            .evaluate()?;
+        let value = self.inner.evaluate()?;
 
         let quantity = if value.logical_type().is_signed_numeric() {
             DataValue::Int64(Some(self.count as i64))
@@ -41,12 +40,10 @@ impl Accumulator for AvgAccumulator {
             DataValue::UInt32(Some(self.count as u32))
         };
 
-        Ok(Arc::new(
-            binary_op(
-                &value,
-                &quantity,
-                &BinaryOperator::Divide
-            )?
-        ))
+        Ok(Arc::new(binary_op(
+            &value,
+            &quantity,
+            &BinaryOperator::Divide,
+        )?))
     }
 }

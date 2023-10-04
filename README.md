@@ -146,4 +146,4 @@ implement_from_tuple!(Post, (
 
 ### Thanks For
 - [Fedomn/sqlrs](https://github.com/Fedomn/sqlrs): 主要参考资料，Optimizer、Executor均参考自sqlrs的设计
-- [systemxlabs/tinysql](https://github.com/systemxlabs/tinysql)
+- [systemxlabs/bustubx](https://github.com/systemxlabs/bustubx)

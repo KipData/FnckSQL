@@ -1,28 +1,31 @@
 use crate::binder::BindError;
+use crate::expression::agg::AggKind;
+use async_recursion::async_recursion;
 use itertools::Itertools;
-use sqlparser::ast::{BinaryOperator, Expr, Function, FunctionArg, FunctionArgExpr, Ident, UnaryOperator};
+use sqlparser::ast::{
+    BinaryOperator, Expr, Function, FunctionArg, FunctionArgExpr, Ident, UnaryOperator,
+};
 use std::slice;
 use std::sync::Arc;
-use async_recursion::async_recursion;
-use crate::expression::agg::AggKind;
 
 use super::Binder;
 use crate::expression::ScalarExpression;
 use crate::storage::Storage;
-use crate::types::LogicalType;
 use crate::types::value::DataValue;
+use crate::types::LogicalType;
 
 impl<S: Storage> Binder<S> {
     #[async_recursion]
     pub(crate) async fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
         match expr {
             Expr::Identifier(ident) => {
-                self.bind_column_ref_from_identifiers(slice::from_ref(ident), None).await
+                self.bind_column_ref_from_identifiers(slice::from_ref(ident), None)
+                    .await
             }
             Expr::CompoundIdentifier(idents) => {
                 self.bind_column_ref_from_identifiers(idents, None).await
             }
-            Expr::BinaryOp { left, right, op} => {
+            Expr::BinaryOp { left, right, op } => {
                 self.bind_binary_op_internal(left, right, op).await
             }
             Expr::Value(v) => Ok(ScalarExpression::Constant(Arc::new(v.into()))),
@@ -85,7 +88,10 @@ impl<S: Storage> Binder<S> {
             }
             if got_column.is_none() {
                 if let Some(expr) = self.context.aliases.get(column_name) {
-                    return Ok(ScalarExpression::Alias { expr: Box::new(expr.clone()), alias: column_name.clone() });
+                    return Ok(ScalarExpression::Alias {
+                        expr: Box::new(expr.clone()),
+                        alias: column_name.clone(),
+                    });
                 }
             }
             let column_catalog =
@@ -104,19 +110,23 @@ impl<S: Storage> Binder<S> {
         let right_expr = Box::new(self.bind_expr(right).await?);
 
         let ty = match op {
-            BinaryOperator::Plus | BinaryOperator::Minus | BinaryOperator::Multiply |
-            BinaryOperator::Divide | BinaryOperator::Modulo => {
-                LogicalType::max_logical_type(
-                    &left_expr.return_type(),
-                    &right_expr.return_type()
-                )?
+            BinaryOperator::Plus
+            | BinaryOperator::Minus
+            | BinaryOperator::Multiply
+            | BinaryOperator::Divide
+            | BinaryOperator::Modulo => {
+                LogicalType::max_logical_type(&left_expr.return_type(), &right_expr.return_type())?
             }
-            BinaryOperator::Gt | BinaryOperator::Lt | BinaryOperator::GtEq |
-            BinaryOperator::LtEq | BinaryOperator::Eq | BinaryOperator::NotEq |
-            BinaryOperator::And | BinaryOperator::Or | BinaryOperator::Xor => {
-                LogicalType::Boolean
-            },
-            _ => todo!()
+            BinaryOperator::Gt
+            | BinaryOperator::Lt
+            | BinaryOperator::GtEq
+            | BinaryOperator::LtEq
+            | BinaryOperator::Eq
+            | BinaryOperator::NotEq
+            | BinaryOperator::And
+            | BinaryOperator::Or
+            | BinaryOperator::Xor => LogicalType::Boolean,
+            _ => todo!(),
         };
 
         Ok(ScalarExpression::Binary {
@@ -157,37 +167,37 @@ impl<S: Storage> Binder<S> {
             match arg_expr {
                 FunctionArgExpr::Expr(expr) => args.push(self.bind_expr(expr).await?),
                 FunctionArgExpr::Wildcard => args.push(Self::wildcard_expr()),
-                _ => todo!()
+                _ => todo!(),
             }
         }
         let ty = args[0].return_type();
 
         Ok(match func.name.to_string().to_lowercase().as_str() {
-            "count" => ScalarExpression::AggCall{
+            "count" => ScalarExpression::AggCall {
                 distinct: func.distinct,
                 kind: AggKind::Count,
                 args,
                 ty: LogicalType::Integer,
             },
-            "sum" => ScalarExpression::AggCall{
+            "sum" => ScalarExpression::AggCall {
                 distinct: func.distinct,
                 kind: AggKind::Sum,
                 args,
                 ty,
             },
-            "min" => ScalarExpression::AggCall{
+            "min" => ScalarExpression::AggCall {
                 distinct: func.distinct,
                 kind: AggKind::Min,
                 args,
                 ty,
             },
-            "max" => ScalarExpression::AggCall{
+            "max" => ScalarExpression::AggCall {
                 distinct: func.distinct,
                 kind: AggKind::Max,
                 args,
                 ty,
             },
-            "avg" => ScalarExpression::AggCall{
+            "avg" => ScalarExpression::AggCall {
                 distinct: func.distinct,
                 kind: AggKind::Avg,
                 args,
