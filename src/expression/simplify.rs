@@ -728,6 +728,8 @@ mod test {
                 is_unique: false,
             },
             ref_expr: None,
+            text_files: Vec::new(),
+            deleted_text_files: Vec::new(),
         });
         let val_1 = Arc::new(DataValue::Int32(Some(1)));
 

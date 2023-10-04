@@ -16,6 +16,9 @@ pub struct ColumnCatalog {
     pub nullable: bool,
     pub desc: ColumnDesc,
     pub ref_expr: Option<ScalarExpression>,
+    // absoulte file path, used to store text content
+    pub text_files: Vec<String>,
+    pub deleted_text_files: Vec<String>,
 }
 
 impl ColumnCatalog {
@@ -32,6 +35,8 @@ impl ColumnCatalog {
             nullable,
             desc: column_desc,
             ref_expr,
+            text_files: Vec::new(),
+            deleted_text_files: Vec::new(),
         }
     }
 
@@ -43,6 +48,8 @@ impl ColumnCatalog {
             nullable: false,
             desc: ColumnDesc::new(LogicalType::Varchar(None), false, false),
             ref_expr: None,
+            text_files: Vec::new(),
+            deleted_text_files: Vec::new(),
         }
     }
 

@@ -35,6 +35,7 @@ pub enum LogicalType {
     Float,
     Double,
     Varchar(Option<u32>),
+    Text,
     Date,
     DateTime,
     // decimal (precision, scale)
@@ -95,6 +96,7 @@ impl LogicalType {
             LogicalType::Double => Some(8),
             /// Note: The non-fixed length type's raw_len is None e.g. Varchar
             LogicalType::Varchar(_) => None,
+            LogicalType::Text => None,
             LogicalType::Decimal(_, _) => Some(16),
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
@@ -293,6 +295,7 @@ impl LogicalType {
             LogicalType::Float => matches!(to, LogicalType::Double),
             LogicalType::Double => false,
             LogicalType::Varchar(_) => false,
+            LogicalType::Text => false,
             LogicalType::Date => matches!(to, LogicalType::DateTime | LogicalType::Varchar(_)),
             LogicalType::DateTime => matches!(to, LogicalType::Date | LogicalType::Varchar(_)),
             LogicalType::Decimal(_, _) => false,
@@ -309,6 +312,7 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
             sqlparser::ast::DataType::Char(len) | sqlparser::ast::DataType::Varchar(len) => {
                 Ok(LogicalType::Varchar(len.map(|len| len.length as u32)))
             }
+            sqlparser::ast::DataType::Text => Ok(LogicalType::Text),
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
             sqlparser::ast::DataType::Double => Ok(LogicalType::Double),
             sqlparser::ast::DataType::TinyInt(_) => Ok(LogicalType::Tinyint),

@@ -17,7 +17,7 @@ cargo run
 ```
 test command
 ```sql
-create table t1 (a int, b int);
+create table t1 (a int primary key, b int);
 
 insert into t1 (a, b) values (1, 1), (5, 3), (5, 2);
 
