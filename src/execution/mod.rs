@@ -56,4 +56,12 @@ pub enum ExecutorError {
     LengthMismatch { expected: usize, actual: usize },
     #[error("abort")]
     Abort,
+    #[error("unknown error")]
+    Unknown,
+    #[error("join error")]
+    JoinError(
+        #[from]
+        #[source]
+        tokio::task::JoinError,
+    ),
 }
