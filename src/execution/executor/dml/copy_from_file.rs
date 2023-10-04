@@ -43,14 +43,14 @@ impl CopyFromFile {
                 txn.append(chunk, false)?;
                 size += 1;
             }
-            handle.await?;
+            handle.await??;
             txn.commit().await?;
 
             let handle = tokio::task::spawn_blocking(move || return_result(size.clone(), tx1));
             while let Some(chunk) = rx1.recv().await {
                 yield chunk;
             }
-            handle.await?;
+            handle.await??;
         }
     }
     /// Read records from file using blocking IO.

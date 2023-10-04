@@ -55,9 +55,8 @@ impl TupleBuilder {
             let col = &columns[i];
             col.id
                 .map(|col_id| tuple_map.insert(col_id, Arc::new(cast_data_value.clone())));
-            if col.desc.is_primary {
+            if primary_key_index.is_none() && col.desc.is_primary {
                 primary_key_index = Some(i);
-                break;
             }
         }
 
