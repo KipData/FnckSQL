@@ -63,10 +63,9 @@ impl Insert {
                 let mut tuple_map = HashMap::new();
                 for (i, value) in values.into_iter().enumerate() {
                     let col = &columns[i];
-                    let cast_val = DataValue::clone(&value).cast(&col.datatype())?;
 
                     if let Some(col_id) = col.id {
-                        tuple_map.insert(col_id, Arc::new(cast_val));
+                        tuple_map.insert(col_id, value);
                     }
                 }
                 let primary_col_id = primary_key_index.get_or_insert_with(|| {

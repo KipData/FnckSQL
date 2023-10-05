@@ -59,7 +59,9 @@ impl<S: Storage> Binder<S> {
                         }
                         ScalarExpression::Unary { expr, op, .. } => {
                             if let ScalarExpression::Constant(value) = expr.as_ref() {
-                                row.push(Arc::new(unary_op(value, op)?))
+                                row.push(Arc::new(
+                                    unary_op(value, op)?.cast(columns[i].datatype())?,
+                                ))
                             } else {
                                 unreachable!()
                             }

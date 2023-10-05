@@ -19,7 +19,7 @@ test command
 ```sql
 create table t1 (a int, b int);
 
-insert into t1 (a, b) values (1, 1), (5, 3), (5, 2);
+insert into t1 (a, b) values (1, 1), (5, 3), (6, 2);
 
 update t1 set a = 0 where b > 1;
 
