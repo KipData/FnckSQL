@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 const BOUND_MIN_TAG: u8 = 0;
 const BOUND_MAX_TAG: u8 = 1;
 lazy_static! {
-    static ref ROOT_BYTES: Vec<u8> = { b"Root".to_vec() };
+    static ref ROOT_BYTES: Vec<u8> = b"Root".to_vec();
 }
 
 #[derive(Clone)]

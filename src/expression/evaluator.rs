@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use std::sync::Arc;
 
 lazy_static! {
-    static ref NULL_VALUE: ValueRef = { Arc::new(DataValue::Null) };
+    static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
 }
 
 impl ScalarExpression {

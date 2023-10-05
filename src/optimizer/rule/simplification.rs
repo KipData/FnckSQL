@@ -147,6 +147,8 @@ mod test {
                     is_unique: false,
                 },
                 ref_expr: None,
+                text_files: Vec::new(),
+                deleted_text_files: Vec::new(),
             };
             let c2_col = ColumnCatalog {
                 id: Some(1),
@@ -159,6 +161,8 @@ mod test {
                     is_unique: true,
                 },
                 ref_expr: None,
+                text_files: Vec::new(),
+                deleted_text_files: Vec::new(),
             };
 
             // -(c1 + 1) > c2 => c1 < -c2 - 1
