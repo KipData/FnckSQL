@@ -154,6 +154,13 @@ pub enum StorageError {
 
     #[error("The column has been declared unique and the value already exists")]
     DuplicateUniqueValue,
+
+    #[error("io error")]
+    Io {
+        #[from]
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 impl From<KernelError> for StorageError {

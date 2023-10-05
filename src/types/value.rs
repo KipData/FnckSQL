@@ -285,13 +285,6 @@ impl DataValue {
         value.and_then(|v| Self::date_time_format(v).map(|fmt| format!("{}", fmt)))
     }
 
-    pub fn is_variable(&self) -> bool {
-        match self {
-            DataValue::Utf8(_) => true,
-            _ => false,
-        }
-    }
-
     pub fn is_null(&self) -> bool {
         match self {
             DataValue::Null => true,

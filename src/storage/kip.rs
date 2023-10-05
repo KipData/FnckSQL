@@ -7,7 +7,8 @@ use crate::storage::{
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexMeta, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
-use crate::types::value::ValueRef;
+use crate::types::value::{DataValue, ValueRef};
+use crate::types::LogicalType;
 use async_trait::async_trait;
 use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
 use kip_db::kernel::lsm::mvcc::TransactionIter;
@@ -17,6 +18,7 @@ use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use kip_db::kernel::Storage as KipDBStorage;
 use std::collections::hash_map::RandomState;
 use std::collections::{Bound, VecDeque};
+use std::io::Write;
 use std::mem;
 use std::ops::SubAssign;
 use std::path::PathBuf;
@@ -381,6 +383,32 @@ impl Transaction for KipTransaction {
         if !is_overwrite && self.tx.get(&key)?.is_some() {
             return Err(StorageError::DuplicatePrimaryKey);
         }
+
+        // create or overwrite text file
+        for (i, col) in tuple.columns.iter().enumerate() {
+            if matches!(col.desc.column_datatype, LogicalType::Text) {
+                let value = tuple.values[i].clone();
+                let file_path = generate_text_file_path(
+                    tuple.id.as_ref().expect("The tuple has no primary key"),
+                    col,
+                );
+                let mut file = std::fs::File::create(file_path)?;
+                match value.as_ref() {
+                    DataValue::Utf8(text) => {
+                        file.write_all(
+                            text.as_ref().map_or("".as_bytes(), |text| text.as_bytes()),
+                        )?;
+                    }
+                    DataValue::Null => {}
+                    _ => {
+                        panic!("The data type of text column should be Utf8 or Null");
+                    }
+                }
+                // TODO do we need to wait for flushing?
+                file.flush()?;
+            }
+        }
+
         self.tx.set(key, value);
 
         Ok(())
@@ -466,6 +494,17 @@ pub struct KipIter<'a> {
     projections: Projections,
     table_codec: &'a TableCodec,
     iter: TransactionIter<'a>,
+}
+
+pub fn generate_text_file_path(tuple_id: &TupleId, col: &ColumnCatalog) -> String {
+    let col_id = col.id.expect("The column id should not be none");
+    let table_name = col
+        .table_name
+        .as_ref()
+        .expect("The table name should not be none");
+    // TODO support multi databases
+    // TODO support specify home dir
+    format!("data/text-{}-{}-{}", table_name, tuple_id, col_id)
 }
 
 impl Iter for KipIter<'_> {

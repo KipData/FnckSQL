@@ -39,6 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 async fn server_run() -> Result<(), Box<dyn Error>> {
     let db = Database::with_kipdb("./data").await?;
+    // let db = Database::with_mem().await;
 
     loop {
         println!("> 👇👇🏻👇🏼👇🏽👇🏾👇🏿 <");

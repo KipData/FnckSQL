@@ -1,8 +1,11 @@
 use crate::catalog::ColumnRef;
+use crate::storage::kip::generate_text_file_path;
 use crate::types::value::{DataValue, ValueRef};
+use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
 use integer_encoding::FixedInt;
 use itertools::Itertools;
+use std::cmp::min;
 use std::sync::Arc;
 
 const BITS_MAX_INDEX: usize = 8;
@@ -81,10 +84,44 @@ impl Tuple {
             } else {
                 let mut value_bytes = value.to_raw();
 
-                if value.is_variable() {
-                    bytes.append(&mut (value_bytes.len() as u32).encode_fixed_vec());
+                let col = &self.columns[i];
+                match col.desc.column_datatype {
+                    LogicalType::Boolean
+                    | LogicalType::Tinyint
+                    | LogicalType::UTinyint
+                    | LogicalType::Smallint
+                    | LogicalType::USmallint
+                    | LogicalType::Integer
+                    | LogicalType::UInteger
+                    | LogicalType::Bigint
+                    | LogicalType::UBigint
+                    | LogicalType::Decimal(_, _)
+                    | LogicalType::Float
+                    | LogicalType::Double
+                    | LogicalType::Date
+                    | LogicalType::DateTime => bytes.append(&mut value_bytes),
+                    LogicalType::Varchar(_) => {
+                        bytes.append(&mut (value_bytes.len() as u32).encode_fixed_vec());
+                        bytes.append(&mut value_bytes);
+                    }
+                    LogicalType::Text => {
+                        // len of text file
+                        let len = value_bytes.len();
+                        bytes.append(&mut (len as u32).encode_fixed_vec());
+                        // 6 bytes prefix of text content
+                        bytes.append(&mut value_bytes[..min(6, len)].to_vec());
+                        // text file absolute path
+                        let file_path = generate_text_file_path(
+                            self.id.as_ref().expect("The tuple has no primary key"),
+                            col,
+                        );
+                        bytes.append(&mut file_path.as_bytes().to_vec());
+                    }
+                    _ => panic!(
+                        "col type {:?} not supported to serialize",
+                        col.desc.column_datatype
+                    ),
                 }
-                bytes.append(&mut value_bytes);
             }
         }
 
