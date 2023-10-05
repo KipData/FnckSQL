@@ -114,7 +114,7 @@ fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), ExecutorError> {
 #[cfg(test)]
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::db::Database;
+    use crate::db::{Database, DatabaseError};
     use futures::StreamExt;
     use std::io::Write;
     use std::sync::Arc;
@@ -125,7 +125,7 @@ mod tests {
     use crate::types::LogicalType;
 
     #[tokio::test]
-    async fn read_csv() {
+    async fn read_csv() -> Result<(), DatabaseError> {
         let csv = "1,1.5,one\n2,2.5,two\n";
 
         let mut file = tempfile::NamedTempFile::new().expect("failed to create temp file");
@@ -189,16 +189,18 @@ mod tests {
         };
 
         let temp_dir = TempDir::new().unwrap();
-        let db = Database::with_kipdb(temp_dir.path()).await.unwrap();
+        let db = Database::with_kipdb(temp_dir.path()).await?;
         let _ = db
             .run("create table test_copy (a int primary key, b float, c varchar(10))")
             .await;
-        let actual = executor.execute(&db.storage).next().await.unwrap().unwrap();
+        let actual = executor.execute(&db.storage).next().await.unwrap()?;
 
         let tuple_builder = TupleBuilder::new_result();
         let expected = tuple_builder
             .push_result("COPY FROM SOURCE", format!("import {} rows", 2).as_str())
             .unwrap();
         assert_eq!(actual, expected);
+
+        Ok(())
     }
 }
