@@ -139,6 +139,8 @@ mod tests {
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Integer, true, false),
                 ref_expr: None,
+                text_files: vec![],
+                deleted_text_files: vec![],
             }),
             Arc::new(ColumnCatalog {
                 id: Some(1),
@@ -147,6 +149,8 @@ mod tests {
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Float, false, false),
                 ref_expr: None,
+                text_files: vec![],
+                deleted_text_files: vec![],
             }),
             Arc::new(ColumnCatalog {
                 id: Some(1),
@@ -155,6 +159,8 @@ mod tests {
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false),
                 ref_expr: None,
+                text_files: vec![],
+                deleted_text_files: vec![],
             }),
         ];
 
