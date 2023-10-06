@@ -1,6 +1,5 @@
 use crate::binder::BindError;
 use crate::expression::agg::AggKind;
-use async_recursion::async_recursion;
 use itertools::Itertools;
 use sqlparser::ast::{
     BinaryOperator, Expr, Function, FunctionArg, FunctionArgExpr, Ident, UnaryOperator,
@@ -10,35 +9,29 @@ use std::sync::Arc;
 
 use super::Binder;
 use crate::expression::ScalarExpression;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 
-impl<S: Storage> Binder<S> {
-    #[async_recursion]
-    pub(crate) async fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
+impl<'a, T: Transaction> Binder<'a, T> {
+    pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
         match expr {
             Expr::Identifier(ident) => {
                 self.bind_column_ref_from_identifiers(slice::from_ref(ident), None)
-                    .await
             }
-            Expr::CompoundIdentifier(idents) => {
-                self.bind_column_ref_from_identifiers(idents, None).await
-            }
-            Expr::BinaryOp { left, right, op } => {
-                self.bind_binary_op_internal(left, right, op).await
-            }
+            Expr::CompoundIdentifier(idents) => self.bind_column_ref_from_identifiers(idents, None),
+            Expr::BinaryOp { left, right, op } => self.bind_binary_op_internal(left, right, op),
             Expr::Value(v) => Ok(ScalarExpression::Constant(Arc::new(v.into()))),
-            Expr::Function(func) => self.bind_agg_call(func).await,
-            Expr::Nested(expr) => self.bind_expr(expr).await,
-            Expr::UnaryOp { expr, op } => self.bind_unary_op_internal(expr, op).await,
+            Expr::Function(func) => self.bind_agg_call(func),
+            Expr::Nested(expr) => self.bind_expr(expr),
+            Expr::UnaryOp { expr, op } => self.bind_unary_op_internal(expr, op),
             _ => {
                 todo!()
             }
         }
     }
 
-    pub async fn bind_column_ref_from_identifiers(
+    pub fn bind_column_ref_from_identifiers(
         &mut self,
         idents: &[Ident],
         bind_table_name: Option<&String>,
@@ -66,9 +59,8 @@ impl<S: Storage> Binder<S> {
         if let Some(table) = table_name.or(bind_table_name) {
             let table_catalog = self
                 .context
-                .storage
+                .transaction
                 .table(table)
-                .await
                 .ok_or_else(|| BindError::InvalidTable(table.to_string()))?;
 
             let column_catalog = table_catalog
@@ -100,14 +92,14 @@ impl<S: Storage> Binder<S> {
         }
     }
 
-    async fn bind_binary_op_internal(
+    fn bind_binary_op_internal(
         &mut self,
         left: &Expr,
         right: &Expr,
         op: &BinaryOperator,
     ) -> Result<ScalarExpression, BindError> {
-        let left_expr = Box::new(self.bind_expr(left).await?);
-        let right_expr = Box::new(self.bind_expr(right).await?);
+        let left_expr = Box::new(self.bind_expr(left)?);
+        let right_expr = Box::new(self.bind_expr(right)?);
 
         let ty = match op {
             BinaryOperator::Plus
@@ -137,12 +129,12 @@ impl<S: Storage> Binder<S> {
         })
     }
 
-    async fn bind_unary_op_internal(
+    fn bind_unary_op_internal(
         &mut self,
         expr: &Expr,
         op: &UnaryOperator,
     ) -> Result<ScalarExpression, BindError> {
-        let expr = Box::new(self.bind_expr(expr).await?);
+        let expr = Box::new(self.bind_expr(expr)?);
         let ty = if let UnaryOperator::Not = op {
             LogicalType::Boolean
         } else {
@@ -156,7 +148,7 @@ impl<S: Storage> Binder<S> {
         })
     }
 
-    async fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression, BindError> {
+    fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression, BindError> {
         let mut args = Vec::with_capacity(func.args.len());
 
         for arg in func.args.iter() {
@@ -165,7 +157,7 @@ impl<S: Storage> Binder<S> {
                 FunctionArg::Unnamed(arg) => arg,
             };
             match arg_expr {
-                FunctionArgExpr::Expr(expr) => args.push(self.bind_expr(expr).await?),
+                FunctionArgExpr::Expr(expr) => args.push(self.bind_expr(expr)?),
                 FunctionArgExpr::Wildcard => args.push(Self::wildcard_expr()),
                 _ => todo!(),
             }

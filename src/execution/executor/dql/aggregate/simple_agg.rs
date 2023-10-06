@@ -3,39 +3,37 @@ use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
+use std::cell::RefCell;
 
 pub struct SimpleAggExecutor {
     pub agg_calls: Vec<ScalarExpression>,
-    pub input: BoxedExecutor,
 }
 
-impl From<(AggregateOperator, BoxedExecutor)> for SimpleAggExecutor {
-    fn from(
-        (AggregateOperator { agg_calls, .. }, input): (AggregateOperator, BoxedExecutor),
-    ) -> Self {
-        SimpleAggExecutor { agg_calls, input }
+impl From<AggregateOperator> for SimpleAggExecutor {
+    fn from(AggregateOperator { agg_calls, .. }: AggregateOperator) -> SimpleAggExecutor {
+        SimpleAggExecutor { agg_calls }
     }
 }
 
-impl<S: Storage> Executor<S> for SimpleAggExecutor {
-    fn execute(self, _: &S) -> BoxedExecutor {
-        self._execute()
+impl<T: Transaction> Executor<T> for SimpleAggExecutor {
+    fn execute(self, inputs: Vec<BoxedExecutor>, _transaction: &RefCell<T>) -> BoxedExecutor {
+        self._execute(inputs)
     }
 }
 
 impl SimpleAggExecutor {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self) {
+    pub async fn _execute(self, mut inputs: Vec<BoxedExecutor>) {
         let mut accs = create_accumulators(&self.agg_calls);
         let mut columns_option = None;
 
         #[for_await]
-        for tuple in self.input {
+        for tuple in inputs.remove(0) {
             let tuple = tuple?;
 
             columns_option.get_or_insert_with(|| {

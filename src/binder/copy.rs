@@ -44,13 +44,13 @@ impl std::fmt::Display for FileFormat {
 
 impl FromStr for ExtSource {
     type Err = ();
-    fn from_str(_s: &str) -> std::result::Result<Self, Self::Err> {
+    fn from_str(_s: &str) -> Result<Self, Self::Err> {
         Err(())
     }
 }
 
-impl<S: Storage> Binder<S> {
-    pub(super) async fn bind_copy(
+impl<'a, T: Transaction> Binder<'a, T> {
+    pub(super) fn bind_copy(
         &mut self,
         source: CopySource,
         to: bool,
@@ -69,7 +69,7 @@ impl<S: Storage> Binder<S> {
             }
         };
 
-        if let Some(table) = self.context.storage.table(&table_name.to_string()).await {
+        if let Some(table) = self.context.transaction.table(&table_name.to_string()) {
             let cols = table.all_columns();
             let ext_source = ExtSource {
                 path: match target {

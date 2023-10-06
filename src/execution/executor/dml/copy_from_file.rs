@@ -2,10 +2,11 @@ use crate::binder::copy::FileFormat;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
-use crate::storage::{Storage, Transaction};
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 use std::fs::File;
 use std::io::BufReader;
 use tokio::sync::mpsc::Sender;
@@ -21,37 +22,34 @@ impl From<CopyFromFileOperator> for CopyFromFile {
     }
 }
 
-impl<S: Storage> Executor<S> for CopyFromFile {
-    fn execute(self, storage: &S) -> BoxedExecutor {
-        self._execute(storage.clone())
+impl<T: Transaction> Executor<T> for CopyFromFile {
+    fn execute(self, _inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }
 
 impl CopyFromFile {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<S: Storage>(self, storage: S) {
+    pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
         let (tx1, mut rx1) = tokio::sync::mpsc::channel(1);
         // # Cancellation
         // When this stream is dropped, the `rx` is dropped, the spawned task will fail to send to
         // `tx`, then the task will finish.
         let table_name = self.op.table.clone();
-        if let Some(mut txn) = storage.transaction(&table_name).await {
-            let handle = tokio::task::spawn_blocking(|| self.read_file_blocking(tx));
-            let mut size = 0 as usize;
-            while let Some(chunk) = rx.recv().await {
-                txn.append(chunk, false)?;
-                size += 1;
-            }
-            handle.await??;
-            txn.commit().await?;
-
-            let handle = tokio::task::spawn_blocking(move || return_result(size.clone(), tx1));
-            while let Some(chunk) = rx1.recv().await {
-                yield chunk;
-            }
-            handle.await??;
+        let handle = tokio::task::spawn_blocking(|| self.read_file_blocking(tx));
+        let mut size = 0 as usize;
+        while let Some(chunk) = rx.recv().await {
+            transaction.append(&table_name, chunk, false)?;
+            size += 1;
         }
+        handle.await??;
+
+        let handle = tokio::task::spawn_blocking(move || return_result(size.clone(), tx1));
+        while let Some(chunk) = rx1.recv().await {
+            yield chunk;
+        }
+        handle.await??;
     }
     /// Read records from file using blocking IO.
     ///
@@ -122,6 +120,7 @@ mod tests {
 
     use super::*;
     use crate::binder::copy::ExtSource;
+    use crate::storage::Storage;
     use crate::types::LogicalType;
 
     #[tokio::test]
@@ -193,7 +192,13 @@ mod tests {
         let _ = db
             .run("create table test_copy (a int primary key, b float, c varchar(10))")
             .await;
-        let actual = executor.execute(&db.storage).next().await.unwrap()?;
+        let storage = db.storage;
+        let transaction = RefCell::new(storage.transaction().await?);
+        let actual = executor
+            .execute(vec![], &transaction)
+            .next()
+            .await
+            .unwrap()?;
 
         let tuple_builder = TupleBuilder::new_result();
         let expected = tuple_builder

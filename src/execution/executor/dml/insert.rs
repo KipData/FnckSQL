@@ -2,61 +2,57 @@ use crate::catalog::TableName;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::insert::InsertOperator;
-use crate::storage::{Storage, Transaction};
+use crate::storage::Transaction;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct Insert {
     table_name: TableName,
-    input: BoxedExecutor,
     is_overwrite: bool,
 }
 
-impl From<(InsertOperator, BoxedExecutor)> for Insert {
+impl From<InsertOperator> for Insert {
     fn from(
-        (
-            InsertOperator {
-                table_name,
-                is_overwrite,
-            },
-            input,
-        ): (InsertOperator, BoxedExecutor),
-    ) -> Self {
+        InsertOperator {
+            table_name,
+            is_overwrite,
+        }: InsertOperator,
+    ) -> Insert {
         Insert {
             table_name,
-            input,
             is_overwrite,
         }
     }
 }
 
-impl<S: Storage> Executor<S> for Insert {
-    fn execute(self, storage: &S) -> BoxedExecutor {
-        self._execute(storage.clone())
+impl<T: Transaction> Executor<T> for Insert {
+    fn execute(self, inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap(), inputs) }
     }
 }
 
 impl Insert {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<S: Storage>(self, storage: S) {
+    pub async fn _execute<T: Transaction>(
+        self,
+        transaction: &mut T,
+        mut inputs: Vec<BoxedExecutor>,
+    ) {
         let Insert {
             table_name,
-            input,
             is_overwrite,
         } = self;
         let mut primary_key_index = None;
         let mut unique_values = HashMap::new();
 
-        if let (Some(table_catalog), Some(mut transaction)) = (
-            storage.table(&table_name).await,
-            storage.transaction(&table_name).await,
-        ) {
+        if let Some(table_catalog) = transaction.table(&table_name).cloned() {
             #[for_await]
-            for tuple in input {
+            for tuple in inputs.remove(0) {
                 let Tuple {
                     columns, values, ..
                 } = tuple?;
@@ -104,7 +100,7 @@ impl Insert {
                     tuple.values.push(value)
                 }
 
-                transaction.append(tuple, is_overwrite)?;
+                transaction.append(&table_name, tuple, is_overwrite)?;
             }
             // Unique Index
             for (col_id, values) in unique_values {
@@ -115,12 +111,10 @@ impl Insert {
                             column_values: vec![value],
                         };
 
-                        transaction.add_index(index, vec![tuple_id], true)?;
+                        transaction.add_index(&table_name, index, vec![tuple_id], true)?;
                     }
                 }
             }
-
-            transaction.commit().await?;
         }
     }
 }

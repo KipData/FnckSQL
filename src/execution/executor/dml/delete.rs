@@ -2,38 +2,35 @@ use crate::catalog::TableName;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::delete::DeleteOperator;
-use crate::storage::{Storage, Transaction};
+use crate::storage::Transaction;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
+use std::cell::RefCell;
 
 pub struct Delete {
     table_name: TableName,
-    input: BoxedExecutor,
 }
 
-impl From<(DeleteOperator, BoxedExecutor)> for Delete {
-    fn from((DeleteOperator { table_name }, input): (DeleteOperator, BoxedExecutor)) -> Self {
-        Delete { table_name, input }
+impl From<DeleteOperator> for Delete {
+    fn from(DeleteOperator { table_name }: DeleteOperator) -> Delete {
+        Delete { table_name }
     }
 }
 
-impl<S: Storage> Executor<S> for Delete {
-    fn execute(self, storage: &S) -> BoxedExecutor {
-        self._execute(storage.clone())
+impl<T: Transaction> Executor<T> for Delete {
+    fn execute(self, inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap(), inputs) }
     }
 }
 
 impl Delete {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<S: Storage>(self, storage: S) {
-        let Delete { table_name, input } = self;
-
-        if let Some(mut transaction) = storage.transaction(&table_name).await {
-            let table_catalog = storage.table(&table_name).await.unwrap();
-
-            let vec = table_catalog
+    async fn _execute<T: Transaction>(self, transaction: &mut T, mut inputs: Vec<BoxedExecutor>) {
+        let Delete { table_name } = self;
+        let option_index_metas = transaction.table(&table_name).map(|table_catalog| {
+            table_catalog
                 .all_columns()
                 .into_iter()
                 .enumerate()
@@ -44,18 +41,20 @@ impl Delete {
                             col.id.and_then(|col_id| {
                                 table_catalog
                                     .get_unique_index(&col_id)
-                                    .map(|index_meta| (i, index_meta))
+                                    .map(|index_meta| (i, index_meta.clone()))
                             })
                         })
                         .flatten()
                 })
-                .collect_vec();
+                .collect_vec()
+        });
 
+        if let Some(index_metas) = option_index_metas {
             #[for_await]
-            for tuple in input {
+            for tuple in inputs.remove(0) {
                 let tuple: Tuple = tuple?;
 
-                for (i, index_meta) in vec.iter() {
+                for (i, index_meta) in index_metas.iter() {
                     let value = &tuple.values[*i];
 
                     if !value.is_null() {
@@ -64,15 +63,14 @@ impl Delete {
                             column_values: vec![value.clone()],
                         };
 
-                        transaction.del_index(&index)?;
+                        transaction.del_index(&table_name, &index)?;
                     }
                 }
 
                 if let Some(tuple_id) = tuple.id {
-                    transaction.delete(tuple_id)?;
+                    transaction.delete(&table_name, tuple_id)?;
                 }
             }
-            transaction.commit().await?;
         }
     }
 }

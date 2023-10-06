@@ -1,4 +1,3 @@
-use async_recursion::async_recursion;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,7 +25,7 @@ use crate::expression::BinaryOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::LogicalPlan;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::LogicalType;
 use itertools::Itertools;
 use sqlparser::ast;
@@ -35,16 +34,15 @@ use sqlparser::ast::{
     SelectItem, SetExpr, TableFactor, TableWithJoins,
 };
 
-impl<S: Storage> Binder<S> {
-    #[async_recursion]
-    pub(crate) async fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, BindError> {
+impl<'a, T: Transaction> Binder<'a, T> {
+    pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, BindError> {
         if let Some(_with) = &query.with {
             // TODO support with clause.
         }
 
         let mut plan = match query.body.borrow() {
-            SetExpr::Select(select) => self.bind_select(select, &query.order_by).await,
-            SetExpr::Query(query) => self.bind_query(query).await,
+            SetExpr::Select(select) => self.bind_select(select, &query.order_by),
+            SetExpr::Query(query) => self.bind_query(query),
             _ => unimplemented!(),
         }?;
 
@@ -52,43 +50,40 @@ impl<S: Storage> Binder<S> {
         let offset = &query.offset;
 
         if limit.is_some() || offset.is_some() {
-            plan = self.bind_limit(plan, limit, offset).await?;
+            plan = self.bind_limit(plan, limit, offset)?;
         }
 
         Ok(plan)
     }
 
-    async fn bind_select(
+    fn bind_select(
         &mut self,
         select: &Select,
         orderby: &[OrderByExpr],
     ) -> Result<LogicalPlan, BindError> {
-        let mut plan = self.bind_table_ref(&select.from).await?;
+        let mut plan = self.bind_table_ref(&select.from)?;
 
         // Resolve scalar function call.
         // TODO support SRF(Set-Returning Function).
 
-        let mut select_list = self.normalize_select_item(&select.projection).await?;
+        let mut select_list = self.normalize_select_item(&select.projection)?;
 
         self.extract_select_join(&mut select_list);
 
         if let Some(predicate) = &select.selection {
-            plan = self.bind_where(plan, predicate).await?;
+            plan = self.bind_where(plan, predicate)?;
         }
 
         self.extract_select_aggregate(&mut select_list)?;
 
         if !select.group_by.is_empty() {
-            self.extract_group_by_aggregate(&mut select_list, &select.group_by)
-                .await?;
+            self.extract_group_by_aggregate(&mut select_list, &select.group_by)?;
         }
 
         let mut having_orderby = (None, None);
 
         if select.having.is_some() || !orderby.is_empty() {
-            having_orderby = self
-                .extract_having_orderby_aggregate(&select.having, orderby)
-                .await?;
+            having_orderby = self.extract_having_orderby_aggregate(&select.having, orderby)?;
         }
 
         if !self.context.agg_calls.is_empty() || !self.context.group_by_exprs.is_empty() {
@@ -116,7 +111,7 @@ impl<S: Storage> Binder<S> {
         Ok(plan)
     }
 
-    pub(crate) async fn bind_table_ref(
+    pub(crate) fn bind_table_ref(
         &mut self,
         from: &[TableWithJoins],
     ) -> Result<LogicalPlan, BindError> {
@@ -130,17 +125,17 @@ impl<S: Storage> Binder<S> {
 
         let TableWithJoins { relation, joins } = &from[0];
 
-        let (left_name, mut plan) = self.bind_single_table_ref(relation, None).await?;
+        let (left_name, mut plan) = self.bind_single_table_ref(relation, None)?;
 
         if !joins.is_empty() {
             for join in joins {
-                plan = self.bind_join(left_name.clone(), plan, join).await?;
+                plan = self.bind_join(left_name.clone(), plan, join)?;
             }
         }
         Ok(plan)
     }
 
-    async fn bind_single_table_ref(
+    fn bind_single_table_ref(
         &mut self,
         table: &TableFactor,
         joint_type: Option<JoinType>,
@@ -164,7 +159,7 @@ impl<S: Storage> Binder<S> {
                     table = &alias.name.value;
                 }
 
-                self._bind_single_table_ref(joint_type, table).await?
+                self._bind_single_table_ref(joint_type, table)?
             }
             _ => unimplemented!(),
         };
@@ -172,7 +167,7 @@ impl<S: Storage> Binder<S> {
         Ok(plan_with_name)
     }
 
-    pub(crate) async fn _bind_single_table_ref(
+    pub(crate) fn _bind_single_table_ref(
         &mut self,
         joint_type: Option<JoinType>,
         table: &str,
@@ -185,9 +180,8 @@ impl<S: Storage> Binder<S> {
 
         let table_catalog = self
             .context
-            .storage
+            .transaction
             .table(&table_name)
-            .await
             .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
 
         self.context
@@ -206,7 +200,7 @@ impl<S: Storage> Binder<S> {
     /// - Qualified name with wildcard, e.g. `SELECT t.* FROM t,t1`
     /// - Scalar expression or aggregate expression, e.g. `SELECT COUNT(*) + 1 AS count FROM t`
     ///  
-    async fn normalize_select_item(
+    fn normalize_select_item(
         &mut self,
         items: &[SelectItem],
     ) -> Result<Vec<ScalarExpression>, BindError> {
@@ -214,9 +208,9 @@ impl<S: Storage> Binder<S> {
 
         for item in items.iter().enumerate() {
             match item.1 {
-                SelectItem::UnnamedExpr(expr) => select_items.push(self.bind_expr(expr).await?),
+                SelectItem::UnnamedExpr(expr) => select_items.push(self.bind_expr(expr)?),
                 SelectItem::ExprWithAlias { expr, alias } => {
-                    let expr = self.bind_expr(expr).await?;
+                    let expr = self.bind_expr(expr)?;
                     let alias_name = alias.to_string();
 
                     self.context.add_alias(alias_name.clone(), expr.clone());
@@ -227,7 +221,7 @@ impl<S: Storage> Binder<S> {
                     });
                 }
                 SelectItem::Wildcard(_) => {
-                    select_items.extend_from_slice(self.bind_all_column_refs().await?.as_slice());
+                    select_items.extend_from_slice(self.bind_all_column_refs()?.as_slice());
                 }
 
                 _ => todo!("bind select list"),
@@ -237,14 +231,13 @@ impl<S: Storage> Binder<S> {
         Ok(select_items)
     }
 
-    async fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>, BindError> {
+    fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>, BindError> {
         let mut exprs = vec![];
         for table_name in self.context.bind_table.keys().cloned() {
             let table = self
                 .context
-                .storage
+                .transaction
                 .table(&table_name)
-                .await
                 .ok_or_else(|| BindError::InvalidTable(table_name.to_string()))?;
             for col in table.all_columns() {
                 exprs.push(ScalarExpression::ColumnRef(col));
@@ -254,7 +247,7 @@ impl<S: Storage> Binder<S> {
         Ok(exprs)
     }
 
-    async fn bind_join(
+    fn bind_join(
         &mut self,
         left_table: TableName,
         left: LogicalPlan,
@@ -274,43 +267,36 @@ impl<S: Storage> Binder<S> {
             _ => unimplemented!(),
         };
 
-        let (right_table, right) = self
-            .bind_single_table_ref(relation, Some(join_type))
-            .await?;
+        let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type))?;
 
         let left_table = self
             .context
-            .storage
+            .transaction
             .table(&left_table)
-            .await
             .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("Left: {} not found", left_table)))?;
         let right_table = self
             .context
-            .storage
+            .transaction
             .table(&right_table)
-            .await
             .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("Right: {} not found", right_table)))?;
 
         let on = match joint_condition {
-            Some(constraint) => {
-                self.bind_join_constraint(&left_table, &right_table, constraint)
-                    .await?
-            }
+            Some(constraint) => self.bind_join_constraint(&left_table, &right_table, constraint)?,
             None => JoinCondition::None,
         };
 
         Ok(LJoinOperator::new(left, right, on, join_type))
     }
 
-    pub(crate) async fn bind_where(
+    pub(crate) fn bind_where(
         &mut self,
         children: LogicalPlan,
         predicate: &Expr,
     ) -> Result<LogicalPlan, BindError> {
         Ok(FilterOperator::new(
-            self.bind_expr(predicate).await?,
+            self.bind_expr(predicate)?,
             children,
             false,
         ))
@@ -348,7 +334,7 @@ impl<S: Storage> Binder<S> {
         }
     }
 
-    async fn bind_limit(
+    fn bind_limit(
         &mut self,
         children: LogicalPlan,
         limit_expr: &Option<Expr>,
@@ -357,7 +343,7 @@ impl<S: Storage> Binder<S> {
         let mut limit = 0;
         let mut offset = 0;
         if let Some(expr) = limit_expr {
-            let expr = self.bind_expr(expr).await?;
+            let expr = self.bind_expr(expr)?;
             match expr {
                 ScalarExpression::Constant(dv) => match dv.as_ref() {
                     DataValue::Int32(Some(v)) if *v > 0 => limit = *v as usize,
@@ -377,7 +363,7 @@ impl<S: Storage> Binder<S> {
         }
 
         if let Some(expr) = offset_expr {
-            let expr = self.bind_expr(&expr.value).await?;
+            let expr = self.bind_expr(&expr.value)?;
             match expr {
                 ScalarExpression::Constant(dv) => match dv.as_ref() {
                     DataValue::Int32(Some(v)) if *v > 0 => offset = *v as usize,
@@ -437,7 +423,7 @@ impl<S: Storage> Binder<S> {
         }
     }
 
-    async fn bind_join_constraint(
+    fn bind_join_constraint(
         &mut self,
         left_table: &TableCatalog,
         right_table: &TableCatalog,
@@ -450,8 +436,7 @@ impl<S: Storage> Binder<S> {
                 // expression that didn't match equi-join pattern
                 let mut filter = vec![];
 
-                self.extract_join_keys(expr, &mut on_keys, &mut filter, left_table, right_table)
-                    .await?;
+                self.extract_join_keys(expr, &mut on_keys, &mut filter, left_table, right_table)?;
 
                 // combine multiple filter exprs into one BinaryExpr
                 let join_filter = filter
@@ -483,8 +468,7 @@ impl<S: Storage> Binder<S> {
     /// foo = bar AND bar = baz => accum=[(foo, bar), (bar, baz)] accum_filter=[]
     /// foo = bar AND baz > 1 => accum=[(foo, bar)] accum_filter=[baz > 1]
     /// ```
-    #[async_recursion]
-    async fn extract_join_keys(
+    fn extract_join_keys(
         &mut self,
         expr: &Expr,
         accum: &mut Vec<(ScalarExpression, ScalarExpression)>,
@@ -495,8 +479,8 @@ impl<S: Storage> Binder<S> {
         match expr {
             Expr::BinaryOp { left, op, right } => match op {
                 ast::BinaryOperator::Eq => {
-                    let left = self.bind_expr(left).await?;
-                    let right = self.bind_expr(right).await?;
+                    let left = self.bind_expr(left)?;
+                    let right = self.bind_expr(right)?;
 
                     match (&left, &right) {
                         // example: foo = bar
@@ -511,12 +495,12 @@ impl<S: Storage> Binder<S> {
                             {
                                 accum.push((right, left));
                             } else {
-                                accum_filter.push(self.bind_expr(expr).await?);
+                                accum_filter.push(self.bind_expr(expr)?);
                             }
                         }
                         // example: baz = 1
                         _other => {
-                            accum_filter.push(self.bind_expr(expr).await?);
+                            accum_filter.push(self.bind_expr(expr)?);
                         }
                     }
                 }
@@ -529,26 +513,24 @@ impl<S: Storage> Binder<S> {
                             accum_filter,
                             left_schema,
                             right_schema,
-                        )
-                        .await?;
+                        )?;
                         self.extract_join_keys(
                             right,
                             accum,
                             accum_filter,
                             left_schema,
                             right_schema,
-                        )
-                        .await?;
+                        )?;
                     }
                 }
                 _other => {
                     // example: baz > 1
-                    accum_filter.push(self.bind_expr(expr).await?);
+                    accum_filter.push(self.bind_expr(expr)?);
                 }
             },
             _other => {
                 // example: baz in (xxx), something else will convert to filter logic
-                accum_filter.push(self.bind_expr(expr).await?);
+                accum_filter.push(self.bind_expr(expr)?);
             }
         }
         Ok(())

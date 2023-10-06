@@ -9,7 +9,7 @@ use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUn
 
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
@@ -146,7 +146,7 @@ impl ScalarExpression {
         exprs
     }
 
-    pub fn has_agg_call<S: Storage>(&self, context: &BinderContext<S>) -> bool {
+    pub fn has_agg_call<T: Transaction>(&self, context: &BinderContext<'_, T>) -> bool {
         match self {
             ScalarExpression::InputRef { index, .. } => context.agg_calls.get(*index).is_some(),
             ScalarExpression::AggCall { .. } => unreachable!(),

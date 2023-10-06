@@ -521,7 +521,7 @@ impl DataValue {
             DataValue::Utf8(Some(v)) => Self::encode_bytes(b, v.as_bytes()),
             value => {
                 return if value.is_null() {
-                    Err(TypeError::NotNull)
+                    Err(TypeError::PrimaryKeyNotFound)
                 } else {
                     Err(TypeError::InvalidType)
                 }

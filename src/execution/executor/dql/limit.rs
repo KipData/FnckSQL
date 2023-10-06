@@ -1,41 +1,36 @@
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::limit::LimitOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures::StreamExt;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 
 pub struct Limit {
     offset: Option<usize>,
     limit: Option<usize>,
-    input: BoxedExecutor,
 }
 
-impl From<(LimitOperator, BoxedExecutor)> for Limit {
-    fn from((LimitOperator { offset, limit }, input): (LimitOperator, BoxedExecutor)) -> Self {
+impl From<LimitOperator> for Limit {
+    fn from(LimitOperator { offset, limit }: LimitOperator) -> Limit {
         Limit {
             offset: Some(offset),
             limit: Some(limit),
-            input,
         }
     }
 }
 
-impl<S: Storage> Executor<S> for Limit {
-    fn execute(self, _: &S) -> BoxedExecutor {
-        self._execute()
+impl<T: Transaction> Executor<T> for Limit {
+    fn execute(self, inputs: Vec<BoxedExecutor>, _transaction: &RefCell<T>) -> BoxedExecutor {
+        self._execute(inputs)
     }
 }
 
 impl Limit {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self) {
-        let Limit {
-            offset,
-            limit,
-            input,
-        } = self;
+    pub async fn _execute(self, mut inputs: Vec<BoxedExecutor>) {
+        let Limit { offset, limit } = self;
 
         if limit.is_some() && limit.unwrap() == 0 {
             return Ok(());
@@ -45,7 +40,7 @@ impl Limit {
         let offset_limit = offset_val + limit.unwrap_or(1) - 1;
 
         #[for_await]
-        for (i, tuple) in input.enumerate() {
+        for (i, tuple) in inputs.remove(0).enumerate() {
             if i < offset_val {
                 continue;
             } else if i > offset_limit {

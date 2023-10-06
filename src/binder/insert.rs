@@ -6,14 +6,14 @@ use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::value::{DataValue, ValueRef};
 use sqlparser::ast::{Expr, Ident, ObjectName};
 use std::slice;
 use std::sync::Arc;
 
-impl<S: Storage> Binder<S> {
-    pub(crate) async fn bind_insert(
+impl<'a, T: Transaction> Binder<'a, T> {
+    pub(crate) fn bind_insert(
         &mut self,
         name: ObjectName,
         idents: &[Ident],
@@ -24,7 +24,7 @@ impl<S: Storage> Binder<S> {
         let (_, name) = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 
-        if let Some(table) = self.context.storage.table(&table_name).await {
+        if let Some(table) = self.context.transaction.table(&table_name) {
             let mut columns = Vec::new();
 
             if idents.is_empty() {
@@ -32,13 +32,10 @@ impl<S: Storage> Binder<S> {
             } else {
                 let bind_table_name = Some(table_name.to_string());
                 for ident in idents {
-                    match self
-                        .bind_column_ref_from_identifiers(
-                            slice::from_ref(ident),
-                            bind_table_name.as_ref(),
-                        )
-                        .await?
-                    {
+                    match self.bind_column_ref_from_identifiers(
+                        slice::from_ref(ident),
+                        bind_table_name.as_ref(),
+                    )? {
                         ScalarExpression::ColumnRef(catalog) => columns.push(catalog),
                         _ => unreachable!(),
                     }
@@ -50,7 +47,7 @@ impl<S: Storage> Binder<S> {
                 let mut row = Vec::with_capacity(expr_row.len());
 
                 for (i, expr) in expr_row.into_iter().enumerate() {
-                    match &self.bind_expr(expr).await? {
+                    match &self.bind_expr(expr)? {
                         ScalarExpression::Constant(value) => {
                             // Check if the value length is too long
                             value.check_len(columns[i].datatype())?;
