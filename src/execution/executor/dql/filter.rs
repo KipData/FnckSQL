@@ -10,27 +10,28 @@ use std::cell::RefCell;
 
 pub struct Filter {
     predicate: ScalarExpression,
+    input: BoxedExecutor,
 }
 
-impl From<FilterOperator> for Filter {
-    fn from(FilterOperator { predicate, .. }: FilterOperator) -> Filter {
-        Filter { predicate }
+impl From<(FilterOperator, BoxedExecutor)> for Filter {
+    fn from((FilterOperator { predicate, .. }, input): (FilterOperator, BoxedExecutor)) -> Self {
+        Filter { predicate, input }
     }
 }
 
 impl<T: Transaction> Executor<T> for Filter {
-    fn execute(self, inputs: Vec<BoxedExecutor>, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute(inputs)
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
+        self._execute()
     }
 }
 
 impl Filter {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self, mut inputs: Vec<BoxedExecutor>) {
-        let Filter { predicate } = self;
+    pub async fn _execute(self) {
+        let Filter { predicate, input } = self;
 
         #[for_await]
-        for tuple in inputs.remove(0) {
+        for tuple in input {
             let tuple = tuple?;
             if let DataValue::Boolean(option) = predicate.eval_column(&tuple)?.as_ref() {
                 if let Some(true) = option {

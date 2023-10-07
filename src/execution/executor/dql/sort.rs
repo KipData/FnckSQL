@@ -10,28 +10,37 @@ use std::cmp::Ordering;
 pub struct Sort {
     sort_fields: Vec<SortField>,
     limit: Option<usize>,
+    input: BoxedExecutor,
 }
 
-impl From<SortOperator> for Sort {
-    fn from(SortOperator { sort_fields, limit }: SortOperator) -> Sort {
-        Sort { sort_fields, limit }
+impl From<(SortOperator, BoxedExecutor)> for Sort {
+    fn from((SortOperator { sort_fields, limit }, input): (SortOperator, BoxedExecutor)) -> Self {
+        Sort {
+            sort_fields,
+            limit,
+            input,
+        }
     }
 }
 
 impl<T: Transaction> Executor<T> for Sort {
-    fn execute(self, inputs: Vec<BoxedExecutor>, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute(inputs)
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
+        self._execute()
     }
 }
 
 impl Sort {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self, mut inputs: Vec<BoxedExecutor>) {
-        let Sort { sort_fields, limit } = self;
+    pub async fn _execute(self) {
+        let Sort {
+            sort_fields,
+            limit,
+            input,
+        } = self;
         let mut tuples: Vec<Tuple> = vec![];
 
         #[for_await]
-        for tuple in inputs.remove(0) {
+        for tuple in input {
             tuples.push(tuple?);
         }
 

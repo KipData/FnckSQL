@@ -17,7 +17,7 @@ impl From<ValuesOperator> for Values {
 }
 
 impl<T: Transaction> Executor<T> for Values {
-    fn execute(self, _inputs: Vec<BoxedExecutor>, _transaction: &RefCell<T>) -> BoxedExecutor {
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
         self._execute()
     }
 }

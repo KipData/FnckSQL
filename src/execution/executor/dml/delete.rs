@@ -11,24 +11,25 @@ use std::cell::RefCell;
 
 pub struct Delete {
     table_name: TableName,
+    input: BoxedExecutor,
 }
 
-impl From<DeleteOperator> for Delete {
-    fn from(DeleteOperator { table_name }: DeleteOperator) -> Delete {
-        Delete { table_name }
+impl From<(DeleteOperator, BoxedExecutor)> for Delete {
+    fn from((DeleteOperator { table_name }, input): (DeleteOperator, BoxedExecutor)) -> Self {
+        Delete { table_name, input }
     }
 }
 
 impl<T: Transaction> Executor<T> for Delete {
-    fn execute(self, inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap(), inputs) }
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }
 
 impl Delete {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    async fn _execute<T: Transaction>(self, transaction: &mut T, mut inputs: Vec<BoxedExecutor>) {
-        let Delete { table_name } = self;
+    async fn _execute<T: Transaction>(self, transaction: &mut T) {
+        let Delete { table_name, input } = self;
         let option_index_metas = transaction.table(&table_name).map(|table_catalog| {
             table_catalog
                 .all_columns()
@@ -51,7 +52,7 @@ impl Delete {
 
         if let Some(index_metas) = option_index_metas {
             #[for_await]
-            for tuple in inputs.remove(0) {
+            for tuple in input {
                 let tuple: Tuple = tuple?;
 
                 for (i, index_meta) in index_metas.iter() {

@@ -17,7 +17,7 @@ impl From<TruncateOperator> for Truncate {
 }
 
 impl<T: Transaction> Executor<T> for Truncate {
-    fn execute(self, _inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
         unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }

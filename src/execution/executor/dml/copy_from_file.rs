@@ -23,7 +23,7 @@ impl From<CopyFromFileOperator> for CopyFromFile {
 }
 
 impl<T: Transaction> Executor<T> for CopyFromFile {
-    fn execute(self, _inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
         unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }
@@ -195,7 +195,7 @@ mod tests {
         let storage = db.storage;
         let transaction = RefCell::new(storage.transaction().await?);
         let actual = executor
-            .execute(vec![], &transaction)
+            .execute(&transaction)
             .next()
             .await
             .unwrap()?;

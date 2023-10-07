@@ -17,24 +17,42 @@ use std::sync::Arc;
 pub struct HashJoin {
     on: JoinCondition,
     ty: JoinType,
+    left_input: BoxedExecutor,
+    right_input: BoxedExecutor,
 }
 
-impl From<JoinOperator> for HashJoin {
-    fn from(JoinOperator { on, join_type }: JoinOperator) -> HashJoin {
-        HashJoin { on, ty: join_type }
+impl From<(JoinOperator, BoxedExecutor, BoxedExecutor)> for HashJoin {
+    fn from(
+        (JoinOperator { on, join_type }, left_input, right_input): (
+            JoinOperator,
+            BoxedExecutor,
+            BoxedExecutor,
+        ),
+    ) -> Self {
+        HashJoin {
+            on,
+            ty: join_type,
+            left_input,
+            right_input,
+        }
     }
 }
 
 impl<T: Transaction> Executor<T> for HashJoin {
-    fn execute(self, inputs: Vec<BoxedExecutor>, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute(inputs)
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
+        self._execute()
     }
 }
 
 impl HashJoin {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self, mut inputs: Vec<BoxedExecutor>) {
-        let HashJoin { on, ty } = self;
+    pub async fn _execute(self) {
+        let HashJoin {
+            on,
+            ty,
+            left_input,
+            right_input,
+        } = self;
 
         if ty == JoinType::Cross {
             unreachable!("Cross join should not be in HashJoinExecutor");
@@ -59,7 +77,7 @@ impl HashJoin {
         // 2.merged all left tuples.
         let mut left_init_flag = false;
         #[for_await]
-        for tuple in inputs.remove(0) {
+        for tuple in left_input {
             let tuple: Tuple = tuple?;
             let hash = Self::hash_row(&on_left_keys, &hash_random_state, &tuple)?;
 
@@ -74,7 +92,7 @@ impl HashJoin {
         // probe phase
         let mut right_init_flag = false;
         #[for_await]
-        for tuple in inputs.remove(0) {
+        for tuple in right_input {
             let tuple: Tuple = tuple?;
             let right_cols_len = tuple.columns.len();
             let hash = Self::hash_row(&on_right_keys, &hash_random_state, &tuple)?;
@@ -353,8 +371,8 @@ mod test {
 
         (
             on_keys,
-            values_t1.execute(vec![], &_t),
-            values_t2.execute(vec![], &_t),
+            values_t1.execute(&_t),
+            values_t2.execute(&_t),
         )
     }
 
@@ -372,7 +390,7 @@ mod test {
             },
             join_type: JoinType::Inner,
         };
-        let mut executor = HashJoin::from(op).execute(vec![left, right], &transaction);
+        let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
         println!("inner_test: \n{}", create_table(&tuples));
@@ -409,7 +427,7 @@ mod test {
             },
             join_type: JoinType::Left,
         };
-        let mut executor = HashJoin::from(op).execute(vec![left, right], &transaction);
+        let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
         println!("left_test: \n{}", create_table(&tuples));
@@ -450,7 +468,7 @@ mod test {
             },
             join_type: JoinType::Right,
         };
-        let mut executor = HashJoin::from(op).execute(vec![left, right], &transaction);
+        let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
         println!("right_test: \n{}", create_table(&tuples));
@@ -491,7 +509,7 @@ mod test {
             },
             join_type: JoinType::Full,
         };
-        let mut executor = HashJoin::from(op).execute(vec![left, right], &transaction);
+        let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
         println!("full_test: \n{}", create_table(&tuples));

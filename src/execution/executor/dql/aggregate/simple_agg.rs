@@ -12,28 +12,31 @@ use std::cell::RefCell;
 
 pub struct SimpleAggExecutor {
     pub agg_calls: Vec<ScalarExpression>,
+    pub input: BoxedExecutor,
 }
 
-impl From<AggregateOperator> for SimpleAggExecutor {
-    fn from(AggregateOperator { agg_calls, .. }: AggregateOperator) -> SimpleAggExecutor {
-        SimpleAggExecutor { agg_calls }
+impl From<(AggregateOperator, BoxedExecutor)> for SimpleAggExecutor {
+    fn from(
+        (AggregateOperator { agg_calls, .. }, input): (AggregateOperator, BoxedExecutor),
+    ) -> Self {
+        SimpleAggExecutor { agg_calls, input }
     }
 }
 
 impl<T: Transaction> Executor<T> for SimpleAggExecutor {
-    fn execute(self, inputs: Vec<BoxedExecutor>, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute(inputs)
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
+        self._execute()
     }
 }
 
 impl SimpleAggExecutor {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self, mut inputs: Vec<BoxedExecutor>) {
+    pub async fn _execute(self) {
         let mut accs = create_accumulators(&self.agg_calls);
         let mut columns_option = None;
 
         #[for_await]
-        for tuple in inputs.remove(0) {
+        for tuple in self.input {
             let tuple = tuple?;
 
             columns_option.get_or_insert_with(|| {

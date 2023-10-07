@@ -13,38 +13,40 @@ use std::sync::Arc;
 
 pub struct Insert {
     table_name: TableName,
+    input: BoxedExecutor,
     is_overwrite: bool,
 }
 
-impl From<InsertOperator> for Insert {
+impl From<(InsertOperator, BoxedExecutor)> for Insert {
     fn from(
-        InsertOperator {
-            table_name,
-            is_overwrite,
-        }: InsertOperator,
-    ) -> Insert {
+        (
+            InsertOperator {
+                table_name,
+                is_overwrite,
+            },
+            input,
+        ): (InsertOperator, BoxedExecutor),
+    ) -> Self {
         Insert {
             table_name,
+            input,
             is_overwrite,
         }
     }
 }
 
 impl<T: Transaction> Executor<T> for Insert {
-    fn execute(self, inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap(), inputs) }
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }
 
 impl Insert {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<T: Transaction>(
-        self,
-        transaction: &mut T,
-        mut inputs: Vec<BoxedExecutor>,
-    ) {
+    pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Insert {
             table_name,
+            input,
             is_overwrite,
         } = self;
         let mut primary_key_index = None;
@@ -52,7 +54,7 @@ impl Insert {
 
         if let Some(table_catalog) = transaction.table(&table_name).cloned() {
             #[for_await]
-            for tuple in inputs.remove(0) {
+            for tuple in input {
                 let Tuple {
                     columns, values, ..
                 } = tuple?;

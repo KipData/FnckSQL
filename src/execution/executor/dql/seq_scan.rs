@@ -17,7 +17,7 @@ impl From<ScanOperator> for SeqScan {
 }
 
 impl<T: Transaction> Executor<T> for SeqScan {
-    fn execute(self, _inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
         unsafe { self._execute(transaction.as_ptr().as_ref().unwrap()) }
     }
 }

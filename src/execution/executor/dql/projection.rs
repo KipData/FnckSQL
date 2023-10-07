@@ -9,27 +9,31 @@ use std::cell::RefCell;
 
 pub struct Projection {
     exprs: Vec<ScalarExpression>,
+    input: BoxedExecutor,
 }
 
-impl From<ProjectOperator> for Projection {
-    fn from(ProjectOperator { columns }: ProjectOperator) -> Projection {
-        Projection { exprs: columns }
+impl From<(ProjectOperator, BoxedExecutor)> for Projection {
+    fn from((ProjectOperator { columns }, input): (ProjectOperator, BoxedExecutor)) -> Self {
+        Projection {
+            exprs: columns,
+            input,
+        }
     }
 }
 
 impl<T: Transaction> Executor<T> for Projection {
-    fn execute<'a>(self, inputs: Vec<BoxedExecutor>, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute(inputs)
+    fn execute<'a>(self, _transaction: &RefCell<T>) -> BoxedExecutor {
+        self._execute()
     }
 }
 
 impl Projection {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self, mut inputs: Vec<BoxedExecutor>) {
-        let Projection { exprs } = self;
+    pub async fn _execute(self) {
+        let Projection { exprs, input } = self;
 
         #[for_await]
-        for tuple in inputs.remove(0) {
+        for tuple in input {
             let tuple = tuple?;
 
             let mut columns = Vec::with_capacity(exprs.len());

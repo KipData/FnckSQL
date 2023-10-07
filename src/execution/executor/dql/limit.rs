@@ -10,27 +10,33 @@ use std::cell::RefCell;
 pub struct Limit {
     offset: Option<usize>,
     limit: Option<usize>,
+    input: BoxedExecutor,
 }
 
-impl From<LimitOperator> for Limit {
-    fn from(LimitOperator { offset, limit }: LimitOperator) -> Limit {
+impl From<(LimitOperator, BoxedExecutor)> for Limit {
+    fn from((LimitOperator { offset, limit }, input): (LimitOperator, BoxedExecutor)) -> Self {
         Limit {
             offset: Some(offset),
             limit: Some(limit),
+            input,
         }
     }
 }
 
 impl<T: Transaction> Executor<T> for Limit {
-    fn execute(self, inputs: Vec<BoxedExecutor>, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute(inputs)
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
+        self._execute()
     }
 }
 
 impl Limit {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self, mut inputs: Vec<BoxedExecutor>) {
-        let Limit { offset, limit } = self;
+    pub async fn _execute(self) {
+        let Limit {
+            offset,
+            limit,
+            input,
+        } = self;
 
         if limit.is_some() && limit.unwrap() == 0 {
             return Ok(());
@@ -40,7 +46,7 @@ impl Limit {
         let offset_limit = offset_val + limit.unwrap_or(1) - 1;
 
         #[for_await]
-        for (i, tuple) in inputs.remove(0).enumerate() {
+        for (i, tuple) in input.enumerate() {
             if i < offset_val {
                 continue;
             } else if i > offset_limit {

@@ -11,35 +11,47 @@ use std::collections::HashMap;
 
 pub struct Update {
     table_name: TableName,
+    input: BoxedExecutor,
+    values: BoxedExecutor,
 }
 
-impl From<UpdateOperator> for Update {
-    fn from(UpdateOperator { table_name }: UpdateOperator) -> Update {
-        Update { table_name }
+impl From<(UpdateOperator, BoxedExecutor, BoxedExecutor)> for Update {
+    fn from(
+        (UpdateOperator { table_name }, input, values): (
+            UpdateOperator,
+            BoxedExecutor,
+            BoxedExecutor,
+        ),
+    ) -> Self {
+        Update {
+            table_name,
+            input,
+            values,
+        }
     }
 }
 
 impl<T: Transaction> Executor<T> for Update {
-    fn execute(self, inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap(), inputs) }
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }
 
 impl Update {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<T: Transaction>(
-        self,
-        transaction: &mut T,
-        mut inputs: Vec<BoxedExecutor>,
-    ) {
-        let Update { table_name } = self;
+    pub async fn _execute<T: Transaction>(self, transaction: &mut T, ) {
+        let Update {
+            table_name,
+            input,
+            values,
+        } = self;
 
         if let Some(table_catalog) = transaction.table(&table_name).cloned() {
             let mut value_map = HashMap::new();
 
             // only once
             #[for_await]
-            for tuple in inputs.remove(1) {
+            for tuple in values {
                 let Tuple {
                     columns, values, ..
                 } = tuple?;
@@ -48,7 +60,7 @@ impl Update {
                 }
             }
             #[for_await]
-            for tuple in inputs.remove(0) {
+            for tuple in input {
                 let mut tuple: Tuple = tuple?;
                 let mut is_overwrite = true;
 

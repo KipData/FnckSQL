@@ -34,7 +34,7 @@ use std::cell::RefCell;
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
 pub trait Executor<T: Transaction> {
-    fn execute(self, inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor;
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor;
 }
 
 pub fn build<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>) -> BoxedExecutor {
@@ -44,71 +44,71 @@ pub fn build<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>) -> Box
     } = plan;
 
     match operator {
-        Operator::Dummy => Dummy {}.execute(vec![], transaction),
+        Operator::Dummy => Dummy {}.execute(transaction),
         Operator::Aggregate(op) => {
             let input = build(childrens.remove(0), transaction);
 
             if op.groupby_exprs.is_empty() {
-                SimpleAggExecutor::from(op).execute(vec![input], transaction)
+                SimpleAggExecutor::from((op, input)).execute(transaction)
             } else {
-                HashAggExecutor::from(op).execute(vec![input], transaction)
+                HashAggExecutor::from((op, input)).execute(transaction)
             }
         }
         Operator::Filter(op) => {
             let input = build(childrens.remove(0), transaction);
 
-            Filter::from(op).execute(vec![input], transaction)
+            Filter::from((op, input)).execute(transaction)
         }
         Operator::Join(op) => {
             let left_input = build(childrens.remove(0), transaction);
             let right_input = build(childrens.remove(0), transaction);
 
-            HashJoin::from(op).execute(vec![left_input, right_input], transaction)
+            HashJoin::from((op, left_input, right_input)).execute(transaction)
         }
         Operator::Project(op) => {
             let input = build(childrens.remove(0), transaction);
 
-            Projection::from(op).execute(vec![input], transaction)
+            Projection::from((op, input)).execute(transaction)
         }
         Operator::Scan(op) => {
             if op.index_by.is_some() {
-                IndexScan::from(op).execute(vec![], transaction)
+                IndexScan::from(op).execute(transaction)
             } else {
-                SeqScan::from(op).execute(vec![], transaction)
+                SeqScan::from(op).execute(transaction)
             }
         }
         Operator::Sort(op) => {
             let input = build(childrens.remove(0), transaction);
 
-            Sort::from(op).execute(vec![input], transaction)
+            Sort::from((op, input)).execute(transaction)
         }
         Operator::Limit(op) => {
             let input = build(childrens.remove(0), transaction);
 
-            Limit::from(op).execute(vec![input], transaction)
+            Limit::from((op, input)).execute(transaction)
         }
         Operator::Insert(op) => {
             let input = build(childrens.remove(0), transaction);
 
-            Insert::from(op).execute(vec![input], transaction)
+            Insert::from((op, input)).execute(transaction)
         }
         Operator::Update(op) => {
             let input = build(childrens.remove(0), transaction);
             let values = build(childrens.remove(0), transaction);
 
-            Update::from(op).execute(vec![input, values], transaction)
+            Update::from((op, input, values)).execute(transaction)
         }
         Operator::Delete(op) => {
             let input = build(childrens.remove(0), transaction);
 
-            Delete::from(op).execute(vec![input], transaction)
+            Delete::from((op, input)).execute(transaction)
         }
-        Operator::Values(op) => Values::from(op).execute(vec![], transaction),
-        Operator::CreateTable(op) => CreateTable::from(op).execute(vec![], transaction),
-        Operator::DropTable(op) => DropTable::from(op).execute(vec![], transaction),
-        Operator::Truncate(op) => Truncate::from(op).execute(vec![], transaction),
-        Operator::Show(op) => ShowTables::from(op).execute(vec![], transaction),
-        Operator::CopyFromFile(op) => CopyFromFile::from(op).execute(vec![], transaction),
+        Operator::Values(op) => Values::from(op).execute(transaction),
+        Operator::CreateTable(op) => CreateTable::from(op).execute(transaction),
+        Operator::DropTable(op) => DropTable::from(op).execute(transaction),
+        Operator::Truncate(op) => Truncate::from(op).execute(transaction),
+        Operator::Show(op) => ShowTables::from(op).execute(transaction),
+        Operator::CopyFromFile(op) => CopyFromFile::from(op).execute(transaction),
         #[warn(unused_assignments)]
         Operator::CopyToFile(_op) => {
             todo!()

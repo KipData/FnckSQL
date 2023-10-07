@@ -18,7 +18,7 @@ impl From<CreateTableOperator> for CreateTable {
 }
 
 impl<T: Transaction> Executor<T> for CreateTable {
-    fn execute(self, _inputs: Vec<BoxedExecutor>, transaction: &RefCell<T>) -> BoxedExecutor {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
         unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }
