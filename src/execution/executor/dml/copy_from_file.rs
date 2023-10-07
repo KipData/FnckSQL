@@ -194,11 +194,7 @@ mod tests {
             .await;
         let storage = db.storage;
         let transaction = RefCell::new(storage.transaction().await?);
-        let actual = executor
-            .execute(&transaction)
-            .next()
-            .await
-            .unwrap()?;
+        let actual = executor.execute(&transaction).next().await.unwrap()?;
 
         let tuple_builder = TupleBuilder::new_result();
         let expected = tuple_builder

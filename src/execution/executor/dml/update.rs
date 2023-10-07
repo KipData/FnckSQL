@@ -39,7 +39,7 @@ impl<T: Transaction> Executor<T> for Update {
 
 impl Update {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<T: Transaction>(self, transaction: &mut T, ) {
+    pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Update {
             table_name,
             input,

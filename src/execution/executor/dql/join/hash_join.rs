@@ -369,11 +369,7 @@ mod test {
             columns: t2_columns,
         });
 
-        (
-            on_keys,
-            values_t1.execute(&_t),
-            values_t2.execute(&_t),
-        )
+        (on_keys, values_t1.execute(&_t), values_t2.execute(&_t))
     }
 
     #[tokio::test]
