@@ -53,10 +53,6 @@ impl ColumnCatalog {
     pub fn desc(&self) -> &ColumnDesc {
         &self.desc
     }
-
-    pub fn id(&self) -> &ColumnId {
-        self.id.as_ref().expect("column id should not be none")
-    }
 }
 
 impl From<ColumnDef> for ColumnCatalog {

@@ -493,14 +493,13 @@ pub struct KipIter<'a> {
 }
 
 pub fn generate_text_file_path(tuple_id: &TupleId, col: &ColumnCatalog) -> String {
-    let col_id = col.id();
-    let table_name = col
-        .table_name
-        .as_ref()
-        .expect("The table name should not be none");
     // TODO support multi databases
     // TODO support specify home dir
-    format!("data/text-{}-{}-{}", table_name, tuple_id, col_id)
+    if let (Some(col_id), Some(table_name)) = (&col.id, &col.table_name) {
+        format!("data/text-{}-{}-{}", table_name, tuple_id, col_id)
+    } else {
+        panic!("column should be bound to table")
+    }
 }
 
 impl Iter for KipIter<'_> {
