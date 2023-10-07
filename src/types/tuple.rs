@@ -20,6 +20,9 @@ pub struct Tuple {
 }
 
 impl Tuple {
+    pub fn id(&self) -> &TupleId {
+        self.id.as_ref().expect("The tuple has no primary key")
+    }
     pub fn deserialize_from(columns: Vec<ColumnRef>, bytes: &[u8]) -> Self {
         fn is_none(bits: u8, i: usize) -> bool {
             bits & (1 << (7 - i)) > 0
@@ -106,16 +109,16 @@ impl Tuple {
                     }
                     LogicalType::Text => {
                         // len of text file
-                        let len = value_bytes.len();
-                        bytes.append(&mut (len as u32).encode_fixed_vec());
+                        let text_len = value_bytes.len();
+                        let mut prefix_and_path_bytes = Vec::new();
                         // 6 bytes prefix of text content
-                        bytes.append(&mut value_bytes[..min(6, len)].to_vec());
+                        prefix_and_path_bytes.append(&mut value_bytes[..min(6, text_len)].to_vec());
                         // text file absolute path
-                        let file_path = generate_text_file_path(
-                            self.id.as_ref().expect("The tuple has no primary key"),
-                            col,
-                        );
-                        bytes.append(&mut file_path.as_bytes().to_vec());
+                        let file_path = generate_text_file_path(self.id(), col);
+                        prefix_and_path_bytes.append(&mut file_path.as_bytes().to_vec());
+
+                        bytes.append(&mut (prefix_and_path_bytes.len() as u32).encode_fixed_vec());
+                        bytes.append(&mut prefix_and_path_bytes);
                     }
                     _ => panic!(
                         "col type {:?} not supported to serialize",

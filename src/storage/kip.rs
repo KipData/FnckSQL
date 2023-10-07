@@ -388,10 +388,7 @@ impl Transaction for KipTransaction {
         for (i, col) in tuple.columns.iter().enumerate() {
             if matches!(col.desc.column_datatype, LogicalType::Text) {
                 let value = tuple.values[i].clone();
-                let file_path = generate_text_file_path(
-                    tuple.id.as_ref().expect("The tuple has no primary key"),
-                    col,
-                );
+                let file_path = generate_text_file_path(tuple.id(), col);
                 let mut file = std::fs::File::create(file_path)?;
                 match value.as_ref() {
                     DataValue::Utf8(text) => {
@@ -404,7 +401,6 @@ impl Transaction for KipTransaction {
                         panic!("The data type of text column should be Utf8 or Null");
                     }
                 }
-                // TODO do we need to wait for flushing?
                 file.flush()?;
             }
         }
@@ -497,7 +493,7 @@ pub struct KipIter<'a> {
 }
 
 pub fn generate_text_file_path(tuple_id: &TupleId, col: &ColumnCatalog) -> String {
-    let col_id = col.id.expect("The column id should not be none");
+    let col_id = col.id();
     let table_name = col
         .table_name
         .as_ref()
