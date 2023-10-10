@@ -138,11 +138,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     }
 
     fn unpack_name(table_name: Option<TableName>, is_left: bool) -> TableName {
-        let title = if is_left {
-            "Left"
-        } else {
-            "Right"
-        };
+        let title = if is_left { "Left" } else { "Right" };
         table_name.expect(&format!("{}: Table is not named", title))
     }
 
