@@ -3,11 +3,12 @@ use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
+use std::cell::RefCell;
 
 pub struct SimpleAggExecutor {
     pub agg_calls: Vec<ScalarExpression>,
@@ -22,8 +23,8 @@ impl From<(AggregateOperator, BoxedExecutor)> for SimpleAggExecutor {
     }
 }
 
-impl<S: Storage> Executor<S> for SimpleAggExecutor {
-    fn execute(self, _: &S) -> BoxedExecutor {
+impl<T: Transaction> Executor<T> for SimpleAggExecutor {
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
         self._execute()
     }
 }

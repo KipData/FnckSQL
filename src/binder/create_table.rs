@@ -9,9 +9,9 @@ use crate::catalog::ColumnCatalog;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 
-impl<S: Storage> Binder<S> {
+impl<'a, T: Transaction> Binder<'a, T> {
     // TODO: TableConstraint
     pub(crate) fn bind_create_table(
         &mut self,
@@ -60,19 +60,22 @@ mod tests {
     use super::*;
     use crate::binder::BinderContext;
     use crate::catalog::ColumnDesc;
+    use crate::execution::ExecutorError;
     use crate::storage::kip::KipStorage;
+    use crate::storage::Storage;
     use crate::types::LogicalType;
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_create_bind() {
+    async fn test_create_bind() -> Result<(), ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let storage = KipStorage::new(temp_dir.path()).await.unwrap();
+        let storage = KipStorage::new(temp_dir.path()).await?;
+        let transaction = storage.transaction().await?;
 
         let sql = "create table t1 (id int primary key, name varchar(10) null)";
-        let binder = Binder::new(BinderContext::new(storage));
+        let binder = Binder::new(BinderContext::new(&transaction));
         let stmt = crate::parser::parse_sql(sql).unwrap();
-        let plan1 = binder.bind(&stmt[0]).await.unwrap();
+        let plan1 = binder.bind(&stmt[0]).unwrap();
 
         match plan1.operator {
             Operator::CreateTable(op) => {
@@ -92,5 +95,7 @@ mod tests {
             }
             _ => unreachable!(),
         }
+
+        Ok(())
     }
 }

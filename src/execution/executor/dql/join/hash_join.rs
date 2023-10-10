@@ -4,13 +4,14 @@ use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use ahash::{HashMap, HashMapExt, HashSet, HashSetExt, RandomState};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 pub struct HashJoin {
@@ -37,8 +38,8 @@ impl From<(JoinOperator, BoxedExecutor, BoxedExecutor)> for HashJoin {
     }
 }
 
-impl<S: Storage> Executor<S> for HashJoin {
-    fn execute(self, _: &S) -> BoxedExecutor {
+impl<T: Transaction> Executor<T> for HashJoin {
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
         self._execute()
     }
 }
@@ -256,15 +257,17 @@ mod test {
     use crate::expression::ScalarExpression;
     use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
     use crate::planner::operator::values::ValuesOperator;
-    use crate::storage::memory::MemStorage;
-    use crate::storage::Storage;
+    use crate::storage::kip::KipStorage;
+    use crate::storage::{Storage, Transaction};
     use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
+    use std::cell::RefCell;
     use std::sync::Arc;
+    use tempfile::TempDir;
 
-    fn build_join_values<S: Storage>(
-        _s: &S,
+    fn build_join_values<T: Transaction>(
+        _t: &RefCell<T>,
     ) -> (
         Vec<(ScalarExpression, ScalarExpression)>,
         BoxedExecutor,
@@ -366,13 +369,15 @@ mod test {
             columns: t2_columns,
         });
 
-        (on_keys, values_t1.execute(_s), values_t2.execute(_s))
+        (on_keys, values_t1.execute(&_t), values_t2.execute(&_t))
     }
 
     #[tokio::test]
     async fn test_inner_join() -> Result<(), ExecutorError> {
-        let mem_storage = MemStorage::new();
-        let (keys, left, right) = build_join_values(&mem_storage);
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = KipStorage::new(temp_dir.path()).await?;
+        let transaction = RefCell::new(storage.transaction().await?);
+        let (keys, left, right) = build_join_values(&transaction);
 
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -381,7 +386,7 @@ mod test {
             },
             join_type: JoinType::Inner,
         };
-        let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
+        let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
         println!("inner_test: \n{}", create_table(&tuples));
@@ -406,8 +411,10 @@ mod test {
 
     #[tokio::test]
     async fn test_left_join() -> Result<(), ExecutorError> {
-        let mem_storage = MemStorage::new();
-        let (keys, left, right) = build_join_values(&mem_storage);
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = KipStorage::new(temp_dir.path()).await?;
+        let transaction = RefCell::new(storage.transaction().await?);
+        let (keys, left, right) = build_join_values(&transaction);
 
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -416,7 +423,7 @@ mod test {
             },
             join_type: JoinType::Left,
         };
-        let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
+        let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
         println!("left_test: \n{}", create_table(&tuples));
@@ -445,8 +452,10 @@ mod test {
 
     #[tokio::test]
     async fn test_right_join() -> Result<(), ExecutorError> {
-        let mem_storage = MemStorage::new();
-        let (keys, left, right) = build_join_values(&mem_storage);
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = KipStorage::new(temp_dir.path()).await?;
+        let transaction = RefCell::new(storage.transaction().await?);
+        let (keys, left, right) = build_join_values(&transaction);
 
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -455,7 +464,7 @@ mod test {
             },
             join_type: JoinType::Right,
         };
-        let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
+        let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
         println!("right_test: \n{}", create_table(&tuples));
@@ -484,8 +493,10 @@ mod test {
 
     #[tokio::test]
     async fn test_full_join() -> Result<(), ExecutorError> {
-        let mem_storage = MemStorage::new();
-        let (keys, left, right) = build_join_values(&mem_storage);
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = KipStorage::new(temp_dir.path()).await?;
+        let transaction = RefCell::new(storage.transaction().await?);
+        let (keys, left, right) = build_join_values(&transaction);
 
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -494,7 +505,7 @@ mod test {
             },
             join_type: JoinType::Full,
         };
-        let mut executor = HashJoin::from((op, left, right)).execute(&mem_storage);
+        let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
         println!("full_test: \n{}", create_table(&tuples));

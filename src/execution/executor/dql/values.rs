@@ -1,9 +1,10 @@
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::values::ValuesOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 
 pub struct Values {
     op: ValuesOperator,
@@ -15,8 +16,8 @@ impl From<ValuesOperator> for Values {
     }
 }
 
-impl<S: Storage> Executor<S> for Values {
-    fn execute(self, _: &S) -> BoxedExecutor {
+impl<T: Transaction> Executor<T> for Values {
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
         self._execute()
     }
 }

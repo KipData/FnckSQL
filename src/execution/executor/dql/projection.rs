@@ -2,9 +2,10 @@ use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::project::ProjectOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 
 pub struct Projection {
     exprs: Vec<ScalarExpression>,
@@ -20,8 +21,8 @@ impl From<(ProjectOperator, BoxedExecutor)> for Projection {
     }
 }
 
-impl<S: Storage> Executor<S> for Projection {
-    fn execute(self, _: &S) -> BoxedExecutor {
+impl<T: Transaction> Executor<T> for Projection {
+    fn execute<'a>(self, _transaction: &RefCell<T>) -> BoxedExecutor {
         self._execute()
     }
 }

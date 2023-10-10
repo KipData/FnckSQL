@@ -1,5 +1,4 @@
 pub mod kip;
-pub mod memory;
 mod table_codec;
 
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
@@ -20,19 +19,7 @@ use std::ops::SubAssign;
 pub trait Storage: Sync + Send + Clone + 'static {
     type TransactionType: Transaction;
 
-    async fn create_table(
-        &self,
-        table_name: TableName,
-        columns: Vec<ColumnCatalog>,
-    ) -> Result<TableName, StorageError>;
-
-    async fn drop_table(&self, name: &String) -> Result<(), StorageError>;
-    async fn drop_data(&self, name: &String) -> Result<(), StorageError>;
-
-    async fn transaction(&self, name: &String) -> Option<Self::TransactionType>;
-    async fn table(&self, name: &String) -> Option<&TableCatalog>;
-
-    async fn show_tables(&self) -> Result<Vec<String>, StorageError>;
+    async fn transaction(&self) -> Result<Self::TransactionType, StorageError>;
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).
@@ -48,12 +35,14 @@ pub trait Transaction: Sync + Send + 'static {
     /// The projections is column indices.
     fn read(
         &self,
+        table_name: &String,
         bounds: Bounds,
         projection: Projections,
     ) -> Result<Self::IterType<'_>, StorageError>;
 
     fn read_by_index(
         &self,
+        table_name: &String,
         bounds: Bounds,
         projection: Projections,
         index_meta: IndexMetaRef,
@@ -62,16 +51,34 @@ pub trait Transaction: Sync + Send + 'static {
 
     fn add_index(
         &mut self,
+        table_name: &String,
         index: Index,
         tuple_ids: Vec<TupleId>,
         is_unique: bool,
     ) -> Result<(), StorageError>;
 
-    fn del_index(&mut self, index: &Index) -> Result<(), StorageError>;
+    fn del_index(&mut self, table_name: &String, index: &Index) -> Result<(), StorageError>;
 
-    fn append(&mut self, tuple: Tuple, is_overwrite: bool) -> Result<(), StorageError>;
+    fn append(
+        &mut self,
+        table_name: &String,
+        tuple: Tuple,
+        is_overwrite: bool,
+    ) -> Result<(), StorageError>;
 
-    fn delete(&mut self, tuple_id: TupleId) -> Result<(), StorageError>;
+    fn delete(&mut self, table_name: &String, tuple_id: TupleId) -> Result<(), StorageError>;
+
+    fn create_table(
+        &mut self,
+        table_name: TableName,
+        columns: Vec<ColumnCatalog>,
+    ) -> Result<TableName, StorageError>;
+
+    fn drop_table(&mut self, table_name: &String) -> Result<(), StorageError>;
+    fn drop_data(&mut self, table_name: &String) -> Result<(), StorageError>;
+    fn table(&self, table_name: &String) -> Option<&TableCatalog>;
+
+    fn show_tables(&self) -> Result<Vec<String>, StorageError>;
 
     async fn commit(self) -> Result<(), StorageError>;
 }
@@ -79,7 +86,7 @@ pub trait Transaction: Sync + Send + 'static {
 // TODO: Table return optimization
 pub struct IndexIter<'a> {
     projections: Projections,
-    table_codec: &'a TableCodec,
+    table: &'a TableCatalog,
     tuple_ids: VecDeque<TupleId>,
     tx: &'a mvcc::Transaction,
 }
@@ -87,17 +94,15 @@ pub struct IndexIter<'a> {
 impl Iter for IndexIter<'_> {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, StorageError> {
         if let Some(tuple_id) = self.tuple_ids.pop_front() {
-            let key = self.table_codec.encode_tuple_key(&tuple_id)?;
+            let key = TableCodec::encode_tuple_key(&self.table.name, &tuple_id)?;
 
             Ok(self
                 .tx
                 .get(&key)?
                 .map(|bytes| {
-                    tuple_projection(
-                        &mut None,
-                        &self.projections,
-                        self.table_codec.decode_tuple(&bytes),
-                    )
+                    let tuple = TableCodec::decode_tuple(self.table.all_columns(), &bytes);
+
+                    tuple_projection(&mut None, &self.projections, tuple)
                 })
                 .transpose()?)
         } else {
@@ -154,6 +159,9 @@ pub enum StorageError {
 
     #[error("The column has been declared unique and the value already exists")]
     DuplicateUniqueValue,
+
+    #[error("The table not found")]
+    TableNotFound,
 }
 
 impl From<KernelError> for StorageError {

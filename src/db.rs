@@ -1,4 +1,5 @@
 use sqlparser::parser::ParserError;
+use std::cell::RefCell;
 use std::path::PathBuf;
 
 use crate::binder::{BindError, Binder, BinderContext};
@@ -11,21 +12,11 @@ use crate::optimizer::OptimizerError;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
 use crate::storage::kip::KipStorage;
-use crate::storage::memory::MemStorage;
-use crate::storage::{Storage, StorageError};
+use crate::storage::{Storage, StorageError, Transaction};
 use crate::types::tuple::Tuple;
 
 pub struct Database<S: Storage> {
     pub storage: S,
-}
-
-impl Database<MemStorage> {
-    /// Create a new Database instance With Memory.
-    pub async fn with_mem() -> Self {
-        let storage = MemStorage::new();
-
-        Database { storage }
-    }
 }
 
 impl Database<KipStorage> {
@@ -45,6 +36,8 @@ impl<S: Storage> Database<S> {
 
     /// Run SQL queries.
     pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
+        let transaction = self.storage.transaction().await?;
+
         // parse
         let stmts = parse_sql(sql)?;
 
@@ -52,7 +45,7 @@ impl<S: Storage> Database<S> {
             return Ok(vec![]);
         }
 
-        let binder = Binder::new(BinderContext::new(self.storage.clone()));
+        let binder = Binder::new(BinderContext::new(&transaction));
 
         /// Build a logical plan.
         ///
@@ -61,15 +54,19 @@ impl<S: Storage> Database<S> {
         ///   Sort(a)
         ///     Limit(1)
         ///       Project(a,b)
-        let source_plan = binder.bind(&stmts[0]).await?;
+        let source_plan = binder.bind(&stmts[0])?;
         // println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan = Self::default_optimizer(source_plan).find_best()?;
         // println!("best_plan plan: {:#?}", best_plan);
 
-        let mut stream = build(best_plan, &self.storage);
+        let transaction = RefCell::new(transaction);
+        let mut stream = build(best_plan, &transaction);
+        let tuples = try_collect(&mut stream).await?;
 
-        Ok(try_collect(&mut stream).await?)
+        transaction.into_inner().commit().await?;
+
+        Ok(tuples)
     }
 
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
@@ -151,15 +148,15 @@ pub enum DatabaseError {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, TableName};
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::{Database, DatabaseError};
-    use crate::storage::{Storage, StorageError};
+    use crate::storage::{Storage, StorageError, Transaction};
     use crate::types::tuple::create_table;
     use crate::types::LogicalType;
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    async fn build_table(storage: &impl Storage) -> Result<TableName, StorageError> {
+    async fn build_table(mut transaction: impl Transaction) -> Result<(), StorageError> {
         let columns = vec![
             ColumnCatalog::new(
                 "c1".to_string(),
@@ -174,17 +171,19 @@ mod test {
                 None,
             ),
         ];
+        let _ = transaction.create_table(Arc::new("t1".to_string()), columns)?;
+        transaction.commit().await?;
 
-        Ok(storage
-            .create_table(Arc::new("t1".to_string()), columns)
-            .await?)
+        Ok(())
     }
 
     #[tokio::test]
     async fn test_run_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let database = Database::with_kipdb(temp_dir.path()).await?;
-        let _ = build_table(&database.storage).await?;
+        let transaction = database.storage.transaction().await?;
+        build_table(transaction).await?;
+
         let batch = database.run("select * from t1").await?;
 
         println!("{:#?}", batch);

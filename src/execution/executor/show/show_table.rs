@@ -3,10 +3,11 @@ use crate::catalog::ColumnRef;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::show::ShowTablesOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 pub struct ShowTables {
@@ -19,16 +20,16 @@ impl From<ShowTablesOperator> for ShowTables {
     }
 }
 
-impl<S: Storage> Executor<S> for ShowTables {
-    fn execute(self, storage: &S) -> BoxedExecutor {
-        self._execute(storage.clone())
+impl<T: Transaction> Executor<T> for ShowTables {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_ref().unwrap()) }
     }
 }
 
 impl ShowTables {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<S: Storage>(self, storage: S) {
-        let tables = storage.show_tables().await?;
+    pub async fn _execute<T: Transaction>(self, transaction: &T) {
+        let tables = transaction.show_tables()?;
 
         for table in tables {
             let columns: Vec<ColumnRef> =

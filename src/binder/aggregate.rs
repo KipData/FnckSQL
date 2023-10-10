@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use crate::binder::{BindError, InputRefType};
 use crate::planner::LogicalPlan;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::{
     expression::ScalarExpression,
     planner::operator::{aggregate::AggregateOperator, sort::SortField},
@@ -13,7 +13,7 @@ use crate::{
 
 use super::Binder;
 
-impl<S: Storage> Binder<S> {
+impl<'a, T: Transaction> Binder<'a, T> {
     pub fn bind_aggregate(
         &mut self,
         children: LogicalPlan,
@@ -33,29 +33,28 @@ impl<S: Storage> Binder<S> {
         Ok(())
     }
 
-    pub async fn extract_group_by_aggregate(
+    pub fn extract_group_by_aggregate(
         &mut self,
         select_list: &mut [ScalarExpression],
         groupby: &[Expr],
     ) -> Result<(), BindError> {
-        self.validate_groupby_illegal_column(select_list, groupby)
-            .await?;
+        self.validate_groupby_illegal_column(select_list, groupby)?;
 
         for gb in groupby {
-            let mut expr = self.bind_expr(gb).await?;
+            let mut expr = self.bind_expr(gb)?;
             self.visit_group_by_expr(select_list, &mut expr);
         }
         Ok(())
     }
 
-    pub async fn extract_having_orderby_aggregate(
+    pub fn extract_having_orderby_aggregate(
         &mut self,
         having: &Option<Expr>,
         orderbys: &[OrderByExpr],
     ) -> Result<(Option<ScalarExpression>, Option<Vec<SortField>>), BindError> {
         // Extract having expression.
         let return_having = if let Some(having) = having {
-            let mut having = self.bind_expr(having).await?;
+            let mut having = self.bind_expr(having)?;
             self.visit_column_agg_expr(&mut having, false)?;
 
             Some(having)
@@ -72,7 +71,7 @@ impl<S: Storage> Binder<S> {
                     asc,
                     nulls_first,
                 } = orderby;
-                let mut expr = self.bind_expr(expr).await?;
+                let mut expr = self.bind_expr(expr)?;
                 self.visit_column_agg_expr(&mut expr, false)?;
 
                 return_orderby.push(SortField::new(
@@ -156,14 +155,14 @@ impl<S: Storage> Binder<S> {
     /// e.g. SELECT a,count(b) FROM t GROUP BY a. it's ok.
     ///      SELECT a,b FROM t GROUP BY a.        it's error.
     ///      SELECT a,count(b) FROM t GROUP BY b. it's error.
-    async fn validate_groupby_illegal_column(
+    fn validate_groupby_illegal_column(
         &mut self,
         select_items: &[ScalarExpression],
         groupby: &[Expr],
     ) -> Result<(), BindError> {
         let mut group_raw_exprs = vec![];
         for expr in groupby {
-            let expr = self.bind_expr(expr).await?;
+            let expr = self.bind_expr(expr)?;
 
             if let ScalarExpression::Alias { alias, .. } = expr {
                 let alias_expr = select_items.iter().find(|column| {

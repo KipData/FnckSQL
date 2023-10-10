@@ -25,89 +25,90 @@ use crate::execution::executor::show::show_table::ShowTables;
 use crate::execution::ExecutorError;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
+use std::cell::RefCell;
 
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
-pub trait Executor<S: Storage> {
-    fn execute(self, storage: &S) -> BoxedExecutor;
+pub trait Executor<T: Transaction> {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor;
 }
 
-pub fn build<S: Storage>(plan: LogicalPlan, storage: &S) -> BoxedExecutor {
+pub fn build<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>) -> BoxedExecutor {
     let LogicalPlan {
         operator,
         mut childrens,
     } = plan;
 
     match operator {
-        Operator::Dummy => Dummy {}.execute(storage),
+        Operator::Dummy => Dummy {}.execute(transaction),
         Operator::Aggregate(op) => {
-            let input = build(childrens.remove(0), storage);
+            let input = build(childrens.remove(0), transaction);
 
             if op.groupby_exprs.is_empty() {
-                SimpleAggExecutor::from((op, input)).execute(storage)
+                SimpleAggExecutor::from((op, input)).execute(transaction)
             } else {
-                HashAggExecutor::from((op, input)).execute(storage)
+                HashAggExecutor::from((op, input)).execute(transaction)
             }
         }
         Operator::Filter(op) => {
-            let input = build(childrens.remove(0), storage);
+            let input = build(childrens.remove(0), transaction);
 
-            Filter::from((op, input)).execute(storage)
+            Filter::from((op, input)).execute(transaction)
         }
         Operator::Join(op) => {
-            let left_input = build(childrens.remove(0), storage);
-            let right_input = build(childrens.remove(0), storage);
+            let left_input = build(childrens.remove(0), transaction);
+            let right_input = build(childrens.remove(0), transaction);
 
-            HashJoin::from((op, left_input, right_input)).execute(storage)
+            HashJoin::from((op, left_input, right_input)).execute(transaction)
         }
         Operator::Project(op) => {
-            let input = build(childrens.remove(0), storage);
+            let input = build(childrens.remove(0), transaction);
 
-            Projection::from((op, input)).execute(storage)
+            Projection::from((op, input)).execute(transaction)
         }
         Operator::Scan(op) => {
             if op.index_by.is_some() {
-                IndexScan::from(op).execute(storage)
+                IndexScan::from(op).execute(transaction)
             } else {
-                SeqScan::from(op).execute(storage)
+                SeqScan::from(op).execute(transaction)
             }
         }
         Operator::Sort(op) => {
-            let input = build(childrens.remove(0), storage);
+            let input = build(childrens.remove(0), transaction);
 
-            Sort::from((op, input)).execute(storage)
+            Sort::from((op, input)).execute(transaction)
         }
         Operator::Limit(op) => {
-            let input = build(childrens.remove(0), storage);
+            let input = build(childrens.remove(0), transaction);
 
-            Limit::from((op, input)).execute(storage)
+            Limit::from((op, input)).execute(transaction)
         }
         Operator::Insert(op) => {
-            let input = build(childrens.remove(0), storage);
+            let input = build(childrens.remove(0), transaction);
 
-            Insert::from((op, input)).execute(storage)
+            Insert::from((op, input)).execute(transaction)
         }
         Operator::Update(op) => {
-            let input = build(childrens.remove(0), storage);
-            let values = build(childrens.remove(0), storage);
+            let input = build(childrens.remove(0), transaction);
+            let values = build(childrens.remove(0), transaction);
 
-            Update::from((op, input, values)).execute(storage)
+            Update::from((op, input, values)).execute(transaction)
         }
         Operator::Delete(op) => {
-            let input = build(childrens.remove(0), storage);
+            let input = build(childrens.remove(0), transaction);
 
-            Delete::from((op, input)).execute(storage)
+            Delete::from((op, input)).execute(transaction)
         }
-        Operator::Values(op) => Values::from(op).execute(storage),
-        Operator::CreateTable(op) => CreateTable::from(op).execute(storage),
-        Operator::DropTable(op) => DropTable::from(op).execute(storage),
-        Operator::Truncate(op) => Truncate::from(op).execute(storage),
-        Operator::Show(op) => ShowTables::from(op).execute(storage),
-        Operator::CopyFromFile(op) => CopyFromFile::from(op).execute(storage),
+        Operator::Values(op) => Values::from(op).execute(transaction),
+        Operator::CreateTable(op) => CreateTable::from(op).execute(transaction),
+        Operator::DropTable(op) => DropTable::from(op).execute(transaction),
+        Operator::Truncate(op) => Truncate::from(op).execute(transaction),
+        Operator::Show(op) => ShowTables::from(op).execute(transaction),
+        Operator::CopyFromFile(op) => CopyFromFile::from(op).execute(transaction),
         #[warn(unused_assignments)]
         Operator::CopyToFile(_op) => {
             todo!()

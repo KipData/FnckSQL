@@ -2,10 +2,11 @@ use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::filter::FilterOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 
 pub struct Filter {
     predicate: ScalarExpression,
@@ -18,8 +19,8 @@ impl From<(FilterOperator, BoxedExecutor)> for Filter {
     }
 }
 
-impl<S: Storage> Executor<S> for Filter {
-    fn execute(self, _: &S) -> BoxedExecutor {
+impl<T: Transaction> Executor<T> for Filter {
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
         self._execute()
     }
 }

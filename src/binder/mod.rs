@@ -18,7 +18,7 @@ use crate::catalog::{CatalogError, TableCatalog, TableName, DEFAULT_SCHEMA_NAME}
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::JoinType;
 use crate::planner::LogicalPlan;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::errors::TypeError;
 
 pub enum InputRefType {
@@ -27,18 +27,18 @@ pub enum InputRefType {
 }
 
 #[derive(Clone)]
-pub struct BinderContext<S: Storage> {
-    pub(crate) storage: S,
+pub struct BinderContext<'a, T: Transaction> {
+    pub(crate) transaction: &'a T,
     pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
     group_by_exprs: Vec<ScalarExpression>,
     pub(crate) agg_calls: Vec<ScalarExpression>,
 }
 
-impl<S: Storage> BinderContext<S> {
-    pub fn new(storage: S) -> Self {
+impl<'a, T: Transaction> BinderContext<'a, T> {
+    pub fn new(transaction: &'a T) -> Self {
         BinderContext {
-            storage,
+            transaction,
             bind_table: Default::default(),
             aliases: Default::default(),
             group_by_exprs: vec![],
@@ -67,18 +67,18 @@ impl<S: Storage> BinderContext<S> {
     }
 }
 
-pub struct Binder<S: Storage> {
-    context: BinderContext<S>,
+pub struct Binder<'a, T: Transaction> {
+    context: BinderContext<'a, T>,
 }
 
-impl<S: Storage> Binder<S> {
-    pub fn new(context: BinderContext<S>) -> Self {
+impl<'a, T: Transaction> Binder<'a, T> {
+    pub fn new(context: BinderContext<'a, T>) -> Self {
         Binder { context }
     }
 
-    pub async fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
+    pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
-            Statement::Query(query) => self.bind_query(query).await?,
+            Statement::Query(query) => self.bind_query(query)?,
             Statement::CreateTable {
                 name,
                 columns,
@@ -99,8 +99,7 @@ impl<S: Storage> Binder<S> {
                 ..
             } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
-                    self.bind_insert(table_name.to_owned(), columns, &values.rows, *overwrite)
-                        .await?
+                    self.bind_insert(table_name.to_owned(), columns, &values.rows, *overwrite)?
                 } else {
                     todo!()
                 }
@@ -114,7 +113,7 @@ impl<S: Storage> Binder<S> {
                 if !table.joins.is_empty() {
                     unimplemented!()
                 } else {
-                    self.bind_update(table, selection, assignments).await?
+                    self.bind_update(table, selection, assignments)?
                 }
             }
             Statement::Delete {
@@ -125,10 +124,10 @@ impl<S: Storage> Binder<S> {
                 if !table.joins.is_empty() {
                     unimplemented!()
                 } else {
-                    self.bind_delete(table, selection).await?
+                    self.bind_delete(table, selection)?
                 }
             }
-            Statement::Truncate { table_name, .. } => self.bind_truncate(table_name).await?,
+            Statement::Truncate { table_name, .. } => self.bind_truncate(table_name)?,
             Statement::ShowTables { .. } => self.bind_show_tables()?,
             Statement::Copy {
                 source,
@@ -136,10 +135,7 @@ impl<S: Storage> Binder<S> {
                 target,
                 options,
                 ..
-            } => {
-                self.bind_copy(source.clone(), *to, target.clone(), &options)
-                    .await?
-            }
+            } => self.bind_copy(source.clone(), *to, target.clone(), &options)?,
             _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
@@ -198,7 +194,7 @@ pub mod test {
     use crate::execution::ExecutorError;
     use crate::planner::LogicalPlan;
     use crate::storage::kip::KipStorage;
-    use crate::storage::{Storage, StorageError};
+    use crate::storage::{Storage, StorageError, Transaction};
     use crate::types::LogicalType::Integer;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -208,46 +204,45 @@ pub mod test {
         path: impl Into<PathBuf> + Send,
     ) -> Result<KipStorage, StorageError> {
         let storage = KipStorage::new(path).await?;
+        let mut transaction = storage.transaction().await?;
 
-        let _ = storage
-            .create_table(
-                Arc::new("t1".to_string()),
-                vec![
-                    ColumnCatalog::new(
-                        "c1".to_string(),
-                        false,
-                        ColumnDesc::new(Integer, true, false),
-                        None,
-                    ),
-                    ColumnCatalog::new(
-                        "c2".to_string(),
-                        false,
-                        ColumnDesc::new(Integer, false, true),
-                        None,
-                    ),
-                ],
-            )
-            .await?;
+        let _ = transaction.create_table(
+            Arc::new("t1".to_string()),
+            vec![
+                ColumnCatalog::new(
+                    "c1".to_string(),
+                    false,
+                    ColumnDesc::new(Integer, true, false),
+                    None,
+                ),
+                ColumnCatalog::new(
+                    "c2".to_string(),
+                    false,
+                    ColumnDesc::new(Integer, false, true),
+                    None,
+                ),
+            ],
+        )?;
 
-        let _ = storage
-            .create_table(
-                Arc::new("t2".to_string()),
-                vec![
-                    ColumnCatalog::new(
-                        "c3".to_string(),
-                        false,
-                        ColumnDesc::new(Integer, true, false),
-                        None,
-                    ),
-                    ColumnCatalog::new(
-                        "c4".to_string(),
-                        false,
-                        ColumnDesc::new(Integer, false, false),
-                        None,
-                    ),
-                ],
-            )
-            .await?;
+        let _ = transaction.create_table(
+            Arc::new("t2".to_string()),
+            vec![
+                ColumnCatalog::new(
+                    "c3".to_string(),
+                    false,
+                    ColumnDesc::new(Integer, true, false),
+                    None,
+                ),
+                ColumnCatalog::new(
+                    "c4".to_string(),
+                    false,
+                    ColumnDesc::new(Integer, false, false),
+                    None,
+                ),
+            ],
+        )?;
+
+        transaction.commit().await?;
 
         Ok(storage)
     }
@@ -255,9 +250,10 @@ pub mod test {
     pub async fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = build_test_catalog(temp_dir.path()).await?;
-        let binder = Binder::new(BinderContext::new(storage));
+        let transaction = storage.transaction().await?;
+        let binder = Binder::new(BinderContext::new(&transaction));
         let stmt = crate::parser::parse_sql(sql)?;
 
-        Ok(binder.bind(&stmt[0]).await?)
+        Ok(binder.bind(&stmt[0])?)
     }
 }

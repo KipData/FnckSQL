@@ -2,10 +2,11 @@ use crate::catalog::TableName;
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::update::UpdateOperator;
-use crate::storage::{Storage, Transaction};
+use crate::storage::Transaction;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 pub struct Update {
@@ -30,23 +31,22 @@ impl From<(UpdateOperator, BoxedExecutor, BoxedExecutor)> for Update {
     }
 }
 
-impl<S: Storage> Executor<S> for Update {
-    fn execute(self, storage: &S) -> BoxedExecutor {
-        self._execute(storage.clone())
+impl<T: Transaction> Executor<T> for Update {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }
 
 impl Update {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<S: Storage>(self, storage: S) {
+    pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Update {
             table_name,
             input,
             values,
         } = self;
 
-        if let Some(mut transaction) = storage.transaction(&table_name).await {
-            let table_catalog = storage.table(&table_name).await.unwrap();
+        if let Some(table_catalog) = transaction.table(&table_name).cloned() {
             let mut value_map = HashMap::new();
 
             // only once
@@ -69,7 +69,7 @@ impl Update {
                         if column.desc.is_primary {
                             let old_key = tuple.id.replace(value.clone()).unwrap();
 
-                            transaction.delete(old_key)?;
+                            transaction.delete(&table_name, old_key)?;
                             is_overwrite = false;
                         }
                         if column.desc.is_unique && value != &tuple.values[i] {
@@ -80,11 +80,12 @@ impl Update {
                                     id: index_meta.id,
                                     column_values: vec![tuple.values[i].clone()],
                                 };
-                                transaction.del_index(&index)?;
+                                transaction.del_index(&table_name, &index)?;
 
                                 if !value.is_null() {
                                     index.column_values[0] = value.clone();
                                     transaction.add_index(
+                                        &table_name,
                                         index,
                                         vec![tuple.id.clone().unwrap()],
                                         true,
@@ -97,10 +98,8 @@ impl Update {
                     }
                 }
 
-                transaction.append(tuple, is_overwrite)?;
+                transaction.append(&table_name, tuple, is_overwrite)?;
             }
-
-            transaction.commit().await?;
         }
     }
 }

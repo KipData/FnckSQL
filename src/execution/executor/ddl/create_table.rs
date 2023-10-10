@@ -1,10 +1,11 @@
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::create_table::CreateTableOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 
 pub struct CreateTable {
     op: CreateTableOperator,
@@ -16,23 +17,24 @@ impl From<CreateTableOperator> for CreateTable {
     }
 }
 
-impl<S: Storage> Executor<S> for CreateTable {
-    fn execute(self, storage: &S) -> BoxedExecutor {
-        self._execute(storage.clone())
+impl<T: Transaction> Executor<T> for CreateTable {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }
 
 impl CreateTable {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<S: Storage>(self, storage: S) {
+    pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let CreateTableOperator {
             table_name,
             columns,
         } = self.op;
-        let _ = storage.create_table(table_name.clone(), columns).await?;
+        let _ = transaction.create_table(table_name.clone(), columns)?;
         let tuple_builder = TupleBuilder::new_result();
         let tuple = tuple_builder
             .push_result("CREATE TABLE SUCCESS", format!("{}", table_name).as_str())?;
+
         yield tuple;
     }
 }

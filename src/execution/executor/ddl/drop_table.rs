@@ -1,9 +1,10 @@
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::drop_table::DropTableOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 
 pub struct DropTable {
     op: DropTableOperator,
@@ -15,17 +16,17 @@ impl From<DropTableOperator> for DropTable {
     }
 }
 
-impl<S: Storage> Executor<S> for DropTable {
-    fn execute(self, storage: &S) -> BoxedExecutor {
-        self._execute(storage.clone())
+impl<T: Transaction> Executor<T> for DropTable {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
+        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }
 
 impl DropTable {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute<S: Storage>(self, storage: S) {
+    pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let DropTableOperator { table_name } = self.op;
 
-        storage.drop_table(&table_name).await?;
+        transaction.drop_table(&table_name)?;
     }
 }

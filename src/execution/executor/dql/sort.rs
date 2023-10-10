@@ -1,9 +1,10 @@
 use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::sort::{SortField, SortOperator};
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 
 pub struct Sort {
@@ -22,8 +23,8 @@ impl From<(SortOperator, BoxedExecutor)> for Sort {
     }
 }
 
-impl<S: Storage> Executor<S> for Sort {
-    fn execute(self, _: &S) -> BoxedExecutor {
+impl<T: Transaction> Executor<T> for Sort {
+    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
         self._execute()
     }
 }

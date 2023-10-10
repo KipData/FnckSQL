@@ -3,12 +3,13 @@ use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
-use crate::storage::Storage;
+use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use ahash::{HashMap, HashMapExt};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
+use std::cell::RefCell;
 
 pub struct HashAggExecutor {
     pub agg_calls: Vec<ScalarExpression>,
@@ -34,8 +35,8 @@ impl From<(AggregateOperator, BoxedExecutor)> for HashAggExecutor {
     }
 }
 
-impl<S: Storage> Executor<S> for HashAggExecutor {
-    fn execute(self, _: &S) -> BoxedExecutor {
+impl<T: Transaction> Executor<T> for HashAggExecutor {
+    fn execute<'a>(self, _transaction: &RefCell<T>) -> BoxedExecutor {
         self._execute()
     }
 }
@@ -120,16 +121,21 @@ mod test {
     use crate::expression::ScalarExpression;
     use crate::planner::operator::aggregate::AggregateOperator;
     use crate::planner::operator::values::ValuesOperator;
-    use crate::storage::memory::MemStorage;
+    use crate::storage::kip::KipStorage;
+    use crate::storage::Storage;
     use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use itertools::Itertools;
+    use std::cell::RefCell;
     use std::sync::Arc;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_hash_agg() -> Result<(), ExecutorError> {
-        let mem_storage = MemStorage::new();
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = KipStorage::new(temp_dir.path()).await.unwrap();
+        let transaction = RefCell::new(storage.transaction().await?);
         let desc = ColumnDesc::new(LogicalType::Integer, false, false);
 
         let t1_columns = vec![
@@ -188,10 +194,10 @@ mod test {
             ],
             columns: t1_columns,
         })
-        .execute(&mem_storage);
+        .execute(&transaction);
 
         let tuples =
-            try_collect(&mut HashAggExecutor::from((operator, input)).execute(&mem_storage))
+            try_collect(&mut HashAggExecutor::from((operator, input)).execute(&transaction))
                 .await?;
 
         println!("hash_agg_test: \n{}", create_table(&tuples));
