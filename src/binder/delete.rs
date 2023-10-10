@@ -14,11 +14,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
         if let TableFactor::Table { name, alias, .. } = &from.relation {
             let name = lower_case_name(name);
             let (_, name) = split_name(&name)?;
-            let (table_name, mut plan) = self._bind_single_table_ref(
-                None,
-                name,
-                Self::trans_alias(alias)
-            )?;
+            let (table_name, mut plan) =
+                self._bind_single_table_ref(None, name, Self::trans_alias(alias))?;
 
             if let Some(predicate) = selection {
                 plan = self.bind_where(plan, predicate)?;

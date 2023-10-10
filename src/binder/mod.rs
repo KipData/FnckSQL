@@ -31,7 +31,7 @@ pub struct BinderContext<'a, T: Transaction> {
     transaction: &'a T,
     pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
-    table_aliases: BTreeMap<String, String>,
+    table_aliases: BTreeMap<String, TableName>,
     group_by_exprs: Vec<ScalarExpression>,
     pub(crate) agg_calls: Vec<ScalarExpression>,
 }
@@ -64,12 +64,42 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
     }
 
-    pub fn add_alias(&mut self, alias: String, expr: ScalarExpression) {
-        if self.aliases.contains_key(&alias) {
-            return;
+    pub fn add_alias(&mut self, alias: String, expr: ScalarExpression) -> Result<(), BindError> {
+        let is_exist = self.aliases.insert(alias.clone(), expr).is_some();
+        if is_exist {
+            return Err(BindError::InvalidColumn(format!("{} duplicated", alias)));
         }
 
-        self.aliases.insert(alias, expr);
+        Ok(())
+    }
+
+    pub fn add_table_alias(&mut self, alias: String, table: TableName) -> Result<(), BindError> {
+        let is_alias_exist = self
+            .table_aliases
+            .insert(alias.clone(), table.clone())
+            .is_some();
+        if is_alias_exist {
+            return Err(BindError::InvalidTable(format!("{} duplicated", alias)));
+        }
+
+        Ok(())
+    }
+
+    pub fn add_bind_table(
+        &mut self,
+        table: TableName,
+        table_catalog: TableCatalog,
+        join_type: Option<JoinType>,
+    ) -> Result<(), BindError> {
+        let is_bound = self
+            .bind_table
+            .insert(table.clone(), (table_catalog.clone(), join_type))
+            .is_some();
+        if is_bound {
+            return Err(BindError::InvalidTable(format!("{} duplicated", table)));
+        }
+
+        Ok(())
     }
 
     pub fn has_agg_call(&self, expr: &ScalarExpression) -> bool {
@@ -185,8 +215,8 @@ pub enum BindError {
     AmbiguousColumn(String),
     #[error("binary operator types mismatch: {0} != {1}")]
     BinaryOpTypeMismatch(String, String),
-    #[error("subquery in FROM must have an alias")]
-    SubqueryMustHaveAlias,
+    #[error("subquery error: {0}")]
+    Subquery(String),
     #[error("agg miss: {0}")]
     AggMiss(String),
     #[error("catalog error: {0}")]
