@@ -69,7 +69,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
         };
 
-        if let Some(table) = self.context.transaction.table(&table_name.to_string()) {
+        if let Some(table) = self.context.table(&table_name.to_string()) {
             let cols = table.all_columns();
             let ext_source = ExtSource {
                 path: match target {

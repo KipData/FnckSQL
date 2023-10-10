@@ -28,9 +28,10 @@ pub enum InputRefType {
 
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
-    pub(crate) transaction: &'a T,
+    transaction: &'a T,
     pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
+    table_aliases: BTreeMap<String, String>,
     group_by_exprs: Vec<ScalarExpression>,
     pub(crate) agg_calls: Vec<ScalarExpression>,
 }
@@ -41,8 +42,17 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             transaction,
             bind_table: Default::default(),
             aliases: Default::default(),
+            table_aliases: Default::default(),
             group_by_exprs: vec![],
             agg_calls: Default::default(),
+        }
+    }
+
+    pub fn table(&self, table_name: &String) -> Option<&TableCatalog> {
+        if let Some(real_name) = self.table_aliases.get(table_name) {
+            self.transaction.table(real_name)
+        } else {
+            self.transaction.table(table_name)
         }
     }
 
