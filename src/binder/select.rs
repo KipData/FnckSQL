@@ -128,6 +128,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let (left_name, mut plan) = self.bind_single_table_ref(relation, None)?;
 
         if !joins.is_empty() {
+            let left_name = Self::unpack_name(left_name, true);
+
             for join in joins {
                 plan = self.bind_join(&left_name, plan, join)?;
             }
@@ -135,11 +137,20 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(plan)
     }
 
+    fn unpack_name(table_name: Option<TableName>, is_left: bool) -> TableName {
+        let title = if is_left {
+            "Left"
+        } else {
+            "Right"
+        };
+        table_name.expect(&format!("{}: Table is not named", title))
+    }
+
     fn bind_single_table_ref(
         &mut self,
         table: &TableFactor,
         joint_type: Option<JoinType>,
-    ) -> Result<(TableName, LogicalPlan), BindError> {
+    ) -> Result<(Option<TableName>, LogicalPlan), BindError> {
         let plan_with_name = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
@@ -157,7 +168,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 let (table, plan) =
                     self._bind_single_table_ref(joint_type, table, Self::trans_alias(alias))?;
-                (table, plan)
+                (Some(table), plan)
             }
             TableFactor::Derived {
                 subquery, alias, ..
@@ -175,13 +186,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     self.context
                         .add_table_alias(alias.to_string(), tables.remove(0))?;
 
-                    (alias, plan)
+                    (Some(alias), plan)
                 } else {
-                    if tables.len() != 1 {
-                        return Err(BindError::Subquery(format!("There may be multiple or no Tables in the subquery and their aliases are not declared.")));
-                    }
-
-                    (tables.remove(0), plan)
+                    ((tables.len() > 1).then(|| tables.pop()).flatten(), plan)
                 }
             }
             _ => unimplemented!(),
@@ -294,6 +301,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             _ => unimplemented!(),
         };
         let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type))?;
+        let right_table = Self::unpack_name(right_table, false);
 
         let left_table =
             self.context.table(left_table).cloned().ok_or_else(|| {
