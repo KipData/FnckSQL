@@ -45,6 +45,8 @@ impl Rule for CollapseProject {
             if let Operator::Project(child_op) = graph.operator(child_id) {
                 if is_subset_exprs(&op.columns, &child_op.columns) {
                     graph.remove_node(child_id, false);
+                } else {
+                    graph.remove_node(node_id, false);
                 }
             }
         }

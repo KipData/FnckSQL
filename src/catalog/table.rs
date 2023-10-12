@@ -9,11 +9,11 @@ pub type TableName = Arc<String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableCatalog {
-    pub name: TableName,
+    pub(crate) name: TableName,
     /// Mapping from column names to column ids
     column_idxs: BTreeMap<String, ColumnId>,
     pub(crate) columns: BTreeMap<ColumnId, ColumnRef>,
-    pub indexes: Vec<IndexMetaRef>,
+    pub(crate) indexes: Vec<IndexMetaRef>,
 }
 
 impl TableCatalog {

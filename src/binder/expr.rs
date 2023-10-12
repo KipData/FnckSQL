@@ -59,7 +59,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
         if let Some(table) = table_name.or(bind_table_name) {
             let table_catalog = self
                 .context
-                .transaction
                 .table(table)
                 .ok_or_else(|| BindError::InvalidTable(table.to_string()))?;
 

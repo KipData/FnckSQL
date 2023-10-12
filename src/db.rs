@@ -85,6 +85,11 @@ impl<S: Storage> Database<S> {
                 ],
             )
             .batch(
+                "Combine Operators".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![RuleImpl::CollapseProject, RuleImpl::CombineFilter],
+            )
+            .batch(
                 "Column Pruning".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
@@ -101,11 +106,6 @@ impl<S: Storage> Database<S> {
                     RuleImpl::PushLimitIntoTableScan,
                     RuleImpl::EliminateLimits,
                 ],
-            )
-            .batch(
-                "Combine Operators".to_string(),
-                HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::CollapseProject, RuleImpl::CombineFilter],
             )
     }
 }

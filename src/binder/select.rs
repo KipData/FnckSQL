@@ -31,7 +31,7 @@ use itertools::Itertools;
 use sqlparser::ast;
 use sqlparser::ast::{
     Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
-    SelectItem, SetExpr, TableFactor, TableWithJoins,
+    SelectItem, SetExpr, TableAlias, TableFactor, TableWithJoins,
 };
 
 impl<'a, T: Transaction> Binder<'a, T> {
@@ -128,18 +128,25 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let (left_name, mut plan) = self.bind_single_table_ref(relation, None)?;
 
         if !joins.is_empty() {
+            let left_name = Self::unpack_name(left_name, true);
+
             for join in joins {
-                plan = self.bind_join(left_name.clone(), plan, join)?;
+                plan = self.bind_join(&left_name, plan, join)?;
             }
         }
         Ok(plan)
+    }
+
+    fn unpack_name(table_name: Option<TableName>, is_left: bool) -> TableName {
+        let title = if is_left { "Left" } else { "Right" };
+        table_name.expect(&format!("{}: Table is not named", title))
     }
 
     fn bind_single_table_ref(
         &mut self,
         table: &TableFactor,
         joint_type: Option<JoinType>,
-    ) -> Result<(TableName, LogicalPlan), BindError> {
+    ) -> Result<(Option<TableName>, LogicalPlan), BindError> {
         let plan_with_name = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
@@ -148,18 +155,37 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     .map(|ident| Ident::new(ident.value.to_lowercase()))
                     .collect_vec();
 
-                let (_database, _schema, mut table): (&str, &str, &str) = match obj_name.as_slice()
-                {
+                let (_database, _schema, table): (&str, &str, &str) = match obj_name.as_slice() {
                     [table] => (DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, &table.value),
                     [schema, table] => (DEFAULT_DATABASE_NAME, &schema.value, &table.value),
                     [database, schema, table] => (&database.value, &schema.value, &table.value),
                     _ => return Err(BindError::InvalidTableName(obj_name)),
                 };
-                if let Some(alias) = alias {
-                    table = &alias.name.value;
-                }
 
-                self._bind_single_table_ref(joint_type, table)?
+                let (table, plan) =
+                    self._bind_single_table_ref(joint_type, table, Self::trans_alias(alias))?;
+                (Some(table), plan)
+            }
+            TableFactor::Derived {
+                subquery, alias, ..
+            } => {
+                let plan = self.bind_query(subquery)?;
+                let mut tables = plan.referenced_table();
+
+                if let Some(alias) = Self::trans_alias(alias) {
+                    let alias = Arc::new(alias.clone());
+
+                    if tables.len() > 1 {
+                        todo!("Implement virtual tables for multiple table aliases");
+                    }
+                    // FIXME
+                    self.context
+                        .add_table_alias(alias.to_string(), tables.remove(0))?;
+
+                    (Some(alias), plan)
+                } else {
+                    ((tables.len() > 1).then(|| tables.pop()).flatten(), plan)
+                }
             }
             _ => unimplemented!(),
         };
@@ -167,26 +193,31 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(plan_with_name)
     }
 
+    pub(crate) fn trans_alias(alias: &Option<TableAlias>) -> Option<&String> {
+        alias.as_ref().map(|alias| &alias.name.value)
+    }
+
     pub(crate) fn _bind_single_table_ref(
         &mut self,
-        joint_type: Option<JoinType>,
+        join_type: Option<JoinType>,
         table: &str,
+        alias: Option<&String>,
     ) -> Result<(Arc<String>, LogicalPlan), BindError> {
         let table_name = Arc::new(table.to_string());
 
-        if self.context.bind_table.contains_key(&table_name) {
-            return Err(BindError::InvalidTable(format!("{} duplicated", table)));
-        }
-
         let table_catalog = self
             .context
-            .transaction
             .table(&table_name)
+            .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
 
         self.context
-            .bind_table
-            .insert(table_name.clone(), (table_catalog.clone(), joint_type));
+            .add_bind_table(table_name.clone(), table_catalog.clone(), join_type)?;
+
+        if let Some(alias) = alias {
+            self.context
+                .add_table_alias(alias.to_string(), table_name.clone())?;
+        }
 
         Ok((
             table_name.clone(),
@@ -213,7 +244,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     let expr = self.bind_expr(expr)?;
                     let alias_name = alias.to_string();
 
-                    self.context.add_alias(alias_name.clone(), expr.clone());
+                    self.context.add_alias(alias_name.clone(), expr.clone())?;
 
                     select_items.push(ScalarExpression::Alias {
                         expr: Box::new(expr),
@@ -236,7 +267,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
         for table_name in self.context.bind_table.keys().cloned() {
             let table = self
                 .context
-                .transaction
                 .table(&table_name)
                 .ok_or_else(|| BindError::InvalidTable(table_name.to_string()))?;
             for col in table.all_columns() {
@@ -249,7 +279,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     fn bind_join(
         &mut self,
-        left_table: TableName,
+        left_table: &String,
         left: LogicalPlan,
         join: &Join,
     ) -> Result<LogicalPlan, BindError> {
@@ -266,21 +296,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
             JoinOperator::CrossJoin => (JoinType::Cross, None),
             _ => unimplemented!(),
         };
-
         let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type))?;
+        let right_table = Self::unpack_name(right_table, false);
 
-        let left_table = self
-            .context
-            .transaction
-            .table(&left_table)
-            .cloned()
-            .ok_or_else(|| BindError::InvalidTable(format!("Left: {} not found", left_table)))?;
-        let right_table = self
-            .context
-            .transaction
-            .table(&right_table)
-            .cloned()
-            .ok_or_else(|| BindError::InvalidTable(format!("Right: {} not found", right_table)))?;
+        let left_table =
+            self.context.table(left_table).cloned().ok_or_else(|| {
+                BindError::InvalidTable(format!("Left: {} not found", left_table))
+            })?;
+        let right_table =
+            self.context.table(&right_table).cloned().ok_or_else(|| {
+                BindError::InvalidTable(format!("Right: {} not found", right_table))
+            })?;
 
         let on = match joint_condition {
             Some(constraint) => self.bind_join_constraint(&left_table, &right_table, constraint)?,
