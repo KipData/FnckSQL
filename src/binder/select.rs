@@ -26,6 +26,7 @@ use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
+use crate::types::errors::TypeError;
 use crate::types::LogicalType;
 use itertools::Itertools;
 use sqlparser::ast;
@@ -178,7 +179,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     if tables.len() > 1 {
                         todo!("Implement virtual tables for multiple table aliases");
                     }
-                    // FIXME
                     self.context
                         .add_table_alias(alias.to_string(), tables.remove(0))?;
 
@@ -366,19 +366,15 @@ impl<'a, T: Transaction> Binder<'a, T> {
         limit_expr: &Option<Expr>,
         offset_expr: &Option<Offset>,
     ) -> Result<LogicalPlan, BindError> {
-        let mut limit = 0;
-        let mut offset = 0;
+        let mut limit = None;
+        let mut offset = None;
         if let Some(expr) = limit_expr {
             let expr = self.bind_expr(expr)?;
             match expr {
                 ScalarExpression::Constant(dv) => match dv.as_ref() {
-                    DataValue::Int32(Some(v)) if *v > 0 => limit = *v as usize,
-                    DataValue::Int64(Some(v)) if *v > 0 => limit = *v as usize,
-                    _ => {
-                        return Err(BindError::InvalidColumn(
-                            "invalid limit expression.".to_owned(),
-                        ))
-                    }
+                    DataValue::Int32(Some(v)) if *v >= 0 => limit = Some(*v as usize),
+                    DataValue::Int64(Some(v)) if *v >= 0 => limit = Some(*v as usize),
+                    _ => return Err(BindError::from(TypeError::InvalidType)),
                 },
                 _ => {
                     return Err(BindError::InvalidColumn(
@@ -392,13 +388,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
             let expr = self.bind_expr(&expr.value)?;
             match expr {
                 ScalarExpression::Constant(dv) => match dv.as_ref() {
-                    DataValue::Int32(Some(v)) if *v > 0 => offset = *v as usize,
-                    DataValue::Int64(Some(v)) if *v > 0 => offset = *v as usize,
-                    _ => {
-                        return Err(BindError::InvalidColumn(
-                            "invalid limit expression.".to_owned(),
-                        ))
-                    }
+                    DataValue::Int32(Some(v)) if *v > 0 => offset = Some(*v as usize),
+                    DataValue::Int64(Some(v)) if *v > 0 => offset = Some(*v as usize),
+                    _ => return Err(BindError::from(TypeError::InvalidType)),
                 },
                 _ => {
                     return Err(BindError::InvalidColumn(
