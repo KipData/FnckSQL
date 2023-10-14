@@ -25,6 +25,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             Expr::Function(func) => self.bind_agg_call(func),
             Expr::Nested(expr) => self.bind_expr(expr),
             Expr::UnaryOp { expr, op } => self.bind_unary_op_internal(expr, op),
+            Expr::IsNull(expr) => self.bind_is_null(expr),
             _ => {
                 todo!()
             }
@@ -195,6 +196,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ty,
             },
             _ => todo!(),
+        })
+    }
+
+    fn bind_is_null(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
+        Ok(ScalarExpression::IsNull {
+            expr: Box::new(self.bind_expr(expr)?),
         })
     }
 
