@@ -16,8 +16,8 @@ pub struct Limit {
 impl From<(LimitOperator, BoxedExecutor)> for Limit {
     fn from((LimitOperator { offset, limit }, input): (LimitOperator, BoxedExecutor)) -> Self {
         Limit {
-            offset: Some(offset),
-            limit: Some(limit),
+            offset,
+            limit,
             input,
         }
     }

@@ -75,10 +75,10 @@ impl Rule for EliminateLimits {
         if let Operator::Limit(op) = graph.operator(node_id) {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Limit(child_op) = graph.operator(child_id) {
-                let new_limit_op = LimitOperator {
-                    offset: op.offset + child_op.offset,
-                    limit: cmp::min(op.limit, child_op.limit),
-                };
+                let offset = Self::binary_options(op.offset, child_op.offset, |a, b| a + b);
+                let limit = Self::binary_options(op.limit, child_op.limit, |a, b| cmp::min(a, b));
+
+                let new_limit_op = LimitOperator { offset, limit };
 
                 graph.remove_node(child_id, false);
                 graph.replace_node(
@@ -89,6 +89,21 @@ impl Rule for EliminateLimits {
         }
 
         Ok(())
+    }
+}
+
+impl EliminateLimits {
+    fn binary_options<F: Fn(usize, usize) -> usize>(
+        a: Option<usize>,
+        b: Option<usize>,
+        _fn: F,
+    ) -> Option<usize> {
+        match (a, b) {
+            (Some(a), Some(b)) => Some(_fn(a, b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        }
     }
 }
 
@@ -147,7 +162,7 @@ impl Rule for PushLimitIntoScan {
             if let Operator::Scan(scan_op) = graph.operator(child_index) {
                 let mut new_scan_op = scan_op.clone();
 
-                new_scan_op.limit = (Some(limit_op.offset), Some(limit_op.limit));
+                new_scan_op.limit = (limit_op.offset, limit_op.limit);
 
                 graph.remove_node(node_id, false);
                 graph.replace_node(
@@ -208,8 +223,8 @@ mod tests {
         );
 
         let new_limit_op = LimitOperator {
-            offset: 2,
-            limit: 1,
+            offset: Some(2),
+            limit: Some(1),
         };
 
         optimizer
@@ -219,8 +234,8 @@ mod tests {
         let best_plan = optimizer.find_best()?;
 
         if let Operator::Limit(op) = &best_plan.operator {
-            assert_eq!(op.limit, 1);
-            assert_eq!(op.offset, 3);
+            assert_eq!(op.limit, Some(1));
+            assert_eq!(op.offset, Some(3));
         } else {
             unreachable!("Should be a project operator")
         }
@@ -253,7 +268,7 @@ mod tests {
         }
 
         if let Operator::Limit(op) = &best_plan.childrens[0].childrens[0].childrens[0].operator {
-            assert_eq!(op.limit, 1);
+            assert_eq!(op.limit, Some(1));
         } else {
             unreachable!("Should be a limit operator")
         }

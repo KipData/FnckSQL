@@ -62,3 +62,24 @@ jobs:
         with:
           command: fmt
           args: -- --check
+  # 3
+  e2e:
+    name: Rust e2e sqllogictest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          components: rustfmt, clippy
+
+      # `cargo check` command here will use installed `nightly`
+      # as it is set as an "override" for current directory
+
+      - name: Run cargo run sqllogictest-test
+        uses: actions-rs/cargo@v1
+        with:
+          command: run
+          args: --bin sqllogictest-test --manifest-path ./tests/sqllogictest/Cargo.toml
