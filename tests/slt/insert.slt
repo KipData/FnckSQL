@@ -1,5 +1,5 @@
 statement ok
-create table t(id int primary key, v1 int null, v2 int null, v3 int null)
+create table t(id int primary key, v1 bigint null, v2 varchar null, v3 decimal null)
 
 statement ok
 insert into t values (0,1,10,100)

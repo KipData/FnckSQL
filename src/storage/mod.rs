@@ -14,7 +14,6 @@ use kip_db::KernelError;
 use std::collections::VecDeque;
 use std::ops::SubAssign;
 
-
 pub trait Storage: Sync + Send + Clone + 'static {
     type TransactionType: Transaction;
 
@@ -25,7 +24,6 @@ pub trait Storage: Sync + Send + Clone + 'static {
 /// Optional bounds of the reader, of the form (offset, limit).
 pub(crate) type Bounds = (Option<usize>, Option<usize>);
 type Projections = Vec<ScalarExpression>;
-
 
 pub trait Transaction: Sync + Send + 'static {
     type IterType<'a>: Iter;
