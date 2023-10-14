@@ -8,17 +8,17 @@ use crate::storage::table_codec::TableCodec;
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
-use async_trait::async_trait;
 use kip_db::error::CacheError;
 use kip_db::kernel::lsm::mvcc;
 use kip_db::KernelError;
 use std::collections::VecDeque;
 use std::ops::SubAssign;
 
-#[async_trait]
+
 pub trait Storage: Sync + Send + Clone + 'static {
     type TransactionType: Transaction;
 
+    #[allow(async_fn_in_trait)]
     async fn transaction(&self) -> Result<Self::TransactionType, StorageError>;
 }
 
@@ -26,7 +26,7 @@ pub trait Storage: Sync + Send + Clone + 'static {
 pub(crate) type Bounds = (Option<usize>, Option<usize>);
 type Projections = Vec<ScalarExpression>;
 
-#[async_trait]
+
 pub trait Transaction: Sync + Send + 'static {
     type IterType<'a>: Iter;
 
@@ -80,6 +80,7 @@ pub trait Transaction: Sync + Send + 'static {
 
     fn show_tables(&self) -> Result<Vec<String>, StorageError>;
 
+    #[allow(async_fn_in_trait)]
     async fn commit(self) -> Result<(), StorageError>;
 }
 

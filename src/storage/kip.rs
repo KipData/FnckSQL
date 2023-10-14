@@ -8,7 +8,6 @@ use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexMeta, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::value::ValueRef;
-use async_trait::async_trait;
 use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
 use kip_db::kernel::lsm::mvcc::TransactionIter;
 use kip_db::kernel::lsm::storage::Config;
@@ -37,7 +36,6 @@ impl KipStorage {
     }
 }
 
-#[async_trait]
 impl Storage for KipStorage {
     type TransactionType = KipTransaction;
 
@@ -56,7 +54,6 @@ pub struct KipTransaction {
     cache: ShardingLruCache<String, TableCatalog>,
 }
 
-#[async_trait]
 impl Transaction for KipTransaction {
     type IterType<'a> = KipIter<'a>;
 

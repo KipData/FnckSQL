@@ -5,6 +5,7 @@
 #![feature(iterator_try_collect)]
 #![feature(slice_pattern)]
 #![feature(bound_map)]
+#![feature(async_fn_in_trait)]
 extern crate core;
 pub mod binder;
 pub mod catalog;
