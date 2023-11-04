@@ -30,7 +30,6 @@ pub struct HepBatchStrategy {
 }
 
 impl HepBatchStrategy {
-    #[allow(dead_code)]
     pub fn once_topdown() -> Self {
         HepBatchStrategy {
             max_iteration: 1,

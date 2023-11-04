@@ -101,7 +101,7 @@ pub fn create_table(tuples: &[Tuple]) -> Table {
 
     let mut header = Vec::new();
     for col in &tuples[0].columns {
-        header.push(Cell::new(col.name.clone()));
+        header.push(Cell::new(col.name().to_string()));
     }
     table.set_header(header);
 

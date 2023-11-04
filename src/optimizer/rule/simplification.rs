@@ -1,4 +1,3 @@
-use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
@@ -29,10 +28,7 @@ impl Rule for SimplifyFilter {
         if let Operator::Filter(mut filter_op) = graph.operator(node_id).clone() {
             filter_op.predicate.simplify()?;
 
-            graph.replace_node(
-                node_id,
-                OptExprNode::OperatorRef(Operator::Filter(filter_op)),
-            )
+            graph.replace_node(node_id, Operator::Filter(filter_op))
         }
 
         Ok(())
@@ -42,7 +38,7 @@ impl Rule for SimplifyFilter {
 #[cfg(test)]
 mod test {
     use crate::binder::test::select_sql_run;
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::db::DatabaseError;
     use crate::expression::simplify::ConstantBinary;
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
@@ -137,9 +133,11 @@ mod test {
             .find_best()?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
             let c1_col = ColumnCatalog {
-                id: Some(0),
-                name: "c1".to_string(),
-                table_name: Some(Arc::new("t1".to_string())),
+                summary: ColumnSummary {
+                    id: Some(0),
+                    name: "c1".to_string(),
+                    table_name: Some(Arc::new("t1".to_string())),
+                },
                 nullable: false,
                 desc: ColumnDesc {
                     column_datatype: LogicalType::Integer,
@@ -149,9 +147,11 @@ mod test {
                 ref_expr: None,
             };
             let c2_col = ColumnCatalog {
-                id: Some(1),
-                name: "c2".to_string(),
-                table_name: Some(Arc::new("t1".to_string())),
+                summary: ColumnSummary {
+                    id: Some(1),
+                    name: "c2".to_string(),
+                    table_name: Some(Arc::new("t1".to_string())),
+                },
                 nullable: false,
                 desc: ColumnDesc {
                     column_datatype: LogicalType::Integer,

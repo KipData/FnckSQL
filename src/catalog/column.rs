@@ -2,6 +2,7 @@ use crate::catalog::TableName;
 use crate::expression::ScalarExpression;
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ColumnDef, ColumnOption};
+use std::hash::Hash;
 use std::sync::Arc;
 
 use crate::types::{ColumnId, LogicalType};
@@ -10,12 +11,17 @@ pub type ColumnRef = Arc<ColumnCatalog>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct ColumnCatalog {
-    pub id: Option<ColumnId>,
-    pub name: String,
-    pub table_name: Option<TableName>,
+    pub summary: ColumnSummary,
     pub nullable: bool,
     pub desc: ColumnDesc,
     pub ref_expr: Option<ScalarExpression>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub struct ColumnSummary {
+    pub id: Option<ColumnId>,
+    pub name: String,
+    pub table_name: Option<TableName>,
 }
 
 impl ColumnCatalog {
@@ -26,9 +32,11 @@ impl ColumnCatalog {
         ref_expr: Option<ScalarExpression>,
     ) -> ColumnCatalog {
         ColumnCatalog {
-            id: None,
-            name: column_name,
-            table_name: None,
+            summary: ColumnSummary {
+                id: None,
+                name: column_name,
+                table_name: None,
+            },
             nullable,
             desc: column_desc,
             ref_expr,
@@ -37,20 +45,39 @@ impl ColumnCatalog {
 
     pub(crate) fn new_dummy(column_name: String) -> ColumnCatalog {
         ColumnCatalog {
-            id: Some(0),
-            name: column_name,
-            table_name: None,
+            summary: ColumnSummary {
+                id: Some(0),
+                name: column_name,
+                table_name: None,
+            },
             nullable: false,
             desc: ColumnDesc::new(LogicalType::Varchar(None), false, false),
             ref_expr: None,
         }
     }
 
+    pub(crate) fn summary(&self) -> &ColumnSummary {
+        &self.summary
+    }
+
+    pub(crate) fn id(&self) -> Option<ColumnId> {
+        self.summary.id
+    }
+
+    pub(crate) fn table_name(&self) -> Option<TableName> {
+        self.summary.table_name.clone()
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.summary.name
+    }
+
     pub(crate) fn datatype(&self) -> &LogicalType {
         &self.desc.column_datatype
     }
 
-    pub fn desc(&self) -> &ColumnDesc {
+    #[allow(dead_code)]
+    pub(crate) fn desc(&self) -> &ColumnDesc {
         &self.desc
     }
 }

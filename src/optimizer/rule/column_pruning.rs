@@ -1,188 +1,150 @@
-use crate::catalog::ColumnRef;
+use crate::catalog::{ColumnRef, ColumnSummary};
+use crate::expression::agg::AggKind;
 use crate::expression::ScalarExpression;
-use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
-use crate::planner::operator::aggregate::AggregateOperator;
-use crate::planner::operator::project::ProjectOperator;
 use crate::planner::operator::Operator;
-use itertools::Itertools;
+use crate::types::value::DataValue;
+use crate::types::LogicalType;
 use lazy_static::lazy_static;
+use std::collections::HashSet;
+use std::sync::Arc;
 
 lazy_static! {
-    static ref PUSH_PROJECT_INTO_SCAN_RULE: Pattern = {
+    static ref COLUMN_PRUNING_RULE: Pattern = {
         Pattern {
-            predicate: |op| matches!(op, Operator::Project(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Scan(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
+            predicate: |_| true,
+            children: PatternChildrenPredicate::None,
         }
     };
-    static ref PUSH_PROJECT_THROUGH_CHILD_RULE: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Project(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| !matches!(op, Operator::Scan(_) | Operator::Project(_)),
-                children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                    predicate: |op| !matches!(op, Operator::Project(_)),
-                    children: PatternChildrenPredicate::None,
-                }]),
-            }]),
-        }
-    };
-}
-
-#[derive(Copy, Clone)]
-pub struct PushProjectIntoScan;
-
-impl Rule for PushProjectIntoScan {
-    fn pattern(&self) -> &Pattern {
-        &PUSH_PROJECT_INTO_SCAN_RULE
-    }
-
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
-        if let Operator::Project(project_op) = graph.operator(node_id) {
-            let child_index = graph.children_at(node_id)[0];
-            if let Operator::Scan(scan_op) = graph.operator(child_index) {
-                let mut new_scan_op = scan_op.clone();
-
-                new_scan_op.columns = project_op
-                    .columns
-                    .iter()
-                    .map(ScalarExpression::unpack_alias)
-                    .cloned()
-                    .collect_vec();
-
-                graph.remove_node(node_id, false);
-                graph.replace_node(
-                    child_index,
-                    OptExprNode::OperatorRef(Operator::Scan(new_scan_op)),
-                );
-            }
-        }
-
-        Ok(())
-    }
 }
 
 #[derive(Clone)]
-pub struct PushProjectThroughChild;
+pub struct ColumnPruning;
 
-impl Rule for PushProjectThroughChild {
-    fn pattern(&self) -> &Pattern {
-        &PUSH_PROJECT_THROUGH_CHILD_RULE
+impl ColumnPruning {
+    fn clear_exprs(
+        column_references: &mut HashSet<ColumnSummary>,
+        exprs: &mut Vec<ScalarExpression>,
+    ) {
+        exprs.retain(|expr| {
+            expr.referenced_columns()
+                .iter()
+                .any(|column| column_references.contains(column.summary()))
+        })
     }
 
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
-        let node_operator = graph.operator(node_id);
+    fn _apply(
+        column_references: &mut HashSet<ColumnSummary>,
+        all_referenced: bool,
+        node_id: HepNodeId,
+        graph: &mut HepGraph,
+    ) {
+        let operator = graph.operator_mut(node_id);
 
-        if let Operator::Project(_) = node_operator {
-            let child_index = graph.children_at(node_id)[0];
-            let node_referenced_columns = node_operator.referenced_columns();
-            let child_operator = graph.operator(child_index);
-            let child_referenced_columns = child_operator.referenced_columns();
-            let op = |col: &ColumnRef| format!("{:?}.{:?}", col.table_name, col.id);
+        match operator {
+            Operator::Aggregate(op) => {
+                if !all_referenced {
+                    Self::clear_exprs(column_references, &mut op.agg_calls);
 
-            match child_operator {
-                // When the aggregate function is a child node,
-                // the pushdown will lose the corresponding ColumnRef due to `InputRef`.
-                // Therefore, it is necessary to map the InputRef to the corresponding ColumnRef
-                // and push it down.
-                Operator::Aggregate(AggregateOperator { agg_calls, .. }) => {
-                    let grandson_id = graph.children_at(child_index)[0];
-                    let columns = node_operator
-                        .project_input_refs()
-                        .iter()
-                        .filter_map(|expr| {
-                            if agg_calls.is_empty() {
-                                return None;
-                            }
-
-                            if let ScalarExpression::InputRef { index, .. } = expr {
-                                agg_calls.get(*index).cloned()
-                            } else {
-                                None
-                            }
+                    if op.agg_calls.is_empty() && op.groupby_exprs.is_empty() {
+                        let value = Arc::new(DataValue::Utf8(Some("*".to_string())));
+                        // only single COUNT(*) is not depend on any column
+                        // removed all expressions from the aggregate: push a COUNT(*)
+                        op.agg_calls.push(ScalarExpression::AggCall {
+                            distinct: false,
+                            kind: AggKind::Count,
+                            args: vec![ScalarExpression::Constant(value)],
+                            ty: LogicalType::Integer,
                         })
-                        .map(|expr| expr.referenced_columns())
-                        .flatten()
-                        .chain(node_referenced_columns.into_iter())
-                        .chain(child_referenced_columns.into_iter())
-                        .unique_by(op)
-                        .map(|col| ScalarExpression::ColumnRef(col))
-                        .collect_vec();
-
-                    Self::add_project_node(graph, child_index, columns, grandson_id);
-                }
-                Operator::Join(_) => {
-                    let parent_referenced_columns = node_referenced_columns
-                        .into_iter()
-                        .chain(child_referenced_columns.into_iter())
-                        .unique_by(op)
-                        .collect_vec();
-
-                    for grandson_id in graph.children_at(child_index) {
-                        let grandson_referenced_column =
-                            graph.operator(grandson_id).referenced_columns();
-
-                        // for PushLimitThroughJoin
-                        if grandson_referenced_column.is_empty() {
-                            return Ok(());
-                        }
-                        let grandson_table_name = grandson_referenced_column[0].table_name.clone();
-                        let columns = parent_referenced_columns
-                            .iter()
-                            .filter(|col| col.table_name == grandson_table_name)
-                            .cloned()
-                            .map(|col| ScalarExpression::ColumnRef(col))
-                            .collect_vec();
-
-                        Self::add_project_node(graph, child_index, columns, grandson_id);
                     }
                 }
-                _ => {
-                    let grandson_ids = graph.children_at(child_index);
+                let op_ref_columns = operator.referenced_columns();
 
-                    if grandson_ids.is_empty() {
-                        return Ok(());
+                Self::recollect_apply(op_ref_columns, false, node_id, graph);
+            }
+            Operator::Project(op) => {
+                let has_count_star = op.exprs.iter().any(ScalarExpression::has_count_star);
+                if !has_count_star {
+                    if !all_referenced {
+                        Self::clear_exprs(column_references, &mut op.exprs);
                     }
-                    let grandson_id = grandson_ids[0];
-                    let mut columns = node_operator.project_input_refs();
-                    let mut referenced_columns = node_referenced_columns
-                        .into_iter()
-                        .chain(child_referenced_columns.into_iter())
-                        .unique_by(op)
-                        .map(|col| ScalarExpression::ColumnRef(col))
-                        .collect_vec();
+                    let op_ref_columns = operator.referenced_columns();
 
-                    columns.append(&mut referenced_columns);
-
-                    Self::add_project_node(graph, child_index, columns, grandson_id);
+                    Self::recollect_apply(op_ref_columns, false, node_id, graph);
                 }
             }
-        }
+            Operator::Sort(_op) => {
+                if !all_referenced {
+                    // Todo: Order Project
+                    // https://github.com/duckdb/duckdb/blob/main/src/optimizer/remove_unused_columns.cpp#L174
+                }
+                for child_id in graph.children_at(node_id) {
+                    Self::_apply(column_references, true, child_id, graph);
+                }
+            }
+            Operator::Scan(op) => {
+                if !all_referenced {
+                    Self::clear_exprs(column_references, &mut op.columns);
+                }
+            }
+            Operator::Limit(_) | Operator::Join(_) | Operator::Filter(_) => {
+                for column in operator.referenced_columns() {
+                    column_references.insert(column.summary().clone());
+                }
+                for child_id in graph.children_at(node_id) {
+                    Self::_apply(column_references, all_referenced, child_id, graph);
+                }
+            }
+            // Last Operator
+            Operator::Dummy | Operator::Values(_) => (),
+            // DDL Based on Other Plan
+            Operator::Insert(_) | Operator::Update(_) | Operator::Delete(_) => {
+                let op_ref_columns = operator.referenced_columns();
 
-        Ok(())
+                Self::recollect_apply(op_ref_columns, true, graph.children_at(node_id)[0], graph);
+            }
+            // DDL Single Plan
+            Operator::CreateTable(_)
+            | Operator::DropTable(_)
+            | Operator::Truncate(_)
+            | Operator::Show(_)
+            | Operator::CopyFromFile(_)
+            | Operator::CopyToFile(_) => (),
+        }
+    }
+
+    fn recollect_apply(
+        referenced_columns: Vec<ColumnRef>,
+        all_referenced: bool,
+        node_id: HepNodeId,
+        graph: &mut HepGraph,
+    ) {
+        for child_id in graph.children_at(node_id) {
+            let mut new_references: HashSet<ColumnSummary> = referenced_columns
+                .iter()
+                .map(|column| column.summary())
+                .cloned()
+                .collect();
+
+            Self::_apply(&mut new_references, all_referenced, child_id, graph);
+        }
     }
 }
 
-impl PushProjectThroughChild {
-    fn add_project_node(
-        graph: &mut HepGraph,
-        child_index: HepNodeId,
-        columns: Vec<ScalarExpression>,
-        grandson_id: HepNodeId,
-    ) {
-        if !columns.is_empty() {
-            graph.add_node(
-                child_index,
-                Some(grandson_id),
-                OptExprNode::OperatorRef(Operator::Project(ProjectOperator { columns })),
-            );
-        }
+impl Rule for ColumnPruning {
+    fn pattern(&self) -> &Pattern {
+        &COLUMN_PRUNING_RULE
+    }
+
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+        Self::_apply(&mut HashSet::new(), true, node_id, graph);
+        // mark changed to skip this rule batch
+        graph.version += 1;
+
+        Ok(())
     }
 }
 
@@ -197,47 +159,21 @@ mod tests {
     use crate::planner::operator::Operator;
 
     #[tokio::test]
-    async fn test_project_into_table_scan() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1").await?;
-
-        let best_plan = HepOptimizer::new(plan.clone())
-            .batch(
-                "test_project_into_table_scan".to_string(),
-                HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushProjectIntoScan],
-            )
-            .find_best()?;
-
-        assert_eq!(best_plan.childrens.len(), 0);
-        match best_plan.operator {
-            Operator::Scan(op) => {
-                assert_eq!(op.columns.len(), 2);
-            }
-            _ => unreachable!("Should be a scan operator"),
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_project_through_child_on_join() -> Result<(), DatabaseError> {
+    async fn test_column_pruning() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select c1, c3 from t1 left join t2 on c1 = c3").await?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
-                "test_project_through_child_on_join".to_string(),
-                HepBatchStrategy::fix_point_topdown(10),
-                vec![
-                    RuleImpl::PushProjectThroughChild,
-                    RuleImpl::PushProjectIntoScan,
-                ],
+                "test_column_pruning".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![RuleImpl::ColumnPruning],
             )
             .find_best()?;
 
         assert_eq!(best_plan.childrens.len(), 1);
         match best_plan.operator {
             Operator::Project(op) => {
-                assert_eq!(op.columns.len(), 2);
+                assert_eq!(op.exprs.len(), 2);
             }
             _ => unreachable!("Should be a project operator"),
         }

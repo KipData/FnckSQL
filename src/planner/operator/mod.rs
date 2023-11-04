@@ -67,7 +67,7 @@ impl Operator {
     pub fn project_input_refs(&self) -> Vec<ScalarExpression> {
         match self {
             Operator::Project(op) => op
-                .columns
+                .exprs
                 .iter()
                 .map(ScalarExpression::unpack_alias)
                 .filter(|expr| matches!(expr, ScalarExpression::InputRef { .. }))
@@ -125,7 +125,7 @@ impl Operator {
                 exprs
             }
             Operator::Project(op) => op
-                .columns
+                .exprs
                 .iter()
                 .flat_map(|expr| expr.referenced_columns())
                 .collect_vec(),

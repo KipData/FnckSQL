@@ -266,7 +266,7 @@ struct ReplaceUnary {
 impl ScalarExpression {
     pub fn exist_column(&self, col_id: &ColumnId) -> bool {
         match self {
-            ScalarExpression::ColumnRef(col) => col.id == Some(*col_id),
+            ScalarExpression::ColumnRef(col) => col.id() == Some(*col_id),
             ScalarExpression::Alias { expr, .. } => expr.exist_column(col_id),
             ScalarExpression::TypeCast { expr, .. } => expr.exist_column(col_id),
             ScalarExpression::IsNull { expr } => expr.exist_column(col_id),
@@ -666,7 +666,7 @@ impl ScalarExpression {
         val: ValueRef,
         is_flip: bool,
     ) -> Option<ConstantBinary> {
-        if col.id.unwrap() != *col_id {
+        if col.id() != Some(*col_id) {
             return None;
         }
 
@@ -706,7 +706,7 @@ impl ScalarExpression {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::expression::simplify::ConstantBinary;
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::types::errors::TypeError;
@@ -718,9 +718,11 @@ mod test {
     #[test]
     fn test_convert_binary_simple() -> Result<(), TypeError> {
         let col_1 = Arc::new(ColumnCatalog {
-            id: Some(0),
-            name: "c1".to_string(),
-            table_name: None,
+            summary: ColumnSummary {
+                id: Some(0),
+                name: "c1".to_string(),
+                table_name: None,
+            },
             nullable: false,
             desc: ColumnDesc {
                 column_datatype: LogicalType::Integer,

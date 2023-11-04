@@ -6,16 +6,15 @@ use tempfile::TempDir;
 
 #[tokio::main]
 async fn main() {
+    const SLT_PATTERN: &str = "tests/slt/**/*.slt";
+
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
     std::env::set_current_dir(path).unwrap();
 
     println!("KipSQL Test Start!\n");
-    const SLT_PATTERN: &str = "tests/slt/**/*.slt";
 
-    let slt_files = glob::glob(SLT_PATTERN).expect("failed to find slt files");
-    for slt_file in slt_files {
+    for slt_file in glob::glob(SLT_PATTERN).expect("failed to find slt files") {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-
         let filepath = slt_file
             .expect("failed to read slt file")
             .to_str()

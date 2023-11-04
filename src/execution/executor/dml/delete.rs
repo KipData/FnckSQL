@@ -39,7 +39,7 @@ impl Delete {
                     col.desc
                         .is_unique
                         .then(|| {
-                            col.id.and_then(|col_id| {
+                            col.id().and_then(|col_id| {
                                 table_catalog
                                     .get_unique_index(&col_id)
                                     .map(|index_meta| (i, index_meta.clone()))

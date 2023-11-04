@@ -450,11 +450,11 @@ impl KipTransaction {
             .into_iter()
             .filter(|col| col.desc.is_unique)
         {
-            if let Some(col_id) = col.id {
+            if let Some(col_id) = col.id() {
                 let meta = IndexMeta {
                     id: 0,
                     column_ids: vec![col_id],
-                    name: format!("uk_{}", col.name),
+                    name: format!("uk_{}", col.name()),
                     is_unique: true,
                 };
                 let meta_ref = table.add_index_meta(meta);
@@ -584,6 +584,7 @@ mod test {
             vec![ScalarExpression::InputRef {
                 index: 0,
                 ty: LogicalType::Integer,
+                ref_columns: vec![],
             }],
         )?;
 

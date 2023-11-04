@@ -92,6 +92,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
         expr: &mut ScalarExpression,
         is_select: bool,
     ) -> Result<(), BindError> {
+        let ref_columns = expr.referenced_columns();
+
         match expr {
             ScalarExpression::AggCall {
                 ty: return_type, ..
@@ -99,7 +101,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let ty = return_type.clone();
                 if is_select {
                     let index = self.context.input_ref_index(InputRefType::AggCall);
-                    let input_ref = ScalarExpression::InputRef { index, ty };
+                    let input_ref = ScalarExpression::InputRef {
+                        index,
+                        ty,
+                        ref_columns,
+                    };
                     match std::mem::replace(expr, input_ref) {
                         ScalarExpression::AggCall {
                             kind,
@@ -124,7 +130,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         .find_position(|agg_expr| agg_expr == &expr)
                         .ok_or_else(|| BindError::AggMiss(format!("{:?}", expr)))?;
 
-                    let _ = std::mem::replace(expr, ScalarExpression::InputRef { index, ty });
+                    let _ = std::mem::replace(
+                        expr,
+                        ScalarExpression::InputRef {
+                            index,
+                            ty,
+                            ref_columns,
+                        },
+                    );
                 }
             }
 
@@ -228,6 +241,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }) {
                 let index = self.context.input_ref_index(InputRefType::GroupBy);
                 let mut select_item = &mut select_list[i];
+                let ref_columns = select_item.referenced_columns();
                 let return_type = select_item.return_type();
 
                 self.context.group_by_exprs.push(std::mem::replace(
@@ -235,6 +249,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     ScalarExpression::InputRef {
                         index,
                         ty: return_type,
+                        ref_columns,
                     },
                 ));
                 return;
@@ -243,6 +258,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         if let Some(i) = select_list.iter().position(|column| column == expr) {
             let expr = &mut select_list[i];
+            let ref_columns = expr.referenced_columns();
+
             match expr {
                 ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {
                     self.context.group_by_exprs.push(expr.clone())
@@ -255,6 +272,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         ScalarExpression::InputRef {
                             index,
                             ty: expr.return_type(),
+                            ref_columns,
                         },
                     ))
                 }

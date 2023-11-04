@@ -1,5 +1,4 @@
 use crate::expression::{BinaryOperator, ScalarExpression};
-use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
@@ -43,7 +42,7 @@ impl Rule for CollapseProject {
         if let Operator::Project(op) = graph.operator(node_id) {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Project(child_op) = graph.operator(child_id) {
-                if is_subset_exprs(&op.columns, &child_op.columns) {
+                if is_subset_exprs(&op.exprs, &child_op.exprs) {
                     graph.remove_node(child_id, false);
                 } else {
                     graph.remove_node(node_id, false);
@@ -76,10 +75,7 @@ impl Rule for CombineFilter {
                     },
                     having: op.having || child_op.having,
                 };
-                graph.replace_node(
-                    node_id,
-                    OptExprNode::OperatorRef(Operator::Filter(new_filter_op)),
-                );
+                graph.replace_node(node_id, Operator::Filter(new_filter_op));
                 graph.remove_node(child_id, false);
             }
         }
@@ -94,7 +90,6 @@ mod tests {
     use crate::db::DatabaseError;
     use crate::expression::ScalarExpression::Constant;
     use crate::expression::{BinaryOperator, ScalarExpression};
-    use crate::optimizer::core::opt_expr::OptExprNode;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::graph::HepNodeId;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -117,19 +112,17 @@ mod tests {
         let mut new_project_op = optimizer.graph.operator(HepNodeId::new(0)).clone();
 
         if let Operator::Project(op) = &mut new_project_op {
-            op.columns.remove(0);
+            op.exprs.remove(0);
         } else {
             unreachable!("Should be a project operator")
         }
 
-        optimizer
-            .graph
-            .add_root(OptExprNode::OperatorRef(new_project_op));
+        optimizer.graph.add_root(new_project_op);
 
         let best_plan = optimizer.find_best()?;
 
         if let Operator::Project(op) = &best_plan.operator {
-            assert_eq!(op.columns.len(), 1);
+            assert_eq!(op.exprs.len(), 1);
         } else {
             unreachable!("Should be a project operator")
         }
@@ -166,11 +159,9 @@ mod tests {
             unreachable!("Should be a filter operator")
         }
 
-        optimizer.graph.add_node(
-            HepNodeId::new(0),
-            Some(HepNodeId::new(1)),
-            OptExprNode::OperatorRef(new_filter_op),
-        );
+        optimizer
+            .graph
+            .add_node(HepNodeId::new(0), Some(HepNodeId::new(1)), new_filter_op);
 
         let best_plan = optimizer.find_best()?;
 

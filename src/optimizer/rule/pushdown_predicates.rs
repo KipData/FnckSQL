@@ -1,6 +1,5 @@
 use crate::catalog::ColumnRef;
 use crate::expression::{BinaryOperator, ScalarExpression};
-use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::core::rule::Rule;
@@ -177,23 +176,15 @@ impl Rule for PushPredicateThroughJoin {
             }
 
             if let Some(left_op) = new_ops.0 {
-                graph.add_node(
-                    child_id,
-                    Some(join_childs[0]),
-                    OptExprNode::OperatorRef(left_op),
-                );
+                graph.add_node(child_id, Some(join_childs[0]), left_op);
             }
 
             if let Some(right_op) = new_ops.1 {
-                graph.add_node(
-                    child_id,
-                    Some(join_childs[1]),
-                    OptExprNode::OperatorRef(right_op),
-                );
+                graph.add_node(child_id, Some(join_childs[1]), right_op);
             }
 
             if let Some(common_op) = new_ops.2 {
-                graph.replace_node(node_id, OptExprNode::OperatorRef(common_op));
+                graph.replace_node(node_id, common_op);
             } else {
                 graph.remove_node(node_id, false);
             }
@@ -203,7 +194,7 @@ impl Rule for PushPredicateThroughJoin {
     }
 }
 
-pub struct PushPredicateIntoScan {}
+pub struct PushPredicateIntoScan;
 
 impl Rule for PushPredicateIntoScan {
     fn pattern(&self) -> &Pattern {
@@ -232,10 +223,7 @@ impl Rule for PushPredicateIntoScan {
 
                             // The constant expression extracted in prewhere is used to
                             // reduce the data scanning range and cannot replace the role of Filter.
-                            graph.replace_node(
-                                child_id,
-                                OptExprNode::OperatorRef(Operator::Scan(scan_by_index)),
-                            );
+                            graph.replace_node(child_id, Operator::Scan(scan_by_index));
 
                             return Ok(());
                         }

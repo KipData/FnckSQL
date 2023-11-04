@@ -91,11 +91,8 @@ impl<S: Storage> Database<S> {
             )
             .batch(
                 "Column Pruning".to_string(),
-                HepBatchStrategy::fix_point_topdown(10),
-                vec![
-                    RuleImpl::PushProjectThroughChild,
-                    RuleImpl::PushProjectIntoScan,
-                ],
+                HepBatchStrategy::once_topdown(),
+                vec![RuleImpl::ColumnPruning],
             )
             .batch(
                 "Limit Pushdown".to_string(),

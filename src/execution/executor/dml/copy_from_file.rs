@@ -111,7 +111,7 @@ fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), ExecutorError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::db::{Database, DatabaseError};
     use futures::StreamExt;
     use std::io::Write;
@@ -132,25 +132,31 @@ mod tests {
 
         let columns = vec![
             Arc::new(ColumnCatalog {
-                id: Some(0),
-                name: "a".to_string(),
-                table_name: None,
+                summary: ColumnSummary {
+                    id: Some(0),
+                    name: "a".to_string(),
+                    table_name: None,
+                },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Integer, true, false),
                 ref_expr: None,
             }),
             Arc::new(ColumnCatalog {
-                id: Some(1),
-                name: "b".to_string(),
-                table_name: None,
+                summary: ColumnSummary {
+                    id: Some(1),
+                    name: "b".to_string(),
+                    table_name: None,
+                },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Float, false, false),
                 ref_expr: None,
             }),
             Arc::new(ColumnCatalog {
-                id: Some(1),
-                name: "c".to_string(),
-                table_name: None,
+                summary: ColumnSummary {
+                    id: Some(1),
+                    name: "c".to_string(),
+                    table_name: None,
+                },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false),
                 ref_expr: None,
