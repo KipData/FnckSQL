@@ -301,6 +301,8 @@ pub enum BinaryOperator {
     Spaceship,
     Eq,
     NotEq,
+    Like,
+    NotLike,
 
     And,
     Or,
@@ -326,6 +328,8 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::And => write!(f, "&&"),
             BinaryOperator::Or => write!(f, "||"),
             BinaryOperator::Xor => write!(f, "^"),
+            BinaryOperator::Like => write!(f, "like"),
+            BinaryOperator::NotLike => write!(f, "not like"),
         }
     }
 }

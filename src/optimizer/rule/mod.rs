@@ -9,8 +9,8 @@ use crate::optimizer::rule::pushdown_limit::{
 };
 use crate::optimizer::rule::pushdown_predicates::PushPredicateIntoScan;
 use crate::optimizer::rule::pushdown_predicates::PushPredicateThroughJoin;
-use crate::optimizer::rule::simplification::SimplifyFilter;
 use crate::optimizer::rule::simplification::ConstantCalculation;
+use crate::optimizer::rule::simplification::SimplifyFilter;
 use crate::optimizer::OptimizerError;
 
 mod column_pruning;
@@ -36,7 +36,7 @@ pub enum RuleImpl {
     PushPredicateIntoScan,
     // Simplification
     SimplifyFilter,
-    ConstantCalculation
+    ConstantCalculation,
 }
 
 impl Rule for RuleImpl {

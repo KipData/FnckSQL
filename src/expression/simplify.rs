@@ -348,12 +348,19 @@ impl ScalarExpression {
                     let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
                 }
             }
-            ScalarExpression::Binary { left_expr, right_expr, op, .. } => {
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                op,
+                ..
+            } => {
                 left_expr.constant_calculation()?;
                 right_expr.constant_calculation()?;
 
-                if let (ScalarExpression::Constant(left_val), ScalarExpression::Constant(right_val))
-                    = (left_expr.as_ref(), right_expr.as_ref())
+                if let (
+                    ScalarExpression::Constant(left_val),
+                    ScalarExpression::Constant(right_val),
+                ) = (left_expr.as_ref(), right_expr.as_ref())
                 {
                     let value = binary_op(left_val, right_val, op)?;
                     let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
@@ -367,7 +374,7 @@ impl ScalarExpression {
                     expr.constant_calculation()?;
                 }
             }
-            _ => ()
+            _ => (),
         }
 
         Ok(())

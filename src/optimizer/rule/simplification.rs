@@ -2,9 +2,9 @@ use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
+use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
 use lazy_static::lazy_static;
-use crate::planner::operator::join::JoinCondition;
 lazy_static! {
     static ref CONSTANT_CALCULATION_RULE: Pattern = {
         Pattern {
@@ -32,10 +32,7 @@ impl ConstantCalculation {
 
         match operator {
             Operator::Aggregate(op) => {
-                for expr in op.agg_calls
-                    .iter_mut()
-                    .chain(op.groupby_exprs.iter_mut())
-                {
+                for expr in op.agg_calls.iter_mut().chain(op.groupby_exprs.iter_mut()) {
                     expr.constant_calculation()?;
                 }
             }
@@ -68,7 +65,7 @@ impl ConstantCalculation {
                     field.expr.constant_calculation()?;
                 }
             }
-            _ => ()
+            _ => (),
         }
         for child_id in graph.children_at(node_id) {
             Self::_apply(child_id, graph)?;
@@ -133,16 +130,15 @@ mod test {
     #[tokio::test]
     async fn test_constant_calculation_omitted() -> Result<(), DatabaseError> {
         // (2 + (-1)) < -(c1 + 1)
-        let plan = select_sql_run("select c1 + (2 + 1), 2 + 1 from t1 where (2 + (-1)) < -(c1 + 1)").await?;
+        let plan =
+            select_sql_run("select c1 + (2 + 1), 2 + 1 from t1 where (2 + (-1)) < -(c1 + 1)")
+                .await?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
                 "test_simplification".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![
-                    RuleImpl::SimplifyFilter,
-                    RuleImpl::ConstantCalculation
-                ],
+                vec![RuleImpl::SimplifyFilter, RuleImpl::ConstantCalculation],
             )
             .find_best()?;
         if let Operator::Project(project_op) = best_plan.clone().operator {
@@ -160,7 +156,7 @@ mod test {
             let column_binary = filter_op.predicate.convert_binary(&0).unwrap();
             let final_binary = ConstantBinary::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2)))),
             };
             assert_eq!(column_binary, Some(final_binary));
         } else {
