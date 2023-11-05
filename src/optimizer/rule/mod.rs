@@ -10,6 +10,7 @@ use crate::optimizer::rule::pushdown_limit::{
 use crate::optimizer::rule::pushdown_predicates::PushPredicateIntoScan;
 use crate::optimizer::rule::pushdown_predicates::PushPredicateThroughJoin;
 use crate::optimizer::rule::simplification::SimplifyFilter;
+use crate::optimizer::rule::simplification::ConstantCalculation;
 use crate::optimizer::OptimizerError;
 
 mod column_pruning;
@@ -35,6 +36,7 @@ pub enum RuleImpl {
     PushPredicateIntoScan,
     // Simplification
     SimplifyFilter,
+    ConstantCalculation
 }
 
 impl Rule for RuleImpl {
@@ -50,6 +52,7 @@ impl Rule for RuleImpl {
             RuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin.pattern(),
             RuleImpl::PushPredicateIntoScan => PushPredicateIntoScan.pattern(),
             RuleImpl::SimplifyFilter => SimplifyFilter.pattern(),
+            RuleImpl::ConstantCalculation => ConstantCalculation.pattern(),
         }
     }
 
@@ -65,6 +68,7 @@ impl Rule for RuleImpl {
             RuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin.apply(node_id, graph),
             RuleImpl::SimplifyFilter => SimplifyFilter.apply(node_id, graph),
             RuleImpl::PushPredicateIntoScan => PushPredicateIntoScan.apply(node_id, graph),
+            RuleImpl::ConstantCalculation => ConstantCalculation.apply(node_id, graph),
         }
     }
 }

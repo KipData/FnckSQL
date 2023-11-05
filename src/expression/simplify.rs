@@ -338,6 +338,41 @@ impl ScalarExpression {
         self._simplify(&mut Vec::new())
     }
 
+    pub fn constant_calculation(&mut self) -> Result<(), TypeError> {
+        match self {
+            ScalarExpression::Unary { expr, op, .. } => {
+                expr.constant_calculation()?;
+
+                if let ScalarExpression::Constant(unary_val) = expr.as_ref() {
+                    let value = unary_op(unary_val, op)?;
+                    let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
+                }
+            }
+            ScalarExpression::Binary { left_expr, right_expr, op, .. } => {
+                left_expr.constant_calculation()?;
+                right_expr.constant_calculation()?;
+
+                if let (ScalarExpression::Constant(left_val), ScalarExpression::Constant(right_val))
+                    = (left_expr.as_ref(), right_expr.as_ref())
+                {
+                    let value = binary_op(left_val, right_val, op)?;
+                    let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
+                }
+            }
+            ScalarExpression::Alias { expr, .. } => expr.constant_calculation()?,
+            ScalarExpression::TypeCast { expr, .. } => expr.constant_calculation()?,
+            ScalarExpression::IsNull { expr, .. } => expr.constant_calculation()?,
+            ScalarExpression::AggCall { args, .. } => {
+                for expr in args {
+                    expr.constant_calculation()?;
+                }
+            }
+            _ => ()
+        }
+
+        Ok(())
+    }
+
     // Tips: Indirect expressions like `ScalarExpression:：Alias` will be lost
     fn _simplify(&mut self, replaces: &mut Vec<Replace>) -> Result<(), TypeError> {
         match self {
@@ -458,7 +493,6 @@ impl ScalarExpression {
         if Self::is_arithmetic(op) {
             return Ok(());
         }
-
         while let Some(replace) = replaces.pop() {
             match replace {
                 Replace::Binary(binary) => Self::fix_binary(binary, left_expr, right_expr, op),

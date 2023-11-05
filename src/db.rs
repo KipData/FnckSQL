@@ -72,9 +72,17 @@ impl<S: Storage> Database<S> {
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
             .batch(
+                "Column Pruning".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![RuleImpl::ColumnPruning],
+            )
+            .batch(
                 "Simplify Filter".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::SimplifyFilter],
+                vec![
+                    RuleImpl::SimplifyFilter,
+                    RuleImpl::ConstantCalculation,
+                ],
             )
             .batch(
                 "Predicate Pushdown".to_string(),
@@ -88,11 +96,6 @@ impl<S: Storage> Database<S> {
                 "Combine Operators".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![RuleImpl::CollapseProject, RuleImpl::CombineFilter],
-            )
-            .batch(
-                "Column Pruning".to_string(),
-                HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::ColumnPruning],
             )
             .batch(
                 "Limit Pushdown".to_string(),

@@ -4,7 +4,14 @@ use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
 use lazy_static::lazy_static;
+use crate::planner::operator::join::JoinCondition;
 lazy_static! {
+    static ref CONSTANT_CALCULATION_RULE: Pattern = {
+        Pattern {
+            predicate: |_| true,
+            children: PatternChildrenPredicate::None,
+        }
+    };
     static ref SIMPLIFY_FILTER_RULE: Pattern = {
         Pattern {
             predicate: |op| matches!(op, Operator::Filter(_)),
@@ -14,6 +21,75 @@ lazy_static! {
             }]),
         }
     };
+}
+
+#[derive(Copy, Clone)]
+pub struct ConstantCalculation;
+
+impl ConstantCalculation {
+    fn _apply(node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+        let operator = graph.operator_mut(node_id);
+
+        match operator {
+            Operator::Aggregate(op) => {
+                for expr in op.agg_calls
+                    .iter_mut()
+                    .chain(op.groupby_exprs.iter_mut())
+                {
+                    expr.constant_calculation()?;
+                }
+            }
+            Operator::Filter(op) => {
+                op.predicate.constant_calculation()?;
+            }
+            Operator::Join(op) => {
+                if let JoinCondition::On { on, filter } = &mut op.on {
+                    for (left_expr, right_expr) in on {
+                        left_expr.constant_calculation()?;
+                        right_expr.constant_calculation()?;
+                    }
+                    if let Some(expr) = filter {
+                        expr.constant_calculation()?;
+                    }
+                }
+            }
+            Operator::Project(op) => {
+                for expr in &mut op.exprs {
+                    expr.constant_calculation()?;
+                }
+            }
+            Operator::Scan(op) => {
+                for expr in &mut op.columns {
+                    expr.constant_calculation()?;
+                }
+            }
+            Operator::Sort(op) => {
+                for field in &mut op.sort_fields {
+                    field.expr.constant_calculation()?;
+                }
+            }
+            _ => ()
+        }
+        for child_id in graph.children_at(node_id) {
+            Self::_apply(child_id, graph)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Rule for ConstantCalculation {
+    fn pattern(&self) -> &Pattern {
+        &CONSTANT_CALCULATION_RULE
+    }
+
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+        Self::_apply(node_id, graph)?;
+        // mark changed to skip this rule batch
+        graph.version += 1;
+
+        Ok(())
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -27,6 +103,7 @@ impl Rule for SimplifyFilter {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Filter(mut filter_op) = graph.operator(node_id).clone() {
             filter_op.predicate.simplify()?;
+            filter_op.predicate.constant_calculation()?;
 
             graph.replace_node(node_id, Operator::Filter(filter_op))
         }
@@ -52,6 +129,46 @@ mod test {
     use crate::types::LogicalType;
     use std::collections::Bound;
     use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_constant_calculation_omitted() -> Result<(), DatabaseError> {
+        // (2 + (-1)) < -(c1 + 1)
+        let plan = select_sql_run("select c1 + (2 + 1), 2 + 1 from t1 where (2 + (-1)) < -(c1 + 1)").await?;
+
+        let best_plan = HepOptimizer::new(plan)
+            .batch(
+                "test_simplification".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![
+                    RuleImpl::SimplifyFilter,
+                    RuleImpl::ConstantCalculation
+                ],
+            )
+            .find_best()?;
+        if let Operator::Project(project_op) = best_plan.clone().operator {
+            let constant_expr = ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(3))));
+            if let ScalarExpression::Binary { right_expr, .. } = &project_op.exprs[0] {
+                assert_eq!(right_expr.as_ref(), &constant_expr);
+            } else {
+                unreachable!();
+            }
+            assert_eq!(&project_op.exprs[1], &constant_expr);
+        } else {
+            unreachable!();
+        }
+        if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+            let column_binary = filter_op.predicate.convert_binary(&0).unwrap();
+            let final_binary = ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
+            };
+            assert_eq!(column_binary, Some(final_binary));
+        } else {
+            unreachable!();
+        }
+
+        Ok(())
+    }
 
     #[tokio::test]
     async fn test_simplify_filter_single_column() -> Result<(), DatabaseError> {
