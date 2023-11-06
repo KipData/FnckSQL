@@ -32,7 +32,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 pattern,
                 ..
             } => self.bind_like(*negated, expr, pattern),
-            Expr::IsNull(expr) => self.bind_is_null(expr),
+            Expr::IsNull(expr) => self.bind_is_null(expr, false),
+            Expr::IsNotNull(expr) => self.bind_is_null(expr, true),
             _ => {
                 todo!()
             }
@@ -227,8 +228,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
         })
     }
 
-    fn bind_is_null(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
+    fn bind_is_null(&mut self, expr: &Expr, negated: bool) -> Result<ScalarExpression, BindError> {
         Ok(ScalarExpression::IsNull {
+            negated,
             expr: Box::new(self.bind_expr(expr)?),
         })
     }

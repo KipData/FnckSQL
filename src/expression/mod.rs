@@ -41,6 +41,7 @@ pub enum ScalarExpression {
         ty: LogicalType,
     },
     IsNull {
+        negated: bool,
         expr: Box<ScalarExpression>,
     },
     Unary {
@@ -95,7 +96,7 @@ impl ScalarExpression {
             ScalarExpression::InputRef { .. } => unreachable!(),
             ScalarExpression::Alias { expr, .. } => expr.nullable(),
             ScalarExpression::TypeCast { expr, .. } => expr.nullable(),
-            ScalarExpression::IsNull { expr } => expr.nullable(),
+            ScalarExpression::IsNull { expr, .. } => expr.nullable(),
             ScalarExpression::Unary { expr, .. } => expr.nullable(),
             ScalarExpression::Binary {
                 left_expr,

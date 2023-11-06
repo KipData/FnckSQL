@@ -68,4 +68,40 @@ select v2 from t where ((v2 >= -8 and -4 >= v1) or (v1 >= 0 and 5 > v2)) and ((v
 1
 
 statement ok
+create table t1(id int primary key, v1 varchar)
+
+statement ok
+insert into t1 values (0, 'KipSQL'), (1, 'KipDB'), (2, 'KipBlog'), (3, 'Cool!');
+
+query II
+select * from t1 where v1 like 'Kip%'
+----
+0 KipSQL
+1 KipDB
+2 KipBlog
+
+query II
+select * from t1 where v1 not like 'Kip%'
+----
+3 Cool!
+
+query II
+select * from t1 where v1 like 'KipD_'
+----
+1 KipDB
+
+query II
+select * from t1 where v1 like 'KipS_L'
+----
+0 KipSQL
+
+query II
+select * from t1 where v1 like 'K%L'
+----
+0 KipSQL
+
+statement ok
 drop table t
+
+statement ok
+drop table t1

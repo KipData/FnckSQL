@@ -46,10 +46,13 @@ impl ScalarExpression {
 
                 Ok(Arc::new(binary_op(&left, &right, op)?))
             }
-            ScalarExpression::IsNull { expr } => {
-                let value = expr.eval_column(tuple)?;
+            ScalarExpression::IsNull { expr, negated } => {
+                let mut value = expr.eval_column(tuple)?.is_null();
 
-                Ok(Arc::new(DataValue::Boolean(Some(value.is_null()))))
+                if *negated {
+                    value = !value;
+                }
+                Ok(Arc::new(DataValue::Boolean(Some(value))))
             }
             ScalarExpression::Unary { expr, op, .. } => {
                 let value = expr.eval_column(tuple)?;

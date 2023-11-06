@@ -32,5 +32,17 @@ select * from t where v1 > 1
 2 3 4
 3 4 3
 
+query II
+select * from t where v1 is null
+----
+1 null 3
+
+query II
+select * from t where v1 is not null
+----
+0 2 4
+2 3 4
+3 4 3
+
 statement ok
 drop table t

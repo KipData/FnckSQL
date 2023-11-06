@@ -269,7 +269,7 @@ impl ScalarExpression {
             ScalarExpression::ColumnRef(col) => col.id() == Some(*col_id),
             ScalarExpression::Alias { expr, .. } => expr.exist_column(col_id),
             ScalarExpression::TypeCast { expr, .. } => expr.exist_column(col_id),
-            ScalarExpression::IsNull { expr } => expr.exist_column(col_id),
+            ScalarExpression::IsNull { expr, .. } => expr.exist_column(col_id),
             ScalarExpression::Unary { expr, .. } => expr.exist_column(col_id),
             ScalarExpression::Binary {
                 left_expr,
@@ -287,7 +287,7 @@ impl ScalarExpression {
             ScalarExpression::TypeCast { expr, ty, .. } => expr
                 .unpack_val()
                 .and_then(|val| DataValue::clone(&val).cast(ty).ok().map(Arc::new)),
-            ScalarExpression::IsNull { expr } => {
+            ScalarExpression::IsNull { expr, .. } => {
                 let is_null = expr.unpack_val().map(|val| val.is_null());
 
                 Some(Arc::new(DataValue::Boolean(is_null)))
@@ -679,7 +679,7 @@ impl ScalarExpression {
             }
             ScalarExpression::Alias { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::TypeCast { expr, .. } => expr.convert_binary(col_id),
-            ScalarExpression::IsNull { expr } => expr.convert_binary(col_id),
+            ScalarExpression::IsNull { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::Unary { expr, .. } => expr.convert_binary(col_id),
             _ => Ok(None),
         }

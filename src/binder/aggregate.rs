@@ -144,7 +144,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             ScalarExpression::TypeCast { expr, .. } => {
                 self.visit_column_agg_expr(expr, is_select)?
             }
-            ScalarExpression::IsNull { expr } => self.visit_column_agg_expr(expr, is_select)?,
+            ScalarExpression::IsNull { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
             ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
             ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
             ScalarExpression::Binary {
@@ -318,7 +318,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
 
             ScalarExpression::TypeCast { expr, .. } => self.validate_having_orderby(expr),
-            ScalarExpression::IsNull { expr } => self.validate_having_orderby(expr),
+            ScalarExpression::IsNull { expr, .. } => self.validate_having_orderby(expr),
             ScalarExpression::Unary { expr, .. } => self.validate_having_orderby(expr),
             ScalarExpression::Binary {
                 left_expr,
