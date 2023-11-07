@@ -1,11 +1,24 @@
-# KipSQL 
+<pre align="center">
+Built by @KipData
 
-Welcome to our WebSite, Power By KipSQL: 
+██╗  ██╗██╗██████╗ ███████╗ ██████╗ ██╗
+██║ ██╔╝██║██╔══██╗██╔════╝██╔═══██╗██║
+█████╔╝ ██║██████╔╝███████╗██║   ██║██║
+██╔═██╗ ██║██╔═══╝ ╚════██║██║▄▄ ██║██║
+     ██║  ██╗██║██║     ███████║╚██████╔╝███████╗
+     ╚═╝  ╚═╝╚═╝╚═╝     ╚══════╝ ╚══▀▀═╝ ╚══════╝
+-----------------------------------
+Embedded SQL DBMS
+</pre>
+<br/>
+
+### Architecture
+Welcome to our WebSite, Power By KipSQL:
 **http://www.kipdata.site/**
 
 > Lightweight SQL calculation engine, as the SQL layer of KipDB, implemented with TalentPlan's TinySQL as the reference standard
 
-### Architecture
+
 ![architecture](./static/images/architecture.png)
 
 ### Get Started
