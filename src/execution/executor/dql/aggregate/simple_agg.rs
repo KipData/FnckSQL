@@ -42,7 +42,7 @@ impl SimpleAggExecutor {
             columns_option.get_or_insert_with(|| {
                 self.agg_calls
                     .iter()
-                    .map(|expr| expr.output_columns(&tuple))
+                    .map(|expr| expr.output_columns())
                     .collect_vec()
             });
 

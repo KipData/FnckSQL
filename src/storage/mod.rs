@@ -125,7 +125,7 @@ pub(crate) fn tuple_projection(
 
     for expr in projections.iter() {
         values.push(expr.eval_column(&tuple)?);
-        columns.push(expr.output_columns(&tuple));
+        columns.push(expr.output_columns());
     }
 
     if let Some(num) = limit {

@@ -30,6 +30,9 @@ impl ColumnPruning {
         exprs: &mut Vec<ScalarExpression>,
     ) {
         exprs.retain(|expr| {
+            if column_references.contains(expr.output_columns().summary()) {
+                return true;
+            }
             expr.referenced_columns()
                 .iter()
                 .any(|column| column_references.contains(column.summary()))

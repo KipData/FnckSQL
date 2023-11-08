@@ -17,7 +17,6 @@ pub mod update;
 pub mod values;
 
 use crate::catalog::ColumnRef;
-use crate::expression::ScalarExpression;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
@@ -64,41 +63,6 @@ pub enum Operator {
 }
 
 impl Operator {
-    pub fn project_input_refs(&self) -> Vec<ScalarExpression> {
-        match self {
-            Operator::Project(op) => op
-                .exprs
-                .iter()
-                .map(ScalarExpression::unpack_alias)
-                .filter(|expr| matches!(expr, ScalarExpression::InputRef { .. }))
-                .sorted_by_key(|expr| match expr {
-                    ScalarExpression::InputRef { index, .. } => index,
-                    _ => unreachable!(),
-                })
-                .cloned()
-                .collect_vec(),
-            _ => vec![],
-        }
-    }
-
-    pub fn agg_mapping_col_refs(&self, input_refs: &[ScalarExpression]) -> Vec<ColumnRef> {
-        match self {
-            Operator::Aggregate(AggregateOperator { agg_calls, .. }) => input_refs
-                .iter()
-                .filter_map(|expr| {
-                    if let ScalarExpression::InputRef { index, .. } = expr {
-                        Some(agg_calls[*index].clone())
-                    } else {
-                        None
-                    }
-                })
-                .map(|expr| expr.referenced_columns())
-                .flatten()
-                .collect_vec(),
-            _ => vec![],
-        }
-    }
-
     pub fn referenced_columns(&self) -> Vec<ColumnRef> {
         match self {
             Operator::Aggregate(op) => op
@@ -121,7 +85,6 @@ impl Operator {
                         exprs.append(&mut filter_expr.referenced_columns());
                     }
                 }
-
                 exprs
             }
             Operator::Project(op) => op

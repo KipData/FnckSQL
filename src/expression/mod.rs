@@ -10,7 +10,6 @@ use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUn
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
 use crate::storage::Transaction;
-use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 
@@ -27,11 +26,6 @@ pub mod value_compute;
 pub enum ScalarExpression {
     Constant(ValueRef),
     ColumnRef(ColumnRef),
-    InputRef {
-        index: usize,
-        ty: LogicalType,
-        ref_columns: Vec<ColumnRef>,
-    },
     Alias {
         expr: Box<ScalarExpression>,
         alias: String,
@@ -74,7 +68,6 @@ impl ScalarExpression {
 
     pub fn has_count_star(&self) -> bool {
         match self {
-            ScalarExpression::InputRef { ref_columns, .. } => ref_columns.is_empty(),
             ScalarExpression::Alias { expr, .. } => expr.has_count_star(),
             ScalarExpression::TypeCast { expr, .. } => expr.has_count_star(),
             ScalarExpression::IsNull { expr, .. } => expr.has_count_star(),
@@ -93,7 +86,6 @@ impl ScalarExpression {
         match self {
             ScalarExpression::Constant(_) => false,
             ScalarExpression::ColumnRef(col) => col.nullable,
-            ScalarExpression::InputRef { .. } => unreachable!(),
             ScalarExpression::Alias { expr, .. } => expr.nullable(),
             ScalarExpression::TypeCast { expr, .. } => expr.nullable(),
             ScalarExpression::IsNull { expr, .. } => expr.nullable(),
@@ -123,9 +115,6 @@ impl ScalarExpression {
             Self::AggCall {
                 ty: return_type, ..
             } => return_type.clone(),
-            Self::InputRef {
-                ty: return_type, ..
-            } => return_type.clone(),
             Self::IsNull { .. } => LogicalType::Boolean,
             Self::Alias { expr, .. } => expr.return_type(),
         }
@@ -133,6 +122,9 @@ impl ScalarExpression {
 
     pub fn referenced_columns(&self) -> Vec<ColumnRef> {
         fn columns_collect(expr: &ScalarExpression, vec: &mut Vec<ColumnRef>) {
+            // When `ScalarExpression` is a complex type, it itself is also a special Column
+            vec.push(expr.output_columns());
+
             match expr {
                 ScalarExpression::ColumnRef(col) => {
                     vec.push(col.clone());
@@ -154,9 +146,6 @@ impl ScalarExpression {
                         columns_collect(expr, vec)
                     }
                 }
-                ScalarExpression::InputRef { ref_columns, .. } => {
-                    vec.extend_from_slice(ref_columns);
-                }
                 _ => (),
             }
         }
@@ -170,8 +159,7 @@ impl ScalarExpression {
 
     pub fn has_agg_call<T: Transaction>(&self, context: &BinderContext<'_, T>) -> bool {
         match self {
-            ScalarExpression::InputRef { index, .. } => context.agg_calls.get(*index).is_some(),
-            ScalarExpression::AggCall { .. } => unreachable!(),
+            ScalarExpression::AggCall { .. } => true,
             ScalarExpression::Constant(_) => false,
             ScalarExpression::ColumnRef(_) => false,
             ScalarExpression::Alias { expr, .. } => expr.has_agg_call(context),
@@ -186,7 +174,7 @@ impl ScalarExpression {
         }
     }
 
-    pub fn output_columns(&self, tuple: &Tuple) -> ColumnRef {
+    pub fn output_columns(&self) -> ColumnRef {
         match self {
             ScalarExpression::ColumnRef(col) => col.clone(),
             ScalarExpression::Constant(value) => Arc::new(ColumnCatalog::new(
@@ -209,7 +197,7 @@ impl ScalarExpression {
             } => {
                 let args_str = args
                     .iter()
-                    .map(|expr| expr.output_columns(tuple).name().to_string())
+                    .map(|expr| expr.output_columns().name().to_string())
                     .join(", ");
                 let op = |allow_distinct, distinct| {
                     if allow_distinct && distinct {
@@ -232,7 +220,6 @@ impl ScalarExpression {
                     Some(self.clone()),
                 ))
             }
-            ScalarExpression::InputRef { index, .. } => tuple.columns[*index].clone(),
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
@@ -241,9 +228,9 @@ impl ScalarExpression {
             } => {
                 let column_name = format!(
                     "({} {} {})",
-                    left_expr.output_columns(tuple).name(),
+                    left_expr.output_columns().name(),
                     op,
-                    right_expr.output_columns(tuple).name(),
+                    right_expr.output_columns().name(),
                 );
 
                 Arc::new(ColumnCatalog::new(
@@ -254,7 +241,7 @@ impl ScalarExpression {
                 ))
             }
             ScalarExpression::Unary { expr, op, ty } => {
-                let column_name = format!("{} {}", op, expr.output_columns(tuple).name());
+                let column_name = format!("{}{}", op, expr.output_columns().name());
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
@@ -262,7 +249,23 @@ impl ScalarExpression {
                     Some(self.clone()),
                 ))
             }
-            _ => unreachable!(),
+            ScalarExpression::IsNull { negated, expr } => {
+                let suffix = if *negated {
+                    "is not null"
+                } else {
+                    "is null"
+                };
+                let column_name = format!("{} {}", expr.output_columns().name(), suffix);
+                Arc::new(ColumnCatalog::new(
+                    column_name,
+                    true,
+                    ColumnDesc::new(LogicalType::Boolean, false, false),
+                    Some(self.clone()),
+                ))
+            }
+            _ => {
+                todo!()
+            }
         }
     }
 }

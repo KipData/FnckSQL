@@ -38,7 +38,7 @@ impl Projection {
 
             for expr in exprs.iter() {
                 values.push(expr.eval_column(&tuple)?);
-                columns.push(expr.output_columns(&tuple));
+                columns.push(expr.output_columns());
             }
 
             yield Tuple {

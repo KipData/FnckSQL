@@ -13,6 +13,10 @@ lazy_static! {
 
 impl ScalarExpression {
     pub fn eval_column(&self, tuple: &Tuple) -> Result<ValueRef, TypeError> {
+        if let Some(value) = Self::eval_with_name(&tuple, self.output_columns().name()) {
+            return Ok(value.clone());
+        }
+
         match &self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
             ScalarExpression::ColumnRef(col) => {
@@ -22,7 +26,6 @@ impl ScalarExpression {
 
                 Ok(value)
             }
-            ScalarExpression::InputRef { index, .. } => Ok(tuple.values[*index].clone()),
             ScalarExpression::Alias { expr, alias } => {
                 if let Some(value) = Self::eval_with_name(&tuple, alias) {
                     return Ok(value.clone());
@@ -59,7 +62,13 @@ impl ScalarExpression {
 
                 Ok(Arc::new(unary_op(&value, op)?))
             }
-            ScalarExpression::AggCall { .. } => todo!(),
+            ScalarExpression::AggCall { .. } => {
+                let value = Self::eval_with_name(&tuple, self.output_columns().name())
+                    .unwrap_or(&NULL_VALUE)
+                    .clone();
+
+                Ok(value)
+            },
         }
     }
 

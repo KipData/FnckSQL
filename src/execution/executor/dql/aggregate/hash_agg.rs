@@ -57,7 +57,7 @@ impl HashAggExecutor {
                 self.agg_calls
                     .iter()
                     .chain(self.groupby_exprs.iter())
-                    .map(|expr| expr.output_columns(&tuple))
+                    .map(|expr| expr.output_columns())
                     .collect_vec()
             });
 
