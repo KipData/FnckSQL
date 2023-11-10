@@ -53,8 +53,8 @@ impl Sort {
                 nulls_first,
             } in &sort_fields
             {
-                let value_1 = expr.eval_column(tuple_1).unwrap();
-                let value_2 = expr.eval_column(tuple_2).unwrap();
+                let value_1 = expr.eval(tuple_1).unwrap();
+                let value_2 = expr.eval(tuple_2).unwrap();
 
                 ordering = value_1.partial_cmp(&value_2).unwrap_or_else(|| {
                     match (value_1.is_null(), value_2.is_null()) {

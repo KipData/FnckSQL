@@ -55,6 +55,11 @@ pub enum ScalarExpression {
         args: Vec<ScalarExpression>,
         ty: LogicalType,
     },
+    In {
+        negated: bool,
+        expr: Box<ScalarExpression>,
+        args: Vec<ScalarExpression>
+    }
 }
 
 impl ScalarExpression {
@@ -95,7 +100,12 @@ impl ScalarExpression {
                 right_expr,
                 ..
             } => left_expr.nullable() && right_expr.nullable(),
-            ScalarExpression::AggCall { args, .. } => args[0].nullable(),
+            ScalarExpression::In { expr, args, .. } => {
+                args.iter().all(ScalarExpression::nullable) && expr.nullable()
+            }
+            ScalarExpression::AggCall { args, .. } => {
+                args.iter().all(ScalarExpression::nullable)
+            },
         }
     }
 
@@ -115,7 +125,7 @@ impl ScalarExpression {
             Self::AggCall {
                 ty: return_type, ..
             } => return_type.clone(),
-            Self::IsNull { .. } => LogicalType::Boolean,
+            Self::IsNull { .. } | Self::In { .. } => LogicalType::Boolean,
             Self::Alias { expr, .. } => expr.return_type(),
         }
     }
@@ -159,6 +169,12 @@ impl ScalarExpression {
                         columns_collect(expr, vec, only_column_ref)
                     }
                 }
+                ScalarExpression::In { expr, args, .. } => {
+                    columns_collect(expr, vec, only_column_ref);
+                    for arg in args {
+                        columns_collect(arg, vec, only_column_ref)
+                    }
+                }
                 _ => (),
             }
         }
@@ -183,6 +199,9 @@ impl ScalarExpression {
                 right_expr,
                 ..
             } => left_expr.has_agg_call(context) || right_expr.has_agg_call(context),
+            ScalarExpression::In { expr, args, .. } => {
+                expr.has_agg_call(context) || args.iter().any(|arg| arg.has_agg_call(context))
+            }
         }
     }
 
@@ -263,9 +282,24 @@ impl ScalarExpression {
             }
             ScalarExpression::IsNull { negated, expr } => {
                 let suffix = if *negated { "is not null" } else { "is null" };
-                let column_name = format!("{} {}", expr.output_columns().name(), suffix);
                 Arc::new(ColumnCatalog::new(
-                    column_name,
+                    format!("{} {}", expr.output_columns().name(), suffix),
+                    true,
+                    ColumnDesc::new(LogicalType::Boolean, false, false),
+                    Some(self.clone()),
+                ))
+            }
+            ScalarExpression::In { negated, expr, args } => {
+                let args_string = args.iter()
+                    .map(|arg| arg.output_columns().name().to_string())
+                    .join(", ");
+                let op_string = if *negated {
+                    "not in"
+                } else {
+                    "in"
+                };
+                Arc::new(ColumnCatalog::new(
+                    format!("{} {} ({})", expr.output_columns().name(), op_string, args_string),
                     true,
                     ColumnDesc::new(LogicalType::Boolean, false, false),
                     Some(self.clone()),
@@ -351,7 +385,7 @@ impl fmt::Display for UnaryOperator {
         match self {
             UnaryOperator::Plus => write!(f, "+"),
             UnaryOperator::Minus => write!(f, "-"),
-            UnaryOperator::Not => write!(f, "not"),
+            UnaryOperator::Not => write!(f, "!"),
         }
     }
 }

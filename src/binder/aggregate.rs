@@ -28,7 +28,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         select_items: &mut [ScalarExpression],
     ) -> Result<(), BindError> {
         for column in select_items {
-            self.visit_column_agg_expr(column, true)?;
+            self.visit_column_agg_expr(column)?;
         }
         Ok(())
     }
@@ -55,7 +55,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         // Extract having expression.
         let return_having = if let Some(having) = having {
             let mut having = self.bind_expr(having)?;
-            self.visit_column_agg_expr(&mut having, false)?;
+            self.visit_column_agg_expr(&mut having)?;
 
             Some(having)
         } else {
@@ -72,7 +72,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     nulls_first,
                 } = orderby;
                 let mut expr = self.bind_expr(expr)?;
-                self.visit_column_agg_expr(&mut expr, false)?;
+                self.visit_column_agg_expr(&mut expr)?;
 
                 return_orderby.push(SortField::new(
                     expr,
@@ -90,25 +90,34 @@ impl<'a, T: Transaction> Binder<'a, T> {
     fn visit_column_agg_expr(
         &mut self,
         expr: &mut ScalarExpression,
-        is_select: bool,
     ) -> Result<(), BindError> {
         match expr {
             ScalarExpression::AggCall { .. } => {
                 self.context.agg_calls.push(expr.clone());
             }
             ScalarExpression::TypeCast { expr, .. } => {
-                self.visit_column_agg_expr(expr, is_select)?
+                self.visit_column_agg_expr(expr)?
             }
-            ScalarExpression::IsNull { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
-            ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
-            ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
+            ScalarExpression::IsNull { expr, .. } => self.visit_column_agg_expr(expr)?,
+            ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr)?,
+            ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr)?,
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
                 ..
             } => {
-                self.visit_column_agg_expr(left_expr, is_select)?;
-                self.visit_column_agg_expr(right_expr, is_select)?;
+                self.visit_column_agg_expr(left_expr)?;
+                self.visit_column_agg_expr(right_expr)?;
+            }
+            ScalarExpression::In {
+                expr,
+                args,
+                ..
+            } => {
+                self.visit_column_agg_expr(expr)?;
+                for arg in args {
+                    self.visit_column_agg_expr(arg)?;
+                }
             }
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {}
         }
@@ -242,6 +251,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
             ScalarExpression::TypeCast { expr, .. } => self.validate_having_orderby(expr),
             ScalarExpression::IsNull { expr, .. } => self.validate_having_orderby(expr),
             ScalarExpression::Unary { expr, .. } => self.validate_having_orderby(expr),
+            ScalarExpression::In { expr, args, .. } => {
+                self.validate_having_orderby(expr)?;
+                for arg in args {
+                    self.validate_having_orderby(arg)?;
+                }
+                Ok(())
+            }
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,

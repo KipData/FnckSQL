@@ -50,7 +50,7 @@ impl SimpleAggExecutor {
                 .agg_calls
                 .iter()
                 .map(|expr| match expr {
-                    ScalarExpression::AggCall { args, .. } => args[0].eval_column(&tuple),
+                    ScalarExpression::AggCall { args, .. } => args[0].eval(&tuple),
                     _ => unreachable!(),
                 })
                 .try_collect()?;

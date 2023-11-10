@@ -67,7 +67,7 @@ impl HashAggExecutor {
                 .iter()
                 .map(|expr| {
                     if let ScalarExpression::AggCall { args, .. } = expr {
-                        args[0].eval_column(&tuple)
+                        args[0].eval(&tuple)
                     } else {
                         unreachable!()
                     }
@@ -77,7 +77,7 @@ impl HashAggExecutor {
             let group_keys: Vec<ValueRef> = self
                 .groupby_exprs
                 .iter()
-                .map(|expr| expr.eval_column(&tuple))
+                .map(|expr| expr.eval(&tuple))
                 .try_collect()?;
 
             for (acc, value) in group_hash_accs
