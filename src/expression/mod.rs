@@ -120,39 +120,51 @@ impl ScalarExpression {
         }
     }
 
-    pub fn referenced_columns(&self) -> Vec<ColumnRef> {
-        fn columns_collect(expr: &ScalarExpression, vec: &mut Vec<ColumnRef>) {
+    pub fn referenced_columns(&self, only_column_ref: bool) -> Vec<ColumnRef> {
+        fn columns_collect(
+            expr: &ScalarExpression,
+            vec: &mut Vec<ColumnRef>,
+            only_column_ref: bool,
+        ) {
             // When `ScalarExpression` is a complex type, it itself is also a special Column
-            vec.push(expr.output_columns());
-
+            if !only_column_ref {
+                vec.push(expr.output_columns());
+            }
             match expr {
                 ScalarExpression::ColumnRef(col) => {
                     vec.push(col.clone());
                 }
-                ScalarExpression::Alias { expr, .. } => columns_collect(&expr, vec),
-                ScalarExpression::TypeCast { expr, .. } => columns_collect(&expr, vec),
-                ScalarExpression::IsNull { expr, .. } => columns_collect(&expr, vec),
-                ScalarExpression::Unary { expr, .. } => columns_collect(&expr, vec),
+                ScalarExpression::Alias { expr, .. } => {
+                    columns_collect(&expr, vec, only_column_ref)
+                }
+                ScalarExpression::TypeCast { expr, .. } => {
+                    columns_collect(&expr, vec, only_column_ref)
+                }
+                ScalarExpression::IsNull { expr, .. } => {
+                    columns_collect(&expr, vec, only_column_ref)
+                }
+                ScalarExpression::Unary { expr, .. } => {
+                    columns_collect(&expr, vec, only_column_ref)
+                }
                 ScalarExpression::Binary {
                     left_expr,
                     right_expr,
                     ..
                 } => {
-                    columns_collect(left_expr, vec);
-                    columns_collect(right_expr, vec);
+                    columns_collect(left_expr, vec, only_column_ref);
+                    columns_collect(right_expr, vec, only_column_ref);
                 }
                 ScalarExpression::AggCall { args, .. } => {
                     for expr in args {
-                        columns_collect(expr, vec)
+                        columns_collect(expr, vec, only_column_ref)
                     }
                 }
                 _ => (),
             }
         }
-
         let mut exprs = Vec::new();
 
-        columns_collect(self, &mut exprs);
+        columns_collect(self, &mut exprs, only_column_ref);
 
         exprs
     }
@@ -250,11 +262,7 @@ impl ScalarExpression {
                 ))
             }
             ScalarExpression::IsNull { negated, expr } => {
-                let suffix = if *negated {
-                    "is not null"
-                } else {
-                    "is null"
-                };
+                let suffix = if *negated { "is not null" } else { "is null" };
                 let column_name = format!("{} {}", expr.output_columns().name(), suffix);
                 Arc::new(ColumnCatalog::new(
                     column_name,

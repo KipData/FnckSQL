@@ -68,7 +68,7 @@ impl ScalarExpression {
                     .clone();
 
                 Ok(value)
-            },
+            }
         }
     }
 

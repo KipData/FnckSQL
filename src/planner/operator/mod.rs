@@ -63,26 +63,26 @@ pub enum Operator {
 }
 
 impl Operator {
-    pub fn referenced_columns(&self) -> Vec<ColumnRef> {
+    pub fn referenced_columns(&self, only_column_ref: bool) -> Vec<ColumnRef> {
         match self {
             Operator::Aggregate(op) => op
                 .agg_calls
                 .iter()
                 .chain(op.groupby_exprs.iter())
-                .flat_map(|expr| expr.referenced_columns())
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
-            Operator::Filter(op) => op.predicate.referenced_columns(),
+            Operator::Filter(op) => op.predicate.referenced_columns(only_column_ref),
             Operator::Join(op) => {
                 let mut exprs = Vec::new();
 
                 if let JoinCondition::On { on, filter } = &op.on {
                     for (left_expr, right_expr) in on {
-                        exprs.append(&mut left_expr.referenced_columns());
-                        exprs.append(&mut right_expr.referenced_columns());
+                        exprs.append(&mut left_expr.referenced_columns(only_column_ref));
+                        exprs.append(&mut right_expr.referenced_columns(only_column_ref));
                     }
 
                     if let Some(filter_expr) = filter {
-                        exprs.append(&mut filter_expr.referenced_columns());
+                        exprs.append(&mut filter_expr.referenced_columns(only_column_ref));
                     }
                 }
                 exprs
@@ -90,18 +90,18 @@ impl Operator {
             Operator::Project(op) => op
                 .exprs
                 .iter()
-                .flat_map(|expr| expr.referenced_columns())
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Scan(op) => op
                 .columns
                 .iter()
-                .flat_map(|expr| expr.referenced_columns())
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Sort(op) => op
                 .sort_fields
                 .iter()
                 .map(|field| &field.expr)
-                .flat_map(|expr| expr.referenced_columns())
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Values(op) => op.columns.clone(),
             _ => vec![],

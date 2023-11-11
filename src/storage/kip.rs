@@ -569,7 +569,7 @@ mod test {
             &"test".to_string(),
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(2)))),
-                columns,
+                columns: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(2))),
                     Arc::new(DataValue::Boolean(Some(false))),
@@ -581,11 +581,7 @@ mod test {
         let mut iter = transaction.read(
             &"test".to_string(),
             (Some(1), Some(1)),
-            vec![ScalarExpression::InputRef {
-                index: 0,
-                ty: LogicalType::Integer,
-                ref_columns: vec![],
-            }],
+            vec![ScalarExpression::ColumnRef(columns[0].clone())],
         )?;
 
         let option_1 = iter.next_tuple()?;

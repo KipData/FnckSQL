@@ -110,8 +110,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 self.visit_column_agg_expr(left_expr, is_select)?;
                 self.visit_column_agg_expr(right_expr, is_select)?;
             }
-            ScalarExpression::Constant(_)
-            | ScalarExpression::ColumnRef { .. } => {}
+            ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {}
         }
 
         Ok(())
