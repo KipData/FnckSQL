@@ -56,13 +56,13 @@ cargo run
 ```
 Example
 ```sql
-create table blog (id int primary key, title int unique);
+create table blog (id int primary key, title varchar unique);
 
 insert into blog (id, title) values (0, 'KipSQL'), (1, 'KipDB'), (2, 'KipBlog');
 
 update blog set title = 'KipData' where id = 2;
 
-select * from blog order by a asc nulls first
+select * from blog order by title desc nulls first
 
 select count(distinct id) from blog;
 
