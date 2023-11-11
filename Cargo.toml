@@ -42,6 +42,7 @@ csv = "1"
 regex = "1.10.2"
 
 [dev-dependencies]
+cargo-tarpaulin = "0.27.1"
 tokio-test = "0.4.2"
 ctor = "0.2.0"
 env_logger = "0.10"

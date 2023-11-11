@@ -10,45 +10,67 @@ Built by @KipData
 -----------------------------------
 Embedded SQL DBMS
 </pre>
-<br/>
+<h3 align="center">
+    The Lightweight Embedded OLTP Open-source Database
+</h3>
 
-### Architecture
-Welcome to our WebSite, Power By KipSQL:
-**http://www.kipdata.site/**
+<p align="center">
+    &nbsp;
+    <a href="https://github.com/KipData/KipSQL/actions/workflows/ci.yml"><img src="https://github.com/KipData/KipSQL/actions/workflows/ci.yml/badge.svg" alt="CI"></img></a>
+    &nbsp;
+    <a href="https://github.com/KipData/KipSQL/blob/main/LICENSE"><img src="https://img.shields.io/github/license/KipData/KipSQL"></a>
+    &nbsp;
+    <a href="https://www.rust-lang.org/community"><img src="https://img.shields.io/badge/Rust_Community%20-Join_us-brightgreen?style=plastic&logo=rust"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/KipData/KipSQL" target="_blank">
+    <img src="https://img.shields.io/github/stars/KipData/KipSQL.svg?style=social" alt="github star"/>
+    <img src="https://img.shields.io/github/forks/KipData/KipSQL.svg?style=social" alt="github fork"/>
+  </a>
+</p>
 
-> Lightweight SQL calculation engine, as the SQL layer of KipDB, implemented with TalentPlan's TinySQL as the reference standard
+### What is KipSQL
+
+KipSQL is designed to allow small Rust projects to reduce external dependencies and get rid of heavy database maintenance, 
+so that the Rust application itself can provide SQL storage capabilities.
 
 
-![architecture](./static/images/architecture.png)
+If you are a developer of the following applications, we very much welcome you to try using KipSQL 
+and provide your experience and opinions on using it.
+- personal website
+- desktop/mobile application
+- learning database
+- platform bot
 
-### Get Started
-``` toml
-kip-sql = "0.0.1-alpha.0"
+Welcome to our WebSite, Power By KipSQL: **http://www.kipdata.site/**
+
+### Quick Started
+Clone the repository
+``` shell
+git clone https://github.com/KipData/KipSQL.git
 ```
 
 Install rust toolchain first.
 ```
 cargo run
 ```
-test command
+Example
 ```sql
-create table t1 (a int primary key, b int);
+create table blog (id int primary key, title int unique);
 
-insert into t1 (a, b) values (1, 1), (5, 3), (6, 2);
+insert into blog (id, title) values (0, 'KipSQL'), (1, 'KipDB'), (2, 'KipBlog');
 
-update t1 set a = 0 where b > 1;
+update blog set title = 'KipData' where id = 2;
 
-delete from t1 where b > 1;
+select * from blog order by a asc nulls first
 
-select * from t1;
+select count(distinct id) from blog;
 
-select * from t1 order by a asc nulls first
+delete from blog where title like 'Kip%';
 
-select count(distinct a) from t1;
+truncate table blog;
 
-truncate table t1;
-
-drop table t1;
+drop table blog;
 ```
 Using KipSQL in code
 ```rust
@@ -58,9 +80,6 @@ let tupes = db.run("select * from t1").await?;
 ```
 Storage Support:
 - KipDB
-- Memory
-
-![demo](./static/images/demo.png)
 
 ### Features
 - ORM Mapping
@@ -100,6 +119,8 @@ implement_from_tuple!(Post, (
   - is not null
   - like
   - not like
+  - in
+  - not in
 - Supports index type
   - Unique Index
 - Supports multiple primary key types
@@ -128,7 +149,7 @@ implement_from_tuple!(Post, (
   - [x] Distinct
   - [x] Alias
   - [x] Aggregation: count()/sum()/avg()/min()/max()
-  - [ ] Subquery
+  - [x] SubQuery(from)
   - [x] Join: Inner/Left/Right/Full Cross(x)
   - [x] Group By
   - [x] Having
@@ -165,6 +186,14 @@ implement_from_tuple!(Post, (
   - Column Pruning
   - Collapse Project
 
+## License
+
+KipSQL uses the [Apache 2.0 license][1] to strike a balance between
+open contributions and allowing you to use the software however you want.
+
+[1]: <https://github.com/KipData/KipSQL/blob/main/LICENSE>
+
 ### Thanks For
-- [Fedomn/sqlrs](https://github.com/Fedomn/sqlrs): 主要参考资料，Optimizer、Executor均参考自sqlrs的设计
+- [Fedomn/sqlrs](https://github.com/Fedomn/sqlrs): Main reference materials, Optimizer and Executor all refer to the design of sqlrs
 - [systemxlabs/bustubx](https://github.com/systemxlabs/bustubx)
+- [duckdb/duckdb](https://github.com/duckdb/duckdb)
