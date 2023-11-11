@@ -30,6 +30,7 @@ pub enum ScalarExpression {
     InputRef {
         index: usize,
         ty: LogicalType,
+        ref_columns: Vec<ColumnRef>,
     },
     Alias {
         expr: Box<ScalarExpression>,
@@ -40,6 +41,7 @@ pub enum ScalarExpression {
         ty: LogicalType,
     },
     IsNull {
+        negated: bool,
         expr: Box<ScalarExpression>,
     },
     Unary {
@@ -70,6 +72,23 @@ impl ScalarExpression {
         }
     }
 
+    pub fn has_count_star(&self) -> bool {
+        match self {
+            ScalarExpression::InputRef { ref_columns, .. } => ref_columns.is_empty(),
+            ScalarExpression::Alias { expr, .. } => expr.has_count_star(),
+            ScalarExpression::TypeCast { expr, .. } => expr.has_count_star(),
+            ScalarExpression::IsNull { expr, .. } => expr.has_count_star(),
+            ScalarExpression::Unary { expr, .. } => expr.has_count_star(),
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                ..
+            } => left_expr.has_count_star() || right_expr.has_count_star(),
+            ScalarExpression::AggCall { args, .. } => args.iter().any(Self::has_count_star),
+            _ => false,
+        }
+    }
+
     pub fn nullable(&self) -> bool {
         match self {
             ScalarExpression::Constant(_) => false,
@@ -77,7 +96,7 @@ impl ScalarExpression {
             ScalarExpression::InputRef { .. } => unreachable!(),
             ScalarExpression::Alias { expr, .. } => expr.nullable(),
             ScalarExpression::TypeCast { expr, .. } => expr.nullable(),
-            ScalarExpression::IsNull { expr } => expr.nullable(),
+            ScalarExpression::IsNull { expr, .. } => expr.nullable(),
             ScalarExpression::Unary { expr, .. } => expr.nullable(),
             ScalarExpression::Binary {
                 left_expr,
@@ -135,6 +154,9 @@ impl ScalarExpression {
                         columns_collect(expr, vec)
                     }
                 }
+                ScalarExpression::InputRef { ref_columns, .. } => {
+                    vec.extend_from_slice(ref_columns);
+                }
                 _ => (),
             }
         }
@@ -187,7 +209,7 @@ impl ScalarExpression {
             } => {
                 let args_str = args
                     .iter()
-                    .map(|expr| expr.output_columns(tuple).name.clone())
+                    .map(|expr| expr.output_columns(tuple).name().to_string())
                     .join(", ");
                 let op = |allow_distinct, distinct| {
                     if allow_distinct && distinct {
@@ -219,9 +241,9 @@ impl ScalarExpression {
             } => {
                 let column_name = format!(
                     "({} {} {})",
-                    left_expr.output_columns(tuple).name,
+                    left_expr.output_columns(tuple).name(),
                     op,
-                    right_expr.output_columns(tuple).name,
+                    right_expr.output_columns(tuple).name(),
                 );
 
                 Arc::new(ColumnCatalog::new(
@@ -232,7 +254,7 @@ impl ScalarExpression {
                 ))
             }
             ScalarExpression::Unary { expr, op, ty } => {
-                let column_name = format!("{} {}", op, expr.output_columns(tuple).name,);
+                let column_name = format!("{} {}", op, expr.output_columns(tuple).name());
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
@@ -280,6 +302,8 @@ pub enum BinaryOperator {
     Spaceship,
     Eq,
     NotEq,
+    Like,
+    NotLike,
 
     And,
     Or,
@@ -305,6 +329,8 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::And => write!(f, "&&"),
             BinaryOperator::Or => write!(f, "||"),
             BinaryOperator::Xor => write!(f, "^"),
+            BinaryOperator::Like => write!(f, "like"),
+            BinaryOperator::NotLike => write!(f, "not like"),
         }
     }
 }

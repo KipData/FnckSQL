@@ -266,10 +266,10 @@ struct ReplaceUnary {
 impl ScalarExpression {
     pub fn exist_column(&self, col_id: &ColumnId) -> bool {
         match self {
-            ScalarExpression::ColumnRef(col) => col.id == Some(*col_id),
+            ScalarExpression::ColumnRef(col) => col.id() == Some(*col_id),
             ScalarExpression::Alias { expr, .. } => expr.exist_column(col_id),
             ScalarExpression::TypeCast { expr, .. } => expr.exist_column(col_id),
-            ScalarExpression::IsNull { expr } => expr.exist_column(col_id),
+            ScalarExpression::IsNull { expr, .. } => expr.exist_column(col_id),
             ScalarExpression::Unary { expr, .. } => expr.exist_column(col_id),
             ScalarExpression::Binary {
                 left_expr,
@@ -287,7 +287,7 @@ impl ScalarExpression {
             ScalarExpression::TypeCast { expr, ty, .. } => expr
                 .unpack_val()
                 .and_then(|val| DataValue::clone(&val).cast(ty).ok().map(Arc::new)),
-            ScalarExpression::IsNull { expr } => {
+            ScalarExpression::IsNull { expr, .. } => {
                 let is_null = expr.unpack_val().map(|val| val.is_null());
 
                 Some(Arc::new(DataValue::Boolean(is_null)))
@@ -336,6 +336,48 @@ impl ScalarExpression {
 
     pub fn simplify(&mut self) -> Result<(), TypeError> {
         self._simplify(&mut Vec::new())
+    }
+
+    pub fn constant_calculation(&mut self) -> Result<(), TypeError> {
+        match self {
+            ScalarExpression::Unary { expr, op, .. } => {
+                expr.constant_calculation()?;
+
+                if let ScalarExpression::Constant(unary_val) = expr.as_ref() {
+                    let value = unary_op(unary_val, op)?;
+                    let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
+                }
+            }
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                op,
+                ..
+            } => {
+                left_expr.constant_calculation()?;
+                right_expr.constant_calculation()?;
+
+                if let (
+                    ScalarExpression::Constant(left_val),
+                    ScalarExpression::Constant(right_val),
+                ) = (left_expr.as_ref(), right_expr.as_ref())
+                {
+                    let value = binary_op(left_val, right_val, op)?;
+                    let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
+                }
+            }
+            ScalarExpression::Alias { expr, .. } => expr.constant_calculation()?,
+            ScalarExpression::TypeCast { expr, .. } => expr.constant_calculation()?,
+            ScalarExpression::IsNull { expr, .. } => expr.constant_calculation()?,
+            ScalarExpression::AggCall { args, .. } => {
+                for expr in args {
+                    expr.constant_calculation()?;
+                }
+            }
+            _ => (),
+        }
+
+        Ok(())
     }
 
     // Tips: Indirect expressions like `ScalarExpression:：Alias` will be lost
@@ -458,7 +500,6 @@ impl ScalarExpression {
         if Self::is_arithmetic(op) {
             return Ok(());
         }
-
         while let Some(replace) = replaces.pop() {
             match replace {
                 Replace::Binary(binary) => Self::fix_binary(binary, left_expr, right_expr, op),
@@ -638,7 +679,7 @@ impl ScalarExpression {
             }
             ScalarExpression::Alias { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::TypeCast { expr, .. } => expr.convert_binary(col_id),
-            ScalarExpression::IsNull { expr } => expr.convert_binary(col_id),
+            ScalarExpression::IsNull { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::Unary { expr, .. } => expr.convert_binary(col_id),
             _ => Ok(None),
         }
@@ -666,7 +707,7 @@ impl ScalarExpression {
         val: ValueRef,
         is_flip: bool,
     ) -> Option<ConstantBinary> {
-        if col.id.unwrap() != *col_id {
+        if col.id() != Some(*col_id) {
             return None;
         }
 
@@ -706,7 +747,7 @@ impl ScalarExpression {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::expression::simplify::ConstantBinary;
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::types::errors::TypeError;
@@ -718,9 +759,11 @@ mod test {
     #[test]
     fn test_convert_binary_simple() -> Result<(), TypeError> {
         let col_1 = Arc::new(ColumnCatalog {
-            id: Some(0),
-            name: "c1".to_string(),
-            table_name: None,
+            summary: ColumnSummary {
+                id: Some(0),
+                name: "c1".to_string(),
+                table_name: None,
+            },
             nullable: false,
             desc: ColumnDesc {
                 column_datatype: LogicalType::Integer,

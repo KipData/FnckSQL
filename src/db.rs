@@ -44,7 +44,6 @@ impl<S: Storage> Database<S> {
         if stmts.is_empty() {
             return Ok(vec![]);
         }
-
         let binder = Binder::new(BinderContext::new(&transaction));
 
         /// Build a logical plan.
@@ -72,9 +71,14 @@ impl<S: Storage> Database<S> {
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
             .batch(
+                "Column Pruning".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![RuleImpl::ColumnPruning],
+            )
+            .batch(
                 "Simplify Filter".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::SimplifyFilter],
+                vec![RuleImpl::SimplifyFilter, RuleImpl::ConstantCalculation],
             )
             .batch(
                 "Predicate Pushdown".to_string(),
@@ -88,14 +92,6 @@ impl<S: Storage> Database<S> {
                 "Combine Operators".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![RuleImpl::CollapseProject, RuleImpl::CombineFilter],
-            )
-            .batch(
-                "Column Pruning".to_string(),
-                HepBatchStrategy::fix_point_topdown(10),
-                vec![
-                    RuleImpl::PushProjectThroughChild,
-                    RuleImpl::PushProjectIntoScan,
-                ],
             )
             .batch(
                 "Limit Pushdown".to_string(),
@@ -199,7 +195,7 @@ mod test {
         let _ = kipsql
             .run("create table t2 (c int primary key, d int unsigned null, e datetime)")
             .await?;
-        let _ = kipsql.run("insert into t1 (a, b, k, z) values (-99, 1, 1, 'k'), (-1, 2, 2, 'i'), (5, 3, 2, 'p')").await?;
+        let _ = kipsql.run("insert into t1 (a, b, k, z) values (-99, 1, 1, 'k'), (-1, 2, 2, 'i'), (5, 3, 2, 'p'), (29, 4, 2, 'db')").await?;
         let _ = kipsql.run("insert into t2 (d, c, e) values (2, 1, '2021-05-20 21:00:00'), (3, 4, '2023-09-10 00:00:00')").await?;
         let _ = kipsql
             .run("create table t3 (a int primary key, b decimal(4,2))")
@@ -230,6 +226,18 @@ mod test {
         println!("projection_and_sort:");
         let tuples_projection_and_sort = kipsql.run("select * from t1 order by a, b").await?;
         println!("{}", create_table(&tuples_projection_and_sort));
+
+        println!("like t1 1:");
+        let tuples_like_1_t1 = kipsql.run("select * from t1 where z like '%k'").await?;
+        println!("{}", create_table(&tuples_like_1_t1));
+
+        println!("like t1 2:");
+        let tuples_like_2_t1 = kipsql.run("select * from t1 where z like '_b'").await?;
+        println!("{}", create_table(&tuples_like_2_t1));
+
+        println!("not like t1:");
+        let tuples_not_like_t1 = kipsql.run("select * from t1 where z not like '_b'").await?;
+        println!("{}", create_table(&tuples_not_like_t1));
 
         println!("limit:");
         let tuples_limit = kipsql.run("select * from t1 limit 1 offset 1").await?;

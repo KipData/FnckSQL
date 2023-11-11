@@ -1,4 +1,3 @@
-use crate::optimizer::core::opt_expr::OptExprNode;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::core::rule::Rule;
@@ -81,10 +80,7 @@ impl Rule for EliminateLimits {
                 let new_limit_op = LimitOperator { offset, limit };
 
                 graph.remove_node(child_id, false);
-                graph.replace_node(
-                    node_id,
-                    OptExprNode::OperatorRef(Operator::Limit(new_limit_op)),
-                );
+                graph.replace_node(node_id, Operator::Limit(new_limit_op));
             }
         }
 
@@ -135,11 +131,7 @@ impl Rule for PushLimitThroughJoin {
                     JoinType::Right => Some(graph.children_at(child_id)[1]),
                     _ => None,
                 } {
-                    graph.add_node(
-                        child_id,
-                        Some(grandson_id),
-                        OptExprNode::OperatorRef(Operator::Limit(op.clone())),
-                    );
+                    graph.add_node(child_id, Some(grandson_id), Operator::Limit(op.clone()));
                 }
             }
         }
@@ -165,10 +157,7 @@ impl Rule for PushLimitIntoScan {
                 new_scan_op.limit = (limit_op.offset, limit_op.limit);
 
                 graph.remove_node(node_id, false);
-                graph.replace_node(
-                    child_index,
-                    OptExprNode::OperatorRef(Operator::Scan(new_scan_op)),
-                );
+                graph.replace_node(child_index, Operator::Scan(new_scan_op));
             }
         }
 
@@ -180,7 +169,6 @@ impl Rule for PushLimitIntoScan {
 mod tests {
     use crate::binder::test::select_sql_run;
     use crate::db::DatabaseError;
-    use crate::optimizer::core::opt_expr::OptExprNode;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::RuleImpl;
@@ -227,9 +215,7 @@ mod tests {
             limit: Some(1),
         };
 
-        optimizer
-            .graph
-            .add_root(OptExprNode::OperatorRef(Operator::Limit(new_limit_op)));
+        optimizer.graph.add_root(Operator::Limit(new_limit_op));
 
         let best_plan = optimizer.find_best()?;
 

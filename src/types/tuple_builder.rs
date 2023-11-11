@@ -53,7 +53,7 @@ impl TupleBuilder {
             let cast_data_value = data_value.cast(&self.data_types[i])?;
             self.data_values.push(Arc::new(cast_data_value.clone()));
             let col = &columns[i];
-            col.id
+            col.id()
                 .map(|col_id| tuple_map.insert(col_id, Arc::new(cast_data_value.clone())));
             if primary_key_index.is_none() && col.desc.is_primary {
                 primary_key_index = Some(i);
@@ -61,7 +61,7 @@ impl TupleBuilder {
         }
 
         let primary_col_id = primary_key_index
-            .map(|i| columns[i].id.unwrap())
+            .map(|i| columns[i].id().unwrap())
             .ok_or_else(|| TypeError::PrimaryKeyNotFound)?;
 
         let tuple_id = tuple_map

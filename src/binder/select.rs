@@ -343,9 +343,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         select_list: Vec<ScalarExpression>,
     ) -> LogicalPlan {
         LogicalPlan {
-            operator: Operator::Project(ProjectOperator {
-                columns: select_list,
-            }),
+            operator: Operator::Project(ProjectOperator { exprs: select_list }),
             childrens: vec![children],
         }
     }
@@ -431,7 +429,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         for column in select_items {
             if let ScalarExpression::ColumnRef(col) = column {
-                if let Some(nullable) = table_force_nullable.get(col.table_name.as_ref().unwrap()) {
+                if let Some(nullable) = table_force_nullable.get(col.table_name().as_ref().unwrap())
+                {
                     let mut new_col = ColumnCatalog::clone(col);
                     new_col.nullable = *nullable;
 
@@ -504,12 +503,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         // example: foo = bar
                         (ScalarExpression::ColumnRef(l), ScalarExpression::ColumnRef(r)) => {
                             // reorder left and right joins keys to pattern: (left, right)
-                            if left_schema.contains_column(&l.name)
-                                && right_schema.contains_column(&r.name)
+                            if left_schema.contains_column(l.name())
+                                && right_schema.contains_column(r.name())
                             {
                                 accum.push((left, right));
-                            } else if left_schema.contains_column(&r.name)
-                                && right_schema.contains_column(&l.name)
+                            } else if left_schema.contains_column(r.name())
+                                && right_schema.contains_column(l.name())
                             {
                                 accum.push((right, left));
                             } else {

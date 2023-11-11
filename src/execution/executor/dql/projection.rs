@@ -13,11 +13,8 @@ pub struct Projection {
 }
 
 impl From<(ProjectOperator, BoxedExecutor)> for Projection {
-    fn from((ProjectOperator { columns }, input): (ProjectOperator, BoxedExecutor)) -> Self {
-        Projection {
-            exprs: columns,
-            input,
-        }
+    fn from((ProjectOperator { exprs }, input): (ProjectOperator, BoxedExecutor)) -> Self {
+        Projection { exprs, input }
     }
 }
 

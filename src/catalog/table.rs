@@ -38,7 +38,7 @@ impl TableCatalog {
         self.columns.get(id)
     }
 
-    pub(crate) fn contains_column(&self, name: &String) -> bool {
+    pub(crate) fn contains_column(&self, name: &str) -> bool {
         self.column_idxs.contains_key(name)
     }
 
@@ -55,15 +55,15 @@ impl TableCatalog {
 
     /// Add a column to the table catalog.
     pub(crate) fn add_column(&mut self, mut col: ColumnCatalog) -> Result<ColumnId, CatalogError> {
-        if self.column_idxs.contains_key(&col.name) {
-            return Err(CatalogError::Duplicated("column", col.name.clone()));
+        if self.column_idxs.contains_key(col.name()) {
+            return Err(CatalogError::Duplicated("column", col.name().to_string()));
         }
 
         let col_id = self.columns.len() as u32;
 
-        col.id = Some(col_id);
-        col.table_name = Some(self.name.clone());
-        self.column_idxs.insert(col.name.clone(), col_id);
+        col.summary.id = Some(col_id);
+        col.summary.table_name = Some(self.name.clone());
+        self.column_idxs.insert(col.name().to_string(), col_id);
         self.columns.insert(col_id, Arc::new(col));
 
         Ok(col_id)
@@ -148,11 +148,11 @@ mod tests {
         assert!(col_a_id < col_b_id);
 
         let column_catalog = table_catalog.get_column_by_id(&col_a_id).unwrap();
-        assert_eq!(column_catalog.name, "a");
+        assert_eq!(column_catalog.name(), "a");
         assert_eq!(*column_catalog.datatype(), LogicalType::Integer,);
 
         let column_catalog = table_catalog.get_column_by_id(&col_b_id).unwrap();
-        assert_eq!(column_catalog.name, "b");
+        assert_eq!(column_catalog.name(), "b");
         assert_eq!(*column_catalog.datatype(), LogicalType::Boolean,);
     }
 }

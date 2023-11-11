@@ -16,7 +16,7 @@ impl ScalarExpression {
         match &self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
             ScalarExpression::ColumnRef(col) => {
-                let value = Self::eval_with_name(&tuple, &col.name)
+                let value = Self::eval_with_name(&tuple, col.name())
                     .unwrap_or(&NULL_VALUE)
                     .clone();
 
@@ -46,10 +46,13 @@ impl ScalarExpression {
 
                 Ok(Arc::new(binary_op(&left, &right, op)?))
             }
-            ScalarExpression::IsNull { expr } => {
-                let value = expr.eval_column(tuple)?;
+            ScalarExpression::IsNull { expr, negated } => {
+                let mut value = expr.eval_column(tuple)?.is_null();
 
-                Ok(Arc::new(DataValue::Boolean(Some(value.is_null()))))
+                if *negated {
+                    value = !value;
+                }
+                Ok(Arc::new(DataValue::Boolean(Some(value))))
             }
             ScalarExpression::Unary { expr, op, .. } => {
                 let value = expr.eval_column(tuple)?;
@@ -60,11 +63,11 @@ impl ScalarExpression {
         }
     }
 
-    fn eval_with_name<'a>(tuple: &'a Tuple, name: &String) -> Option<&'a ValueRef> {
+    fn eval_with_name<'a>(tuple: &'a Tuple, name: &str) -> Option<&'a ValueRef> {
         tuple
             .columns
             .iter()
-            .find_position(|tul_col| &tul_col.name == name)
+            .find_position(|tul_col| tul_col.name() == name)
             .map(|(i, _)| &tuple.values[i])
     }
 }

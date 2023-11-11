@@ -1,12 +1,27 @@
-# KipSQL 
+<pre align="center">
+Built by @KipData
+
+██╗  ██╗██╗██████╗ ███████╗ ██████╗ ██╗
+██║ ██╔╝██║██╔══██╗██╔════╝██╔═══██╗██║
+█████╔╝ ██║██████╔╝███████╗██║   ██║██║
+██╔═██╗ ██║██╔═══╝ ╚════██║██║▄▄ ██║██║
+     ██║  ██╗██║██║     ███████║╚██████╔╝███████╗
+     ╚═╝  ╚═╝╚═╝╚═╝     ╚══════╝ ╚══▀▀═╝ ╚══════╝
+-----------------------------------
+Embedded SQL DBMS
+</pre>
+<br/>
+
+### Architecture
+Welcome to our WebSite, Power By KipSQL:
+**http://www.kipdata.site/**
 
 > Lightweight SQL calculation engine, as the SQL layer of KipDB, implemented with TalentPlan's TinySQL as the reference standard
 
-### Architecture
+
 ![architecture](./static/images/architecture.png)
 
 ### Get Started
-#### 组件引入
 ``` toml
 kip-sql = "0.0.1-alpha.0"
 ```
@@ -79,6 +94,12 @@ implement_from_tuple!(Post, (
   - not null
   - null
   - unique
+  - primary key
+- SQL where options
+  - is null
+  - is not null
+  - like
+  - not like
 - Supports index type
   - Unique Index
 - Supports multiple primary key types

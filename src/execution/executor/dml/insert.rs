@@ -62,7 +62,7 @@ impl Insert {
                 for (i, value) in values.into_iter().enumerate() {
                     let col = &columns[i];
 
-                    if let Some(col_id) = col.id {
+                    if let Some(col_id) = col.id() {
                         tuple_map.insert(col_id, value);
                     }
                 }
@@ -70,7 +70,7 @@ impl Insert {
                     columns
                         .iter()
                         .find(|col| col.desc.is_primary)
-                        .map(|col| col.id.unwrap())
+                        .map(|col| col.id().unwrap())
                         .unwrap()
                 });
                 let all_columns = table_catalog.all_columns_with_id();
@@ -87,7 +87,7 @@ impl Insert {
 
                     if col.desc.is_unique && !value.is_null() {
                         unique_values
-                            .entry(col.id)
+                            .entry(col.id())
                             .or_insert_with(|| vec![])
                             .push((tuple_id.clone(), value.clone()))
                     }

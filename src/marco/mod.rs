@@ -31,7 +31,7 @@ macro_rules! implement_from_tuple {
                     let (idx, _) = tuple.columns
                         .iter()
                         .enumerate()
-                        .find(|(_, col)| &col.name == field_name)?;
+                        .find(|(_, col)| col.name() == field_name)?;
 
                     DataValue::clone(&tuple.values[idx])
                         .cast(&ty)

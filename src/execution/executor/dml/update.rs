@@ -56,7 +56,7 @@ impl Update {
                     columns, values, ..
                 } = tuple?;
                 for i in 0..columns.len() {
-                    value_map.insert(columns[i].id, values[i].clone());
+                    value_map.insert(columns[i].id(), values[i].clone());
                 }
             }
             #[for_await]
@@ -65,7 +65,7 @@ impl Update {
                 let mut is_overwrite = true;
 
                 for (i, column) in tuple.columns.iter().enumerate() {
-                    if let Some(value) = value_map.get(&column.id) {
+                    if let Some(value) = value_map.get(&column.id()) {
                         if column.desc.is_primary {
                             let old_key = tuple.id.replace(value.clone()).unwrap();
 
@@ -74,7 +74,7 @@ impl Update {
                         }
                         if column.desc.is_unique && value != &tuple.values[i] {
                             if let Some(index_meta) =
-                                table_catalog.get_unique_index(&column.id.unwrap())
+                                table_catalog.get_unique_index(&column.id().unwrap())
                             {
                                 let mut index = Index {
                                     id: index_meta.id,

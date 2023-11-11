@@ -211,10 +211,10 @@ impl TableCodec {
     /// Tips: the `0` for bound range
     pub fn encode_column(col: &ColumnCatalog) -> Result<(Bytes, Bytes), TypeError> {
         let bytes = bincode::serialize(col)?;
-        let mut key_prefix = Self::key_prefix(CodecType::Column, col.table_name.as_ref().unwrap());
+        let mut key_prefix = Self::key_prefix(CodecType::Column, &col.table_name().unwrap());
 
         key_prefix.push(BOUND_MIN_TAG);
-        key_prefix.append(&mut col.id.unwrap().to_be_bytes().to_vec());
+        key_prefix.append(&mut col.id().unwrap().to_be_bytes().to_vec());
 
         Ok((Bytes::from(key_prefix), Bytes::from(bytes)))
     }
@@ -222,7 +222,7 @@ impl TableCodec {
     pub fn decode_column(bytes: &[u8]) -> Result<(TableName, ColumnCatalog), TypeError> {
         let column = bincode::deserialize::<ColumnCatalog>(bytes)?;
 
-        Ok((column.table_name.clone().unwrap(), column))
+        Ok((column.table_name().unwrap(), column))
     }
 
     /// Key: RootCatalog_0_TableName
@@ -369,8 +369,8 @@ mod tests {
                 None,
             );
 
-            col.table_name = Some(Arc::new(table_name.to_string()));
-            col.id = Some(col_id as u32);
+            col.summary.table_name = Some(Arc::new(table_name.to_string()));
+            col.summary.id = Some(col_id as u32);
 
             let (key, _) = TableCodec::encode_column(&col).unwrap();
             key

@@ -1,4 +1,4 @@
-use crate::optimizer::core::opt_expr::{OptExprNode, OptExprNodeId};
+use crate::optimizer::core::opt_expr::OptExprNodeId;
 use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
@@ -12,7 +12,7 @@ pub type HepNodeId = NodeIndex<OptExprNodeId>;
 
 #[derive(Debug)]
 pub struct HepGraph {
-    graph: StableDiGraph<OptExprNode, usize, usize>,
+    graph: StableDiGraph<Operator, usize, usize>,
     root_index: HepNodeId,
     pub version: usize,
 }
@@ -20,13 +20,13 @@ pub struct HepGraph {
 impl HepGraph {
     pub fn new(root: LogicalPlan) -> Self {
         fn graph_filling(
-            graph: &mut StableDiGraph<OptExprNode, usize, usize>,
+            graph: &mut StableDiGraph<Operator, usize, usize>,
             LogicalPlan {
                 operator,
                 childrens,
             }: LogicalPlan,
         ) -> HepNodeId {
-            let index = graph.add_node(OptExprNode::OperatorRef(operator));
+            let index = graph.add_node(operator);
 
             for (order, child) in childrens.into_iter().enumerate() {
                 let child_index = graph_filling(graph, child);
@@ -36,7 +36,7 @@ impl HepGraph {
             index
         }
 
-        let mut graph = StableDiGraph::<OptExprNode, usize, usize>::default();
+        let mut graph = StableDiGraph::<Operator, usize, usize>::default();
 
         let root_index = graph_filling(&mut graph, root);
 
@@ -54,7 +54,7 @@ impl HepGraph {
     }
 
     #[allow(dead_code)]
-    pub fn add_root(&mut self, new_node: OptExprNode) {
+    pub fn add_root(&mut self, new_node: Operator) {
         let old_root_id = mem::replace(&mut self.root_index, self.graph.add_node(new_node));
 
         self.graph.add_edge(self.root_index, old_root_id, 0);
@@ -65,7 +65,7 @@ impl HepGraph {
         &mut self,
         source_id: HepNodeId,
         children_option: Option<HepNodeId>,
-        new_node: OptExprNode,
+        new_node: Operator,
     ) {
         let new_index = self.graph.add_node(new_node);
 
@@ -85,7 +85,7 @@ impl HepGraph {
         self.version += 1;
     }
 
-    pub fn replace_node(&mut self, source_id: HepNodeId, new_node: OptExprNode) {
+    pub fn replace_node(&mut self, source_id: HepNodeId, new_node: Operator) {
         self.graph[source_id] = new_node;
         self.version += 1;
     }
@@ -97,11 +97,7 @@ impl HepGraph {
         self.version += 1;
     }
 
-    pub fn remove_node(
-        &mut self,
-        source_id: HepNodeId,
-        with_childrens: bool,
-    ) -> Option<OptExprNode> {
+    pub fn remove_node(&mut self, source_id: HepNodeId, with_childrens: bool) -> Option<Operator> {
         if !with_childrens {
             let children_ids = self
                 .graph
@@ -152,15 +148,16 @@ impl HepGraph {
     }
 
     #[allow(dead_code)]
-    pub fn node(&self, node_id: HepNodeId) -> Option<&OptExprNode> {
+    pub fn node(&self, node_id: HepNodeId) -> Option<&Operator> {
         self.graph.node_weight(node_id)
     }
 
     pub fn operator(&self, node_id: HepNodeId) -> &Operator {
-        match &self.graph[node_id] {
-            OptExprNode::OperatorRef(op) => op,
-            OptExprNode::OptExpr(node_id) => self.operator(HepNodeId::new(*node_id)),
-        }
+        &self.graph[node_id]
+    }
+
+    pub fn operator_mut(&mut self, node_id: HepNodeId) -> &mut Operator {
+        &mut self.graph[node_id]
     }
 
     pub fn to_plan(&self) -> LogicalPlan {
@@ -204,7 +201,6 @@ impl HepGraph {
 mod tests {
     use crate::binder::test::select_sql_run;
     use crate::execution::ExecutorError;
-    use crate::optimizer::core::opt_expr::OptExprNode;
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;
     use petgraph::stable_graph::{EdgeIndex, NodeIndex};
@@ -236,23 +232,11 @@ mod tests {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
-        graph.add_node(
-            HepNodeId::new(1),
-            None,
-            OptExprNode::OperatorRef(Operator::Dummy),
-        );
+        graph.add_node(HepNodeId::new(1), None, Operator::Dummy);
 
-        graph.add_node(
-            HepNodeId::new(1),
-            Some(HepNodeId::new(4)),
-            OptExprNode::OperatorRef(Operator::Dummy),
-        );
+        graph.add_node(HepNodeId::new(1), Some(HepNodeId::new(4)), Operator::Dummy);
 
-        graph.add_node(
-            HepNodeId::new(5),
-            None,
-            OptExprNode::OperatorRef(Operator::Dummy),
-        );
+        graph.add_node(HepNodeId::new(5), None, Operator::Dummy);
 
         assert!(graph
             .graph
@@ -276,7 +260,7 @@ mod tests {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
-        graph.replace_node(HepNodeId::new(1), OptExprNode::OperatorRef(Operator::Dummy));
+        graph.replace_node(HepNodeId::new(1), Operator::Dummy);
 
         assert!(matches!(graph.operator(HepNodeId::new(1)), Operator::Dummy));
 
@@ -338,7 +322,7 @@ mod tests {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
-        graph.add_root(OptExprNode::OperatorRef(Operator::Dummy));
+        graph.add_root(Operator::Dummy);
 
         assert_eq!(graph.graph.edge_count(), 4);
         assert!(graph

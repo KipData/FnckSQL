@@ -2,6 +2,7 @@ use crate::expression::{BinaryOperator, UnaryOperator};
 use crate::types::errors::TypeError;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
+use regex::Regex;
 
 fn unpack_i32(value: DataValue) -> Option<i32> {
     match value {
@@ -114,6 +115,22 @@ pub fn binary_op(
     right: &DataValue,
     op: &BinaryOperator,
 ) -> Result<DataValue, TypeError> {
+    if matches!(op, BinaryOperator::Like | BinaryOperator::NotLike) {
+        let value_option = unpack_utf8(left.clone().cast(&LogicalType::Varchar(None))?);
+        let pattern_option = unpack_utf8(right.clone().cast(&LogicalType::Varchar(None))?);
+
+        let mut is_match = if let (Some(value), Some(pattern)) = (value_option, pattern_option) {
+            let regex_pattern = pattern.replace("%", ".*").replace("_", ".");
+
+            Regex::new(&regex_pattern).unwrap().is_match(&value)
+        } else {
+            unreachable!("The left and right values calculated by Like cannot be Null values.")
+        };
+        if op == &BinaryOperator::NotLike {
+            is_match = !is_match;
+        }
+        return Ok(DataValue::Boolean(Some(is_match)));
+    }
     let unified_type = LogicalType::max_logical_type(&left.logical_type(), &right.logical_type())?;
 
     let value = match &unified_type {

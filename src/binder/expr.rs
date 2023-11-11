@@ -1,4 +1,5 @@
 use crate::binder::BindError;
+use crate::expression;
 use crate::expression::agg::AggKind;
 use itertools::Itertools;
 use sqlparser::ast::{
@@ -25,11 +26,39 @@ impl<'a, T: Transaction> Binder<'a, T> {
             Expr::Function(func) => self.bind_agg_call(func),
             Expr::Nested(expr) => self.bind_expr(expr),
             Expr::UnaryOp { expr, op } => self.bind_unary_op_internal(expr, op),
-            Expr::IsNull(expr) => self.bind_is_null(expr),
+            Expr::Like {
+                negated,
+                expr,
+                pattern,
+                ..
+            } => self.bind_like(*negated, expr, pattern),
+            Expr::IsNull(expr) => self.bind_is_null(expr, false),
+            Expr::IsNotNull(expr) => self.bind_is_null(expr, true),
             _ => {
                 todo!()
             }
         }
+    }
+
+    pub fn bind_like(
+        &mut self,
+        negated: bool,
+        expr: &Expr,
+        pattern: &Expr,
+    ) -> Result<ScalarExpression, BindError> {
+        let left_expr = Box::new(self.bind_expr(expr)?);
+        let right_expr = Box::new(self.bind_expr(pattern)?);
+        let op = if negated {
+            expression::BinaryOperator::NotLike
+        } else {
+            expression::BinaryOperator::Like
+        };
+        Ok(ScalarExpression::Binary {
+            op,
+            left_expr,
+            right_expr,
+            ty: LogicalType::Boolean,
+        })
     }
 
     pub fn bind_column_ref_from_identifiers(
@@ -199,8 +228,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
         })
     }
 
-    fn bind_is_null(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
+    fn bind_is_null(&mut self, expr: &Expr, negated: bool) -> Result<ScalarExpression, BindError> {
         Ok(ScalarExpression::IsNull {
+            negated,
             expr: Box::new(self.bind_expr(expr)?),
         })
     }
