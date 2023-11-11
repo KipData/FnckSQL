@@ -58,8 +58,8 @@ pub enum ScalarExpression {
     In {
         negated: bool,
         expr: Box<ScalarExpression>,
-        args: Vec<ScalarExpression>
-    }
+        args: Vec<ScalarExpression>,
+    },
 }
 
 impl ScalarExpression {
@@ -103,9 +103,7 @@ impl ScalarExpression {
             ScalarExpression::In { expr, args, .. } => {
                 args.iter().all(ScalarExpression::nullable) && expr.nullable()
             }
-            ScalarExpression::AggCall { args, .. } => {
-                args.iter().all(ScalarExpression::nullable)
-            },
+            ScalarExpression::AggCall { args, .. } => args.iter().all(ScalarExpression::nullable),
         }
     }
 
@@ -289,17 +287,23 @@ impl ScalarExpression {
                     Some(self.clone()),
                 ))
             }
-            ScalarExpression::In { negated, expr, args } => {
-                let args_string = args.iter()
+            ScalarExpression::In {
+                negated,
+                expr,
+                args,
+            } => {
+                let args_string = args
+                    .iter()
                     .map(|arg| arg.output_columns().name().to_string())
                     .join(", ");
-                let op_string = if *negated {
-                    "not in"
-                } else {
-                    "in"
-                };
+                let op_string = if *negated { "not in" } else { "in" };
                 Arc::new(ColumnCatalog::new(
-                    format!("{} {} ({})", expr.output_columns().name(), op_string, args_string),
+                    format!(
+                        "{} {} ({})",
+                        expr.output_columns().name(),
+                        op_string,
+                        args_string
+                    ),
                     true,
                     ColumnDesc::new(LogicalType::Boolean, false, false),
                     Some(self.clone()),

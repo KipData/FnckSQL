@@ -56,13 +56,17 @@ impl ScalarExpression {
                 }
                 Ok(Arc::new(DataValue::Boolean(Some(is_null))))
             }
-            ScalarExpression::In { expr, args, negated } => {
+            ScalarExpression::In {
+                expr,
+                args,
+                negated,
+            } => {
                 let value = expr.eval(tuple)?;
                 let mut is_in = false;
                 for arg in args {
                     if arg.eval(tuple)? == value {
                         is_in = true;
-                        break
+                        break;
                     }
                 }
                 if *negated {

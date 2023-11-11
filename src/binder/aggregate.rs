@@ -87,17 +87,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok((return_having, return_orderby))
     }
 
-    fn visit_column_agg_expr(
-        &mut self,
-        expr: &mut ScalarExpression,
-    ) -> Result<(), BindError> {
+    fn visit_column_agg_expr(&mut self, expr: &mut ScalarExpression) -> Result<(), BindError> {
         match expr {
             ScalarExpression::AggCall { .. } => {
                 self.context.agg_calls.push(expr.clone());
             }
-            ScalarExpression::TypeCast { expr, .. } => {
-                self.visit_column_agg_expr(expr)?
-            }
+            ScalarExpression::TypeCast { expr, .. } => self.visit_column_agg_expr(expr)?,
             ScalarExpression::IsNull { expr, .. } => self.visit_column_agg_expr(expr)?,
             ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr)?,
             ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr)?,
@@ -109,11 +104,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 self.visit_column_agg_expr(left_expr)?;
                 self.visit_column_agg_expr(right_expr)?;
             }
-            ScalarExpression::In {
-                expr,
-                args,
-                ..
-            } => {
+            ScalarExpression::In { expr, args, .. } => {
                 self.visit_column_agg_expr(expr)?;
                 for arg in args {
                     self.visit_column_agg_expr(arg)?;

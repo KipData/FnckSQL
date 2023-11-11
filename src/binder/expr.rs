@@ -34,7 +34,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
             } => self.bind_like(*negated, expr, pattern),
             Expr::IsNull(expr) => self.bind_is_null(expr, false),
             Expr::IsNotNull(expr) => self.bind_is_null(expr, true),
-            Expr::InList { expr, list, negated } => self.bind_is_in(expr, list, *negated),
+            Expr::InList {
+                expr,
+                list,
+                negated,
+            } => self.bind_is_in(expr, list, *negated),
             _ => {
                 todo!()
             }
@@ -236,10 +240,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
         })
     }
 
-    fn bind_is_in(&mut self, expr: &Expr, list: &[Expr], negated: bool) -> Result<ScalarExpression, BindError> {
-        let args = list.iter()
-            .map(|expr| self.bind_expr(expr))
-            .try_collect()?;
+    fn bind_is_in(
+        &mut self,
+        expr: &Expr,
+        list: &[Expr],
+        negated: bool,
+    ) -> Result<ScalarExpression, BindError> {
+        let args = list.iter().map(|expr| self.bind_expr(expr)).try_collect()?;
 
         Ok(ScalarExpression::In {
             negated,

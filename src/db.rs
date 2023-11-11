@@ -244,7 +244,9 @@ mod test {
         println!("{}", create_table(&tuples_in_t1));
 
         println!("not in t1:");
-        let tuples_not_in_t1 = kipsql.run("select * from t1 where a not in (5, 29)").await?;
+        let tuples_not_in_t1 = kipsql
+            .run("select * from t1 where a not in (5, 29)")
+            .await?;
         println!("{}", create_table(&tuples_not_in_t1));
 
         println!("limit:");
