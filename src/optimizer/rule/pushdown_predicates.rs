@@ -111,8 +111,8 @@ impl Rule for PushPredicateThroughJoin {
             }
 
             let join_childs = graph.children_at(child_id);
-            let left_columns = graph.operator(join_childs[0]).referenced_columns();
-            let right_columns = graph.operator(join_childs[1]).referenced_columns();
+            let left_columns = graph.operator(join_childs[0]).referenced_columns(true);
+            let right_columns = graph.operator(join_childs[1]).referenced_columns(true);
 
             let mut new_ops = (None, None, None);
 
@@ -121,10 +121,10 @@ impl Rule for PushPredicateThroughJoin {
 
                 let (left_filters, rest): (Vec<_>, Vec<_>) = filter_exprs
                     .into_iter()
-                    .partition(|f| is_subset_cols(&f.referenced_columns(), &left_columns));
+                    .partition(|f| is_subset_cols(&f.referenced_columns(true), &left_columns));
                 let (right_filters, common_filters): (Vec<_>, Vec<_>) = rest
                     .into_iter()
-                    .partition(|f| is_subset_cols(&f.referenced_columns(), &right_columns));
+                    .partition(|f| is_subset_cols(&f.referenced_columns(true), &right_columns));
 
                 let replace_filters = match child_op.join_type {
                     JoinType::Inner => {

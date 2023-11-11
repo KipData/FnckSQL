@@ -30,7 +30,10 @@ impl ColumnPruning {
         exprs: &mut Vec<ScalarExpression>,
     ) {
         exprs.retain(|expr| {
-            expr.referenced_columns()
+            if column_references.contains(expr.output_columns().summary()) {
+                return true;
+            }
+            expr.referenced_columns(false)
                 .iter()
                 .any(|column| column_references.contains(column.summary()))
         })
@@ -61,7 +64,7 @@ impl ColumnPruning {
                         })
                     }
                 }
-                let op_ref_columns = operator.referenced_columns();
+                let op_ref_columns = operator.referenced_columns(false);
 
                 Self::recollect_apply(op_ref_columns, false, node_id, graph);
             }
@@ -71,7 +74,7 @@ impl ColumnPruning {
                     if !all_referenced {
                         Self::clear_exprs(column_references, &mut op.exprs);
                     }
-                    let op_ref_columns = operator.referenced_columns();
+                    let op_ref_columns = operator.referenced_columns(false);
 
                     Self::recollect_apply(op_ref_columns, false, node_id, graph);
                 }
@@ -91,7 +94,7 @@ impl ColumnPruning {
                 }
             }
             Operator::Limit(_) | Operator::Join(_) | Operator::Filter(_) => {
-                for column in operator.referenced_columns() {
+                for column in operator.referenced_columns(false) {
                     column_references.insert(column.summary().clone());
                 }
                 for child_id in graph.children_at(node_id) {
@@ -102,7 +105,7 @@ impl ColumnPruning {
             Operator::Dummy | Operator::Values(_) => (),
             // DDL Based on Other Plan
             Operator::Insert(_) | Operator::Update(_) | Operator::Delete(_) => {
-                let op_ref_columns = operator.referenced_columns();
+                let op_ref_columns = operator.referenced_columns(false);
 
                 Self::recollect_apply(op_ref_columns, true, graph.children_at(node_id)[0], graph);
             }

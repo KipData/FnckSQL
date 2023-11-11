@@ -17,7 +17,6 @@ pub mod update;
 pub mod values;
 
 use crate::catalog::ColumnRef;
-use crate::expression::ScalarExpression;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
@@ -64,81 +63,45 @@ pub enum Operator {
 }
 
 impl Operator {
-    pub fn project_input_refs(&self) -> Vec<ScalarExpression> {
-        match self {
-            Operator::Project(op) => op
-                .exprs
-                .iter()
-                .map(ScalarExpression::unpack_alias)
-                .filter(|expr| matches!(expr, ScalarExpression::InputRef { .. }))
-                .sorted_by_key(|expr| match expr {
-                    ScalarExpression::InputRef { index, .. } => index,
-                    _ => unreachable!(),
-                })
-                .cloned()
-                .collect_vec(),
-            _ => vec![],
-        }
-    }
-
-    pub fn agg_mapping_col_refs(&self, input_refs: &[ScalarExpression]) -> Vec<ColumnRef> {
-        match self {
-            Operator::Aggregate(AggregateOperator { agg_calls, .. }) => input_refs
-                .iter()
-                .filter_map(|expr| {
-                    if let ScalarExpression::InputRef { index, .. } = expr {
-                        Some(agg_calls[*index].clone())
-                    } else {
-                        None
-                    }
-                })
-                .map(|expr| expr.referenced_columns())
-                .flatten()
-                .collect_vec(),
-            _ => vec![],
-        }
-    }
-
-    pub fn referenced_columns(&self) -> Vec<ColumnRef> {
+    pub fn referenced_columns(&self, only_column_ref: bool) -> Vec<ColumnRef> {
         match self {
             Operator::Aggregate(op) => op
                 .agg_calls
                 .iter()
                 .chain(op.groupby_exprs.iter())
-                .flat_map(|expr| expr.referenced_columns())
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
-            Operator::Filter(op) => op.predicate.referenced_columns(),
+            Operator::Filter(op) => op.predicate.referenced_columns(only_column_ref),
             Operator::Join(op) => {
                 let mut exprs = Vec::new();
 
                 if let JoinCondition::On { on, filter } = &op.on {
                     for (left_expr, right_expr) in on {
-                        exprs.append(&mut left_expr.referenced_columns());
-                        exprs.append(&mut right_expr.referenced_columns());
+                        exprs.append(&mut left_expr.referenced_columns(only_column_ref));
+                        exprs.append(&mut right_expr.referenced_columns(only_column_ref));
                     }
 
                     if let Some(filter_expr) = filter {
-                        exprs.append(&mut filter_expr.referenced_columns());
+                        exprs.append(&mut filter_expr.referenced_columns(only_column_ref));
                     }
                 }
-
                 exprs
             }
             Operator::Project(op) => op
                 .exprs
                 .iter()
-                .flat_map(|expr| expr.referenced_columns())
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Scan(op) => op
                 .columns
                 .iter()
-                .flat_map(|expr| expr.referenced_columns())
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Sort(op) => op
                 .sort_fields
                 .iter()
                 .map(|field| &field.expr)
-                .flat_map(|expr| expr.referenced_columns())
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Values(op) => op.columns.clone(),
             _ => vec![],

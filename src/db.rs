@@ -239,6 +239,16 @@ mod test {
         let tuples_not_like_t1 = kipsql.run("select * from t1 where z not like '_b'").await?;
         println!("{}", create_table(&tuples_not_like_t1));
 
+        println!("in t1:");
+        let tuples_in_t1 = kipsql.run("select * from t1 where a in (5, 29)").await?;
+        println!("{}", create_table(&tuples_in_t1));
+
+        println!("not in t1:");
+        let tuples_not_in_t1 = kipsql
+            .run("select * from t1 where a not in (5, 29)")
+            .await?;
+        println!("{}", create_table(&tuples_not_in_t1));
+
         println!("limit:");
         let tuples_limit = kipsql.run("select * from t1 limit 1 offset 1").await?;
         println!("{}", create_table(&tuples_limit));

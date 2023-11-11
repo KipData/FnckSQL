@@ -10,7 +10,6 @@ use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUn
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
 use crate::storage::Transaction;
-use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 
@@ -27,11 +26,6 @@ pub mod value_compute;
 pub enum ScalarExpression {
     Constant(ValueRef),
     ColumnRef(ColumnRef),
-    InputRef {
-        index: usize,
-        ty: LogicalType,
-        ref_columns: Vec<ColumnRef>,
-    },
     Alias {
         expr: Box<ScalarExpression>,
         alias: String,
@@ -61,6 +55,11 @@ pub enum ScalarExpression {
         args: Vec<ScalarExpression>,
         ty: LogicalType,
     },
+    In {
+        negated: bool,
+        expr: Box<ScalarExpression>,
+        args: Vec<ScalarExpression>,
+    },
 }
 
 impl ScalarExpression {
@@ -74,7 +73,6 @@ impl ScalarExpression {
 
     pub fn has_count_star(&self) -> bool {
         match self {
-            ScalarExpression::InputRef { ref_columns, .. } => ref_columns.is_empty(),
             ScalarExpression::Alias { expr, .. } => expr.has_count_star(),
             ScalarExpression::TypeCast { expr, .. } => expr.has_count_star(),
             ScalarExpression::IsNull { expr, .. } => expr.has_count_star(),
@@ -93,7 +91,6 @@ impl ScalarExpression {
         match self {
             ScalarExpression::Constant(_) => false,
             ScalarExpression::ColumnRef(col) => col.nullable,
-            ScalarExpression::InputRef { .. } => unreachable!(),
             ScalarExpression::Alias { expr, .. } => expr.nullable(),
             ScalarExpression::TypeCast { expr, .. } => expr.nullable(),
             ScalarExpression::IsNull { expr, .. } => expr.nullable(),
@@ -103,7 +100,10 @@ impl ScalarExpression {
                 right_expr,
                 ..
             } => left_expr.nullable() && right_expr.nullable(),
-            ScalarExpression::AggCall { args, .. } => args[0].nullable(),
+            ScalarExpression::In { expr, args, .. } => {
+                args.iter().all(ScalarExpression::nullable) && expr.nullable()
+            }
+            ScalarExpression::AggCall { args, .. } => args.iter().all(ScalarExpression::nullable),
         }
     }
 
@@ -123,55 +123,69 @@ impl ScalarExpression {
             Self::AggCall {
                 ty: return_type, ..
             } => return_type.clone(),
-            Self::InputRef {
-                ty: return_type, ..
-            } => return_type.clone(),
-            Self::IsNull { .. } => LogicalType::Boolean,
+            Self::IsNull { .. } | Self::In { .. } => LogicalType::Boolean,
             Self::Alias { expr, .. } => expr.return_type(),
         }
     }
 
-    pub fn referenced_columns(&self) -> Vec<ColumnRef> {
-        fn columns_collect(expr: &ScalarExpression, vec: &mut Vec<ColumnRef>) {
+    pub fn referenced_columns(&self, only_column_ref: bool) -> Vec<ColumnRef> {
+        fn columns_collect(
+            expr: &ScalarExpression,
+            vec: &mut Vec<ColumnRef>,
+            only_column_ref: bool,
+        ) {
+            // When `ScalarExpression` is a complex type, it itself is also a special Column
+            if !only_column_ref {
+                vec.push(expr.output_columns());
+            }
             match expr {
                 ScalarExpression::ColumnRef(col) => {
                     vec.push(col.clone());
                 }
-                ScalarExpression::Alias { expr, .. } => columns_collect(&expr, vec),
-                ScalarExpression::TypeCast { expr, .. } => columns_collect(&expr, vec),
-                ScalarExpression::IsNull { expr, .. } => columns_collect(&expr, vec),
-                ScalarExpression::Unary { expr, .. } => columns_collect(&expr, vec),
+                ScalarExpression::Alias { expr, .. } => {
+                    columns_collect(&expr, vec, only_column_ref)
+                }
+                ScalarExpression::TypeCast { expr, .. } => {
+                    columns_collect(&expr, vec, only_column_ref)
+                }
+                ScalarExpression::IsNull { expr, .. } => {
+                    columns_collect(&expr, vec, only_column_ref)
+                }
+                ScalarExpression::Unary { expr, .. } => {
+                    columns_collect(&expr, vec, only_column_ref)
+                }
                 ScalarExpression::Binary {
                     left_expr,
                     right_expr,
                     ..
                 } => {
-                    columns_collect(left_expr, vec);
-                    columns_collect(right_expr, vec);
+                    columns_collect(left_expr, vec, only_column_ref);
+                    columns_collect(right_expr, vec, only_column_ref);
                 }
                 ScalarExpression::AggCall { args, .. } => {
                     for expr in args {
-                        columns_collect(expr, vec)
+                        columns_collect(expr, vec, only_column_ref)
                     }
                 }
-                ScalarExpression::InputRef { ref_columns, .. } => {
-                    vec.extend_from_slice(ref_columns);
+                ScalarExpression::In { expr, args, .. } => {
+                    columns_collect(expr, vec, only_column_ref);
+                    for arg in args {
+                        columns_collect(arg, vec, only_column_ref)
+                    }
                 }
                 _ => (),
             }
         }
-
         let mut exprs = Vec::new();
 
-        columns_collect(self, &mut exprs);
+        columns_collect(self, &mut exprs, only_column_ref);
 
         exprs
     }
 
     pub fn has_agg_call<T: Transaction>(&self, context: &BinderContext<'_, T>) -> bool {
         match self {
-            ScalarExpression::InputRef { index, .. } => context.agg_calls.get(*index).is_some(),
-            ScalarExpression::AggCall { .. } => unreachable!(),
+            ScalarExpression::AggCall { .. } => true,
             ScalarExpression::Constant(_) => false,
             ScalarExpression::ColumnRef(_) => false,
             ScalarExpression::Alias { expr, .. } => expr.has_agg_call(context),
@@ -183,10 +197,13 @@ impl ScalarExpression {
                 right_expr,
                 ..
             } => left_expr.has_agg_call(context) || right_expr.has_agg_call(context),
+            ScalarExpression::In { expr, args, .. } => {
+                expr.has_agg_call(context) || args.iter().any(|arg| arg.has_agg_call(context))
+            }
         }
     }
 
-    pub fn output_columns(&self, tuple: &Tuple) -> ColumnRef {
+    pub fn output_columns(&self) -> ColumnRef {
         match self {
             ScalarExpression::ColumnRef(col) => col.clone(),
             ScalarExpression::Constant(value) => Arc::new(ColumnCatalog::new(
@@ -209,7 +226,7 @@ impl ScalarExpression {
             } => {
                 let args_str = args
                     .iter()
-                    .map(|expr| expr.output_columns(tuple).name().to_string())
+                    .map(|expr| expr.output_columns().name().to_string())
                     .join(", ");
                 let op = |allow_distinct, distinct| {
                     if allow_distinct && distinct {
@@ -232,7 +249,6 @@ impl ScalarExpression {
                     Some(self.clone()),
                 ))
             }
-            ScalarExpression::InputRef { index, .. } => tuple.columns[*index].clone(),
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
@@ -241,9 +257,9 @@ impl ScalarExpression {
             } => {
                 let column_name = format!(
                     "({} {} {})",
-                    left_expr.output_columns(tuple).name(),
+                    left_expr.output_columns().name(),
                     op,
-                    right_expr.output_columns(tuple).name(),
+                    right_expr.output_columns().name(),
                 );
 
                 Arc::new(ColumnCatalog::new(
@@ -254,7 +270,7 @@ impl ScalarExpression {
                 ))
             }
             ScalarExpression::Unary { expr, op, ty } => {
-                let column_name = format!("{} {}", op, expr.output_columns(tuple).name());
+                let column_name = format!("{}{}", op, expr.output_columns().name());
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
@@ -262,7 +278,40 @@ impl ScalarExpression {
                     Some(self.clone()),
                 ))
             }
-            _ => unreachable!(),
+            ScalarExpression::IsNull { negated, expr } => {
+                let suffix = if *negated { "is not null" } else { "is null" };
+                Arc::new(ColumnCatalog::new(
+                    format!("{} {}", expr.output_columns().name(), suffix),
+                    true,
+                    ColumnDesc::new(LogicalType::Boolean, false, false),
+                    Some(self.clone()),
+                ))
+            }
+            ScalarExpression::In {
+                negated,
+                expr,
+                args,
+            } => {
+                let args_string = args
+                    .iter()
+                    .map(|arg| arg.output_columns().name().to_string())
+                    .join(", ");
+                let op_string = if *negated { "not in" } else { "in" };
+                Arc::new(ColumnCatalog::new(
+                    format!(
+                        "{} {} ({})",
+                        expr.output_columns().name(),
+                        op_string,
+                        args_string
+                    ),
+                    true,
+                    ColumnDesc::new(LogicalType::Boolean, false, false),
+                    Some(self.clone()),
+                ))
+            }
+            _ => {
+                todo!()
+            }
         }
     }
 }
@@ -340,7 +389,7 @@ impl fmt::Display for UnaryOperator {
         match self {
             UnaryOperator::Plus => write!(f, "+"),
             UnaryOperator::Minus => write!(f, "-"),
-            UnaryOperator::Not => write!(f, "not"),
+            UnaryOperator::Not => write!(f, "!"),
         }
     }
 }

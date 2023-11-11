@@ -146,7 +146,7 @@ impl HashJoin {
                 let mut filter_tuples = Vec::with_capacity(join_tuples.len());
 
                 for mut tuple in join_tuples {
-                    if let DataValue::Boolean(option) = expr.eval_column(&tuple)?.as_ref() {
+                    if let DataValue::Boolean(option) = expr.eval(&tuple)?.as_ref() {
                         if let Some(false) | None = option {
                             let full_cols_len = tuple.columns.len();
                             let left_cols_len = full_cols_len - right_cols_len;
@@ -239,7 +239,7 @@ impl HashJoin {
         let mut values = Vec::with_capacity(on_keys.len());
 
         for expr in on_keys {
-            values.push(expr.eval_column(tuple)?);
+            values.push(expr.eval(tuple)?);
         }
 
         Ok(hash_random_state.hash_one(values))

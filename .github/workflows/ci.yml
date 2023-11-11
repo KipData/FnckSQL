@@ -83,3 +83,14 @@ jobs:
         with:
           command: run
           args: --bin sqllogictest-test --manifest-path ./tests/sqllogictest/Cargo.toml
+#  codecov:
+#    name: Upload coverage reports to Codecov
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Upload coverage reports to Codecov
+#        uses: codecov/codecov-action@v3
+#        with:
+#          files: ./lcov.info
+#          flags: rust
+#        env:
+#          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

@@ -3,7 +3,7 @@ use itertools::Itertools;
 use sqlparser::ast::{Expr, OrderByExpr};
 use std::collections::HashSet;
 
-use crate::binder::{BindError, InputRefType};
+use crate::binder::BindError;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::{
@@ -28,7 +28,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         select_items: &mut [ScalarExpression],
     ) -> Result<(), BindError> {
         for column in select_items {
-            self.visit_column_agg_expr(column, true)?;
+            self.visit_column_agg_expr(column)?;
         }
         Ok(())
     }
@@ -55,7 +55,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         // Extract having expression.
         let return_having = if let Some(having) = having {
             let mut having = self.bind_expr(having)?;
-            self.visit_column_agg_expr(&mut having, false)?;
+            self.visit_column_agg_expr(&mut having)?;
 
             Some(having)
         } else {
@@ -72,7 +72,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     nulls_first,
                 } = orderby;
                 let mut expr = self.bind_expr(expr)?;
-                self.visit_column_agg_expr(&mut expr, false)?;
+                self.visit_column_agg_expr(&mut expr)?;
 
                 return_orderby.push(SortField::new(
                     expr,
@@ -87,77 +87,30 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok((return_having, return_orderby))
     }
 
-    fn visit_column_agg_expr(
-        &mut self,
-        expr: &mut ScalarExpression,
-        is_select: bool,
-    ) -> Result<(), BindError> {
-        let ref_columns = expr.referenced_columns();
-
+    fn visit_column_agg_expr(&mut self, expr: &mut ScalarExpression) -> Result<(), BindError> {
         match expr {
-            ScalarExpression::AggCall {
-                ty: return_type, ..
-            } => {
-                let ty = return_type.clone();
-                if is_select {
-                    let index = self.context.input_ref_index(InputRefType::AggCall);
-                    let input_ref = ScalarExpression::InputRef {
-                        index,
-                        ty,
-                        ref_columns,
-                    };
-                    match std::mem::replace(expr, input_ref) {
-                        ScalarExpression::AggCall {
-                            kind,
-                            args,
-                            ty,
-                            distinct,
-                        } => {
-                            self.context.agg_calls.push(ScalarExpression::AggCall {
-                                distinct,
-                                kind,
-                                args,
-                                ty,
-                            });
-                        }
-                        _ => unreachable!(),
-                    }
-                } else {
-                    let (index, _) = self
-                        .context
-                        .agg_calls
-                        .iter()
-                        .find_position(|agg_expr| agg_expr == &expr)
-                        .ok_or_else(|| BindError::AggMiss(format!("{:?}", expr)))?;
-
-                    let _ = std::mem::replace(
-                        expr,
-                        ScalarExpression::InputRef {
-                            index,
-                            ty,
-                            ref_columns,
-                        },
-                    );
-                }
+            ScalarExpression::AggCall { .. } => {
+                self.context.agg_calls.push(expr.clone());
             }
-
-            ScalarExpression::TypeCast { expr, .. } => {
-                self.visit_column_agg_expr(expr, is_select)?
-            }
-            ScalarExpression::IsNull { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
-            ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
-            ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr, is_select)?,
+            ScalarExpression::TypeCast { expr, .. } => self.visit_column_agg_expr(expr)?,
+            ScalarExpression::IsNull { expr, .. } => self.visit_column_agg_expr(expr)?,
+            ScalarExpression::Unary { expr, .. } => self.visit_column_agg_expr(expr)?,
+            ScalarExpression::Alias { expr, .. } => self.visit_column_agg_expr(expr)?,
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
                 ..
             } => {
-                self.visit_column_agg_expr(left_expr, is_select)?;
-                self.visit_column_agg_expr(right_expr, is_select)?;
+                self.visit_column_agg_expr(left_expr)?;
+                self.visit_column_agg_expr(right_expr)?;
             }
-            ScalarExpression::Constant(_)
-            | ScalarExpression::ColumnRef { .. }
-            | ScalarExpression::InputRef { .. } => {}
+            ScalarExpression::In { expr, args, .. } => {
+                self.visit_column_agg_expr(expr)?;
+                for arg in args {
+                    self.visit_column_agg_expr(arg)?;
+                }
+            }
+            ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {}
         }
 
         Ok(())
@@ -239,44 +192,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     false
                 }
             }) {
-                let index = self.context.input_ref_index(InputRefType::GroupBy);
-                let mut select_item = &mut select_list[i];
-                let ref_columns = select_item.referenced_columns();
-                let return_type = select_item.return_type();
-
-                self.context.group_by_exprs.push(std::mem::replace(
-                    &mut select_item,
-                    ScalarExpression::InputRef {
-                        index,
-                        ty: return_type,
-                        ref_columns,
-                    },
-                ));
+                self.context.group_by_exprs.push(select_list[i].clone());
                 return;
             }
         }
 
         if let Some(i) = select_list.iter().position(|column| column == expr) {
-            let expr = &mut select_list[i];
-            let ref_columns = expr.referenced_columns();
-
-            match expr {
-                ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {
-                    self.context.group_by_exprs.push(expr.clone())
-                }
-                _ => {
-                    let index = self.context.input_ref_index(InputRefType::GroupBy);
-
-                    self.context.group_by_exprs.push(std::mem::replace(
-                        expr,
-                        ScalarExpression::InputRef {
-                            index,
-                            ty: expr.return_type(),
-                            ref_columns,
-                        },
-                    ))
-                }
-            }
+            self.context.group_by_exprs.push(select_list[i].clone())
         }
     }
 
@@ -320,6 +242,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
             ScalarExpression::TypeCast { expr, .. } => self.validate_having_orderby(expr),
             ScalarExpression::IsNull { expr, .. } => self.validate_having_orderby(expr),
             ScalarExpression::Unary { expr, .. } => self.validate_having_orderby(expr),
+            ScalarExpression::In { expr, args, .. } => {
+                self.validate_having_orderby(expr)?;
+                for arg in args {
+                    self.validate_having_orderby(arg)?;
+                }
+                Ok(())
+            }
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
@@ -330,7 +259,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 Ok(())
             }
 
-            ScalarExpression::Constant(_) | ScalarExpression::InputRef { .. } => Ok(()),
+            ScalarExpression::Constant(_) => Ok(()),
         }
     }
 }

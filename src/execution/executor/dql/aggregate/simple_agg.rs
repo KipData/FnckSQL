@@ -42,7 +42,7 @@ impl SimpleAggExecutor {
             columns_option.get_or_insert_with(|| {
                 self.agg_calls
                     .iter()
-                    .map(|expr| expr.output_columns(&tuple))
+                    .map(|expr| expr.output_columns())
                     .collect_vec()
             });
 
@@ -50,7 +50,7 @@ impl SimpleAggExecutor {
                 .agg_calls
                 .iter()
                 .map(|expr| match expr {
-                    ScalarExpression::AggCall { args, .. } => args[0].eval_column(&tuple),
+                    ScalarExpression::AggCall { args, .. } => args[0].eval(&tuple),
                     _ => unreachable!(),
                 })
                 .try_collect()?;

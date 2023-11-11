@@ -124,8 +124,8 @@ pub(crate) fn tuple_projection(
     let mut values = Vec::with_capacity(projection_len);
 
     for expr in projections.iter() {
-        values.push(expr.eval_column(&tuple)?);
-        columns.push(expr.output_columns(&tuple));
+        values.push(expr.eval(&tuple)?);
+        columns.push(expr.output_columns());
     }
 
     if let Some(num) = limit {
