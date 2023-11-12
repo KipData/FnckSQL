@@ -54,10 +54,10 @@ impl<S: Storage> Database<S> {
         ///     Limit(1)
         ///       Project(a,b)
         let source_plan = binder.bind(&stmts[0])?;
-        // println!("source_plan plan: {:#?}", source_plan);
+        //println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan = Self::default_optimizer(source_plan).find_best()?;
-        // println!("best_plan plan: {:#?}", best_plan);
+        //println!("best_plan plan: {:#?}", best_plan);
 
         let transaction = RefCell::new(transaction);
         let mut stream = build(best_plan, &transaction);
@@ -78,10 +78,10 @@ impl<S: Storage> Database<S> {
             .batch(
                 "Simplify Filter".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::SimplifyFilter, RuleImpl::ConstantCalculation],
+                vec![RuleImpl::LikeRewrite, RuleImpl::SimplifyFilter, RuleImpl::ConstantCalculation],
             )
             .batch(
-                "Predicate Pushdown".to_string(),
+                "Predicate Pushown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::PushPredicateThroughJoin,
@@ -205,6 +205,12 @@ mod test {
             .await?;
         let _ = kipsql
             .run("insert into t3 (a, b) values (4, 4444), (5, 5222), (6, 1.00)")
+            .await?;
+        let _ = kipsql
+            .run("create table t4 (a int primary key, b varchar(100))")
+            .await?;
+        let _ = kipsql
+            .run("insert into t4 (a, b) values (1, 'abc'), (2, 'abdc'), (3, 'abcd'), (4, 'ddabc')")
             .await?;
 
         println!("show tables:");
@@ -370,6 +376,10 @@ mod test {
         println!("decimal:");
         let tuples_decimal = kipsql.run("select * from t3").await?;
         println!("{}", create_table(&tuples_decimal));
+
+        println!("like rewrite:");
+        let tuples_like_rewrite = kipsql.run("select * from t4 where b like 'abc%'").await?;
+        println!("{}", create_table(&tuples_like_rewrite));
 
         Ok(())
     }

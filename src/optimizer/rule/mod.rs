@@ -9,7 +9,7 @@ use crate::optimizer::rule::pushdown_limit::{
 };
 use crate::optimizer::rule::pushdown_predicates::PushPredicateIntoScan;
 use crate::optimizer::rule::pushdown_predicates::PushPredicateThroughJoin;
-use crate::optimizer::rule::simplification::ConstantCalculation;
+use crate::optimizer::rule::simplification::{ConstantCalculation, LikeRewrite};
 use crate::optimizer::rule::simplification::SimplifyFilter;
 use crate::optimizer::OptimizerError;
 
@@ -37,6 +37,7 @@ pub enum RuleImpl {
     // Simplification
     SimplifyFilter,
     ConstantCalculation,
+    LikeRewrite,
 }
 
 impl Rule for RuleImpl {
@@ -53,6 +54,7 @@ impl Rule for RuleImpl {
             RuleImpl::PushPredicateIntoScan => PushPredicateIntoScan.pattern(),
             RuleImpl::SimplifyFilter => SimplifyFilter.pattern(),
             RuleImpl::ConstantCalculation => ConstantCalculation.pattern(),
+            RuleImpl::LikeRewrite =>LikeRewrite.pattern(),
         }
     }
 
@@ -69,6 +71,7 @@ impl Rule for RuleImpl {
             RuleImpl::SimplifyFilter => SimplifyFilter.apply(node_id, graph),
             RuleImpl::PushPredicateIntoScan => PushPredicateIntoScan.apply(node_id, graph),
             RuleImpl::ConstantCalculation => ConstantCalculation.apply(node_id, graph),
+            RuleImpl::LikeRewrite => LikeRewrite.apply(node_id, graph),
         }
     }
 }

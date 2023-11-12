@@ -5,7 +5,15 @@ use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
 use lazy_static::lazy_static;
+use crate::expression::{BinaryOperator, ScalarExpression};
+use crate::types::value::{DataValue, ValueRef};
 lazy_static! {
+    static ref LIKE_REWRITE_RULE: Pattern = {
+        Pattern {
+            predicate: |op| matches!(op, Operator::Filter(_)),
+            children: PatternChildrenPredicate::None,
+        }
+    };
     static ref CONSTANT_CALCULATION_RULE: Pattern = {
         Pattern {
             predicate: |_| true,
@@ -109,6 +117,84 @@ impl Rule for SimplifyFilter {
     }
 }
 
+pub struct LikeRewrite;
+
+impl Rule for LikeRewrite {
+    fn pattern(&self) -> &Pattern {
+        &LIKE_REWRITE_RULE
+    }
+
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+        if let Operator::Filter(mut filter_op) = graph.operator(node_id).clone() {
+            // if is like expression
+            if let ScalarExpression::Binary {
+                op: BinaryOperator::Like,
+                left_expr,
+                right_expr,
+                ty,
+            } = &mut filter_op.predicate
+            {
+                // if left is column and right is constant
+                if let ScalarExpression::ColumnRef(_) = left_expr.as_ref() {
+                    if let ScalarExpression::Constant(value) = right_expr.as_ref() {
+                        match value.as_ref() {
+                            DataValue::Utf8(val_str) => {
+                                let mut value = val_str.clone().unwrap_or_else(|| "".to_string());
+
+                                if value.ends_with('%') {
+                                    value.pop(); // remove '%'
+                                    if let Some(last_char) = value.clone().pop() {
+                                        if let Some(next_char) = increment_char(last_char) {
+                                            let mut new_value = value.clone();
+                                            new_value.pop();
+                                            new_value.push(next_char);
+
+                                            let new_expr = ScalarExpression::Binary {
+                                                op: BinaryOperator::And,
+                                                left_expr: Box::new(ScalarExpression::Binary {
+                                                    op: BinaryOperator::GtEq,
+                                                    left_expr: left_expr.clone(),
+                                                    right_expr: Box::new(ScalarExpression::Constant(ValueRef::from(DataValue::Utf8(Some(value))))),
+                                                    ty: ty.clone(),
+                                                }),
+                                                right_expr: Box::new(ScalarExpression::Binary {
+                                                    op: BinaryOperator::Lt,
+                                                    left_expr: left_expr.clone(),
+                                                    right_expr: Box::new(ScalarExpression::Constant(ValueRef::from(DataValue::Utf8(Some(new_value))))),
+                                                    ty: ty.clone(),
+                                                }),
+                                                ty: ty.clone(),
+                                            };
+                                            filter_op.predicate = new_expr;
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                graph.version += 1;
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+            graph.replace_node(node_id, Operator::Filter(filter_op))
+        }
+        // mark changed to skip this rule batch
+        graph.version += 1;
+        Ok(())
+    }
+}
+
+fn increment_char(v: char) -> Option<char> {
+    match v {
+        'z' => None,
+        'Z' => None,
+        _  => std::char::from_u32(v as u32 + 1),
+    }
+}
+
+
 #[cfg(test)]
 mod test {
     use crate::binder::test::select_sql_run;
@@ -126,6 +212,15 @@ mod test {
     use crate::types::LogicalType;
     use std::collections::Bound;
     use std::sync::Arc;
+    use crate::optimizer::rule::simplification::increment_char;
+
+
+    #[test]
+    fn test_increment_char() {
+        assert_eq!(increment_char('a'), Some('b'));
+        assert_eq!(increment_char('z'), None);
+        assert_eq!(increment_char('A'), Some('B'));
+    }
 
     #[tokio::test]
     async fn test_constant_calculation_omitted() -> Result<(), DatabaseError> {
@@ -302,6 +397,7 @@ mod test {
         Ok(())
     }
 
+
     #[tokio::test]
     async fn test_simplify_filter_multiple_column() -> Result<(), DatabaseError> {
         // c1 + 1 < -1 => c1 < -2
@@ -343,7 +439,7 @@ mod test {
             cb_1_c1,
             Some(ConstantBinary::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2)))),
             })
         );
 
@@ -353,7 +449,7 @@ mod test {
             cb_1_c2,
             Some(ConstantBinary::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
-                max: Bound::Unbounded
+                max: Bound::Unbounded,
             })
         );
 
@@ -363,7 +459,7 @@ mod test {
             cb_2_c1,
             Some(ConstantBinary::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
-                max: Bound::Unbounded
+                max: Bound::Unbounded,
             })
         );
 
@@ -373,7 +469,7 @@ mod test {
             cb_1_c1,
             Some(ConstantBinary::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2)))),
             })
         );
 
@@ -383,7 +479,7 @@ mod test {
             cb_3_c1,
             Some(ConstantBinary::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1))))
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1)))),
             })
         );
 
@@ -393,7 +489,7 @@ mod test {
             cb_3_c2,
             Some(ConstantBinary::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
-                max: Bound::Unbounded
+                max: Bound::Unbounded,
             })
         );
 
@@ -403,7 +499,7 @@ mod test {
             cb_4_c1,
             Some(ConstantBinary::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
-                max: Bound::Unbounded
+                max: Bound::Unbounded,
             })
         );
 
@@ -413,7 +509,7 @@ mod test {
             cb_4_c2,
             Some(ConstantBinary::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1))))
+                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1)))),
             })
         );
 
