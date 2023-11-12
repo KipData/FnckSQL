@@ -1,12 +1,12 @@
+use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
-use lazy_static::lazy_static;
-use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::types::value::{DataValue, ValueRef};
+use lazy_static::lazy_static;
 lazy_static! {
     static ref LIKE_REWRITE_RULE: Pattern = {
         Pattern {
@@ -154,13 +154,21 @@ impl Rule for LikeRewrite {
                                                 left_expr: Box::new(ScalarExpression::Binary {
                                                     op: BinaryOperator::GtEq,
                                                     left_expr: left_expr.clone(),
-                                                    right_expr: Box::new(ScalarExpression::Constant(ValueRef::from(DataValue::Utf8(Some(value))))),
+                                                    right_expr: Box::new(
+                                                        ScalarExpression::Constant(ValueRef::from(
+                                                            DataValue::Utf8(Some(value)),
+                                                        )),
+                                                    ),
                                                     ty: ty.clone(),
                                                 }),
                                                 right_expr: Box::new(ScalarExpression::Binary {
                                                     op: BinaryOperator::Lt,
                                                     left_expr: left_expr.clone(),
-                                                    right_expr: Box::new(ScalarExpression::Constant(ValueRef::from(DataValue::Utf8(Some(new_value))))),
+                                                    right_expr: Box::new(
+                                                        ScalarExpression::Constant(ValueRef::from(
+                                                            DataValue::Utf8(Some(new_value)),
+                                                        )),
+                                                    ),
                                                     ty: ty.clone(),
                                                 }),
                                                 ty: ty.clone(),
@@ -190,10 +198,9 @@ fn increment_char(v: char) -> Option<char> {
     match v {
         'z' => None,
         'Z' => None,
-        _  => std::char::from_u32(v as u32 + 1),
+        _ => std::char::from_u32(v as u32 + 1),
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -204,6 +211,7 @@ mod test {
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
+    use crate::optimizer::rule::simplification::increment_char;
     use crate::optimizer::rule::RuleImpl;
     use crate::planner::operator::filter::FilterOperator;
     use crate::planner::operator::Operator;
@@ -212,8 +220,6 @@ mod test {
     use crate::types::LogicalType;
     use std::collections::Bound;
     use std::sync::Arc;
-    use crate::optimizer::rule::simplification::increment_char;
-
 
     #[test]
     fn test_increment_char() {
@@ -396,7 +402,6 @@ mod test {
 
         Ok(())
     }
-
 
     #[tokio::test]
     async fn test_simplify_filter_multiple_column() -> Result<(), DatabaseError> {

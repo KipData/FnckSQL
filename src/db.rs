@@ -78,7 +78,11 @@ impl<S: Storage> Database<S> {
             .batch(
                 "Simplify Filter".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::LikeRewrite, RuleImpl::SimplifyFilter, RuleImpl::ConstantCalculation],
+                vec![
+                    RuleImpl::LikeRewrite,
+                    RuleImpl::SimplifyFilter,
+                    RuleImpl::ConstantCalculation,
+                ],
             )
             .batch(
                 "Predicate Pushown".to_string(),

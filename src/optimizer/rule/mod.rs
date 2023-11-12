@@ -9,8 +9,8 @@ use crate::optimizer::rule::pushdown_limit::{
 };
 use crate::optimizer::rule::pushdown_predicates::PushPredicateIntoScan;
 use crate::optimizer::rule::pushdown_predicates::PushPredicateThroughJoin;
-use crate::optimizer::rule::simplification::{ConstantCalculation, LikeRewrite};
 use crate::optimizer::rule::simplification::SimplifyFilter;
+use crate::optimizer::rule::simplification::{ConstantCalculation, LikeRewrite};
 use crate::optimizer::OptimizerError;
 
 mod column_pruning;
@@ -54,7 +54,7 @@ impl Rule for RuleImpl {
             RuleImpl::PushPredicateIntoScan => PushPredicateIntoScan.pattern(),
             RuleImpl::SimplifyFilter => SimplifyFilter.pattern(),
             RuleImpl::ConstantCalculation => ConstantCalculation.pattern(),
-            RuleImpl::LikeRewrite =>LikeRewrite.pattern(),
+            RuleImpl::LikeRewrite => LikeRewrite.pattern(),
         }
     }
 
