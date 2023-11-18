@@ -267,13 +267,13 @@ mod tests {
             ColumnCatalog::new(
                 "c1".into(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false),
+                ColumnDesc::new(LogicalType::Integer, true, false, None),
                 None,
             ),
             ColumnCatalog::new(
                 "c2".into(),
                 false,
-                ColumnDesc::new(LogicalType::Decimal(None, None), false, false),
+                ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None),
                 None,
             ),
         ];
@@ -365,6 +365,7 @@ mod tests {
                     column_datatype: LogicalType::Invalid,
                     is_primary: false,
                     is_unique: false,
+                    default: None,
                 },
                 None,
             );
@@ -453,7 +454,7 @@ mod tests {
         let column = ColumnCatalog::new(
             "".to_string(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false, false),
+            ColumnDesc::new(LogicalType::Boolean, false, false, None),
             None,
         );
         let table_catalog = TableCatalog::new(Arc::new("T0".to_string()), vec![column]).unwrap();

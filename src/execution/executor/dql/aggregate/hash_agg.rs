@@ -136,7 +136,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await.unwrap();
         let transaction = RefCell::new(storage.transaction().await?);
-        let desc = ColumnDesc::new(LogicalType::Integer, false, false);
+        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None);
 
         let t1_columns = vec![
             Arc::new(ColumnCatalog::new(

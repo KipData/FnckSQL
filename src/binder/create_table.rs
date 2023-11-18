@@ -1,15 +1,18 @@
 use itertools::Itertools;
-use sqlparser::ast::{ColumnDef, ObjectName, TableConstraint};
+use sqlparser::ast::{ColumnDef, ColumnOption, ObjectName, TableConstraint};
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::Binder;
 use crate::binder::{lower_case_name, split_name, BindError};
-use crate::catalog::ColumnCatalog;
+use crate::catalog::{ColumnCatalog, ColumnDesc};
+use crate::expression::ScalarExpression;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
+use crate::types::value::DataValue;
+use crate::types::LogicalType;
 
 impl<'a, T: Transaction> Binder<'a, T> {
     // TODO: TableConstraint
@@ -31,10 +34,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 return Err(BindError::AmbiguousColumn(col_name.to_string()));
             }
         }
-        let columns = columns
+        let columns: Vec<ColumnCatalog> = columns
             .iter()
-            .map(|col| ColumnCatalog::from(col.clone()))
-            .collect_vec();
+            .map(|col| self.bind_column(col))
+            .try_collect()?;
 
         let primary_key_count = columns.iter().filter(|col| col.desc.is_primary).count();
 
@@ -52,6 +55,47 @@ impl<'a, T: Transaction> Binder<'a, T> {
             childrens: vec![],
         };
         Ok(plan)
+    }
+
+    fn bind_column(&mut self, column_def: &ColumnDef) -> Result<ColumnCatalog, BindError> {
+        let column_name = column_def.name.to_string();
+        let mut column_desc = ColumnDesc::new(
+            LogicalType::try_from(column_def.data_type.clone()).unwrap(),
+            false,
+            false,
+            None,
+        );
+        let mut nullable = false;
+
+        // TODO: 这里可以对更多字段可设置内容进行补充
+        for option_def in &column_def.options {
+            match &option_def.option {
+                ColumnOption::Null => nullable = true,
+                ColumnOption::NotNull => (),
+                ColumnOption::Unique { is_primary } => {
+                    if *is_primary {
+                        column_desc.is_primary = true;
+                        nullable = false;
+                        // Skip other options when using primary key
+                        break;
+                    } else {
+                        column_desc.is_unique = true;
+                    }
+                }
+                ColumnOption::Default(expr) => {
+                    if let ScalarExpression::Constant(value) = self.bind_expr(expr)? {
+                        let cast_value =
+                            DataValue::clone(&value).cast(&column_desc.column_datatype)?;
+                        column_desc.default = Some(Arc::new(cast_value));
+                    } else {
+                        unreachable!("'default' only for constant")
+                    }
+                }
+                _ => todo!(),
+            }
+        }
+
+        Ok(ColumnCatalog::new(column_name, nullable, column_desc, None))
     }
 }
 
@@ -84,13 +128,13 @@ mod tests {
                 assert_eq!(op.columns[0].nullable, false);
                 assert_eq!(
                     op.columns[0].desc,
-                    ColumnDesc::new(LogicalType::Integer, true, false)
+                    ColumnDesc::new(LogicalType::Integer, true, false, None)
                 );
                 assert_eq!(op.columns[1].name(), "name");
                 assert_eq!(op.columns[1].nullable, true);
                 assert_eq!(
                     op.columns[1].desc,
-                    ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false)
+                    ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false, None)
                 );
             }
             _ => unreachable!(),

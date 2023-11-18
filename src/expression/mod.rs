@@ -203,13 +203,13 @@ impl ScalarExpression {
             ScalarExpression::Constant(value) => Arc::new(ColumnCatalog::new(
                 format!("{}", value),
                 true,
-                ColumnDesc::new(value.logical_type(), false, false),
+                ColumnDesc::new(value.logical_type(), false, false, None),
                 Some(self.clone()),
             )),
             ScalarExpression::Alias { expr, alias } => Arc::new(ColumnCatalog::new(
                 alias.to_string(),
                 true,
-                ColumnDesc::new(expr.return_type(), false, false),
+                ColumnDesc::new(expr.return_type(), false, false, None),
                 Some(self.clone()),
             )),
             ScalarExpression::AggCall {
@@ -239,7 +239,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(*ty, false, false),
+                    ColumnDesc::new(*ty, false, false, None),
                     Some(self.clone()),
                 ))
             }
@@ -259,7 +259,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(*ty, false, false),
+                    ColumnDesc::new(*ty, false, false, None),
                     Some(self.clone()),
                 ))
             }
@@ -268,7 +268,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(*ty, false, false),
+                    ColumnDesc::new(*ty, false, false, None),
                     Some(self.clone()),
                 ))
             }
@@ -277,7 +277,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     format!("{} {}", expr.output_columns().name(), suffix),
                     true,
-                    ColumnDesc::new(LogicalType::Boolean, false, false),
+                    ColumnDesc::new(LogicalType::Boolean, false, false, None),
                     Some(self.clone()),
                 ))
             }
@@ -299,7 +299,7 @@ impl ScalarExpression {
                         args_string
                     ),
                     true,
-                    ColumnDesc::new(LogicalType::Boolean, false, false),
+                    ColumnDesc::new(LogicalType::Boolean, false, false, None),
                     Some(self.clone()),
                 ))
             }

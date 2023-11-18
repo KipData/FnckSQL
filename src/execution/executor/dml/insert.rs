@@ -83,6 +83,7 @@ impl Insert {
                 for (col_id, col) in all_columns {
                     let value = tuple_map
                         .remove(col_id)
+                        .or_else(|| col.default_value())
                         .unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())));
 
                     if col.desc.is_unique && !value.is_null() {
