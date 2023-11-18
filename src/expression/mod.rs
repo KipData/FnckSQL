@@ -303,6 +303,12 @@ impl ScalarExpression {
                     Some(self.clone()),
                 ))
             }
+            ScalarExpression::TypeCast { expr, ty } => Arc::new(ColumnCatalog::new(
+                format!("CAST({} as {})", expr.output_columns().name(), ty),
+                true,
+                ColumnDesc::new(*ty, false, false, None),
+                Some(self.clone()),
+            )),
             _ => {
                 todo!()
             }
