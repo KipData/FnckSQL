@@ -341,6 +341,6 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
 
 impl std::fmt::Display for LogicalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_ref())
+        write!(f, "{}", self.as_ref().to_uppercase())
     }
 }

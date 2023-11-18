@@ -60,7 +60,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     fn bind_column(&mut self, column_def: &ColumnDef) -> Result<ColumnCatalog, BindError> {
         let column_name = column_def.name.to_string();
         let mut column_desc = ColumnDesc::new(
-            LogicalType::try_from(column_def.data_type.clone()).unwrap(),
+            LogicalType::try_from(column_def.data_type.clone())?,
             false,
             false,
             None,
