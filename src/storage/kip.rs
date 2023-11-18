@@ -578,13 +578,13 @@ mod test {
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false),
+                ColumnDesc::new(LogicalType::Integer, true, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false),
+                ColumnDesc::new(LogicalType::Boolean, false, false, None),
                 None,
             )),
         ];

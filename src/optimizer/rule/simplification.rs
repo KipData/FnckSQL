@@ -255,6 +255,7 @@ mod test {
                     column_datatype: LogicalType::Integer,
                     is_primary: true,
                     is_unique: false,
+                    default: None,
                 },
                 ref_expr: None,
             };
@@ -268,6 +269,7 @@ mod test {
                     column_datatype: LogicalType::Integer,
                     is_primary: false,
                     is_unique: true,
+                    default: None,
                 },
                 ref_expr: None,
             };

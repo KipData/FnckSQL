@@ -124,6 +124,7 @@ mod tests {
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
+    use rust_decimal::Decimal;
     use std::sync::Arc;
 
     #[test]
@@ -132,73 +133,79 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false),
+                ColumnDesc::new(LogicalType::Integer, true, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UInteger, false, false),
+                ColumnDesc::new(LogicalType::UInteger, false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c3".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Varchar(Some(2)), false, false),
+                ColumnDesc::new(LogicalType::Varchar(Some(2)), false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c4".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Smallint, false, false),
+                ColumnDesc::new(LogicalType::Smallint, false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c5".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::USmallint, false, false),
+                ColumnDesc::new(LogicalType::USmallint, false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c6".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Float, false, false),
+                ColumnDesc::new(LogicalType::Float, false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c7".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Double, false, false),
+                ColumnDesc::new(LogicalType::Double, false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c8".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Tinyint, false, false),
+                ColumnDesc::new(LogicalType::Tinyint, false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c9".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UTinyint, false, false),
+                ColumnDesc::new(LogicalType::UTinyint, false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c10".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false),
+                ColumnDesc::new(LogicalType::Boolean, false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c11".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::DateTime, false, false),
+                ColumnDesc::new(LogicalType::DateTime, false, false, None),
                 None,
             )),
             Arc::new(ColumnCatalog::new(
                 "c12".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Date, false, false),
+                ColumnDesc::new(LogicalType::Date, false, false, None),
+                None,
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c13".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None),
                 None,
             )),
         ];
@@ -220,6 +227,7 @@ mod tests {
                     Arc::new(DataValue::Boolean(Some(true))),
                     Arc::new(DataValue::Date64(Some(0))),
                     Arc::new(DataValue::Date32(Some(0))),
+                    Arc::new(DataValue::Decimal(Some(Decimal::new(0, 3)))),
                 ],
             },
             Tuple {
@@ -238,6 +246,7 @@ mod tests {
                     Arc::new(DataValue::Boolean(None)),
                     Arc::new(DataValue::Date64(None)),
                     Arc::new(DataValue::Date32(None)),
+                    Arc::new(DataValue::Decimal(None)),
                 ],
             },
         ];

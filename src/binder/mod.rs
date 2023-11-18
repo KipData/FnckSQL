@@ -254,13 +254,13 @@ pub mod test {
                 ColumnCatalog::new(
                     "c1".to_string(),
                     false,
-                    ColumnDesc::new(Integer, true, false),
+                    ColumnDesc::new(Integer, true, false, None),
                     None,
                 ),
                 ColumnCatalog::new(
                     "c2".to_string(),
                     false,
-                    ColumnDesc::new(Integer, false, true),
+                    ColumnDesc::new(Integer, false, true, None),
                     None,
                 ),
             ],
@@ -272,13 +272,13 @@ pub mod test {
                 ColumnCatalog::new(
                     "c3".to_string(),
                     false,
-                    ColumnDesc::new(Integer, true, false),
+                    ColumnDesc::new(Integer, true, false, None),
                     None,
                 ),
                 ColumnCatalog::new(
                     "c4".to_string(),
                     false,
-                    ColumnDesc::new(Integer, false, false),
+                    ColumnDesc::new(Integer, false, false, None),
                     None,
                 ),
             ],

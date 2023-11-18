@@ -768,6 +768,7 @@ mod test {
                 column_datatype: LogicalType::Integer,
                 is_primary: false,
                 is_unique: false,
+                default: None,
             },
             ref_expr: None,
         });

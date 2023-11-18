@@ -137,7 +137,7 @@ mod tests {
                     name: "a".to_string(),
                 },
                 nullable: false,
-                desc: ColumnDesc::new(LogicalType::Integer, true, false),
+                desc: ColumnDesc::new(LogicalType::Integer, true, false, None),
                 ref_expr: None,
             }),
             Arc::new(ColumnCatalog {
@@ -146,7 +146,7 @@ mod tests {
                     name: "b".to_string(),
                 },
                 nullable: false,
-                desc: ColumnDesc::new(LogicalType::Float, false, false),
+                desc: ColumnDesc::new(LogicalType::Float, false, false, None),
                 ref_expr: None,
             }),
             Arc::new(ColumnCatalog {
@@ -155,7 +155,7 @@ mod tests {
                     name: "c".to_string(),
                 },
                 nullable: false,
-                desc: ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false),
+                desc: ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false, None),
                 ref_expr: None,
             }),
         ];
