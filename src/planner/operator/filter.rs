@@ -12,7 +12,7 @@ pub struct FilterOperator {
 }
 
 impl FilterOperator {
-    pub fn new(predicate: ScalarExpression, children: LogicalPlan, having: bool) -> LogicalPlan {
+    pub fn build(predicate: ScalarExpression, children: LogicalPlan, having: bool) -> LogicalPlan {
         LogicalPlan {
             operator: Operator::Filter(FilterOperator { predicate, having }),
             childrens: vec![children],

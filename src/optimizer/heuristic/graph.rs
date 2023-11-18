@@ -68,17 +68,16 @@ impl HepGraph {
         new_node: Operator,
     ) {
         let new_index = self.graph.add_node(new_node);
-
         let mut order = self.graph.edges(source_id).count();
 
-        if let Some(children_id) = children_option {
+        if let Some((children_id, old_edge_id)) = children_option.and_then(|children_id| {
             self.graph
                 .find_edge(source_id, children_id)
-                .map(|old_edge_id| {
-                    order = self.graph.remove_edge(old_edge_id).unwrap_or(0);
+                .map(|old_edge_id| (children_id, old_edge_id))
+        }) {
+            order = self.graph.remove_edge(old_edge_id).unwrap_or(0);
 
-                    self.graph.add_edge(new_index, children_id, 0);
-                });
+            self.graph.add_edge(new_index, children_id, 0);
         }
 
         self.graph.add_edge(source_id, new_index, order);

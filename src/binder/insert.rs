@@ -24,7 +24,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let (_, name) = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 
-        if let Some(table) = self.context.table(&table_name) {
+        if let Some(table) = self.context.table(table_name.clone()) {
             let mut columns = Vec::new();
 
             if idents.is_empty() {
@@ -46,7 +46,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             for expr_row in expr_rows {
                 let mut row = Vec::with_capacity(expr_row.len());
 
-                for (i, expr) in expr_row.into_iter().enumerate() {
+                for (i, expr) in expr_row.iter().enumerate() {
                     match &self.bind_expr(expr)? {
                         ScalarExpression::Constant(value) => {
                             // Check if the value length is too long

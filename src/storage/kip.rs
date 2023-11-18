@@ -28,8 +28,9 @@ pub struct KipStorage {
 
 impl KipStorage {
     pub async fn new(path: impl Into<PathBuf> + Send) -> Result<Self, StorageError> {
-        let config = Config::new(path);
-        let storage = storage::KipStorage::open_with_config(config).await?;
+        let storage =
+            storage::KipStorage::open_with_config(Config::new(path).enable_level_0_memorization())
+                .await?;
 
         Ok(KipStorage {
             inner: Arc::new(storage),
@@ -60,15 +61,15 @@ impl Transaction for KipTransaction {
 
     fn read(
         &self,
-        table_name: &String,
+        table_name: TableName,
         bounds: Bounds,
         projections: Projections,
     ) -> Result<Self::IterType<'_>, StorageError> {
         let all_columns = self
-            .table(table_name)
+            .table(table_name.clone())
             .ok_or(StorageError::TableNotFound)?
             .all_columns();
-        let (min, max) = TableCodec::tuple_bound(table_name);
+        let (min, max) = TableCodec::tuple_bound(&table_name);
         let iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
 
         Ok(KipIter {
@@ -82,13 +83,15 @@ impl Transaction for KipTransaction {
 
     fn read_by_index(
         &self,
-        table_name: &String,
+        table_name: TableName,
         (offset_option, mut limit_option): Bounds,
         projections: Projections,
         index_meta: IndexMetaRef,
         binaries: Vec<ConstantBinary>,
     ) -> Result<IndexIter<'_>, StorageError> {
-        let table = self.table(table_name).ok_or(StorageError::TableNotFound)?;
+        let table = self
+            .table(table_name.clone())
+            .ok_or(StorageError::TableNotFound)?;
         let mut tuple_ids = Vec::new();
         let mut offset = offset_option.unwrap_or(0);
 
@@ -99,7 +102,7 @@ impl Transaction for KipTransaction {
 
             match binary {
                 ConstantBinary::Scope { min, max } => {
-                    let mut iter = self.scope_to_iter(table_name, &index_meta, min, max)?;
+                    let mut iter = self.scope_to_iter(&table_name, &index_meta, min, max)?;
 
                     while let Some((_, value_option)) = iter.try_next()? {
                         if let Some(value) = value_option {
@@ -126,7 +129,7 @@ impl Transaction for KipTransaction {
                         continue;
                     }
 
-                    let key = Self::val_to_key(table_name, &index_meta, val)?;
+                    let key = Self::val_to_key(&table_name, &index_meta, val)?;
 
                     if let Some(bytes) = self.tx.get(&key)? {
                         tuple_ids.append(&mut TableCodec::decode_index(&bytes)?)
@@ -148,7 +151,7 @@ impl Transaction for KipTransaction {
 
     fn add_index(
         &mut self,
-        table_name: &String,
+        table_name: &str,
         index: Index,
         tuple_ids: Vec<TupleId>,
         is_unique: bool,
@@ -174,8 +177,8 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn del_index(&mut self, table_name: &String, index: &Index) -> Result<(), StorageError> {
-        let key = TableCodec::encode_index_key(table_name, &index)?;
+    fn del_index(&mut self, table_name: &str, index: &Index) -> Result<(), StorageError> {
+        let key = TableCodec::encode_index_key(table_name, index)?;
 
         self.tx.remove(&key)?;
 
@@ -184,7 +187,7 @@ impl Transaction for KipTransaction {
 
     fn append(
         &mut self,
-        table_name: &String,
+        table_name: &str,
         tuple: Tuple,
         is_overwrite: bool,
     ) -> Result<(), StorageError> {
@@ -198,7 +201,7 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn delete(&mut self, table_name: &String, tuple_id: TupleId) -> Result<(), StorageError> {
+    fn delete(&mut self, table_name: &str, tuple_id: TupleId) -> Result<(), StorageError> {
         let key = TableCodec::encode_tuple_key(table_name, &tuple_id)?;
         self.tx.remove(&key)?;
 
@@ -271,8 +274,8 @@ impl Transaction for KipTransaction {
 
         Self::create_index_meta_for_table(&mut self.tx, &mut table_catalog)?;
 
-        for (_, column) in &table_catalog.columns {
-            let (key, value) = TableCodec::encode_column(column)?;
+        for column in table_catalog.columns.values() {
+            let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
         }
         let (table_key, value) = TableCodec::encode_root_table(&table_name)?;
@@ -283,7 +286,7 @@ impl Transaction for KipTransaction {
         Ok(table_name)
     }
 
-    fn drop_table(&mut self, table_name: &String) -> Result<(), StorageError> {
+    fn drop_table(&mut self, table_name: &str) -> Result<(), StorageError> {
         self.drop_data(table_name)?;
 
         let (min, max) = TableCodec::columns_bound(table_name);
@@ -303,12 +306,12 @@ impl Transaction for KipTransaction {
         self.tx
             .remove(&TableCodec::encode_root_table_key(table_name))?;
 
-        let _ = self.cache.remove(table_name);
+        let _ = self.cache.remove(&table_name.to_string());
 
         Ok(())
     }
 
-    fn drop_data(&mut self, table_name: &String) -> Result<(), StorageError> {
+    fn drop_data(&mut self, table_name: &str) -> Result<(), StorageError> {
         let (tuple_min, tuple_max) = TableCodec::tuple_bound(table_name);
         Self::_drop_data(&mut self.tx, &tuple_min, &tuple_max)?;
 
@@ -318,17 +321,17 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn table(&self, table_name: &String) -> Option<&TableCatalog> {
-        let mut option = self.cache.get(table_name);
+    fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
+        let mut option = self.cache.get(&table_name);
 
         if option.is_none() {
             // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
-            let (columns, name_option) = Self::column_collect(table_name, &self.tx).ok()?;
-            let indexes = Self::index_meta_collect(table_name, &self.tx)?;
+            let columns = Self::column_collect(table_name.clone(), &self.tx).ok()?;
+            let indexes = Self::index_meta_collect(&table_name, &self.tx)?;
 
-            if let Some(catalog) = name_option.and_then(|table_name| {
-                TableCatalog::new_with_indexes(table_name, columns, indexes).ok()
-            }) {
+            if let Ok(catalog) =
+                TableCatalog::new_with_indexes(table_name.clone(), columns, indexes)
+            {
                 option = self
                     .cache
                     .get_or_insert(table_name.to_string(), |_| Ok(catalog))
@@ -364,7 +367,7 @@ impl Transaction for KipTransaction {
 
 impl KipTransaction {
     fn val_to_key(
-        table_name: &String,
+        table_name: &str,
         index_meta: &IndexMetaRef,
         val: ValueRef,
     ) -> Result<Vec<u8>, TypeError> {
@@ -375,7 +378,7 @@ impl KipTransaction {
 
     fn scope_to_iter(
         &self,
-        table_name: &String,
+        table_name: &str,
         index_meta: &IndexMetaRef,
         min: Bound<ValueRef>,
         max: Bound<ValueRef>,
@@ -383,14 +386,10 @@ impl KipTransaction {
         let bound_encode = |bound: Bound<ValueRef>| -> Result<_, StorageError> {
             match bound {
                 Bound::Included(val) => Ok(Bound::Included(Self::val_to_key(
-                    table_name,
-                    &index_meta,
-                    val,
+                    table_name, index_meta, val,
                 )?)),
                 Bound::Excluded(val) => Ok(Bound::Excluded(Self::val_to_key(
-                    table_name,
-                    &index_meta,
-                    val,
+                    table_name, index_meta, val,
                 )?)),
                 Bound::Unbounded => Ok(Bound::Unbounded),
             }
@@ -435,33 +434,25 @@ impl KipTransaction {
     }
 
     fn column_collect(
-        name: &String,
+        table_name: TableName,
         tx: &mvcc::Transaction,
-    ) -> Result<(Vec<ColumnCatalog>, Option<TableName>), StorageError> {
-        let (column_min, column_max) = TableCodec::columns_bound(name);
+    ) -> Result<Vec<ColumnCatalog>, StorageError> {
+        let (column_min, column_max) = TableCodec::columns_bound(&table_name);
         let mut column_iter =
             tx.iter(Bound::Included(&column_min), Bound::Included(&column_max))?;
 
         let mut columns = vec![];
-        let mut name_option = None;
 
         while let Some((_, value_option)) = column_iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
-                let (table_name, column) = TableCodec::decode_column(&value)?;
-
-                if name != table_name.as_str() {
-                    return Ok((vec![], None));
-                }
-                let _ = name_option.insert(table_name);
-
-                columns.push(column);
+                columns.push(TableCodec::decode_column(&value)?);
             }
         }
 
-        Ok((columns, name_option))
+        Ok(columns)
     }
 
-    fn index_meta_collect(name: &String, tx: &mvcc::Transaction) -> Option<Vec<IndexMetaRef>> {
+    fn index_meta_collect(name: &str, tx: &mvcc::Transaction) -> Option<Vec<IndexMetaRef>> {
         let (index_min, index_max) = TableCodec::index_meta_bound(name);
         let mut index_metas = vec![];
         let mut index_iter = tx
@@ -470,7 +461,7 @@ impl KipTransaction {
 
         while let Some((_, value_option)) = index_iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
-                if let Some(index_meta) = TableCodec::decode_index_meta(&value).ok() {
+                if let Ok(index_meta) = TableCodec::decode_index_meta(&value) {
                     index_metas.push(Arc::new(index_meta));
                 }
             }
@@ -480,7 +471,7 @@ impl KipTransaction {
     }
 
     fn _drop_data(tx: &mut mvcc::Transaction, min: &[u8], max: &[u8]) -> Result<(), StorageError> {
-        let mut iter = tx.iter(Bound::Included(&min), Bound::Included(&max))?;
+        let mut iter = tx.iter(Bound::Included(min), Bound::Included(max))?;
         let mut data_keys = vec![];
 
         while let Some((key, value_option)) = iter.try_next()? {
@@ -604,7 +595,7 @@ mod test {
             .collect_vec();
         let _ = transaction.create_table(Arc::new("test".to_string()), source_columns)?;
 
-        let table_catalog = transaction.table(&"test".to_string());
+        let table_catalog = transaction.table(Arc::new("test".to_string()));
         assert!(table_catalog.is_some());
         assert!(table_catalog
             .unwrap()
@@ -637,7 +628,7 @@ mod test {
         )?;
 
         let mut iter = transaction.read(
-            &"test".to_string(),
+            Arc::new("test".to_string()),
             (Some(1), Some(1)),
             vec![ScalarExpression::ColumnRef(columns[0].clone())],
         )?;
@@ -665,7 +656,10 @@ mod test {
             .await?;
         let transaction = kipsql.storage.transaction().await?;
 
-        let table = transaction.table(&"t1".to_string()).unwrap().clone();
+        let table = transaction
+            .table(Arc::new("t1".to_string()))
+            .unwrap()
+            .clone();
         let projections = table
             .all_columns()
             .into_iter()
@@ -705,7 +699,10 @@ mod test {
             .await?;
         let transaction = kipsql.storage.transaction().await.unwrap();
 
-        let table = transaction.table(&"t1".to_string()).unwrap().clone();
+        let table = transaction
+            .table(Arc::new("t1".to_string()))
+            .unwrap()
+            .clone();
         let projections = table
             .all_columns()
             .into_iter()
@@ -713,7 +710,7 @@ mod test {
             .collect_vec();
         let mut iter = transaction
             .read_by_index(
-                &"t1".to_string(),
+                Arc::new("t1".to_string()),
                 (Some(0), Some(1)),
                 projections,
                 table.indexes[0].clone(),

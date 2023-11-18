@@ -162,12 +162,12 @@ impl LogicalType {
         right: &LogicalType,
     ) -> Result<LogicalType, TypeError> {
         if left == right {
-            return Ok(left.clone());
+            return Ok(*left);
         }
         match (left, right) {
             // SqlNull type can be cast to anything
-            (LogicalType::SqlNull, _) => return Ok(right.clone()),
-            (_, LogicalType::SqlNull) => return Ok(left.clone()),
+            (LogicalType::SqlNull, _) => return Ok(*right),
+            (_, LogicalType::SqlNull) => return Ok(*left),
             _ => {}
         }
         if left.is_numeric() && right.is_numeric() {
@@ -204,7 +204,7 @@ impl LogicalType {
         right: &LogicalType,
     ) -> Result<LogicalType, TypeError> {
         if left == right {
-            return Ok(left.clone());
+            return Ok(*left);
         }
         if left.is_signed_numeric() && right.is_unsigned_numeric() {
             // this method is symmetric
@@ -214,10 +214,10 @@ impl LogicalType {
         }
 
         if LogicalType::can_implicit_cast(left, right) {
-            return Ok(right.clone());
+            return Ok(*right);
         }
         if LogicalType::can_implicit_cast(right, left) {
-            return Ok(left.clone());
+            return Ok(*left);
         }
         // we can't cast implicitly either way and types are not equal
         // this happens when left is signed and right is unsigned

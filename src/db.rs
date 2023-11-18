@@ -37,7 +37,6 @@ impl<S: Storage> Database<S> {
     /// Run SQL queries.
     pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
-
         // parse
         let stmts = parse_sql(sql)?;
 

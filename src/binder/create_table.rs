@@ -19,7 +19,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         columns: &[ColumnDef],
         _constraints: &[TableConstraint],
     ) -> Result<LogicalPlan, BindError> {
-        let name = lower_case_name(&name);
+        let name = lower_case_name(name);
         let (_, name) = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 

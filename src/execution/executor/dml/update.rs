@@ -46,7 +46,7 @@ impl Update {
             values,
         } = self;
 
-        if let Some(table_catalog) = transaction.table(&table_name).cloned() {
+        if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
             let mut value_map = HashMap::new();
 
             // only once
