@@ -23,7 +23,7 @@ impl PatternMatcher for HepMatcher<'_, '_> {
     fn match_opt_expr(&self) -> bool {
         let op = self.graph.operator(self.start_id);
         // check the root node predicate
-        if !(self.pattern.predicate)(&op) {
+        if !(self.pattern.predicate)(op) {
             return false;
         }
 
@@ -34,7 +34,7 @@ impl PatternMatcher for HepMatcher<'_, '_> {
                     .graph
                     .nodes_iter(HepMatchOrder::TopDown, Some(self.start_id))
                 {
-                    if !(self.pattern.predicate)(&self.graph.operator(node_id)) {
+                    if !(self.pattern.predicate)(self.graph.operator(node_id)) {
                         return false;
                     }
                 }

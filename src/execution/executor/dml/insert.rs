@@ -52,7 +52,7 @@ impl Insert {
         let mut primary_key_index = None;
         let mut unique_values = HashMap::new();
 
-        if let Some(table_catalog) = transaction.table(&table_name).cloned() {
+        if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
             #[for_await]
             for tuple in input {
                 let Tuple {
@@ -88,7 +88,7 @@ impl Insert {
                     if col.desc.is_unique && !value.is_null() {
                         unique_values
                             .entry(col.id())
-                            .or_insert_with(|| vec![])
+                            .or_insert_with(Vec::new)
                             .push((tuple_id.clone(), value.clone()))
                     }
                     if value.is_null() && !col.nullable {

@@ -1,5 +1,4 @@
 use std::borrow::Borrow;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{
@@ -132,7 +131,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             let left_name = Self::unpack_name(left_name, true);
 
             for join in joins {
-                plan = self.bind_join(&left_name, plan, join)?;
+                plan = self.bind_join(left_name.clone(), plan, join)?;
             }
         }
         Ok(plan)
@@ -140,7 +139,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     fn unpack_name(table_name: Option<TableName>, is_left: bool) -> TableName {
         let title = if is_left { "Left" } else { "Right" };
-        table_name.expect(&format!("{}: Table is not named", title))
+        table_name.unwrap_or_else(|| panic!("{}: Table is not named", title))
     }
 
     fn bind_single_table_ref(
@@ -207,7 +206,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         let table_catalog = self
             .context
-            .table(&table_name)
+            .table(table_name.clone())
             .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
 
@@ -221,7 +220,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         Ok((
             table_name.clone(),
-            ScanOperator::new(table_name, &table_catalog),
+            ScanOperator::build(table_name, &table_catalog),
         ))
     }
 
@@ -264,10 +263,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>, BindError> {
         let mut exprs = vec![];
-        for table_name in self.context.bind_table.keys().cloned() {
+        for table_name in self.context.bind_table.keys() {
             let table = self
                 .context
-                .table(&table_name)
+                .table(table_name.clone())
                 .ok_or_else(|| BindError::InvalidTable(table_name.to_string()))?;
             for col in table.all_columns() {
                 exprs.push(ScalarExpression::ColumnRef(col));
@@ -279,7 +278,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     fn bind_join(
         &mut self,
-        left_table: &String,
+        left_table: TableName,
         left: LogicalPlan,
         join: &Join,
     ) -> Result<LogicalPlan, BindError> {
@@ -299,21 +298,23 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type))?;
         let right_table = Self::unpack_name(right_table, false);
 
-        let left_table =
-            self.context.table(left_table).cloned().ok_or_else(|| {
-                BindError::InvalidTable(format!("Left: {} not found", left_table))
-            })?;
-        let right_table =
-            self.context.table(&right_table).cloned().ok_or_else(|| {
-                BindError::InvalidTable(format!("Right: {} not found", right_table))
-            })?;
+        let left_table = self
+            .context
+            .table(left_table.clone())
+            .cloned()
+            .ok_or_else(|| BindError::InvalidTable(format!("Left: {} not found", left_table)))?;
+        let right_table = self
+            .context
+            .table(right_table.clone())
+            .cloned()
+            .ok_or_else(|| BindError::InvalidTable(format!("Right: {} not found", right_table)))?;
 
         let on = match joint_condition {
             Some(constraint) => self.bind_join_constraint(&left_table, &right_table, constraint)?,
             None => JoinCondition::None,
         };
 
-        Ok(LJoinOperator::new(left, right, on, join_type))
+        Ok(LJoinOperator::build(left, right, on, join_type))
     }
 
     pub(crate) fn bind_where(
@@ -321,7 +322,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         children: LogicalPlan,
         predicate: &Expr,
     ) -> Result<LogicalPlan, BindError> {
-        Ok(FilterOperator::new(
+        Ok(FilterOperator::build(
             self.bind_expr(predicate)?,
             children,
             false,
@@ -334,7 +335,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         having: ScalarExpression,
     ) -> Result<LogicalPlan, BindError> {
         self.validate_having_orderby(&having)?;
-        Ok(FilterOperator::new(having, children, true))
+        Ok(FilterOperator::build(having, children, true))
     }
 
     fn bind_project(
@@ -400,7 +401,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         // TODO: validate limit and offset is correct use statistic.
 
-        Ok(LimitOperator::new(offset, limit, children))
+        Ok(LimitOperator::build(offset, limit, children))
     }
 
     pub fn extract_select_join(&mut self, select_items: &mut [ScalarExpression]) {
@@ -409,33 +410,35 @@ impl<'a, T: Transaction> Binder<'a, T> {
             return;
         }
 
-        let mut table_force_nullable = HashMap::new();
+        let mut table_force_nullable = Vec::with_capacity(bind_tables.len());
         let mut left_table_force_nullable = false;
         let mut left_table = None;
 
-        for (table_name, (_, join_option)) in bind_tables {
+        for (table, join_option) in bind_tables.values() {
             if let Some(join_type) = join_option {
                 let (left_force_nullable, right_force_nullable) = joins_nullable(join_type);
-                table_force_nullable.insert(table_name.clone(), right_force_nullable);
+                table_force_nullable.push((table, right_force_nullable));
                 left_table_force_nullable = left_force_nullable;
             } else {
-                left_table = Some(table_name.clone());
+                left_table = Some(table);
             }
         }
 
-        if let Some(name) = left_table {
-            table_force_nullable.insert(name, left_table_force_nullable);
+        if let Some(table) = left_table {
+            table_force_nullable.push((table, left_table_force_nullable));
         }
 
         for column in select_items {
             if let ScalarExpression::ColumnRef(col) = column {
-                if let Some(nullable) = table_force_nullable.get(col.table_name().as_ref().unwrap())
-                {
-                    let mut new_col = ColumnCatalog::clone(col);
-                    new_col.nullable = *nullable;
+                let _ = table_force_nullable
+                    .iter()
+                    .find(|(table, _)| table.contains_column(col.name()))
+                    .map(|(_, nullable)| {
+                        let mut new_col = ColumnCatalog::clone(col);
+                        new_col.nullable = *nullable;
 
-                    *col = Arc::new(new_col)
-                }
+                        *col = Arc::new(new_col);
+                    });
             }
         }
     }

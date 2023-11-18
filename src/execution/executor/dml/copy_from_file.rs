@@ -38,14 +38,14 @@ impl CopyFromFile {
         // `tx`, then the task will finish.
         let table_name = self.op.table.clone();
         let handle = tokio::task::spawn_blocking(|| self.read_file_blocking(tx));
-        let mut size = 0 as usize;
+        let mut size = 0_usize;
         while let Some(chunk) = rx.recv().await {
             transaction.append(&table_name, chunk, false)?;
             size += 1;
         }
         handle.await??;
 
-        let handle = tokio::task::spawn_blocking(move || return_result(size.clone(), tx1));
+        let handle = tokio::task::spawn_blocking(move || return_result(size, tx1));
         while let Some(chunk) = rx1.recv().await {
             yield chunk;
         }
@@ -135,7 +135,6 @@ mod tests {
                 summary: ColumnSummary {
                     id: Some(0),
                     name: "a".to_string(),
-                    table_name: None,
                 },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Integer, true, false),
@@ -145,7 +144,6 @@ mod tests {
                 summary: ColumnSummary {
                     id: Some(1),
                     name: "b".to_string(),
-                    table_name: None,
                 },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Float, false, false),
@@ -155,7 +153,6 @@ mod tests {
                 summary: ColumnSummary {
                     id: Some(1),
                     name: "c".to_string(),
-                    table_name: None,
                 },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false),

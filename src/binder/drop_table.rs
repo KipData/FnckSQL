@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 impl<'a, T: Transaction> Binder<'a, T> {
     pub(crate) fn bind_drop_table(&mut self, name: &ObjectName) -> Result<LogicalPlan, BindError> {
-        let name = lower_case_name(&name);
+        let name = lower_case_name(name);
         let (_, name) = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 

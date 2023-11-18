@@ -29,7 +29,7 @@ pub struct JoinOperator {
 }
 
 impl JoinOperator {
-    pub fn new(
+    pub fn build(
         left: LogicalPlan,
         right: LogicalPlan,
         on: JoinCondition,

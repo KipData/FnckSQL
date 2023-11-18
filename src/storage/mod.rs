@@ -32,14 +32,14 @@ pub trait Transaction: Sync + Send + 'static {
     /// The projections is column indices.
     fn read(
         &self,
-        table_name: &String,
+        table_name: TableName,
         bounds: Bounds,
         projection: Projections,
     ) -> Result<Self::IterType<'_>, StorageError>;
 
     fn read_by_index(
         &self,
-        table_name: &String,
+        table_name: TableName,
         bounds: Bounds,
         projection: Projections,
         index_meta: IndexMetaRef,
@@ -48,22 +48,22 @@ pub trait Transaction: Sync + Send + 'static {
 
     fn add_index(
         &mut self,
-        table_name: &String,
+        table_name: &str,
         index: Index,
         tuple_ids: Vec<TupleId>,
         is_unique: bool,
     ) -> Result<(), StorageError>;
 
-    fn del_index(&mut self, table_name: &String, index: &Index) -> Result<(), StorageError>;
+    fn del_index(&mut self, table_name: &str, index: &Index) -> Result<(), StorageError>;
 
     fn append(
         &mut self,
-        table_name: &String,
+        table_name: &str,
         tuple: Tuple,
         is_overwrite: bool,
     ) -> Result<(), StorageError>;
 
-    fn delete(&mut self, table_name: &String, tuple_id: TupleId) -> Result<(), StorageError>;
+    fn delete(&mut self, table_name: &str, tuple_id: TupleId) -> Result<(), StorageError>;
 
     fn create_table(
         &mut self,
@@ -71,9 +71,9 @@ pub trait Transaction: Sync + Send + 'static {
         columns: Vec<ColumnCatalog>,
     ) -> Result<TableName, StorageError>;
 
-    fn drop_table(&mut self, table_name: &String) -> Result<(), StorageError>;
-    fn drop_data(&mut self, table_name: &String) -> Result<(), StorageError>;
-    fn table(&self, table_name: &String) -> Option<&TableCatalog>;
+    fn drop_table(&mut self, table_name: &str) -> Result<(), StorageError>;
+    fn drop_data(&mut self, table_name: &str) -> Result<(), StorageError>;
+    fn table(&self, table_name: TableName) -> Option<&TableCatalog>;
 
     fn show_tables(&self) -> Result<Vec<String>, StorageError>;
 

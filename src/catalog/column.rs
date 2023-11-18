@@ -1,4 +1,3 @@
-use crate::catalog::TableName;
 use crate::expression::ScalarExpression;
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{ColumnDef, ColumnOption};
@@ -21,7 +20,6 @@ pub struct ColumnCatalog {
 pub struct ColumnSummary {
     pub id: Option<ColumnId>,
     pub name: String,
-    pub table_name: Option<TableName>,
 }
 
 impl ColumnCatalog {
@@ -35,7 +33,6 @@ impl ColumnCatalog {
             summary: ColumnSummary {
                 id: None,
                 name: column_name,
-                table_name: None,
             },
             nullable,
             desc: column_desc,
@@ -48,7 +45,6 @@ impl ColumnCatalog {
             summary: ColumnSummary {
                 id: Some(0),
                 name: column_name,
-                table_name: None,
             },
             nullable: false,
             desc: ColumnDesc::new(LogicalType::Varchar(None), false, false),
@@ -62,10 +58,6 @@ impl ColumnCatalog {
 
     pub(crate) fn id(&self) -> Option<ColumnId> {
         self.summary.id
-    }
-
-    pub(crate) fn table_name(&self) -> Option<TableName> {
-        self.summary.table_name.clone()
     }
 
     pub(crate) fn name(&self) -> &str {

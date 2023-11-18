@@ -86,15 +86,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         .map(|ident| ident.value.clone())
                         .join(".")
                         .to_string(),
-                )
-                .into())
+                ))
             }
         };
 
         if let Some(table) = table_name.or(bind_table_name) {
             let table_catalog = self
                 .context
-                .table(table)
+                .table(Arc::new(table.clone()))
                 .ok_or_else(|| BindError::InvalidTable(table.to_string()))?;
 
             let column_catalog = table_catalog
@@ -104,10 +103,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
         } else {
             // handle col syntax
             let mut got_column = None;
-            for (_, (table_catalog, _)) in &self.context.bind_table {
+            for (table_catalog, _) in self.context.bind_table.values() {
                 if let Some(column_catalog) = table_catalog.get_column_by_name(column_name) {
                     if got_column.is_some() {
-                        return Err(BindError::InvalidColumn(column_name.to_string()).into());
+                        return Err(BindError::InvalidColumn(column_name.to_string()));
                     }
                     got_column = Some(column_catalog);
                 }
@@ -176,7 +175,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         };
 
         Ok(ScalarExpression::Unary {
-            op: (op.clone()).into(),
+            op: (*op).into(),
             expr,
             ty,
         })

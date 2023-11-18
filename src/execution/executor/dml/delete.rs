@@ -30,7 +30,7 @@ impl Delete {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
     async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Delete { table_name, input } = self;
-        let option_index_metas = transaction.table(&table_name).map(|table_catalog| {
+        let option_index_metas = transaction.table(table_name.clone()).map(|table_catalog| {
             table_catalog
                 .all_columns()
                 .into_iter()

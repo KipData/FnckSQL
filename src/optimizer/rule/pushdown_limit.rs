@@ -75,7 +75,7 @@ impl Rule for EliminateLimits {
             let child_id = graph.children_at(node_id)[0];
             if let Operator::Limit(child_op) = graph.operator(child_id) {
                 let offset = Self::binary_options(op.offset, child_op.offset, |a, b| a + b);
-                let limit = Self::binary_options(op.limit, child_op.limit, |a, b| cmp::min(a, b));
+                let limit = Self::binary_options(op.limit, child_op.limit, cmp::min);
 
                 let new_limit_op = LimitOperator { offset, limit };
 

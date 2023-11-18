@@ -35,7 +35,7 @@ impl IndexScan {
         } = self.op;
         let (index_meta, binaries) = index_by.ok_or(TypeError::InvalidType)?;
         let mut iter =
-            transaction.read_by_index(&table_name, limit, columns, index_meta, binaries)?;
+            transaction.read_by_index(table_name, limit, columns, index_meta, binaries)?;
 
         while let Some(tuple) = iter.next_tuple()? {
             yield tuple;

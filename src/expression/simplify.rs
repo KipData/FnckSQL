@@ -190,13 +190,13 @@ impl ConstantBinary {
                             continue;
                         }
 
-                        if let Some(order) = Self::bound_compared(&scope_min, &min, true) {
+                        if let Some(order) = Self::bound_compared(&scope_min, min, true) {
                             if order.is_lt() {
                                 scope_min = min.clone();
                             }
                         }
 
-                        if let Some(order) = Self::bound_compared(&scope_max, &max, false) {
+                        if let Some(order) = Self::bound_compared(&scope_max, max, false) {
                             if order.is_gt() {
                                 scope_max = max.clone();
                             }
@@ -218,7 +218,7 @@ impl ConstantBinary {
                 .into_iter()
                 .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
                 .next()
-                .map(|val| ConstantBinary::Eq(val));
+                .map(ConstantBinary::Eq);
 
             if let Some(eq) = eq_option {
                 let _ = mem::replace(self, eq);
@@ -466,7 +466,7 @@ impl ScalarExpression {
                     let new_expr = ScalarExpression::Constant(Arc::new(unary_op(&val, op)?));
                     let _ = mem::replace(self, new_expr);
                 } else {
-                    let _ = replaces.push(Replace::Unary(ReplaceUnary {
+                    replaces.push(Replace::Unary(ReplaceUnary {
                         child_expr: expr.as_ref().clone(),
                         op: *op,
                         ty: *ty,
@@ -671,7 +671,7 @@ impl ScalarExpression {
                             return Ok(Self::new_binary(col_id, *op, col, val, true));
                         }
 
-                        return Ok(None);
+                        Ok(None)
                     }
                     (Some(binary), None) => Ok(Self::check_or(col_id, right_expr, op, binary)),
                     (None, Some(binary)) => Ok(Self::check_or(col_id, left_expr, op, binary)),
@@ -689,7 +689,7 @@ impl ScalarExpression {
     /// this case it makes no sense to just extract c1 > 1
     fn check_or(
         col_id: &ColumnId,
-        right_expr: &Box<ScalarExpression>,
+        right_expr: &ScalarExpression,
         op: &BinaryOperator,
         binary: ConstantBinary,
     ) -> Option<ConstantBinary> {
@@ -762,7 +762,6 @@ mod test {
             summary: ColumnSummary {
                 id: Some(0),
                 name: "c1".to_string(),
-                table_name: None,
             },
             nullable: false,
             desc: ColumnDesc {

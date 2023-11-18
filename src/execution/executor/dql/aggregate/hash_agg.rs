@@ -96,7 +96,7 @@ impl HashAggExecutor {
                 let values: Vec<ValueRef> = accs
                     .iter()
                     .map(|acc| acc.evaluate())
-                    .chain(group_keys.into_iter().map(|key| Ok(key)))
+                    .chain(group_keys.into_iter().map(Ok))
                     .try_collect()?;
 
                 yield Tuple {

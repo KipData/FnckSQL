@@ -10,6 +10,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
         children: LogicalPlan,
         select_list: Vec<ScalarExpression>,
     ) -> LogicalPlan {
-        AggregateOperator::new(children, vec![], select_list)
+        AggregateOperator::build(children, vec![], select_list)
     }
 }
