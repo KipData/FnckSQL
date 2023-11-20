@@ -22,6 +22,9 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+
       # `cargo check` command here will use installed `nightly`
       # as it is set as an "override" for current directory
 
@@ -74,6 +77,9 @@ jobs:
           toolchain: nightly
           override: true
           components: rustfmt, clippy
+      
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
 
       # `cargo check` command here will use installed `nightly`
       # as it is set as an "override" for current directory
