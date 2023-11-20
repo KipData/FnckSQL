@@ -8,7 +8,6 @@ use crate::storage::table_codec::TableCodec;
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
-use kip_db::error::CacheError;
 use kip_db::kernel::lsm::mvcc;
 use kip_db::KernelError;
 use std::collections::VecDeque;
@@ -147,9 +146,6 @@ pub enum StorageError {
     #[error("kipdb error")]
     KipDBError(KernelError),
 
-    #[error("cache error")]
-    CacheError(CacheError),
-
     #[error("type error")]
     TypeError(#[from] TypeError),
 
@@ -166,11 +162,5 @@ pub enum StorageError {
 impl From<KernelError> for StorageError {
     fn from(value: KernelError) -> Self {
         StorageError::KipDBError(value)
-    }
-}
-
-impl From<CacheError> for StorageError {
-    fn from(value: CacheError) -> Self {
-        StorageError::CacheError(value)
     }
 }
