@@ -55,9 +55,9 @@ impl TableCodec {
         table_bytes
     }
 
-    pub fn tuple_bound(name: &str) -> (Vec<u8>, Vec<u8>) {
+    pub fn tuple_bound(table_name: &str) -> (Vec<u8>, Vec<u8>) {
         let op = |bound_id| {
-            let mut key_prefix = Self::key_prefix(CodecType::Tuple, name);
+            let mut key_prefix = Self::key_prefix(CodecType::Tuple, table_name);
 
             key_prefix.push(bound_id);
             key_prefix
@@ -66,9 +66,9 @@ impl TableCodec {
         (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
     }
 
-    pub fn index_meta_bound(name: &str) -> (Vec<u8>, Vec<u8>) {
+    pub fn index_meta_bound(table_name: &str) -> (Vec<u8>, Vec<u8>) {
         let op = |bound_id| {
-            let mut key_prefix = Self::key_prefix(CodecType::IndexMeta, name);
+            let mut key_prefix = Self::key_prefix(CodecType::IndexMeta, table_name);
 
             key_prefix.push(bound_id);
             key_prefix
@@ -77,9 +77,9 @@ impl TableCodec {
         (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
     }
 
-    pub fn index_bound(name: &str, index_id: &IndexId) -> (Vec<u8>, Vec<u8>) {
+    pub fn index_bound(table_name: &str, index_id: &IndexId) -> (Vec<u8>, Vec<u8>) {
         let op = |bound_id| {
-            let mut key_prefix = Self::key_prefix(CodecType::Index, name);
+            let mut key_prefix = Self::key_prefix(CodecType::Index, table_name);
 
             key_prefix.push(BOUND_MIN_TAG);
             key_prefix.append(&mut index_id.to_be_bytes().to_vec());
@@ -90,9 +90,9 @@ impl TableCodec {
         (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
     }
 
-    pub fn all_index_bound(name: &str) -> (Vec<u8>, Vec<u8>) {
+    pub fn all_index_bound(table_name: &str) -> (Vec<u8>, Vec<u8>) {
         let op = |bound_id| {
-            let mut key_prefix = Self::key_prefix(CodecType::Index, name);
+            let mut key_prefix = Self::key_prefix(CodecType::Index, table_name);
 
             key_prefix.push(bound_id);
             key_prefix
@@ -112,9 +112,9 @@ impl TableCodec {
         (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
     }
 
-    pub fn columns_bound(name: &str) -> (Vec<u8>, Vec<u8>) {
+    pub fn columns_bound(table_name: &str) -> (Vec<u8>, Vec<u8>) {
         let op = |bound_id| {
-            let mut key_prefix = Self::key_prefix(CodecType::Column, name);
+            let mut key_prefix = Self::key_prefix(CodecType::Column, table_name);
 
             key_prefix.push(bound_id);
             key_prefix
@@ -125,15 +125,15 @@ impl TableCodec {
 
     /// Key: TableName_Tuple_0_RowID(Sorted)
     /// Value: Tuple
-    pub fn encode_tuple(name: &str, tuple: &Tuple) -> Result<(Bytes, Bytes), TypeError> {
+    pub fn encode_tuple(table_name: &str, tuple: &Tuple) -> Result<(Bytes, Bytes), TypeError> {
         let tuple_id = tuple.id.clone().ok_or(TypeError::PrimaryKeyNotFound)?;
-        let key = Self::encode_tuple_key(name, &tuple_id)?;
+        let key = Self::encode_tuple_key(table_name, &tuple_id)?;
 
         Ok((Bytes::from(key), Bytes::from(tuple.serialize_to())))
     }
 
-    pub fn encode_tuple_key(name: &str, tuple_id: &TupleId) -> Result<Vec<u8>, TypeError> {
-        let mut key_prefix = Self::key_prefix(CodecType::Tuple, name);
+    pub fn encode_tuple_key(table_name: &str, tuple_id: &TupleId) -> Result<Vec<u8>, TypeError> {
+        let mut key_prefix = Self::key_prefix(CodecType::Tuple, table_name);
         key_prefix.push(BOUND_MIN_TAG);
 
         tuple_id.to_primary_key(&mut key_prefix)?;
@@ -319,6 +319,7 @@ mod tests {
             column_ids: vec![0],
             name: "index_1".to_string(),
             is_unique: false,
+            is_primary: false,
         };
         let (_, bytes) = TableCodec::encode_index_meta(&"T1".to_string(), &index_meta)?;
 
@@ -413,6 +414,7 @@ mod tests {
                 column_ids: vec![],
                 name: "".to_string(),
                 is_unique: false,
+                is_primary: false,
             };
 
             let (key, _) =

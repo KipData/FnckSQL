@@ -101,4 +101,8 @@ impl ColumnDesc {
             default,
         }
     }
+
+    pub(crate) fn is_index(&self) -> bool {
+        self.is_unique || self.is_primary
+    }
 }

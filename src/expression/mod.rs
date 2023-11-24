@@ -309,9 +309,6 @@ impl ScalarExpression {
                 ColumnDesc::new(*ty, false, false, None),
                 Some(self.clone()),
             )),
-            _ => {
-                todo!()
-            }
         }
     }
 }
