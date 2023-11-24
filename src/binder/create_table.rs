@@ -20,28 +20,51 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         name: &ObjectName,
         columns: &[ColumnDef],
-        _constraints: &[TableConstraint],
+        constraints: &[TableConstraint],
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(name);
         let (_, name) = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 
-        // check duplicated column names
-        let mut set = HashSet::new();
-        for col in columns.iter() {
-            let col_name = &col.name.value;
-            if !set.insert(col_name.clone()) {
-                return Err(BindError::AmbiguousColumn(col_name.to_string()));
+        {
+            // check duplicated column names
+            let mut set = HashSet::new();
+            for col in columns.iter() {
+                let col_name = &col.name.value;
+                if !set.insert(col_name.clone()) {
+                    return Err(BindError::AmbiguousColumn(col_name.to_string()));
+                }
             }
         }
-        let columns: Vec<ColumnCatalog> = columns
+        let mut columns: Vec<ColumnCatalog> = columns
             .iter()
             .map(|col| self.bind_column(col))
             .try_collect()?;
+        for constraint in constraints {
+            match constraint {
+                TableConstraint::Unique {
+                    columns: column_names,
+                    is_primary,
+                    ..
+                } => {
+                    for column_name in column_names {
+                        if let Some(column) = columns
+                            .iter_mut()
+                            .find(|column| column.name() == column_name.to_string())
+                        {
+                            if *is_primary {
+                                column.desc.is_primary = true;
+                            } else {
+                                column.desc.is_unique = true;
+                            }
+                        }
+                    }
+                }
+                _ => todo!(),
+            }
+        }
 
-        let primary_key_count = columns.iter().filter(|col| col.desc.is_primary).count();
-
-        if primary_key_count != 1 {
+        if columns.iter().filter(|col| col.desc.is_primary).count() != 1 {
             return Err(BindError::InvalidTable(
                 "The primary key field must exist and have at least one".to_string(),
             ));
