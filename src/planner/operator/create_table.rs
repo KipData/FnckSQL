@@ -6,4 +6,5 @@ pub struct CreateTableOperator {
     pub table_name: TableName,
     /// List of columns of the table
     pub columns: Vec<ColumnCatalog>,
+    pub if_not_exists: bool,
 }
