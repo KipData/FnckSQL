@@ -73,6 +73,7 @@ pub trait Transaction: Sync + Send + 'static {
         &mut self,
         table_name: TableName,
         columns: Vec<ColumnCatalog>,
+        if_not_exists: bool,
     ) -> Result<TableName, StorageError>;
 
     fn drop_table(&mut self, table_name: &str) -> Result<(), StorageError>;
@@ -318,6 +319,9 @@ pub enum StorageError {
 
     #[error("Add column need nullable")]
     NeedNullAble,
+
+    #[error("The table already exists")]
+    TableExists,
 }
 
 impl From<KernelError> for StorageError {

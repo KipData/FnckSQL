@@ -125,8 +125,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 name,
                 columns,
                 constraints,
+                if_not_exists,
                 ..
-            } => self.bind_create_table(name, columns, constraints)?,
+            } => self.bind_create_table(name, columns, constraints, *if_not_exists)?,
             Statement::Drop {
                 object_type, names, ..
             } => match object_type {
@@ -264,6 +265,7 @@ pub mod test {
                     None,
                 ),
             ],
+            false
         )?;
 
         let _ = transaction.create_table(
@@ -282,6 +284,7 @@ pub mod test {
                     None,
                 ),
             ],
+            false
         )?;
 
         transaction.commit().await?;

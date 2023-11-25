@@ -223,7 +223,17 @@ impl Transaction for KipTransaction {
         &mut self,
         table_name: TableName,
         columns: Vec<ColumnCatalog>,
+        if_not_exists: bool,
     ) -> Result<TableName, StorageError> {
+        let (table_key, value) = TableCodec::encode_root_table(&table_name)?;
+        if self.tx.get(&table_key)?.is_some() {
+            if if_not_exists {
+                return Ok(table_name);
+            }
+            return Err(StorageError::TableExists);
+        }
+        self.tx.set(table_key, value);
+
         let mut table_catalog = TableCatalog::new(table_name.clone(), columns)?;
 
         Self::create_index_meta_for_table(&mut self.tx, &mut table_catalog)?;
@@ -232,9 +242,6 @@ impl Transaction for KipTransaction {
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
         }
-        let (table_key, value) = TableCodec::encode_root_table(&table_name)?;
-        self.tx.set(table_key, value);
-
         self.cache.put(table_name.to_string(), table_catalog);
 
         Ok(table_name)
@@ -486,7 +493,7 @@ mod test {
             .iter()
             .map(|col_ref| ColumnCatalog::clone(&col_ref))
             .collect_vec();
-        let _ = transaction.create_table(Arc::new("test".to_string()), source_columns)?;
+        let _ = transaction.create_table(Arc::new("test".to_string()), source_columns, false)?;
 
         let table_catalog = transaction.table(Arc::new("test".to_string()));
         assert!(table_catalog.is_some());

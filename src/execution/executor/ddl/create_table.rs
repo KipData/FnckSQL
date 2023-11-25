@@ -29,8 +29,9 @@ impl CreateTable {
         let CreateTableOperator {
             table_name,
             columns,
+            if_not_exists
         } = self.op;
-        let _ = transaction.create_table(table_name.clone(), columns)?;
+        let _ = transaction.create_table(table_name.clone(), columns, if_not_exists)?;
         let tuple_builder = TupleBuilder::new_result();
         let tuple = tuple_builder
             .push_result("CREATE TABLE SUCCESS", format!("{}", table_name).as_str())?;

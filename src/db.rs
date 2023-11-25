@@ -166,7 +166,7 @@ mod test {
                 None,
             ),
         ];
-        let _ = transaction.create_table(Arc::new("t1".to_string()), columns)?;
+        let _ = transaction.create_table(Arc::new("t1".to_string()), columns, false)?;
         transaction.commit().await?;
 
         Ok(())
