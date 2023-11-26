@@ -29,7 +29,7 @@ impl CreateTable {
         let CreateTableOperator {
             table_name,
             columns,
-            if_not_exists
+            if_not_exists,
         } = self.op;
         let _ = transaction.create_table(table_name.clone(), columns, if_not_exists)?;
         let tuple_builder = TupleBuilder::new_result();

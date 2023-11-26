@@ -263,7 +263,7 @@ pub mod test {
                     None,
                 ),
             ],
-            false
+            false,
         )?;
 
         let _ = transaction.create_table(
@@ -282,7 +282,7 @@ pub mod test {
                     None,
                 ),
             ],
-            false
+            false,
         )?;
 
         transaction.commit().await?;
