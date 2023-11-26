@@ -21,7 +21,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         name: &ObjectName,
         columns: &[ColumnDef],
         constraints: &[TableConstraint],
-        if_not_exists: bool
+        if_not_exists: bool,
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(name);
         let (_, name) = split_name(&name)?;
