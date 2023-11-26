@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution::executor::{build, try_collect};
+use crate::execution::executor::{build, try_collect, BoxedExecutor};
 use crate::execution::ExecutorError;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -16,7 +16,7 @@ use crate::storage::{Storage, StorageError, Transaction};
 use crate::types::tuple::Tuple;
 
 pub struct Database<S: Storage> {
-    pub storage: S,
+    pub(crate) storage: S,
 }
 
 impl Database<KipStorage> {
@@ -37,14 +37,35 @@ impl<S: Storage> Database<S> {
     /// Run SQL queries.
     pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
+        let transaction = RefCell::new(transaction);
+        let mut stream = Self::_run(sql, &transaction)?;
+        let tuples = try_collect(&mut stream).await?;
+
+        transaction.into_inner().commit().await?;
+
+        Ok(tuples)
+    }
+
+    pub async fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
+        let transaction = self.storage.transaction().await?;
+
+        Ok(DBTransaction {
+            inner: RefCell::new(transaction),
+        })
+    }
+
+    fn _run(
+        sql: &str,
+        transaction: &RefCell<<S as Storage>::TransactionType>,
+    ) -> Result<BoxedExecutor, DatabaseError> {
         // parse
         let stmts = parse_sql(sql)?;
-
         if stmts.is_empty() {
-            return Ok(vec![]);
+            return Err(DatabaseError::EmptyStatement);
         }
-        let binder = Binder::new(BinderContext::new(&transaction));
-
+        let binder = Binder::new(BinderContext::new(unsafe {
+            transaction.as_ptr().as_ref().unwrap()
+        }));
         /// Build a logical plan.
         ///
         /// SELECT a,b FROM t1 ORDER BY a LIMIT 1;
@@ -58,13 +79,7 @@ impl<S: Storage> Database<S> {
         let best_plan = Self::default_optimizer(source_plan).find_best()?;
         // println!("best_plan plan: {:#?}", best_plan);
 
-        let transaction = RefCell::new(transaction);
-        let mut stream = build(best_plan, &transaction);
-        let tuples = try_collect(&mut stream).await?;
-
-        transaction.into_inner().commit().await?;
-
-        Ok(tuples)
+        Ok(build(best_plan, &transaction))
     }
 
     fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
@@ -105,8 +120,28 @@ impl<S: Storage> Database<S> {
     }
 }
 
+pub struct DBTransaction<S: Storage> {
+    inner: RefCell<S::TransactionType>,
+}
+
+impl<S: Storage> DBTransaction<S> {
+    pub async fn run(&mut self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
+        let mut stream = Database::<S>::_run(sql, &self.inner)?;
+
+        Ok(try_collect(&mut stream).await?)
+    }
+
+    pub async fn commit(self) -> Result<(), DatabaseError> {
+        self.inner.into_inner().commit().await?;
+
+        Ok(())
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum DatabaseError {
+    #[error("sql statement is empty")]
+    EmptyStatement,
     #[error("parse error: {0}")]
     Parse(
         #[source]
@@ -147,6 +182,7 @@ mod test {
     use crate::db::{Database, DatabaseError};
     use crate::storage::{Storage, StorageError, Transaction};
     use crate::types::tuple::create_table;
+    use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -182,6 +218,70 @@ mod test {
         let batch = database.run("select * from t1").await?;
 
         println!("{:#?}", batch);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_transaction_sql() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let kipsql = Database::with_kipdb(temp_dir.path()).await?;
+
+        let mut tx_1 = kipsql.new_transaction().await?;
+        let mut tx_2 = kipsql.new_transaction().await?;
+
+        let _ = tx_1
+            .run("create table t1 (a int primary key, b int)")
+            .await?;
+        let _ = tx_2
+            .run("create table t1 (c int primary key, d int)")
+            .await?;
+
+        let _ = tx_1.run("insert into t1 values(0, 0)").await?;
+        let _ = tx_1.run("insert into t1 values(1, 1)").await?;
+
+        let _ = tx_2.run("insert into t1 values(2, 2)").await?;
+        let _ = tx_2.run("insert into t1 values(3, 3)").await?;
+
+        let tuples_1 = tx_1.run("select * from t1").await?;
+        let tuples_2 = tx_2.run("select * from t1").await?;
+
+        assert_eq!(tuples_1.len(), 2);
+        assert_eq!(tuples_2.len(), 2);
+
+        assert_eq!(
+            tuples_1[0].values,
+            vec![
+                Arc::new(DataValue::Int32(Some(0))),
+                Arc::new(DataValue::Int32(Some(0)))
+            ]
+        );
+        assert_eq!(
+            tuples_1[1].values,
+            vec![
+                Arc::new(DataValue::Int32(Some(1))),
+                Arc::new(DataValue::Int32(Some(1)))
+            ]
+        );
+
+        assert_eq!(
+            tuples_2[0].values,
+            vec![
+                Arc::new(DataValue::Int32(Some(2))),
+                Arc::new(DataValue::Int32(Some(2)))
+            ]
+        );
+        assert_eq!(
+            tuples_2[1].values,
+            vec![
+                Arc::new(DataValue::Int32(Some(3))),
+                Arc::new(DataValue::Int32(Some(3)))
+            ]
+        );
+
+        // FIXME: No write detection during transaction submission
+        tx_1.commit().await?;
+        tx_2.commit().await?;
+
         Ok(())
     }
 
