@@ -155,7 +155,7 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn delete(&mut self, table_name: &str, tuple_id: TupleId) -> Result<(), StorageError> {
+    fn delete(&mut self, table_name: &String, tuple_id: TupleId) -> Result<(), StorageError> {
         let key = TableCodec::encode_tuple_key(table_name, &tuple_id)?;
         self.tx.remove(&key)?;
 
@@ -171,7 +171,7 @@ impl Transaction for KipTransaction {
             }) => {
                 // we need catalog generate col_id && index_id
                 // generally catalog is immutable, so do not worry it changed when alter table going on
-                if let Some(mut catalog) = self.table(table_name).cloned() {
+                if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
                     // not yet supported default value
                     if !column.nullable {
                         return Err(StorageError::NeedNullAble);
@@ -180,7 +180,7 @@ impl Transaction for KipTransaction {
                     for col in catalog.all_columns() {
                         if col.name() == column.name() {
                             if *if_not_exists {
-                                return Ok(())
+                                return Ok(());
                             } else {
                                 return Err(StorageError::DuplicateColumn);
                             }
@@ -195,6 +195,7 @@ impl Transaction for KipTransaction {
                             column_ids: vec![col_id],
                             name: format!("uk_{}", column.name()),
                             is_unique: true,
+                            is_primary: false,
                         };
                         let meta_ref = catalog.add_index_meta(meta);
                         let (key, value) = TableCodec::encode_index_meta(table_name, meta_ref)?;
@@ -202,14 +203,14 @@ impl Transaction for KipTransaction {
                     }
 
                     let column = catalog.get_column_by_id(&col_id).unwrap();
-                    let (key, value) = TableCodec::encode_column(column)?;
+                    let (key, value) = TableCodec::encode_column(&table_name, column)?;
                     self.tx.set(key, value);
 
                     Ok(())
                 } else {
                     return Err(StorageError::TableNotFound);
                 }
-            },
+            }
             AlterTableOperator::DropColumn => todo!(),
             AlterTableOperator::DropPrimaryKey => todo!(),
             AlterTableOperator::RenameColumn => todo!(),

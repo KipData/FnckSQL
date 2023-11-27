@@ -4,11 +4,10 @@ use std::sync::Arc;
 
 use super::Binder;
 use crate::binder::{lower_case_name, split_name, BindError};
-use crate::catalog::ColumnCatalog;
 use crate::planner::operator::alter_table::{AddColumn, AlterTableOperator};
+use crate::planner::operator::scan::ScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
-use crate::planner::operator::scan::ScanOperator;
 use crate::storage::Transaction;
 
 impl<'a, T: Transaction> Binder<'a, T> {
@@ -27,14 +26,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 if_not_exists,
                 column_def,
             } => {
-                if let Some(table) = self.context.table(&table_name) {
-                    let plan = ScanOperator::new(table_name.clone(), table);
-    
+                if let Some(table) = self.context.table(table_name.clone()) {
+                    let plan = ScanOperator::build(table_name.clone(), table);
+
                     LogicalPlan {
                         operator: Operator::AlterTable(AlterTableOperator::AddColumn(AddColumn {
                             table_name,
                             if_not_exists: *if_not_exists,
-                            column: ColumnCatalog::from(column_def.clone()),
+                            column: self.bind_column(column_def)?,
                         })),
                         childrens: vec![plan],
                     }
@@ -42,9 +41,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     return Err(BindError::InvalidTable(format!(
                         "not found table {}",
                         table_name
-                    )))
+                    )));
                 }
-            },
+            }
             AlterTableOperation::DropColumn {
                 column_name: _,
                 if_exists: _,
