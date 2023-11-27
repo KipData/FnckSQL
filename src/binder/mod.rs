@@ -48,9 +48,9 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
     }
 
-    pub fn table(&self, table_name: &String) -> Option<&TableCatalog> {
-        if let Some(real_name) = self.table_aliases.get(table_name) {
-            self.transaction.table(real_name)
+    pub fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
+        if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
+            self.transaction.table(real_name.clone())
         } else {
             self.transaction.table(table_name)
         }
@@ -123,8 +123,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 name,
                 columns,
                 constraints,
+                if_not_exists,
                 ..
-            } => self.bind_create_table(name, &columns, &constraints)?,
+            } => self.bind_create_table(name, columns, constraints, *if_not_exists)?,
             Statement::Drop {
                 object_type, names, ..
             } => match object_type {
@@ -175,7 +176,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 target,
                 options,
                 ..
-            } => self.bind_copy(source.clone(), *to, target.clone(), &options)?,
+            } => self.bind_copy(source.clone(), *to, target.clone(), options)?,
             _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
@@ -252,16 +253,17 @@ pub mod test {
                 ColumnCatalog::new(
                     "c1".to_string(),
                     false,
-                    ColumnDesc::new(Integer, true, false),
+                    ColumnDesc::new(Integer, true, false, None),
                     None,
                 ),
                 ColumnCatalog::new(
                     "c2".to_string(),
                     false,
-                    ColumnDesc::new(Integer, false, true),
+                    ColumnDesc::new(Integer, false, true, None),
                     None,
                 ),
             ],
+            false,
         )?;
 
         let _ = transaction.create_table(
@@ -270,16 +272,17 @@ pub mod test {
                 ColumnCatalog::new(
                     "c3".to_string(),
                     false,
-                    ColumnDesc::new(Integer, true, false),
+                    ColumnDesc::new(Integer, true, false, None),
                     None,
                 ),
                 ColumnCatalog::new(
                     "c4".to_string(),
                     false,
-                    ColumnDesc::new(Integer, false, false),
+                    ColumnDesc::new(Integer, false, false, None),
                     None,
                 ),
             ],
+            false,
         )?;
 
         transaction.commit().await?;

@@ -17,7 +17,7 @@ impl SumAccumulator {
         assert!(ty.is_numeric());
 
         Self {
-            result: DataValue::init(&ty),
+            result: DataValue::init(ty),
         }
     }
 }

@@ -80,5 +80,11 @@ select * from t
 0 text1
 1 text2
 
+statement error
+select CAST(name AS BIGINT) from t
+
+statement ok
+select CAST(id AS VARCHAR) from t
+
 statement ok
 drop table t

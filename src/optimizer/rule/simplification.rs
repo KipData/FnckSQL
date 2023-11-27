@@ -249,13 +249,13 @@ mod test {
                 summary: ColumnSummary {
                     id: Some(0),
                     name: "c1".to_string(),
-                    table_name: Some(Arc::new("t1".to_string())),
                 },
                 nullable: false,
                 desc: ColumnDesc {
                     column_datatype: LogicalType::Integer,
                     is_primary: true,
                     is_unique: false,
+                    default: None,
                 },
                 ref_expr: None,
             };
@@ -263,13 +263,13 @@ mod test {
                 summary: ColumnSummary {
                     id: Some(1),
                     name: "c2".to_string(),
-                    table_name: Some(Arc::new("t1".to_string())),
                 },
                 nullable: false,
                 desc: ColumnDesc {
                     column_datatype: LogicalType::Integer,
                     is_primary: false,
                     is_unique: true,
+                    default: None,
                 },
                 ref_expr: None,
             };

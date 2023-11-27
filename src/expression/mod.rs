@@ -4,12 +4,10 @@ use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
-use crate::binder::BinderContext;
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
 
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
-use crate::storage::Transaction;
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 
@@ -110,19 +108,19 @@ impl ScalarExpression {
     pub fn return_type(&self) -> LogicalType {
         match self {
             Self::Constant(v) => v.logical_type(),
-            Self::ColumnRef(col) => col.datatype().clone(),
+            Self::ColumnRef(col) => *col.datatype(),
             Self::Binary {
                 ty: return_type, ..
-            } => return_type.clone(),
+            } => *return_type,
             Self::Unary {
                 ty: return_type, ..
-            } => return_type.clone(),
+            } => *return_type,
             Self::TypeCast {
                 ty: return_type, ..
-            } => return_type.clone(),
+            } => *return_type,
             Self::AggCall {
                 ty: return_type, ..
-            } => return_type.clone(),
+            } => *return_type,
             Self::IsNull { .. } | Self::In { .. } => LogicalType::Boolean,
             Self::Alias { expr, .. } => expr.return_type(),
         }
@@ -142,18 +140,14 @@ impl ScalarExpression {
                 ScalarExpression::ColumnRef(col) => {
                     vec.push(col.clone());
                 }
-                ScalarExpression::Alias { expr, .. } => {
-                    columns_collect(&expr, vec, only_column_ref)
-                }
+                ScalarExpression::Alias { expr, .. } => columns_collect(expr, vec, only_column_ref),
                 ScalarExpression::TypeCast { expr, .. } => {
-                    columns_collect(&expr, vec, only_column_ref)
+                    columns_collect(expr, vec, only_column_ref)
                 }
                 ScalarExpression::IsNull { expr, .. } => {
-                    columns_collect(&expr, vec, only_column_ref)
+                    columns_collect(expr, vec, only_column_ref)
                 }
-                ScalarExpression::Unary { expr, .. } => {
-                    columns_collect(&expr, vec, only_column_ref)
-                }
+                ScalarExpression::Unary { expr, .. } => columns_collect(expr, vec, only_column_ref),
                 ScalarExpression::Binary {
                     left_expr,
                     right_expr,
@@ -183,22 +177,22 @@ impl ScalarExpression {
         exprs
     }
 
-    pub fn has_agg_call<T: Transaction>(&self, context: &BinderContext<'_, T>) -> bool {
+    pub fn has_agg_call(&self) -> bool {
         match self {
             ScalarExpression::AggCall { .. } => true,
             ScalarExpression::Constant(_) => false,
             ScalarExpression::ColumnRef(_) => false,
-            ScalarExpression::Alias { expr, .. } => expr.has_agg_call(context),
-            ScalarExpression::TypeCast { expr, .. } => expr.has_agg_call(context),
-            ScalarExpression::IsNull { expr, .. } => expr.has_agg_call(context),
-            ScalarExpression::Unary { expr, .. } => expr.has_agg_call(context),
+            ScalarExpression::Alias { expr, .. } => expr.has_agg_call(),
+            ScalarExpression::TypeCast { expr, .. } => expr.has_agg_call(),
+            ScalarExpression::IsNull { expr, .. } => expr.has_agg_call(),
+            ScalarExpression::Unary { expr, .. } => expr.has_agg_call(),
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
                 ..
-            } => left_expr.has_agg_call(context) || right_expr.has_agg_call(context),
+            } => left_expr.has_agg_call() || right_expr.has_agg_call(),
             ScalarExpression::In { expr, args, .. } => {
-                expr.has_agg_call(context) || args.iter().any(|arg| arg.has_agg_call(context))
+                expr.has_agg_call() || args.iter().any(|arg| arg.has_agg_call())
             }
         }
     }
@@ -209,13 +203,13 @@ impl ScalarExpression {
             ScalarExpression::Constant(value) => Arc::new(ColumnCatalog::new(
                 format!("{}", value),
                 true,
-                ColumnDesc::new(value.logical_type(), false, false),
+                ColumnDesc::new(value.logical_type(), false, false, None),
                 Some(self.clone()),
             )),
             ScalarExpression::Alias { expr, alias } => Arc::new(ColumnCatalog::new(
                 alias.to_string(),
                 true,
-                ColumnDesc::new(expr.return_type(), false, false),
+                ColumnDesc::new(expr.return_type(), false, false, None),
                 Some(self.clone()),
             )),
             ScalarExpression::AggCall {
@@ -245,7 +239,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(ty.clone(), false, false),
+                    ColumnDesc::new(*ty, false, false, None),
                     Some(self.clone()),
                 ))
             }
@@ -265,7 +259,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(ty.clone(), false, false),
+                    ColumnDesc::new(*ty, false, false, None),
                     Some(self.clone()),
                 ))
             }
@@ -274,7 +268,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
-                    ColumnDesc::new(ty.clone(), false, false),
+                    ColumnDesc::new(*ty, false, false, None),
                     Some(self.clone()),
                 ))
             }
@@ -283,7 +277,7 @@ impl ScalarExpression {
                 Arc::new(ColumnCatalog::new(
                     format!("{} {}", expr.output_columns().name(), suffix),
                     true,
-                    ColumnDesc::new(LogicalType::Boolean, false, false),
+                    ColumnDesc::new(LogicalType::Boolean, false, false, None),
                     Some(self.clone()),
                 ))
             }
@@ -305,13 +299,16 @@ impl ScalarExpression {
                         args_string
                     ),
                     true,
-                    ColumnDesc::new(LogicalType::Boolean, false, false),
+                    ColumnDesc::new(LogicalType::Boolean, false, false, None),
                     Some(self.clone()),
                 ))
             }
-            _ => {
-                todo!()
-            }
+            ScalarExpression::TypeCast { expr, ty } => Arc::new(ColumnCatalog::new(
+                format!("CAST({} as {})", expr.output_columns().name(), ty),
+                true,
+                ColumnDesc::new(*ty, false, false, None),
+                Some(self.clone()),
+            )),
         }
     }
 }

@@ -20,7 +20,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         agg_calls: Vec<ScalarExpression>,
         groupby_exprs: Vec<ScalarExpression>,
     ) -> LogicalPlan {
-        AggregateOperator::new(children, agg_calls, groupby_exprs)
+        AggregateOperator::build(children, agg_calls, groupby_exprs)
     }
 
     pub fn extract_select_aggregate(
@@ -153,10 +153,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
             HashSet::from_iter(group_raw_exprs.iter());
 
         for expr in select_items {
-            if expr.has_agg_call(&self.context) {
+            if expr.has_agg_call() {
                 continue;
             }
-
             group_raw_set.remove(expr);
 
             if !group_raw_exprs.iter().contains(expr) {
@@ -168,9 +167,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
         }
 
         if !group_raw_set.is_empty() {
-            return Err(BindError::AggMiss(format!(
-                "In the GROUP BY clause the field must be in the select clause"
-            )));
+            return Err(BindError::AggMiss(
+                "In the GROUP BY clause the field must be in the select clause".to_string(),
+            ));
         }
 
         Ok(())

@@ -37,7 +37,6 @@ impl<S: Storage> Database<S> {
     /// Run SQL queries.
     pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
-
         // parse
         let stmts = parse_sql(sql)?;
 
@@ -157,17 +156,17 @@ mod test {
             ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false),
+                ColumnDesc::new(LogicalType::Integer, true, false, None),
                 None,
             ),
             ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false),
+                ColumnDesc::new(LogicalType::Boolean, false, false, None),
                 None,
             ),
         ];
-        let _ = transaction.create_table(Arc::new("t1".to_string()), columns)?;
+        let _ = transaction.create_table(Arc::new("t1".to_string()), columns, false)?;
         transaction.commit().await?;
 
         Ok(())
