@@ -31,6 +31,8 @@ use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use std::cell::RefCell;
 
+use self::ddl::alter_table::AlterTable;
+
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
 pub trait Executor<T: Transaction> {
@@ -104,6 +106,10 @@ pub fn build<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>) -> Box
             Delete::from((op, input)).execute(transaction)
         }
         Operator::Values(op) => Values::from(op).execute(transaction),
+        Operator::AlterTable(op) => {
+            let input = build(childrens.remove(0), transaction);
+            AlterTable::from((op, input)).execute(transaction)
+        },
         Operator::CreateTable(op) => CreateTable::from(op).execute(transaction),
         Operator::DropTable(op) => DropTable::from(op).execute(transaction),
         Operator::Truncate(op) => Truncate::from(op).execute(transaction),

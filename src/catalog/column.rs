@@ -90,13 +90,13 @@ impl From<ColumnDef> for ColumnCatalog {
             false,
             false,
         );
-        let mut nullable = false;
+        let mut nullable = true;
 
         // TODO: 这里可以对更多字段可设置内容进行补充
         for option_def in column_def.options {
             match option_def.option {
-                ColumnOption::Null => nullable = true,
-                ColumnOption::NotNull => (),
+                ColumnOption::Null => (),
+                ColumnOption::NotNull => nullable = false,
                 ColumnOption::Unique { is_primary } => {
                     if is_primary {
                         column_desc.is_primary = true;

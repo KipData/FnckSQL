@@ -1,4 +1,5 @@
 pub mod aggregate;
+pub mod alter_table;
 pub mod copy_from_file;
 pub mod copy_to_file;
 pub mod create_table;
@@ -31,8 +32,9 @@ use crate::planner::operator::values::ValuesOperator;
 use itertools::Itertools;
 
 use self::{
-    aggregate::AggregateOperator, filter::FilterOperator, join::JoinOperator, limit::LimitOperator,
-    project::ProjectOperator, scan::ScanOperator, sort::SortOperator,
+    aggregate::AggregateOperator, alter_table::AlterTableOperator, filter::FilterOperator,
+    join::JoinOperator, limit::LimitOperator, project::ProjectOperator, scan::ScanOperator,
+    sort::SortOperator,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -52,6 +54,7 @@ pub enum Operator {
     Update(UpdateOperator),
     Delete(DeleteOperator),
     // DDL
+    AlterTable(AlterTableOperator),
     CreateTable(CreateTableOperator),
     DropTable(DropTableOperator),
     Truncate(TruncateOperator),

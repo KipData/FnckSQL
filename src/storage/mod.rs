@@ -4,6 +4,7 @@ mod table_codec;
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 use crate::expression::simplify::ConstantBinary;
 use crate::expression::ScalarExpression;
+use crate::planner::operator::alter_table::AlterTableOperator;
 use crate::storage::table_codec::TableCodec;
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexMetaRef};
@@ -64,7 +65,7 @@ pub trait Transaction: Sync + Send + 'static {
     ) -> Result<(), StorageError>;
 
     fn delete(&mut self, table_name: &String, tuple_id: TupleId) -> Result<(), StorageError>;
-
+    fn alter_table(&mut self, op: &AlterTableOperator) -> Result<(), StorageError>;
     fn create_table(
         &mut self,
         table_name: TableName,
@@ -157,6 +158,12 @@ pub enum StorageError {
 
     #[error("The table not found")]
     TableNotFound,
+
+    #[error("The some column already exists")]
+    DuplicateColumn,
+
+    #[error("Add column need nullable")]
+    NeedNullAble,
 }
 
 impl From<KernelError> for StorageError {
