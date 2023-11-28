@@ -67,7 +67,7 @@ pub trait Transaction: Sync + Send + 'static {
         is_overwrite: bool,
     ) -> Result<(), StorageError>;
 
-    fn delete(&mut self, table_name: &String, tuple_id: TupleId) -> Result<(), StorageError>;
+    fn delete(&mut self, table_name: &str, tuple_id: TupleId) -> Result<(), StorageError>;
     fn alter_table(&mut self, op: &AlterTableOperator) -> Result<(), StorageError>;
     fn create_table(
         &mut self,
