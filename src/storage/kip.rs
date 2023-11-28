@@ -155,7 +155,7 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn delete(&mut self, table_name: &String, tuple_id: TupleId) -> Result<(), StorageError> {
+    fn delete(&mut self, table_name: &str, tuple_id: TupleId) -> Result<(), StorageError> {
         let key = TableCodec::encode_tuple_key(table_name, &tuple_id)?;
         self.tx.remove(&key)?;
 
