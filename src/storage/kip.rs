@@ -7,7 +7,7 @@ use crate::storage::{
 use crate::types::index::{Index, IndexMeta, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
 use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
-use kip_db::kernel::lsm::mvcc::TransactionIter;
+use kip_db::kernel::lsm::mvcc::{CheckType, TransactionIter};
 use kip_db::kernel::lsm::storage::Config;
 use kip_db::kernel::lsm::{mvcc, storage};
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
@@ -37,7 +37,7 @@ impl Storage for KipStorage {
     type TransactionType = KipTransaction;
 
     async fn transaction(&self) -> Result<Self::TransactionType, StorageError> {
-        let tx = self.inner.new_transaction().await;
+        let tx = self.inner.new_transaction(CheckType::Optimistic).await;
 
         Ok(KipTransaction {
             tx,

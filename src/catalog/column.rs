@@ -60,7 +60,7 @@ impl ColumnCatalog {
         self.summary.id
     }
 
-    pub(crate) fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         &self.summary.name
     }
 

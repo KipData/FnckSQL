@@ -278,9 +278,9 @@ mod test {
             ]
         );
 
-        // FIXME: No write detection during transaction submission
         tx_1.commit().await?;
-        tx_2.commit().await?;
+
+        assert!(tx_2.commit().await.is_err());
 
         Ok(())
     }
