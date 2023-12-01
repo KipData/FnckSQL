@@ -8,7 +8,9 @@ async fn main() -> Result<(), DatabaseError> {
     let _ = tx_1
         .run("create table if not exists t1 (c1 int primary key, c2 int)")
         .await?;
-    let _ = tx_1.run("insert into t1 values(0, 0), (1, 1)").await?;
+    let _ = tx_1
+        .run("insert into t1 values(0, 0), (1, 1)")
+        .await?;
 
     assert!(database.run("select * from t1").await.is_err());
 
