@@ -19,3 +19,6 @@ Cargo.lock
 /.idea
 /.obsidian
 .DS_Store
+
+/hello_world
+/transaction
