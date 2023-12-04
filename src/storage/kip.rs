@@ -1,6 +1,6 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
 use crate::expression::simplify::ConstantBinary;
-use crate::planner::operator::alter_table::{AddColumn, AlterTableOperator};
+use crate::planner::operator::alter_table::AddColumnOperator;
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{
     tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, StorageError, Transaction,
@@ -162,61 +162,52 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn alter_table(&mut self, op: &AlterTableOperator) -> Result<(), StorageError> {
-        match op {
-            AlterTableOperator::AddColumn(AddColumn {
-                table_name,
-                if_not_exists,
-                column,
-            }) => {
-                // we need catalog generate col_id && index_id
-                // generally catalog is immutable, so do not worry it changed when alter table going on
-                if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
-                    // not yet supported default value
-                    if !column.nullable {
-                        return Err(StorageError::NeedNullAble);
+    fn add_column(&mut self, op: &AddColumnOperator) -> Result<(), StorageError> {
+        let AddColumnOperator {
+            table_name,
+            if_not_exists,
+            column,
+        } = op;
+        // we need catalog generate col_id && index_id
+        // generally catalog is immutable, so do not worry it changed when alter table going on
+        if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
+            // not yet supported default value
+            if !column.nullable {
+                return Err(StorageError::NeedNullAble);
+            }
+
+            for col in catalog.all_columns() {
+                if col.name() == column.name() {
+                    if *if_not_exists {
+                        return Ok(());
+                    } else {
+                        return Err(StorageError::DuplicateColumn);
                     }
-
-                    for col in catalog.all_columns() {
-                        if col.name() == column.name() {
-                            if *if_not_exists {
-                                return Ok(());
-                            } else {
-                                return Err(StorageError::DuplicateColumn);
-                            }
-                        }
-                    }
-
-                    let col_id = catalog.add_column(column.clone())?;
-
-                    if column.desc.is_unique {
-                        let meta = IndexMeta {
-                            id: 0,
-                            column_ids: vec![col_id],
-                            name: format!("uk_{}", column.name()),
-                            is_unique: true,
-                            is_primary: false,
-                        };
-                        let meta_ref = catalog.add_index_meta(meta);
-                        let (key, value) = TableCodec::encode_index_meta(table_name, meta_ref)?;
-                        self.tx.set(key, value);
-                    }
-
-                    let column = catalog.get_column_by_id(&col_id).unwrap();
-                    let (key, value) = TableCodec::encode_column(&table_name, column)?;
-                    self.tx.set(key, value);
-
-                    Ok(())
-                } else {
-                    return Err(StorageError::TableNotFound);
                 }
             }
-            AlterTableOperator::DropColumn => todo!(),
-            AlterTableOperator::DropPrimaryKey => todo!(),
-            AlterTableOperator::RenameColumn => todo!(),
-            AlterTableOperator::RenameTable => todo!(),
-            AlterTableOperator::ChangeColumn => todo!(),
-            AlterTableOperator::AlterColumn => todo!(),
+
+            let col_id = catalog.add_column(column.clone())?;
+
+            if column.desc.is_unique {
+                let meta = IndexMeta {
+                    id: 0,
+                    column_ids: vec![col_id],
+                    name: format!("uk_{}", column.name()),
+                    is_unique: true,
+                    is_primary: false,
+                };
+                let meta_ref = catalog.add_index_meta(meta);
+                let (key, value) = TableCodec::encode_index_meta(table_name, meta_ref)?;
+                self.tx.set(key, value);
+            }
+
+            let column = catalog.get_column_by_id(&col_id).unwrap();
+            let (key, value) = TableCodec::encode_column(&table_name, column)?;
+            self.tx.set(key, value);
+
+            Ok(())
+        } else {
+            return Err(StorageError::TableNotFound);
         }
     }
 

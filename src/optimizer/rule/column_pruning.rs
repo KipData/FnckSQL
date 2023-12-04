@@ -116,7 +116,7 @@ impl ColumnPruning {
             | Operator::Show(_)
             | Operator::CopyFromFile(_)
             | Operator::CopyToFile(_)
-            | Operator::AlterTable(_) => (),
+            | Operator::AddColumn(_) => (),
         }
     }
 

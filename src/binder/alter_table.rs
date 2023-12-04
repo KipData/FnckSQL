@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::Binder;
 use crate::binder::{lower_case_name, split_name, BindError};
-use crate::planner::operator::alter_table::{AddColumn, AlterTableOperator};
+use crate::planner::operator::alter_table::AddColumnOperator;
 use crate::planner::operator::scan::ScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
@@ -18,8 +18,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
     ) -> Result<LogicalPlan, BindError> {
         let table_name: Arc<String> = Arc::new(split_name(&lower_case_name(name))?.1.to_string());
 
-        // we need convert ColumnDef to ColumnCatalog
-
         let plan = match operation {
             AlterTableOperation::AddColumn {
                 column_keyword: _,
@@ -30,11 +28,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     let plan = ScanOperator::build(table_name.clone(), table);
 
                     LogicalPlan {
-                        operator: Operator::AlterTable(AlterTableOperator::AddColumn(AddColumn {
+                        operator: Operator::AddColumn(AddColumnOperator {
                             table_name,
                             if_not_exists: *if_not_exists,
                             column: self.bind_column(column_def)?,
-                        })),
+                        }),
                         childrens: vec![plan],
                     }
                 } else {

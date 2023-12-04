@@ -32,7 +32,7 @@ use crate::planner::operator::values::ValuesOperator;
 use itertools::Itertools;
 
 use self::{
-    aggregate::AggregateOperator, alter_table::AlterTableOperator, filter::FilterOperator,
+    aggregate::AggregateOperator, alter_table::AddColumnOperator, filter::FilterOperator,
     join::JoinOperator, limit::LimitOperator, project::ProjectOperator, scan::ScanOperator,
     sort::SortOperator,
 };
@@ -54,7 +54,7 @@ pub enum Operator {
     Update(UpdateOperator),
     Delete(DeleteOperator),
     // DDL
-    AlterTable(AlterTableOperator),
+    AddColumn(AddColumnOperator),
     CreateTable(CreateTableOperator),
     DropTable(DropTableOperator),
     Truncate(TruncateOperator),
