@@ -171,7 +171,7 @@ impl Transaction for KipTransaction {
         // we need catalog generate col_id && index_id
         // generally catalog is immutable, so do not worry it changed when alter table going on
         if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
-            if !column.nullable && column.default_value().is_none(){
+            if !column.nullable && column.default_value().is_none() {
                 return Err(StorageError::NeedNullAble);
             }
 
