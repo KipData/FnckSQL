@@ -3,12 +3,12 @@ use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::Rule;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
+use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
 use crate::types::value::{DataValue, ValueRef};
-use lazy_static::lazy_static;
-use crate::planner::operator::filter::FilterOperator;
 use crate::types::LogicalType;
+use lazy_static::lazy_static;
 lazy_static! {
     static ref LIKE_REWRITE_RULE: Pattern = {
         Pattern {
@@ -148,39 +148,51 @@ impl Rule for LikeRewrite {
 }
 
 impl LikeRewrite {
-    fn process_value_str(value_str: Option<String>, left_expr: &mut Box<ScalarExpression>, ty: LogicalType, filter_op: &mut FilterOperator) {
+    fn process_value_str(
+        value_str: Option<String>,
+        left_expr: &mut Box<ScalarExpression>,
+        ty: LogicalType,
+        filter_op: &mut FilterOperator,
+    ) {
         value_str.map(|value_str| {
             if value_str.ends_with('%') {
                 let left_bound = value_str.trim_end_matches('%');
                 let right_bound = increment_last_char(left_bound);
                 right_bound.map(|rb| {
-                    filter_op.predicate = Self::create_new_expr(&mut left_expr.clone(), ty, left_bound.to_string(), rb);
+                    filter_op.predicate = Self::create_new_expr(
+                        &mut left_expr.clone(),
+                        ty,
+                        left_bound.to_string(),
+                        rb,
+                    );
                 });
             }
         });
     }
-    fn create_new_expr(left_expr: &mut Box<ScalarExpression>, ty: LogicalType, left_bound: String, right_bound: String) -> ScalarExpression {
+
+    fn create_new_expr(
+        left_expr: &mut Box<ScalarExpression>,
+        ty: LogicalType,
+        left_bound: String,
+        right_bound: String,
+    ) -> ScalarExpression {
         let new_expr = ScalarExpression::Binary {
             op: BinaryOperator::And,
             left_expr: Box::new(ScalarExpression::Binary {
                 op: BinaryOperator::GtEq,
                 left_expr: left_expr.clone(),
-                right_expr: Box::new(
-                    ScalarExpression::Constant(ValueRef::from(
-                        DataValue::Utf8(Some(left_bound)),
-                    )),
-                ),
-                ty: ty,
+                right_expr: Box::new(ScalarExpression::Constant(ValueRef::from(DataValue::Utf8(
+                    Some(left_bound),
+                )))),
+                ty,
             }),
 
             right_expr: Box::new(ScalarExpression::Binary {
                 op: BinaryOperator::Lt,
                 left_expr: left_expr.clone(),
-                right_expr: Box::new(
-                    ScalarExpression::Constant(ValueRef::from(
-                        DataValue::Utf8(Some(right_bound)),
-                    )),
-                ),
+                right_expr: Box::new(ScalarExpression::Constant(ValueRef::from(DataValue::Utf8(
+                    Some(right_bound),
+                )))),
                 ty,
             }),
             ty,
@@ -199,7 +211,6 @@ fn increment_last_char(s: &str) -> Option<String> {
     }
     None
 }
-
 
 #[cfg(test)]
 mod test {
