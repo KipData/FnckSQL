@@ -7,6 +7,7 @@ use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
 use crate::types::value::{DataValue, ValueRef};
 use lazy_static::lazy_static;
+use crate::planner::operator::filter::FilterOperator;
 use crate::types::LogicalType;
 lazy_static! {
     static ref LIKE_REWRITE_RULE: Pattern = {
@@ -127,26 +128,25 @@ impl Rule for LikeRewrite {
 
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Filter(mut filter_op) = graph.operator(node_id).clone() {
-            // if is like expression
             if let ScalarExpression::Binary {
                 op: BinaryOperator::Like,
-                left_expr,
-                right_expr,
+                ref mut left_expr,
+                ref mut right_expr,
                 ty,
-            } = &mut filter_op.predicate
+            } = filter_op.predicate.clone()
             {
                 if let ScalarExpression::Constant(value) = right_expr.as_ref() {
                     if let DataValue::Utf8(value_str) = (**value).clone() {
-                        if let Some(value_str) = value_str.as_ref() {
+                        value_str.map(|value_str| {
                             if value_str.ends_with('%') {
-                                let x = value_str.trim_end_matches('%');
-                                let mut new_value = increment_last_char(x);
-                                if let Some(new_value) = new_value {
-                                    let new_expr = Self::create_new_expr(left_expr, ty, x.to_string(), new_value);
-                                    filter_op.predicate = new_expr;
-                                }
+                                let left_bound = value_str.trim_end_matches('%');
+                                let mut right_bound = increment_last_char(left_bound);
+
+                                right_bound.map(|rb| {
+                                    filter_op.predicate = Self::create_new_expr(&mut left_expr.clone(), ty, left_bound.to_string(), rb);
+                                });
                             }
-                        }
+                        });
                     }
                 }
             }
@@ -157,7 +157,7 @@ impl Rule for LikeRewrite {
 }
 
 impl LikeRewrite {
-    fn create_new_expr(left_expr: &mut Box<ScalarExpression>, ty: &mut LogicalType, mut value: String, mut new_value: String) -> ScalarExpression {
+    fn create_new_expr(left_expr: &mut Box<ScalarExpression>, ty: LogicalType, left_bound: String, right_bound: String) -> ScalarExpression {
         let new_expr = ScalarExpression::Binary {
             op: BinaryOperator::And,
             left_expr: Box::new(ScalarExpression::Binary {
@@ -165,10 +165,10 @@ impl LikeRewrite {
                 left_expr: left_expr.clone(),
                 right_expr: Box::new(
                     ScalarExpression::Constant(ValueRef::from(
-                        DataValue::Utf8(Some(value)),
+                        DataValue::Utf8(Some(left_bound)),
                     )),
                 ),
-                ty: ty.clone(),
+                ty: ty,
             }),
 
             right_expr: Box::new(ScalarExpression::Binary {
@@ -176,14 +176,49 @@ impl LikeRewrite {
                 left_expr: left_expr.clone(),
                 right_expr: Box::new(
                     ScalarExpression::Constant(ValueRef::from(
-                        DataValue::Utf8(Some(new_value)),
+                        DataValue::Utf8(Some(right_bound)),
                     )),
                 ),
-                ty: ty.clone(),
+                ty,
             }),
-            ty: ty.clone(),
+            ty,
         };
         new_expr
+    }
+
+    fn process_filter_operator(&self, filter_op: &mut FilterOperator) -> Result<(), OptimizerError> {
+        if let ScalarExpression::Binary {
+            op: BinaryOperator::Like,
+            left_expr,
+            right_expr,
+            ty,
+        } = &mut filter_op.predicate
+        {
+            self.process_like_expression(left_expr, right_expr, ty)?;
+        }
+        Ok(())
+    }
+
+    fn process_like_expression(&self, left_expr: &mut Box<ScalarExpression>, right_expr: &mut Box<ScalarExpression>, ty: &mut LogicalType) -> Result<(), OptimizerError> {
+        if let ScalarExpression::Constant(value) = right_expr.as_ref() {
+            if let DataValue::Utf8(value_str) = (**value).clone() {
+                if let Some(value_str) = value_str.as_ref() {
+                    self.process_utf8_value(left_expr, ty, value_str)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn process_utf8_value(&self, left_expr: &mut Box<ScalarExpression>, ty: &mut LogicalType, value_str: &str) -> Result<(), OptimizerError> {
+        if value_str.ends_with('%') {
+            let x = value_str.trim_end_matches('%');
+            if let Some(new_value) = increment_last_char(x) {
+                let new_expr = Self::create_new_expr(left_expr, *ty, x.to_string(), new_value);
+                *left_expr = Box::new(new_expr);
+            }
+        }
+        Ok(())
     }
 }
 
