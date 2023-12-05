@@ -1,0 +1,19 @@
+statement ok
+create table alter_table(id int primary key, v1 int)
+
+statement ok
+insert into alter_table values (1,1), (2,2), (3,3), (4,4)
+
+statement ok
+alter table alter_table add column da int null
+
+query IIII rowsort
+select * from alter_table
+----
+1 1 null
+2 2 null
+3 3 null
+4 4 null
+
+statement ok
+drop table alter_table

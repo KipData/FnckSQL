@@ -42,7 +42,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 }
             }
             let mut rows = Vec::with_capacity(expr_rows.len());
-
             for expr_row in expr_rows {
                 let mut row = Vec::with_capacity(expr_row.len());
 

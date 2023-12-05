@@ -1,4 +1,5 @@
 pub mod aggregate;
+mod alter_table;
 pub mod copy;
 mod create_table;
 mod delete;
@@ -119,6 +120,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query)?,
+            Statement::AlterTable { name, operation } => self.bind_alter_table(name, operation)?,
             Statement::CreateTable {
                 name,
                 columns,

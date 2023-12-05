@@ -1,5 +1,6 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
 use crate::expression::simplify::ConstantBinary;
+use crate::planner::operator::alter_table::add_column::AddColumnOperator;
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{
     tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, StorageError, Transaction,
@@ -161,6 +162,53 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
+    fn add_column(&mut self, op: &AddColumnOperator) -> Result<(), StorageError> {
+        let AddColumnOperator {
+            table_name,
+            if_not_exists,
+            column,
+        } = op;
+
+        if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
+            if !column.nullable && column.default_value().is_none() {
+                return Err(StorageError::NeedNullAble);
+            }
+
+            for col in catalog.all_columns() {
+                if col.name() == column.name() {
+                    if *if_not_exists {
+                        return Ok(());
+                    } else {
+                        return Err(StorageError::DuplicateColumn);
+                    }
+                }
+            }
+
+            let col_id = catalog.add_column(column.clone())?;
+
+            if column.desc.is_unique {
+                let meta = IndexMeta {
+                    id: 0,
+                    column_ids: vec![col_id],
+                    name: format!("uk_{}", column.name()),
+                    is_unique: true,
+                    is_primary: false,
+                };
+                let meta_ref = catalog.add_index_meta(meta);
+                let (key, value) = TableCodec::encode_index_meta(table_name, meta_ref)?;
+                self.tx.set(key, value);
+            }
+
+            let column = catalog.get_column_by_id(&col_id).unwrap();
+            let (key, value) = TableCodec::encode_column(&table_name, column)?;
+            self.tx.set(key, value);
+
+            Ok(())
+        } else {
+            return Err(StorageError::TableNotFound);
+        }
+    }
+
     fn create_table(
         &mut self,
         table_name: TableName,
@@ -264,6 +312,11 @@ impl Transaction for KipTransaction {
     async fn commit(self) -> Result<(), StorageError> {
         self.tx.commit().await?;
 
+        Ok(())
+    }
+
+    fn remove_cache(&self, key: &String) -> Result<(), StorageError> {
+        self.cache.remove(key);
         Ok(())
     }
 }
