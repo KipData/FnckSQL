@@ -1,6 +1,6 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
 use crate::expression::simplify::ConstantBinary;
-use crate::planner::operator::alter_table::AddColumnOperator;
+use crate::planner::operator::alter_table::add_column::AddColumnOperator;
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{
     tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, StorageError, Transaction,
@@ -171,8 +171,7 @@ impl Transaction for KipTransaction {
         // we need catalog generate col_id && index_id
         // generally catalog is immutable, so do not worry it changed when alter table going on
         if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
-            // not yet supported default value
-            if !column.nullable {
+            if !column.nullable && column.default_value().is_none(){
                 return Err(StorageError::NeedNullAble);
             }
 
@@ -204,6 +203,7 @@ impl Transaction for KipTransaction {
             let column = catalog.get_column_by_id(&col_id).unwrap();
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
+            self.cache.put(table_name.to_string(), catalog);
 
             Ok(())
         } else {

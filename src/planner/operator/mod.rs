@@ -32,9 +32,9 @@ use crate::planner::operator::values::ValuesOperator;
 use itertools::Itertools;
 
 use self::{
-    aggregate::AggregateOperator, alter_table::AddColumnOperator, filter::FilterOperator,
-    join::JoinOperator, limit::LimitOperator, project::ProjectOperator, scan::ScanOperator,
-    sort::SortOperator,
+    aggregate::AggregateOperator, alter_table::add_column::AddColumnOperator,
+    filter::FilterOperator, join::JoinOperator, limit::LimitOperator, project::ProjectOperator,
+    scan::ScanOperator, sort::SortOperator,
 };
 
 #[derive(Debug, PartialEq, Clone)]

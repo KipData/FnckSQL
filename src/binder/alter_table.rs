@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::Binder;
 use crate::binder::{lower_case_name, split_name, BindError};
-use crate::planner::operator::alter_table::AddColumnOperator;
+use crate::planner::operator::alter_table::add_column::AddColumnOperator;
 use crate::planner::operator::scan::ScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;

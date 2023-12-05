@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use crate::{
-    execution::executor::Executor, planner::operator::alter_table::AddColumnOperator,
+    execution::executor::Executor, planner::operator::alter_table::add_column::AddColumnOperator,
     storage::Transaction,
 };
 

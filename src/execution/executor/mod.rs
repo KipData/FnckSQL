@@ -31,7 +31,7 @@ use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use std::cell::RefCell;
 
-use self::ddl::alter_table::AddColumn;
+use self::ddl::alter_table::add_column::AddColumn;
 
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 

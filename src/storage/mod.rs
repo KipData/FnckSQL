@@ -4,7 +4,7 @@ mod table_codec;
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 use crate::expression::simplify::ConstantBinary;
 use crate::expression::ScalarExpression;
-use crate::planner::operator::alter_table::AddColumnOperator;
+use crate::planner::operator::alter_table::add_column::AddColumnOperator;
 use crate::storage::table_codec::TableCodec;
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexMetaRef};
