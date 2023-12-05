@@ -84,6 +84,7 @@ pub trait Transaction: Sync + Send + 'static {
 
     #[allow(async_fn_in_trait)]
     async fn commit(self) -> Result<(), StorageError>;
+    fn remove_cache(&self, _key: &String) -> Result<(), StorageError> { Ok(()) }
 }
 
 enum IndexValue {

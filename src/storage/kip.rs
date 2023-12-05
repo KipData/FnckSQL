@@ -168,8 +168,7 @@ impl Transaction for KipTransaction {
             if_not_exists,
             column,
         } = op;
-        // we need catalog generate col_id && index_id
-        // generally catalog is immutable, so do not worry it changed when alter table going on
+
         if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
             if !column.nullable && column.default_value().is_none() {
                 return Err(StorageError::NeedNullAble);
@@ -203,7 +202,6 @@ impl Transaction for KipTransaction {
             let column = catalog.get_column_by_id(&col_id).unwrap();
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
-            self.cache.put(table_name.to_string(), catalog);
 
             Ok(())
         } else {
@@ -314,6 +312,11 @@ impl Transaction for KipTransaction {
     async fn commit(self) -> Result<(), StorageError> {
         self.tx.commit().await?;
 
+        Ok(())
+    }
+
+    fn remove_cache(&self, key: &String) -> Result<(), StorageError> {
+        self.cache.remove(key);
         Ok(())
     }
 }

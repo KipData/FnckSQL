@@ -51,6 +51,7 @@ impl AddColumn {
 
             transaction.append(table_name, tuple, is_overwrite)?;
         }
+        transaction.remove_cache(&table_name)?;
 
         let tuple_builder = TupleBuilder::new_result();
         let tuple = tuple_builder.push_result("ALTER TABLE SUCCESS", "1")?;
