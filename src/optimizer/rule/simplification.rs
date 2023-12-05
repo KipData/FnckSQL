@@ -7,6 +7,7 @@ use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
 use crate::types::value::{DataValue, ValueRef};
 use lazy_static::lazy_static;
+use crate::types::LogicalType;
 lazy_static! {
     static ref LIKE_REWRITE_RULE: Pattern = {
         Pattern {
@@ -134,53 +135,16 @@ impl Rule for LikeRewrite {
                 ty,
             } = &mut filter_op.predicate
             {
-                // if left is column and right is constant
-                if let ScalarExpression::ColumnRef(_) = left_expr.as_ref() {
-                    if let ScalarExpression::Constant(value) = right_expr.as_ref() {
-                        match value.as_ref() {
-                            DataValue::Utf8(val_str) => {
-                                let mut value = val_str.clone().unwrap_or_else(|| "".to_string());
-
-                                if value.ends_with('%') {
-                                    value.pop(); // remove '%'
-                                    if let Some(last_char) = value.clone().pop() {
-                                        if let Some(next_char) = increment_char(last_char) {
-                                            let mut new_value = value.clone();
-                                            new_value.pop();
-                                            new_value.push(next_char);
-
-                                            let new_expr = ScalarExpression::Binary {
-                                                op: BinaryOperator::And,
-                                                left_expr: Box::new(ScalarExpression::Binary {
-                                                    op: BinaryOperator::GtEq,
-                                                    left_expr: left_expr.clone(),
-                                                    right_expr: Box::new(
-                                                        ScalarExpression::Constant(ValueRef::from(
-                                                            DataValue::Utf8(Some(value)),
-                                                        )),
-                                                    ),
-                                                    ty: ty.clone(),
-                                                }),
-                                                right_expr: Box::new(ScalarExpression::Binary {
-                                                    op: BinaryOperator::Lt,
-                                                    left_expr: left_expr.clone(),
-                                                    right_expr: Box::new(
-                                                        ScalarExpression::Constant(ValueRef::from(
-                                                            DataValue::Utf8(Some(new_value)),
-                                                        )),
-                                                    ),
-                                                    ty: ty.clone(),
-                                                }),
-                                                ty: ty.clone(),
-                                            };
-                                            filter_op.predicate = new_expr;
-                                        }
-                                    }
+                if let ScalarExpression::Constant(value) = right_expr.as_ref() {
+                    if let DataValue::Utf8(value_str) = (**value).clone() {
+                        if let Some(value_str) = value_str.as_ref() {
+                            if value_str.ends_with('%') {
+                                let x = value_str.trim_end_matches('%');
+                                let mut new_value = increment_last_char(x);
+                                if let Some(new_value) = new_value {
+                                    let new_expr = Self::create_new_expr(left_expr, ty, x.to_string(), new_value);
+                                    filter_op.predicate = new_expr;
                                 }
-                            }
-                            _ => {
-                                graph.version += 1;
-                                return Ok(());
                             }
                         }
                     }
@@ -188,18 +152,50 @@ impl Rule for LikeRewrite {
             }
             graph.replace_node(node_id, Operator::Filter(filter_op))
         }
-        // mark changed to skip this rule batch
-        graph.version += 1;
         Ok(())
     }
 }
 
-fn increment_char(v: char) -> Option<char> {
-    match v {
-        'z' => None,
-        'Z' => None,
-        _ => std::char::from_u32(v as u32 + 1),
+impl LikeRewrite {
+    fn create_new_expr(left_expr: &mut Box<ScalarExpression>, ty: &mut LogicalType, mut value: String, mut new_value: String) -> ScalarExpression {
+        let new_expr = ScalarExpression::Binary {
+            op: BinaryOperator::And,
+            left_expr: Box::new(ScalarExpression::Binary {
+                op: BinaryOperator::GtEq,
+                left_expr: left_expr.clone(),
+                right_expr: Box::new(
+                    ScalarExpression::Constant(ValueRef::from(
+                        DataValue::Utf8(Some(value)),
+                    )),
+                ),
+                ty: ty.clone(),
+            }),
+
+            right_expr: Box::new(ScalarExpression::Binary {
+                op: BinaryOperator::Lt,
+                left_expr: left_expr.clone(),
+                right_expr: Box::new(
+                    ScalarExpression::Constant(ValueRef::from(
+                        DataValue::Utf8(Some(new_value)),
+                    )),
+                ),
+                ty: ty.clone(),
+            }),
+            ty: ty.clone(),
+        };
+        new_expr
     }
+}
+
+fn increment_last_char(s: &str) -> Option<String> {
+    let mut chars: Vec<char> = s.chars().collect();
+    for i in (0..chars.len()).rev() {
+        if let Some(next_char) = std::char::from_u32(chars[i] as u32 + 1) {
+            chars[i] = next_char;
+            return Some(chars.into_iter().collect());
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -211,7 +207,7 @@ mod test {
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
-    use crate::optimizer::rule::simplification::increment_char;
+    use crate::optimizer::rule::simplification::increment_last_char;
     use crate::optimizer::rule::RuleImpl;
     use crate::planner::operator::filter::FilterOperator;
     use crate::planner::operator::Operator;
@@ -223,9 +219,9 @@ mod test {
 
     #[test]
     fn test_increment_char() {
-        assert_eq!(increment_char('a'), Some('b'));
-        assert_eq!(increment_char('z'), None);
-        assert_eq!(increment_char('A'), Some('B'));
+        assert_eq!(increment_last_char("abc"), Some("abd".to_string()));
+        assert_eq!(increment_last_char("abz"), Some("ab{".to_string()));
+        assert_eq!(increment_last_char("ab}"), Some("ab~".to_string()));
     }
 
     #[tokio::test]

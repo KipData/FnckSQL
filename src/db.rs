@@ -85,7 +85,7 @@ impl<S: Storage> Database<S> {
                 ],
             )
             .batch(
-                "Predicate Pushown".to_string(),
+                "Predicate Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     RuleImpl::PushPredicateThroughJoin,
