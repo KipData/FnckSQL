@@ -4,4 +4,5 @@ use crate::catalog::TableName;
 pub struct DropTableOperator {
     /// Table name to insert to
     pub table_name: TableName,
+    pub if_exists: bool,
 }

@@ -127,9 +127,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ..
             } => self.bind_create_table(name, columns, constraints, *if_not_exists)?,
             Statement::Drop {
-                object_type, names, ..
+                object_type,
+                names,
+                if_exists,
+                ..
             } => match object_type {
-                ObjectType::Table => self.bind_drop_table(&names[0])?,
+                ObjectType::Table => self.bind_drop_table(&names[0], if_exists)?,
                 _ => todo!(),
             },
             Statement::Insert {
