@@ -237,7 +237,15 @@ impl Transaction for KipTransaction {
         Ok(table_name)
     }
 
-    fn drop_table(&mut self, table_name: &str) -> Result<(), StorageError> {
+    fn drop_table(&mut self, table_name: &str, if_exists: bool) -> Result<(), StorageError> {
+        if self.table(Arc::new(table_name.to_string())).is_none() {
+            if if_exists {
+                return Ok(());
+            } else {
+                return Err(StorageError::TableNotFound);
+            }
+        }
+
         self.drop_data(table_name)?;
 
         let (min, max) = TableCodec::columns_bound(table_name);
