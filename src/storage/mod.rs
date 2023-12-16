@@ -4,12 +4,12 @@ mod table_codec;
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
 use crate::expression::simplify::ConstantBinary;
 use crate::expression::ScalarExpression;
-use crate::planner::operator::alter_table::add_column::AddColumnOperator;
 use crate::storage::table_codec::TableCodec;
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::value::ValueRef;
+use crate::types::ColumnId;
 use kip_db::kernel::lsm::iterator::Iter as DBIter;
 use kip_db::kernel::lsm::mvcc;
 use kip_db::KernelError;
@@ -68,7 +68,14 @@ pub trait Transaction: Sync + Send + 'static {
     ) -> Result<(), StorageError>;
 
     fn delete(&mut self, table_name: &str, tuple_id: TupleId) -> Result<(), StorageError>;
-    fn add_column(&mut self, op: &AddColumnOperator) -> Result<(), StorageError>;
+
+    fn add_column(
+        &mut self,
+        table_name: &TableName,
+        column: &ColumnCatalog,
+        if_not_exists: bool,
+    ) -> Result<ColumnId, StorageError>;
+
     fn create_table(
         &mut self,
         table_name: TableName,
@@ -84,9 +91,6 @@ pub trait Transaction: Sync + Send + 'static {
 
     #[allow(async_fn_in_trait)]
     async fn commit(self) -> Result<(), StorageError>;
-    fn remove_cache(&self, _key: &String) -> Result<(), StorageError> {
-        Ok(())
-    }
 }
 
 enum IndexValue {
@@ -320,8 +324,8 @@ pub enum StorageError {
     #[error("The some column already exists")]
     DuplicateColumn,
 
-    #[error("Add column need nullable")]
-    NeedNullAble,
+    #[error("Add column must be nullable or specify a default value")]
+    NeedNullAbleOrDefault,
 
     #[error("The table already exists")]
     TableExists,

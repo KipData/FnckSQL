@@ -1,19 +1,39 @@
 statement ok
-create table alter_table(id int primary key, v1 int)
+create table t1(id int primary key, v1 int)
 
 statement ok
-insert into alter_table values (1,1), (2,2), (3,3), (4,4)
+insert into t1 values (1,1), (2,2), (3,3), (4,4)
 
 statement ok
-alter table alter_table add column da int null
+alter table t1 add column v2 int null
+
+statement ok
+alter table t1 add column v3 int default 0
+
+statement error
+alter table t1 add column v4 int
 
 query IIII rowsort
-select * from alter_table
+select * from t1
 ----
-1 1 null
-2 2 null
-3 3 null
-4 4 null
+1 1 null 0
+2 2 null 0
+3 3 null 0
+4 4 null 0
 
 statement ok
-drop table alter_table
+create table t2(id int primary key, v1 int)
+
+statement ok
+insert into t2 values (1,1)
+
+statement error
+alter table t2 add column v2 int default 0 unique
+
+query IIII rowsort
+select * from t2
+----
+1 1 0
+
+statement ok
+drop table t1

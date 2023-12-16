@@ -1,12 +1,12 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
 use crate::expression::simplify::ConstantBinary;
-use crate::planner::operator::alter_table::add_column::AddColumnOperator;
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{
     tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, StorageError, Transaction,
 };
 use crate::types::index::{Index, IndexMeta, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
+use crate::types::ColumnId;
 use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
 use kip_db::kernel::lsm::mvcc::{CheckType, TransactionIter};
 use kip_db::kernel::lsm::storage::Config;
@@ -42,7 +42,7 @@ impl Storage for KipStorage {
 
         Ok(KipTransaction {
             tx,
-            cache: ShardingLruCache::new(32, 16, RandomState::default())?,
+            cache: ShardingLruCache::new(8, 2, RandomState::default())?,
         })
     }
 }
@@ -162,22 +162,21 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn add_column(&mut self, op: &AddColumnOperator) -> Result<(), StorageError> {
-        let AddColumnOperator {
-            table_name,
-            if_not_exists,
-            column,
-        } = op;
-
+    fn add_column(
+        &mut self,
+        table_name: &TableName,
+        column: &ColumnCatalog,
+        if_not_exists: bool,
+    ) -> Result<ColumnId, StorageError> {
         if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
             if !column.nullable && column.default_value().is_none() {
-                return Err(StorageError::NeedNullAble);
+                return Err(StorageError::NeedNullAbleOrDefault);
             }
 
             for col in catalog.all_columns() {
                 if col.name() == column.name() {
-                    if *if_not_exists {
-                        return Ok(());
+                    if if_not_exists {
+                        return Ok(col.id().unwrap());
                     } else {
                         return Err(StorageError::DuplicateColumn);
                     }
@@ -202,10 +201,11 @@ impl Transaction for KipTransaction {
             let column = catalog.get_column_by_id(&col_id).unwrap();
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
+            self.cache.remove(table_name);
 
-            Ok(())
+            Ok(col_id)
         } else {
-            return Err(StorageError::TableNotFound);
+            Err(StorageError::TableNotFound)
         }
     }
 
@@ -245,23 +245,14 @@ impl Transaction for KipTransaction {
                 return Err(StorageError::TableNotFound);
             }
         }
-
         self.drop_data(table_name)?;
 
-        let (min, max) = TableCodec::columns_bound(table_name);
-        let mut iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
-        let mut col_keys = vec![];
+        let (column_min, column_max) = TableCodec::columns_bound(table_name);
+        Self::_drop_data(&mut self.tx, &column_min, &column_max)?;
 
-        while let Some((key, value_option)) = iter.try_next()? {
-            if value_option.is_some() {
-                col_keys.push(key);
-            }
-        }
-        drop(iter);
+        let (index_meta_min, index_meta_max) = TableCodec::index_meta_bound(table_name);
+        Self::_drop_data(&mut self.tx, &index_meta_min, &index_meta_max)?;
 
-        for col_key in col_keys {
-            self.tx.remove(&col_key)?
-        }
         self.tx
             .remove(&TableCodec::encode_root_table_key(table_name))?;
 
@@ -320,11 +311,6 @@ impl Transaction for KipTransaction {
     async fn commit(self) -> Result<(), StorageError> {
         self.tx.commit().await?;
 
-        Ok(())
-    }
-
-    fn remove_cache(&self, key: &String) -> Result<(), StorageError> {
-        self.cache.remove(key);
         Ok(())
     }
 }
