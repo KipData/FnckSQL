@@ -1,5 +1,5 @@
 statement ok
-create table t1(id int primary key, v1 int)
+create table t1(id int primary key, v1 int unique)
 
 statement ok
 insert into t1 values (1,1), (2,2), (3,3), (4,4)
@@ -8,7 +8,10 @@ statement ok
 alter table t1 add column v2 int null
 
 statement ok
-alter table t1 add column v3 int default 0
+alter table t1 add column if not exists v3 int default 0
+
+statement ok
+alter table t1 add column if not exists v3 int default 0
 
 statement error
 alter table t1 add column v4 int
@@ -20,6 +23,23 @@ select * from t1
 2 2 null 0
 3 3 null 0
 4 4 null 0
+
+statement ok
+alter table t1 drop column if exists v1
+
+statement ok
+alter table t1 drop column if exists v1
+
+statement error
+alter table t1 drop column id
+
+query IIII rowsort
+select * from t1
+----
+1 null 0
+2 null 0
+3 null 0
+4 null 0
 
 statement ok
 create table t2(id int primary key, v1 int)

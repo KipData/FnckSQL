@@ -24,7 +24,7 @@ impl From<(AddColumnOperator, BoxedExecutor)> for AddColumn {
 }
 
 impl<T: Transaction> Executor<T> for AddColumn {
-    fn execute(self, transaction: &RefCell<T>) -> crate::execution::executor::BoxedExecutor {
+    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
         unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
     }
 }

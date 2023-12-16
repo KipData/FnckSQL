@@ -76,6 +76,13 @@ pub trait Transaction: Sync + Send + 'static {
         if_not_exists: bool,
     ) -> Result<ColumnId, StorageError>;
 
+    fn drop_column(
+        &mut self,
+        table_name: &TableName,
+        column: &str,
+        if_exists: bool,
+    ) -> Result<(), StorageError>;
+
     fn create_table(
         &mut self,
         table_name: TableName,

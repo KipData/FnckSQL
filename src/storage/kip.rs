@@ -4,7 +4,7 @@ use crate::storage::table_codec::TableCodec;
 use crate::storage::{
     tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, StorageError, Transaction,
 };
-use crate::types::index::{Index, IndexMeta, IndexMetaRef};
+use crate::types::index::{Index, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::ColumnId;
 use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
@@ -12,6 +12,7 @@ use kip_db::kernel::lsm::mvcc::{CheckType, TransactionIter};
 use kip_db::kernel::lsm::storage::Config;
 use kip_db::kernel::lsm::{mvcc, storage};
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
+use kip_db::KernelError;
 use std::collections::hash_map::RandomState;
 use std::collections::{Bound, VecDeque};
 use std::path::PathBuf;
@@ -186,14 +187,12 @@ impl Transaction for KipTransaction {
             let col_id = catalog.add_column(column.clone())?;
 
             if column.desc.is_unique {
-                let meta = IndexMeta {
-                    id: 0,
-                    column_ids: vec![col_id],
-                    name: format!("uk_{}", column.name()),
-                    is_unique: true,
-                    is_primary: false,
-                };
-                let meta_ref = catalog.add_index_meta(meta);
+                let meta_ref = catalog.add_index_meta(
+                    format!("uk_{}", column.name()),
+                    vec![col_id],
+                    true,
+                    false,
+                );
                 let (key, value) = TableCodec::encode_index_meta(table_name, meta_ref)?;
                 self.tx.set(key, value);
             }
@@ -204,6 +203,41 @@ impl Transaction for KipTransaction {
             self.cache.remove(table_name);
 
             Ok(col_id)
+        } else {
+            Err(StorageError::TableNotFound)
+        }
+    }
+
+    fn drop_column(
+        &mut self,
+        table_name: &TableName,
+        column_name: &str,
+        if_exists: bool,
+    ) -> Result<(), StorageError> {
+        if let Some(catalog) = self.table(table_name.clone()).cloned() {
+            let column = catalog.get_column_by_name(column_name).unwrap();
+
+            if let Some(index_meta) = catalog.get_unique_index(&column.id().unwrap()) {
+                let (index_meta_key, _) = TableCodec::encode_index_meta(table_name, index_meta)?;
+                self.tx.remove(&index_meta_key)?;
+
+                let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id);
+                Self::_drop_data(&mut self.tx, &index_min, &index_max)?;
+            }
+            let (key, _) = TableCodec::encode_column(&table_name, column)?;
+
+            match self.tx.remove(&key) {
+                Ok(_) => (),
+                Err(KernelError::KeyNotFound) => {
+                    if !if_exists {
+                        Err(KernelError::KeyNotFound)?;
+                    }
+                }
+                err => err?,
+            }
+            self.cache.remove(table_name);
+
+            Ok(())
         } else {
             Err(StorageError::TableNotFound)
         }
@@ -387,14 +421,12 @@ impl KipTransaction {
             let prefix = if is_primary { "pk" } else { "uk" };
 
             if let Some(col_id) = col.id() {
-                let meta = IndexMeta {
-                    id: 0,
-                    column_ids: vec![col_id],
-                    name: format!("{}_{}", prefix, col.name()),
-                    is_unique: col.desc.is_unique,
+                let meta_ref = table.add_index_meta(
+                    format!("{}_{}", prefix, col.name()),
+                    vec![col_id],
+                    col.desc.is_unique,
                     is_primary,
-                };
-                let meta_ref = table.add_index_meta(meta);
+                );
                 let (key, value) = TableCodec::encode_index_meta(&table_name, meta_ref)?;
 
                 tx.set(key, value);
