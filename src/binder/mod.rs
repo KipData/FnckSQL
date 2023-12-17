@@ -15,7 +15,7 @@ mod update;
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
 use std::collections::BTreeMap;
 
-use crate::catalog::{CatalogError, TableCatalog, TableName, DEFAULT_SCHEMA_NAME};
+use crate::catalog::{CatalogError, TableCatalog, TableName};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::JoinType;
 use crate::planner::LogicalPlan;
@@ -199,11 +199,10 @@ fn lower_case_name(name: &ObjectName) -> ObjectName {
 }
 
 /// Split an object name into `(schema name, table name)`.
-fn split_name(name: &ObjectName) -> Result<(&str, &str), BindError> {
+fn split_name(name: &ObjectName) -> Result<&str, BindError> {
     Ok(match name.0.as_slice() {
-        [table] => (DEFAULT_SCHEMA_NAME, &table.value),
-        [schema, table] => (&schema.value, &table.value),
-        _ => return Err(BindError::InvalidTableName(name.0.clone())),
+        [table] => &table.value,
+        _ => return Err(BindError::InvalidTable(name.to_string())),
     })
 }
 
@@ -213,8 +212,6 @@ pub enum BindError {
     UnsupportedStmt(String),
     #[error("invalid table {0}")]
     InvalidTable(String),
-    #[error("invalid table name: {0:?}")]
-    InvalidTableName(Vec<Ident>),
     #[error("invalid column {0}")]
     InvalidColumn(String),
     #[error("ambiguous column {0}")]
@@ -237,9 +234,15 @@ pub enum BindError {
     UnsupportedCopySource(String),
 }
 
+pub(crate) fn is_valid_identifier(s: &str) -> bool {
+    s.chars().all(|c| c.is_alphanumeric() || c == '_')
+        && !s.chars().next().unwrap_or_default().is_numeric()
+        && !s.chars().all(|c| c == '_')
+}
+
 #[cfg(test)]
 pub mod test {
-    use crate::binder::{Binder, BinderContext};
+    use crate::binder::{is_valid_identifier, Binder, BinderContext};
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::execution::ExecutorError;
     use crate::planner::LogicalPlan;
@@ -307,5 +310,17 @@ pub mod test {
         let stmt = crate::parser::parse_sql(sql)?;
 
         Ok(binder.bind(&stmt[0])?)
+    }
+
+    #[test]
+    pub fn test_valid_identifier() {
+        assert!(is_valid_identifier("valid_table"));
+        assert!(is_valid_identifier("valid_column"));
+        assert!(is_valid_identifier("_valid_column"));
+        assert!(is_valid_identifier("valid_column_1"));
+
+        assert!(!is_valid_identifier("invalid_name&"));
+        assert!(!is_valid_identifier("1_invalid_name"));
+        assert!(!is_valid_identifier("____"));
     }
 }

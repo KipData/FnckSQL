@@ -3,7 +3,7 @@ use sqlparser::ast::{ColumnDef, ColumnOption, ObjectName, TableConstraint};
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use super::Binder;
+use super::{is_valid_identifier, Binder};
 use crate::binder::{lower_case_name, split_name, BindError};
 use crate::catalog::{ColumnCatalog, ColumnDesc};
 use crate::expression::ScalarExpression;
@@ -24,9 +24,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
         if_not_exists: bool,
     ) -> Result<LogicalPlan, BindError> {
         let name = lower_case_name(name);
-        let (_, name) = split_name(&name)?;
+        let name = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 
+        if !is_valid_identifier(&table_name) {
+            return Err(BindError::InvalidTable("illegal table naming".to_string()));
+        }
         {
             // check duplicated column names
             let mut set = HashSet::new();
@@ -34,6 +37,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let col_name = &col.name.value;
                 if !set.insert(col_name.clone()) {
                     return Err(BindError::AmbiguousColumn(col_name.to_string()));
+                }
+                if !is_valid_identifier(col_name) {
+                    return Err(BindError::InvalidColumn(
+                        "illegal column naming".to_string(),
+                    ));
                 }
             }
         }
