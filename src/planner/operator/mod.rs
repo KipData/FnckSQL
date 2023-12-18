@@ -18,6 +18,7 @@ pub mod update;
 pub mod values;
 
 use crate::catalog::ColumnRef;
+use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
@@ -55,6 +56,7 @@ pub enum Operator {
     Delete(DeleteOperator),
     // DDL
     AddColumn(AddColumnOperator),
+    DropColumn(DropColumnOperator),
     CreateTable(CreateTableOperator),
     DropTable(DropTableOperator),
     Truncate(TruncateOperator),

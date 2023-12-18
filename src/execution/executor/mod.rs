@@ -3,6 +3,7 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 pub(crate) mod show;
 
+use crate::execution::executor::ddl::alter_table::drop_column::DropColumn;
 use crate::execution::executor::ddl::create_table::CreateTable;
 use crate::execution::executor::ddl::drop_table::DropTable;
 use crate::execution::executor::ddl::truncate::Truncate;
@@ -109,6 +110,10 @@ pub fn build<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>) -> Box
         Operator::AddColumn(op) => {
             let input = build(childrens.remove(0), transaction);
             AddColumn::from((op, input)).execute(transaction)
+        }
+        Operator::DropColumn(op) => {
+            let input = build(childrens.remove(0), transaction);
+            DropColumn::from((op, input)).execute(transaction)
         }
         Operator::CreateTable(op) => CreateTable::from(op).execute(transaction),
         Operator::DropTable(op) => DropTable::from(op).execute(transaction),

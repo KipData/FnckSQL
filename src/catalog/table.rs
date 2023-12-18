@@ -29,11 +29,11 @@ impl TableCatalog {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn get_column_id_by_name(&self, name: &String) -> Option<ColumnId> {
+    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnId> {
         self.column_idxs.get(name).cloned()
     }
 
-    pub(crate) fn get_column_by_name(&self, name: &String) -> Option<&ColumnRef> {
+    pub(crate) fn get_column_by_name(&self, name: &str) -> Option<&ColumnRef> {
         let id = self.column_idxs.get(name)?;
         self.columns.get(id)
     }
@@ -65,10 +65,22 @@ impl TableCatalog {
         Ok(col_id)
     }
 
-    pub(crate) fn add_index_meta(&mut self, mut index: IndexMeta) -> &IndexMeta {
+    pub(crate) fn add_index_meta(
+        &mut self,
+        name: String,
+        column_ids: Vec<ColumnId>,
+        is_unique: bool,
+        is_primary: bool,
+    ) -> &IndexMeta {
         let index_id = self.indexes.len();
 
-        index.id = index_id as u32;
+        let index = IndexMeta {
+            id: index_id as u32,
+            column_ids,
+            name,
+            is_unique,
+            is_primary,
+        };
         self.indexes.push(Arc::new(index));
 
         &self.indexes[index_id]
