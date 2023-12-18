@@ -43,6 +43,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
             let mut rows = Vec::with_capacity(expr_rows.len());
             for expr_row in expr_rows {
+                if expr_row.len() != columns.len() {
+                    return Err(BindError::ColumnCountMismatch(
+                        columns.len(),
+                        expr_row.len(),
+                    ));
+                }
                 let mut row = Vec::with_capacity(expr_row.len());
 
                 for (i, expr) in expr_row.iter().enumerate() {

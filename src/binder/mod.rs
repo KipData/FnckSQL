@@ -219,6 +219,8 @@ pub enum BindError {
     InvalidColumn(String),
     #[error("ambiguous column {0}")]
     AmbiguousColumn(String),
+    #[error("column count not match, expect {0}, got {1}")]
+    ColumnCountMismatch(usize, usize),
     #[error("binary operator types mismatch: {0} != {1}")]
     BinaryOpTypeMismatch(String, String),
     #[error("subquery error: {0}")]
