@@ -26,9 +26,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         if let Some(table) = self.context.table(table_name.clone()) {
             let mut columns = Vec::new();
+            let values_len = expr_rows[0].len();
 
             if idents.is_empty() {
                 columns = table.all_columns();
+                if values_len > columns.len() {
+                    return Err(BindError::ValuesLenMismatch(columns.len(), values_len));
+                }
             } else {
                 let bind_table_name = Some(table_name.to_string());
                 for ident in idents {
@@ -40,14 +44,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         _ => unreachable!(),
                     }
                 }
+                if values_len != columns.len() {
+                    return Err(BindError::ValuesLenMismatch(columns.len(), values_len));
+                }
             }
             let mut rows = Vec::with_capacity(expr_rows.len());
             for expr_row in expr_rows {
-                if expr_row.len() != columns.len() {
-                    return Err(BindError::ColumnCountMismatch(
-                        columns.len(),
-                        expr_row.len(),
-                    ));
+                if expr_row.len() != values_len {
+                    return Err(BindError::ValuesLenNotSame());
                 }
                 let mut row = Vec::with_capacity(expr_row.len());
 
