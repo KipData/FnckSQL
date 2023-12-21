@@ -3,7 +3,9 @@ use crate::execution::ExecutorError;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
+use crate::types::value::ValueRef;
 use futures_async_stream::try_stream;
+use itertools::Itertools;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 
@@ -44,49 +46,63 @@ impl Sort {
             tuples.push(tuple?);
         }
 
-        tuples.sort_by(|tuple_1, tuple_2| {
-            let mut ordering = Ordering::Equal;
+        let sort_values: Vec<Vec<ValueRef>> = tuples
+            .iter()
+            .map(|tuple| {
+                sort_fields
+                    .iter()
+                    .map(|SortField { expr, .. }| expr.eval(tuple))
+                    .try_collect()
+            })
+            .try_collect()?;
 
-            for SortField {
-                expr,
-                asc,
-                nulls_first,
-            } in &sort_fields
-            {
-                let value_1 = expr.eval(tuple_1).unwrap();
-                let value_2 = expr.eval(tuple_2).unwrap();
+        tuples = tuples
+            .into_iter()
+            .enumerate()
+            .sorted_by(|(i_1, _), (i_2, _)| {
+                let mut ordering = Ordering::Equal;
 
-                ordering = value_1.partial_cmp(&value_2).unwrap_or_else(|| {
-                    match (value_1.is_null(), value_2.is_null()) {
-                        (false, true) => {
-                            if *nulls_first {
-                                Ordering::Less
-                            } else {
-                                Ordering::Greater
+                for (
+                    sort_index,
+                    SortField {
+                        asc, nulls_first, ..
+                    },
+                ) in sort_fields.iter().enumerate()
+                {
+                    let value_1 = &sort_values[*i_1][sort_index];
+                    let value_2 = &sort_values[*i_2][sort_index];
+
+                    ordering = value_1.partial_cmp(&value_2).unwrap_or_else(|| {
+                        match (value_1.is_null(), value_2.is_null()) {
+                            (false, true) => {
+                                if *nulls_first {
+                                    Ordering::Less
+                                } else {
+                                    Ordering::Greater
+                                }
                             }
-                        }
-                        (true, false) => {
-                            if *nulls_first {
-                                Ordering::Greater
-                            } else {
-                                Ordering::Less
+                            (true, false) => {
+                                if *nulls_first {
+                                    Ordering::Greater
+                                } else {
+                                    Ordering::Less
+                                }
                             }
+                            _ => Ordering::Equal,
                         }
-                        _ => Ordering::Equal,
+                    });
+                    if !*asc {
+                        ordering = ordering.reverse();
                     }
-                });
-
-                if !*asc {
-                    ordering = ordering.reverse();
+                    if ordering != Ordering::Equal {
+                        break;
+                    }
                 }
 
-                if ordering != Ordering::Equal {
-                    break;
-                }
-            }
-
-            ordering
-        });
+                ordering
+            })
+            .map(|(_, tuple)| tuple)
+            .collect_vec();
 
         let len = limit.unwrap_or(tuples.len());
 

@@ -1,15 +1,9 @@
 // Module: catalog
-use std::sync::Arc;
 
 pub(crate) use self::column::*;
-pub(crate) use self::root::*;
 pub(crate) use self::table::*;
 
-/// The type of catalog reference.
-pub type RootRef = Arc<RootCatalog>;
-
 mod column;
-mod root;
 mod table;
 
 #[derive(thiserror::Error, Debug)]
