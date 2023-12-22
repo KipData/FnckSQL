@@ -123,7 +123,7 @@ impl TableCodec {
         (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
     }
 
-    /// Key: TableName_Tuple_0_RowID(Sorted)
+    /// Key: {TableName}{TUPLE_TAG}{BOUND_MIN_TAG}{RowID}(Sorted)
     /// Value: Tuple
     pub fn encode_tuple(table_name: &str, tuple: &Tuple) -> Result<(Bytes, Bytes), TypeError> {
         let tuple_id = tuple.id.clone().ok_or(TypeError::PrimaryKeyNotFound)?;
@@ -145,7 +145,7 @@ impl TableCodec {
         Tuple::deserialize_from(columns, bytes)
     }
 
-    /// Key: TableName_IndexMeta_0_IndexID
+    /// Key: {TableName}{INDEX_META_TAG}{BOUND_MIN_TAG}{IndexID}
     /// Value: IndexMeta
     pub fn encode_index_meta(
         table_name: &str,
@@ -166,11 +166,11 @@ impl TableCodec {
     }
 
     /// NonUnique Index:
-    /// Key: TableName_Index_0_IndexID_0_DataValue1_DataValue2 ..
+    /// Key: {TableName}{INDEX_TAG}{BOUND_MIN_TAG}{IndexID}{BOUND_MIN_TAG}{DataValue1}{DataValue2} ..
     /// Value: TupleIDs
     ///
     /// Unique Index:
-    /// Key: TableName_Index_0_IndexID_0_DataValue
+    /// Key: {TableName}{INDEX_TAG}{BOUND_MIN_TAG}{IndexID}{BOUND_MIN_TAG}{DataValue}
     /// Value: TupleIDs
     ///
     /// Tips: The unique index has only one ColumnID and one corresponding DataValue,
@@ -205,7 +205,7 @@ impl TableCodec {
         Ok(bincode::deserialize(bytes)?)
     }
 
-    /// Key: TableName_Catalog_0_ColumnName_ColumnId
+    /// Key: {TableName}{COLUMN_TAG}{BOUND_MIN_TAG}{ColumnId}
     /// Value: ColumnCatalog
     ///
     /// Tips: the `0` for bound range
@@ -226,7 +226,7 @@ impl TableCodec {
         Ok(bincode::deserialize::<ColumnCatalog>(bytes)?)
     }
 
-    /// Key: RootCatalog_0_TableName
+    /// Key: Root{BOUND_MIN_TAG}{TableName}
     /// Value: TableName
     pub fn encode_root_table(table_name: &str) -> Result<(Bytes, Bytes), TypeError> {
         let key = Self::encode_root_table_key(table_name);
