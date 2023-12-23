@@ -1,8 +1,8 @@
-use std::error::Error;
-use std::io;
-
+use clap::Parser;
 use kip_sql::db::Database;
 use kip_sql::types::tuple::create_table;
+use std::error::Error;
+use std::{env, io};
 
 pub(crate) const BANNER: &str = "
 ██╗  ██╗██╗██████╗ ███████╗ ██████╗ ██╗
@@ -23,22 +23,33 @@ pub const BLOOM: &str = "
               /   \\
 _____________/_ __ \\_____________
 ";
+
+/// KipSQL is a embedded database
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to db file
+    #[arg(short, long, default_value = "./data")]
+    path: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
     println!("{} \nVersion: {}\n", BANNER, env!("CARGO_PKG_VERSION"));
-
     println!(":) Welcome to the KipSQL, Please input sql.\n");
     println!("Tips🔞: ");
     println!("1. input \"quit\" to shutdown");
-    println!("2. all data is in the \'data\' folder in the directory where the application is run");
-
-    server_run().await?;
-
+    println!(
+        "2. all data is in the \'{}\' folder in the directory where the application is run",
+        args.path
+    );
+    server_run(args.path).await?;
     Ok(())
 }
 
-async fn server_run() -> Result<(), Box<dyn Error>> {
-    let db = Database::with_kipdb("./data").await?;
+async fn server_run(path: String) -> Result<(), Box<dyn Error>> {
+    let db = Database::with_kipdb(path).await?;
 
     loop {
         println!("> 👇👇🏻👇🏼👇🏽👇🏾👇🏿 <");
