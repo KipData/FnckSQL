@@ -77,7 +77,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 return_orderby.push(SortField::new(
                     expr,
                     asc.map_or(true, |asc| asc),
-                    nulls_first.map_or(false, |first| first),
+                    nulls_first.map_or(true, |first| first),
                 ));
             }
             Some(return_orderby)

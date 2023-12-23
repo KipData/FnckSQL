@@ -94,7 +94,7 @@ impl Sort {
                     let mut key = Vec::new();
 
                     expr.eval(&tuple)?.memcomparable_encode(&mut key)?;
-                    key.push(if *nulls_first { u8::MAX } else { u8::MIN });
+                    key.push(if *nulls_first { u8::MIN } else { u8::MAX });
 
                     if !asc {
                         for byte in key.iter_mut() {
