@@ -572,8 +572,6 @@ mod test {
                 vec![RuleImpl::LikeRewrite],
             )
             .find_best()?;
-
-        println!("{:#?}", best_plan);
         assert_eq!(best_plan.childrens.len(), 1);
 
         match best_plan.operator {
@@ -596,13 +594,13 @@ mod test {
                                     summary: ColumnSummary {
                                         id: Some(0),
                                         name: "c1".to_string(),
-                                        table_name: Some(Arc::new("t1".to_string())),
                                     },
                                     nullable: false,
                                     desc: ColumnDesc {
                                         column_datatype: LogicalType::Integer,
                                         is_primary: true,
                                         is_unique: false,
+                                        default: None,
                                     },
                                     ref_expr: None,
                                 }
@@ -619,13 +617,13 @@ mod test {
                                     summary: ColumnSummary {
                                         id: Some(0),
                                         name: "c1".to_string(),
-                                        table_name: Some(Arc::new("t1".to_string())),
                                     },
                                     nullable: false,
                                     desc: ColumnDesc {
                                         column_datatype: LogicalType::Integer,
                                         is_primary: true,
                                         is_unique: false,
+                                        default: None,
                                     },
                                     ref_expr: None,
                                 }
