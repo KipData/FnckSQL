@@ -561,4 +561,77 @@ mod test {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_like_rewrite() ->Result<(),DatabaseError> {
+        let plan = select_sql_run("select * from t1 where c1 like 'abc%%'").await?;
+        let best_plan = HepOptimizer::new(plan.clone())
+            .batch(
+                "test_like_rewrite".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![RuleImpl::LikeRewrite],
+            )
+            .find_best()?;
+
+        println!("{:#?}", best_plan);
+        assert_eq!(best_plan.childrens.len(), 1);
+
+        match best_plan.operator {
+            Operator::Project(op)=>{
+                assert_eq!(op.exprs.len(), 2);
+            }
+            _=>unreachable!()
+        }
+
+        match &best_plan.childrens[0].operator {
+            Operator::Filter(op)=>{
+                assert_eq!(op.predicate, ScalarExpression::Binary {
+                    op: BinaryOperator::And,
+                    left_expr: Box::new(ScalarExpression::Binary {
+                        op: BinaryOperator::GtEq,
+                        left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(ColumnCatalog {
+                            summary: ColumnSummary {
+                                id: Some(0),
+                                name: "c1".to_string(),
+                                table_name: Some(Arc::new("t1".to_string())),
+                            },
+                            nullable: false,
+                            desc: ColumnDesc {
+                                column_datatype: LogicalType::Integer,
+                                is_primary: true,
+                                is_unique: false,
+                            },
+                            ref_expr: None,
+                        }))),
+                        right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Utf8(Some("abc".to_string()))))),
+                        ty: LogicalType::Boolean,
+                    }),
+                    right_expr: Box::new(ScalarExpression::Binary {
+                        op: BinaryOperator::Lt,
+                        left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(ColumnCatalog {
+                            summary: ColumnSummary {
+                                id: Some(0),
+                                name: "c1".to_string(),
+                                table_name: Some(Arc::new("t1".to_string())),
+                            },
+                            nullable: false,
+                            desc: ColumnDesc {
+                                column_datatype: LogicalType::Integer,
+                                is_primary: true,
+                                is_unique: false,
+                            },
+                            ref_expr: None,
+                        }))),
+                        right_expr: Box::new(ScalarExpression::Constant(Arc::new(DataValue::Utf8(Some("abd".to_string()))))),
+                        ty: LogicalType::Boolean,
+                    }),
+                    ty: LogicalType::Boolean,
+                });
+            }
+            _=>unreachable!()
+        }
+
+        Ok(())
+    }
+
 }
