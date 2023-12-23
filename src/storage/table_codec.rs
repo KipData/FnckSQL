@@ -2,9 +2,9 @@ use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexId, IndexMeta};
 use crate::types::tuple::{Tuple, TupleId};
+use crate::types::LogicalType;
 use bytes::Bytes;
 use lazy_static::lazy_static;
-use crate::types::LogicalType;
 
 const BOUND_MIN_TAG: u8 = 0;
 const BOUND_MAX_TAG: u8 = 1;
@@ -141,14 +141,14 @@ impl TableCodec {
         if !matches!(
             tuple_id.logical_type(),
             LogicalType::Tinyint
-            | LogicalType::Smallint
-            | LogicalType::Integer
-            | LogicalType::Bigint
-            | LogicalType::UTinyint
-            | LogicalType::USmallint
-            | LogicalType::UInteger
-            | LogicalType::UBigint
-            | LogicalType::Varchar(_)
+                | LogicalType::Smallint
+                | LogicalType::Integer
+                | LogicalType::Bigint
+                | LogicalType::UTinyint
+                | LogicalType::USmallint
+                | LogicalType::UInteger
+                | LogicalType::UBigint
+                | LogicalType::Varchar(_)
         ) {
             return Err(TypeError::InvalidType);
         }

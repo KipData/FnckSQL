@@ -2,22 +2,18 @@ use crate::execution::executor::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::storage::Transaction;
+use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use std::cell::RefCell;
 use std::mem;
-use crate::types::errors::TypeError;
 
 const BUCKET_SIZE: usize = u8::MAX as usize + 1;
 
 // LSD Radix Sort
 fn radix_sort<T>(tuple_groups: &mut Vec<(T, Vec<u8>)>) {
-    if let Some(max_len) = tuple_groups
-        .iter()
-        .map(|(_, bytes)| bytes.len())
-        .max()
-    {
+    if let Some(max_len) = tuple_groups.iter().map(|(_, bytes)| bytes.len()).max() {
         // init buckets
         let mut temp_buckets = Vec::new();
         for _ in 0..BUCKET_SIZE {
@@ -34,11 +30,7 @@ fn radix_sort<T>(tuple_groups: &mut Vec<(T, Vec<u8>)>) {
         for i in (0..max_len).rev() {
             for option in temp_groups.into_iter() {
                 let (t, bytes) = option.unwrap();
-                let index = if bytes.len() > i {
-                    bytes[i]
-                } else {
-                    0
-                };
+                let index = if bytes.len() > i { bytes[i] } else { 0 };
                 temp_buckets[index as usize].push(Some((t, bytes)));
             }
 
@@ -93,17 +85,16 @@ impl Sort {
             .map(|tuple| {
                 let mut full_key = Vec::new();
 
-                for SortField { expr, nulls_first, asc } in &sort_fields {
+                for SortField {
+                    expr,
+                    nulls_first,
+                    asc,
+                } in &sort_fields
+                {
                     let mut key = Vec::new();
 
-                    expr
-                        .eval(&tuple)?
-                        .memcomparable_encode(&mut key)?;
-                    key.push(if *nulls_first {
-                        u8::MAX
-                    } else {
-                        u8::MIN
-                    });
+                    expr.eval(&tuple)?.memcomparable_encode(&mut key)?;
+                    key.push(if *nulls_first { u8::MAX } else { u8::MIN });
 
                     if !asc {
                         for byte in key.iter_mut() {
@@ -120,9 +111,7 @@ impl Sort {
 
         let len = limit.unwrap_or(tuples_with_keys.len());
 
-        for tuple in tuples_with_keys
-            .drain(..len)
-            .map(|(tuple, _)| tuple) {
+        for tuple in tuples_with_keys.drain(..len).map(|(tuple, _)| tuple) {
             yield tuple;
         }
     }
