@@ -3,12 +3,54 @@ use crate::execution::ExecutorError;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
-use crate::types::value::ValueRef;
-use futures::StreamExt;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use std::cell::RefCell;
-use std::cmp::Ordering;
+use std::mem;
+use crate::types::errors::TypeError;
+
+const BUCKET_SIZE: usize = u8::MAX as usize + 1;
+
+// LSD Radix Sort
+fn radix_sort<T>(tuple_groups: &mut Vec<(T, Vec<u8>)>) {
+    if let Some(max_len) = tuple_groups
+        .iter()
+        .map(|(_, bytes)| bytes.len())
+        .max()
+    {
+        // init buckets
+        let mut temp_buckets = Vec::new();
+        for _ in 0..BUCKET_SIZE {
+            temp_buckets.push(Vec::new());
+        }
+
+        // Use Option Vector to avoid empty data allocation
+        let mut temp_groups = tuple_groups
+            .drain(..)
+            .into_iter()
+            .map(|item| Some(item))
+            .collect_vec();
+
+        for i in (0..max_len).rev() {
+            for option in temp_groups.into_iter() {
+                let (t, bytes) = option.unwrap();
+                let index = if bytes.len() > i {
+                    bytes[i]
+                } else {
+                    0
+                };
+                temp_buckets[index as usize].push(Some((t, bytes)));
+            }
+
+            temp_groups = temp_buckets
+                .iter_mut()
+                .map(|group| mem::replace(group, vec![]))
+                .flatten()
+                .collect_vec();
+        }
+        tuple_groups.extend(temp_groups.into_iter().flatten());
+    }
+}
 
 pub struct Sort {
     sort_fields: Vec<SortField>,
@@ -40,70 +82,70 @@ impl Sort {
             limit,
             input,
         } = self;
-        let mut tuples: Vec<(usize, Tuple)> = vec![];
+        let mut tuples: Vec<Tuple> = vec![];
 
         #[for_await]
-        for (i, tuple) in input.enumerate() {
-            tuples.push((i, tuple?));
+        for tuple in input {
+            tuples.push(tuple?);
         }
-        let sort_values: Vec<Vec<ValueRef>> = tuples
-            .iter()
-            .map(|(_, tuple)| {
-                sort_fields
-                    .iter()
-                    .map(|SortField { expr, .. }| expr.eval(tuple))
-                    .try_collect()
+        let mut tuples_with_keys: Vec<(Tuple, Vec<u8>)> = tuples
+            .into_iter()
+            .map(|tuple| {
+                let mut full_key = Vec::new();
+
+                for SortField { expr, nulls_first, asc } in &sort_fields {
+                    let mut key = Vec::new();
+
+                    expr
+                        .eval(&tuple)?
+                        .memcomparable_encode(&mut key)?;
+                    key.push(if *nulls_first {
+                        u8::MAX
+                    } else {
+                        u8::MIN
+                    });
+
+                    if !asc {
+                        for byte in key.iter_mut() {
+                            *byte ^= 0xFF;
+                        }
+                    }
+                    full_key.extend(key);
+                }
+                Ok::<(Tuple, Vec<u8>), TypeError>((tuple, full_key))
             })
             .try_collect()?;
 
-        tuples.sort_by(|(i_1, _), (i_2, _)| {
-            let mut ordering = Ordering::Equal;
+        radix_sort(&mut tuples_with_keys);
 
-            for (
-                sort_index,
-                SortField {
-                    asc, nulls_first, ..
-                },
-            ) in sort_fields.iter().enumerate()
-            {
-                let value_1 = &sort_values[*i_1][sort_index];
-                let value_2 = &sort_values[*i_2][sort_index];
+        let len = limit.unwrap_or(tuples_with_keys.len());
 
-                ordering = value_1.partial_cmp(&value_2).unwrap_or_else(|| {
-                    match (value_1.is_null(), value_2.is_null()) {
-                        (false, true) => {
-                            if *nulls_first {
-                                Ordering::Less
-                            } else {
-                                Ordering::Greater
-                            }
-                        }
-                        (true, false) => {
-                            if *nulls_first {
-                                Ordering::Greater
-                            } else {
-                                Ordering::Less
-                            }
-                        }
-                        _ => Ordering::Equal,
-                    }
-                });
-                if !*asc {
-                    ordering = ordering.reverse();
-                }
-                if ordering != Ordering::Equal {
-                    break;
-                }
-            }
-
-            ordering
-        });
-        drop(sort_values);
-
-        let len = limit.unwrap_or(tuples.len());
-
-        for tuple in tuples.drain(..len).map(|(_, tuple)| tuple) {
+        for tuple in tuples_with_keys
+            .drain(..len)
+            .map(|(tuple, _)| tuple) {
             yield tuple;
         }
     }
+}
+
+#[test]
+fn test_sort() {
+    let mut tupels = vec![
+        (0, "abc".as_bytes().to_vec()),
+        (1, "abz".as_bytes().to_vec()),
+        (2, "abe".as_bytes().to_vec()),
+        (3, "abcd".as_bytes().to_vec()),
+    ];
+
+    radix_sort(&mut tupels);
+
+    assert_eq!(
+        tupels,
+        vec![
+            (0, "abc".as_bytes().to_vec()),
+            (3, "abcd".as_bytes().to_vec()),
+            (2, "abe".as_bytes().to_vec()),
+            (1, "abz".as_bytes().to_vec()),
+        ]
+    )
 }

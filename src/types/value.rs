@@ -500,30 +500,7 @@ impl DataValue {
         }
     }
 
-    pub fn to_primary_key(&self, b: &mut Vec<u8>) -> Result<(), TypeError> {
-        match self {
-            DataValue::Int8(Some(v)) => encode_u!(b, *v as u8 ^ 0x80_u8),
-            DataValue::Int16(Some(v)) => encode_u!(b, *v as u16 ^ 0x8000_u16),
-            DataValue::Int32(Some(v)) => encode_u!(b, *v as u32 ^ 0x80000000_u32),
-            DataValue::Int64(Some(v)) => encode_u!(b, *v as u64 ^ 0x8000000000000000_u64),
-            DataValue::UInt8(Some(v)) => encode_u!(b, v),
-            DataValue::UInt16(Some(v)) => encode_u!(b, v),
-            DataValue::UInt32(Some(v)) => encode_u!(b, v),
-            DataValue::UInt64(Some(v)) => encode_u!(b, v),
-            DataValue::Utf8(Some(v)) => Self::encode_bytes(b, v.as_bytes()),
-            value => {
-                return if value.is_null() {
-                    Err(TypeError::PrimaryKeyNotFound)
-                } else {
-                    Err(TypeError::InvalidType)
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn to_index_key(&self, b: &mut Vec<u8>) -> Result<(), TypeError> {
+    pub fn memcomparable_encode(&self, b: &mut Vec<u8>) -> Result<(), TypeError> {
         match self {
             DataValue::Int8(Some(v)) => encode_u!(b, *v as u8 ^ 0x80_u8),
             DataValue::Int16(Some(v)) => encode_u!(b, *v as u16 ^ 0x8000_u16),
@@ -561,12 +538,11 @@ impl DataValue {
 
                 encode_u!(b, u);
             }
+            DataValue::Null => (),
             DataValue::Decimal(Some(_v)) => todo!(),
             value => {
-                return if value.is_null() {
-                    todo!()
-                } else {
-                    Err(TypeError::InvalidType)
+                if !value.is_null() {
+                    return Err(TypeError::InvalidType);
                 }
             }
         }
@@ -1059,14 +1035,14 @@ mod test {
     use crate::types::value::DataValue;
 
     #[test]
-    fn test_to_primary_key() -> Result<(), TypeError> {
+    fn test_mem_comparable_int() -> Result<(), TypeError> {
         let mut key_i8_1 = Vec::new();
         let mut key_i8_2 = Vec::new();
         let mut key_i8_3 = Vec::new();
 
-        DataValue::Int8(Some(i8::MIN)).to_primary_key(&mut key_i8_1)?;
-        DataValue::Int8(Some(-1_i8)).to_primary_key(&mut key_i8_2)?;
-        DataValue::Int8(Some(i8::MAX)).to_primary_key(&mut key_i8_3)?;
+        DataValue::Int8(Some(i8::MIN)).memcomparable_encode(&mut key_i8_1)?;
+        DataValue::Int8(Some(-1_i8)).memcomparable_encode(&mut key_i8_2)?;
+        DataValue::Int8(Some(i8::MAX)).memcomparable_encode(&mut key_i8_3)?;
 
         println!("{:?} < {:?}", key_i8_1, key_i8_2);
         println!("{:?} < {:?}", key_i8_2, key_i8_3);
@@ -1077,9 +1053,9 @@ mod test {
         let mut key_i16_2 = Vec::new();
         let mut key_i16_3 = Vec::new();
 
-        DataValue::Int16(Some(i16::MIN)).to_primary_key(&mut key_i16_1)?;
-        DataValue::Int16(Some(-1_i16)).to_primary_key(&mut key_i16_2)?;
-        DataValue::Int16(Some(i16::MAX)).to_primary_key(&mut key_i16_3)?;
+        DataValue::Int16(Some(i16::MIN)).memcomparable_encode(&mut key_i16_1)?;
+        DataValue::Int16(Some(-1_i16)).memcomparable_encode(&mut key_i16_2)?;
+        DataValue::Int16(Some(i16::MAX)).memcomparable_encode(&mut key_i16_3)?;
 
         println!("{:?} < {:?}", key_i16_1, key_i16_2);
         println!("{:?} < {:?}", key_i16_2, key_i16_3);
@@ -1090,9 +1066,9 @@ mod test {
         let mut key_i32_2 = Vec::new();
         let mut key_i32_3 = Vec::new();
 
-        DataValue::Int32(Some(i32::MIN)).to_primary_key(&mut key_i32_1)?;
-        DataValue::Int32(Some(-1_i32)).to_primary_key(&mut key_i32_2)?;
-        DataValue::Int32(Some(i32::MAX)).to_primary_key(&mut key_i32_3)?;
+        DataValue::Int32(Some(i32::MIN)).memcomparable_encode(&mut key_i32_1)?;
+        DataValue::Int32(Some(-1_i32)).memcomparable_encode(&mut key_i32_2)?;
+        DataValue::Int32(Some(i32::MAX)).memcomparable_encode(&mut key_i32_3)?;
 
         println!("{:?} < {:?}", key_i32_1, key_i32_2);
         println!("{:?} < {:?}", key_i32_2, key_i32_3);
@@ -1103,9 +1079,9 @@ mod test {
         let mut key_i64_2 = Vec::new();
         let mut key_i64_3 = Vec::new();
 
-        DataValue::Int64(Some(i64::MIN)).to_primary_key(&mut key_i64_1)?;
-        DataValue::Int64(Some(-1_i64)).to_primary_key(&mut key_i64_2)?;
-        DataValue::Int64(Some(i64::MAX)).to_primary_key(&mut key_i64_3)?;
+        DataValue::Int64(Some(i64::MIN)).memcomparable_encode(&mut key_i64_1)?;
+        DataValue::Int64(Some(-1_i64)).memcomparable_encode(&mut key_i64_2)?;
+        DataValue::Int64(Some(i64::MAX)).memcomparable_encode(&mut key_i64_3)?;
 
         println!("{:?} < {:?}", key_i64_1, key_i64_2);
         println!("{:?} < {:?}", key_i64_2, key_i64_3);
@@ -1116,14 +1092,14 @@ mod test {
     }
 
     #[test]
-    fn test_to_index_key_f() -> Result<(), TypeError> {
+    fn test_mem_comparable_float() -> Result<(), TypeError> {
         let mut key_f32_1 = Vec::new();
         let mut key_f32_2 = Vec::new();
         let mut key_f32_3 = Vec::new();
 
-        DataValue::Float32(Some(f32::MIN)).to_index_key(&mut key_f32_1)?;
-        DataValue::Float32(Some(-1_f32)).to_index_key(&mut key_f32_2)?;
-        DataValue::Float32(Some(f32::MAX)).to_index_key(&mut key_f32_3)?;
+        DataValue::Float32(Some(f32::MIN)).memcomparable_encode(&mut key_f32_1)?;
+        DataValue::Float32(Some(-1_f32)).memcomparable_encode(&mut key_f32_2)?;
+        DataValue::Float32(Some(f32::MAX)).memcomparable_encode(&mut key_f32_3)?;
 
         println!("{:?} < {:?}", key_f32_1, key_f32_2);
         println!("{:?} < {:?}", key_f32_2, key_f32_3);
@@ -1134,9 +1110,9 @@ mod test {
         let mut key_f64_2 = Vec::new();
         let mut key_f64_3 = Vec::new();
 
-        DataValue::Float64(Some(f64::MIN)).to_index_key(&mut key_f64_1)?;
-        DataValue::Float64(Some(-1_f64)).to_index_key(&mut key_f64_2)?;
-        DataValue::Float64(Some(f64::MAX)).to_index_key(&mut key_f64_3)?;
+        DataValue::Float64(Some(f64::MIN)).memcomparable_encode(&mut key_f64_1)?;
+        DataValue::Float64(Some(-1_f64)).memcomparable_encode(&mut key_f64_2)?;
+        DataValue::Float64(Some(f64::MAX)).memcomparable_encode(&mut key_f64_3)?;
 
         println!("{:?} < {:?}", key_f64_1, key_f64_2);
         println!("{:?} < {:?}", key_f64_2, key_f64_3);
