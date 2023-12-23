@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
@@ -69,7 +70,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
         };
 
-        if let Some(table) = self.context.table(&table_name.to_string()) {
+        if let Some(table) = self.context.table(Arc::new(table_name.to_string())) {
             let cols = table.all_columns();
             let ext_source = ExtSource {
                 path: match target {

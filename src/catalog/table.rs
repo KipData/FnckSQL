@@ -29,11 +29,11 @@ impl TableCatalog {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn get_column_id_by_name(&self, name: &String) -> Option<ColumnId> {
+    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnId> {
         self.column_idxs.get(name).cloned()
     }
 
-    pub(crate) fn get_column_by_name(&self, name: &String) -> Option<&ColumnRef> {
+    pub(crate) fn get_column_by_name(&self, name: &str) -> Option<&ColumnRef> {
         let id = self.column_idxs.get(name)?;
         self.columns.get(id)
     }
@@ -47,10 +47,7 @@ impl TableCatalog {
     }
 
     pub(crate) fn all_columns(&self) -> Vec<ColumnRef> {
-        self.columns
-            .iter()
-            .map(|(_, col)| Arc::clone(col))
-            .collect()
+        self.columns.values().map(Arc::clone).collect()
     }
 
     /// Add a column to the table catalog.
@@ -62,17 +59,28 @@ impl TableCatalog {
         let col_id = self.columns.len() as u32;
 
         col.summary.id = Some(col_id);
-        col.summary.table_name = Some(self.name.clone());
         self.column_idxs.insert(col.name().to_string(), col_id);
         self.columns.insert(col_id, Arc::new(col));
 
         Ok(col_id)
     }
 
-    pub(crate) fn add_index_meta(&mut self, mut index: IndexMeta) -> &IndexMeta {
+    pub(crate) fn add_index_meta(
+        &mut self,
+        name: String,
+        column_ids: Vec<ColumnId>,
+        is_unique: bool,
+        is_primary: bool,
+    ) -> &IndexMeta {
         let index_id = self.indexes.len();
 
-        index.id = index_id as u32;
+        let index = IndexMeta {
+            id: index_id as u32,
+            column_ids,
+            name,
+            is_unique,
+            is_primary,
+        };
         self.indexes.push(Arc::new(index));
 
         &self.indexes[index_id]
@@ -82,13 +90,15 @@ impl TableCatalog {
         name: TableName,
         columns: Vec<ColumnCatalog>,
     ) -> Result<TableCatalog, CatalogError> {
+        if columns.is_empty() {
+            return Err(CatalogError::ColumnsEmpty);
+        }
         let mut table_catalog = TableCatalog {
             name,
             column_idxs: BTreeMap::new(),
             columns: BTreeMap::new(),
             indexes: vec![],
         };
-
         for col_catalog in columns.into_iter() {
             let _ = table_catalog.add_column(col_catalog)?;
         }
@@ -123,13 +133,13 @@ mod tests {
         let col0 = ColumnCatalog::new(
             "a".into(),
             false,
-            ColumnDesc::new(LogicalType::Integer, false, false),
+            ColumnDesc::new(LogicalType::Integer, false, false, None),
             None,
         );
         let col1 = ColumnCatalog::new(
             "b".into(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false, false),
+            ColumnDesc::new(LogicalType::Boolean, false, false, None),
             None,
         );
         let col_catalogs = vec![col0, col1];

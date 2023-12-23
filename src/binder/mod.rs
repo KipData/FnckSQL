@@ -1,4 +1,5 @@
 pub mod aggregate;
+mod alter_table;
 pub mod copy;
 mod create_table;
 mod delete;
@@ -48,9 +49,9 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
     }
 
-    pub fn table(&self, table_name: &String) -> Option<&TableCatalog> {
-        if let Some(real_name) = self.table_aliases.get(table_name) {
-            self.transaction.table(real_name)
+    pub fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
+        if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
+            self.transaction.table(real_name.clone())
         } else {
             self.transaction.table(table_name)
         }
@@ -119,16 +120,21 @@ impl<'a, T: Transaction> Binder<'a, T> {
     pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query)?,
+            Statement::AlterTable { name, operation } => self.bind_alter_table(name, operation)?,
             Statement::CreateTable {
                 name,
                 columns,
                 constraints,
+                if_not_exists,
                 ..
-            } => self.bind_create_table(name, &columns, &constraints)?,
+            } => self.bind_create_table(name, columns, constraints, *if_not_exists)?,
             Statement::Drop {
-                object_type, names, ..
+                object_type,
+                names,
+                if_exists,
+                ..
             } => match object_type {
-                ObjectType::Table => self.bind_drop_table(&names[0])?,
+                ObjectType::Table => self.bind_drop_table(&names[0], if_exists)?,
                 _ => todo!(),
             },
             Statement::Insert {
@@ -175,7 +181,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 target,
                 options,
                 ..
-            } => self.bind_copy(source.clone(), *to, target.clone(), &options)?,
+            } => self.bind_copy(source.clone(), *to, target.clone(), options)?,
             _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
@@ -213,6 +219,10 @@ pub enum BindError {
     InvalidColumn(String),
     #[error("ambiguous column {0}")]
     AmbiguousColumn(String),
+    #[error("values length not match, expect {0}, got {1}")]
+    ValuesLenMismatch(usize, usize),
+    #[error("values list must all be the same length")]
+    ValuesLenNotSame(),
     #[error("binary operator types mismatch: {0} != {1}")]
     BinaryOpTypeMismatch(String, String),
     #[error("subquery error: {0}")]
@@ -252,16 +262,17 @@ pub mod test {
                 ColumnCatalog::new(
                     "c1".to_string(),
                     false,
-                    ColumnDesc::new(Integer, true, false),
+                    ColumnDesc::new(Integer, true, false, None),
                     None,
                 ),
                 ColumnCatalog::new(
                     "c2".to_string(),
                     false,
-                    ColumnDesc::new(Integer, false, true),
+                    ColumnDesc::new(Integer, false, true, None),
                     None,
                 ),
             ],
+            false,
         )?;
 
         let _ = transaction.create_table(
@@ -270,16 +281,17 @@ pub mod test {
                 ColumnCatalog::new(
                     "c3".to_string(),
                     false,
-                    ColumnDesc::new(Integer, true, false),
+                    ColumnDesc::new(Integer, true, false, None),
                     None,
                 ),
                 ColumnCatalog::new(
                     "c4".to_string(),
                     false,
-                    ColumnDesc::new(Integer, false, false),
+                    ColumnDesc::new(Integer, false, false, None),
                     None,
                 ),
             ],
+            false,
         )?;
 
         transaction.commit().await?;

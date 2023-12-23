@@ -286,10 +286,7 @@ impl DataValue {
     }
 
     pub fn is_variable(&self) -> bool {
-        match self {
-            DataValue::Utf8(_) => true,
-            _ => false,
-        }
+        matches!(self, DataValue::Utf8(_))
     }
 
     pub fn is_null(&self) -> bool {
@@ -374,7 +371,7 @@ impl DataValue {
             DataValue::Utf8(v) => v.clone().map(|v| v.into_bytes()),
             DataValue::Date32(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::Date64(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::Decimal(v) => v.clone().map(|v| v.serialize().to_vec()),
+            DataValue::Decimal(v) => v.map(|v| v.serialize().to_vec()),
         }
         .unwrap_or(vec![])
     }
@@ -383,7 +380,7 @@ impl DataValue {
         match ty {
             LogicalType::Invalid => panic!("invalid logical type"),
             LogicalType::SqlNull => DataValue::Null,
-            LogicalType::Boolean => DataValue::Boolean(bytes.get(0).map(|v| *v != 0)),
+            LogicalType::Boolean => DataValue::Boolean(bytes.first().map(|v| *v != 0)),
             LogicalType::Tinyint => {
                 DataValue::Int8((!bytes.is_empty()).then(|| i8::decode_fixed(bytes)))
             }
@@ -650,18 +647,16 @@ impl DataValue {
             DataValue::Int8(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
                 LogicalType::Tinyint => Ok(DataValue::Int8(value)),
-                LogicalType::UTinyint => Ok(DataValue::UInt8(
-                    value.map(|v| u8::try_from(v)).transpose()?,
-                )),
-                LogicalType::USmallint => Ok(DataValue::UInt16(
-                    value.map(|v| u16::try_from(v)).transpose()?,
-                )),
-                LogicalType::UInteger => Ok(DataValue::UInt32(
-                    value.map(|v| u32::try_from(v)).transpose()?,
-                )),
-                LogicalType::UBigint => Ok(DataValue::UInt64(
-                    value.map(|v| u64::try_from(v)).transpose()?,
-                )),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::USmallint => {
+                    Ok(DataValue::UInt16(value.map(u16::try_from).transpose()?))
+                }
+                LogicalType::UInteger => {
+                    Ok(DataValue::UInt32(value.map(u32::try_from).transpose()?))
+                }
+                LogicalType::UBigint => {
+                    Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
+                }
                 LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
                 LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
@@ -678,19 +673,17 @@ impl DataValue {
             },
             DataValue::Int16(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
-                LogicalType::UTinyint => Ok(DataValue::UInt8(
-                    value.map(|v| u8::try_from(v)).transpose()?,
-                )),
-                LogicalType::USmallint => Ok(DataValue::UInt16(
-                    value.map(|v| u16::try_from(v)).transpose()?,
-                )),
-                LogicalType::UInteger => Ok(DataValue::UInt32(
-                    value.map(|v| u32::try_from(v)).transpose()?,
-                )),
-                LogicalType::UBigint => Ok(DataValue::UInt64(
-                    value.map(|v| u64::try_from(v)).transpose()?,
-                )),
-                LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::USmallint => {
+                    Ok(DataValue::UInt16(value.map(u16::try_from).transpose()?))
+                }
+                LogicalType::UInteger => {
+                    Ok(DataValue::UInt32(value.map(u32::try_from).transpose()?))
+                }
+                LogicalType::UBigint => {
+                    Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
+                }
+                LogicalType::Smallint => Ok(DataValue::Int16(value)),
                 LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
@@ -706,19 +699,17 @@ impl DataValue {
             },
             DataValue::Int32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
-                LogicalType::UTinyint => Ok(DataValue::UInt8(
-                    value.map(|v| u8::try_from(v)).transpose()?,
-                )),
-                LogicalType::USmallint => Ok(DataValue::UInt16(
-                    value.map(|v| u16::try_from(v)).transpose()?,
-                )),
-                LogicalType::UInteger => Ok(DataValue::UInt32(
-                    value.map(|v| u32::try_from(v)).transpose()?,
-                )),
-                LogicalType::UBigint => Ok(DataValue::UInt64(
-                    value.map(|v| u64::try_from(v)).transpose()?,
-                )),
-                LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::USmallint => {
+                    Ok(DataValue::UInt16(value.map(u16::try_from).transpose()?))
+                }
+                LogicalType::UInteger => {
+                    Ok(DataValue::UInt32(value.map(u32::try_from).transpose()?))
+                }
+                LogicalType::UBigint => {
+                    Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
+                }
+                LogicalType::Integer => Ok(DataValue::Int32(value)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
@@ -732,19 +723,17 @@ impl DataValue {
             },
             DataValue::Int64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
-                LogicalType::UTinyint => Ok(DataValue::UInt8(
-                    value.map(|v| u8::try_from(v)).transpose()?,
-                )),
-                LogicalType::USmallint => Ok(DataValue::UInt16(
-                    value.map(|v| u16::try_from(v)).transpose()?,
-                )),
-                LogicalType::UInteger => Ok(DataValue::UInt32(
-                    value.map(|v| u32::try_from(v)).transpose()?,
-                )),
-                LogicalType::UBigint => Ok(DataValue::UInt64(
-                    value.map(|v| u64::try_from(v)).transpose()?,
-                )),
-                LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::USmallint => {
+                    Ok(DataValue::UInt16(value.map(u16::try_from).transpose()?))
+                }
+                LogicalType::UInteger => {
+                    Ok(DataValue::UInt32(value.map(u32::try_from).transpose()?))
+                }
+                LogicalType::UBigint => {
+                    Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
+                }
+                LogicalType::Bigint => Ok(DataValue::Int64(value)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -776,7 +765,7 @@ impl DataValue {
             },
             DataValue::UInt16(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
-                LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| v.into()))),
+                LogicalType::USmallint => Ok(DataValue::UInt16(value)),
                 LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                 LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| v.into()))),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
@@ -794,7 +783,7 @@ impl DataValue {
             },
             DataValue::UInt32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
-                LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| v.into()))),
+                LogicalType::UInteger => Ok(DataValue::UInt32(value)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
@@ -809,7 +798,7 @@ impl DataValue {
             },
             DataValue::UInt64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
-                LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
+                LogicalType::UBigint => Ok(DataValue::UInt64(value)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -1032,13 +1021,9 @@ impl fmt::Display for DataValue {
             DataValue::UInt64(e) => format_option!(f, e)?,
             DataValue::Utf8(e) => format_option!(f, e)?,
             DataValue::Null => write!(f, "null")?,
-            DataValue::Date32(e) => format_option!(f, e.and_then(|s| DataValue::date_format(s)))?,
-            DataValue::Date64(e) => {
-                format_option!(f, e.and_then(|s| DataValue::date_time_format(s)))?
-            }
-            DataValue::Decimal(e) => {
-                format_option!(f, e.as_ref().map(|s| DataValue::decimal_format(s)))?
-            }
+            DataValue::Date32(e) => format_option!(f, e.and_then(DataValue::date_format))?,
+            DataValue::Date64(e) => format_option!(f, e.and_then(DataValue::date_time_format))?,
+            DataValue::Decimal(e) => format_option!(f, e.as_ref().map(DataValue::decimal_format))?,
         };
         Ok(())
     }

@@ -115,7 +115,9 @@ impl ColumnPruning {
             | Operator::Truncate(_)
             | Operator::Show(_)
             | Operator::CopyFromFile(_)
-            | Operator::CopyToFile(_) => (),
+            | Operator::CopyToFile(_)
+            | Operator::AddColumn(_)
+            | Operator::DropColumn(_) => (),
         }
     }
 

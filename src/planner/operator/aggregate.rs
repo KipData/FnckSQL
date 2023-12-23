@@ -8,7 +8,7 @@ pub struct AggregateOperator {
 }
 
 impl AggregateOperator {
-    pub fn new(
+    pub fn build(
         children: LogicalPlan,
         agg_calls: Vec<ScalarExpression>,
         groupby_exprs: Vec<ScalarExpression>,

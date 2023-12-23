@@ -12,6 +12,7 @@ pub struct IndexMeta {
     pub column_ids: Vec<ColumnId>,
     pub name: String,
     pub is_unique: bool,
+    pub is_primary: bool,
 }
 
 pub struct Index {

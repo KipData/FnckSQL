@@ -13,21 +13,21 @@ lazy_static! {
 
 impl ScalarExpression {
     pub fn eval(&self, tuple: &Tuple) -> Result<ValueRef, TypeError> {
-        if let Some(value) = Self::eval_with_name(&tuple, self.output_columns().name()) {
+        if let Some(value) = Self::eval_with_name(tuple, self.output_columns().name()) {
             return Ok(value.clone());
         }
 
         match &self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
             ScalarExpression::ColumnRef(col) => {
-                let value = Self::eval_with_name(&tuple, col.name())
+                let value = Self::eval_with_name(tuple, col.name())
                     .unwrap_or(&NULL_VALUE)
                     .clone();
 
                 Ok(value)
             }
             ScalarExpression::Alias { expr, alias } => {
-                if let Some(value) = Self::eval_with_name(&tuple, alias) {
+                if let Some(value) = Self::eval_with_name(tuple, alias) {
                     return Ok(value.clone());
                 }
 
@@ -80,7 +80,7 @@ impl ScalarExpression {
                 Ok(Arc::new(unary_op(&value, op)?))
             }
             ScalarExpression::AggCall { .. } => {
-                let value = Self::eval_with_name(&tuple, self.output_columns().name())
+                let value = Self::eval_with_name(tuple, self.output_columns().name())
                     .unwrap_or(&NULL_VALUE)
                     .clone();
 

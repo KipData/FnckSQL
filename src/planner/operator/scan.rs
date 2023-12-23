@@ -23,12 +23,12 @@ pub struct ScanOperator {
     pub index_by: Option<(IndexMetaRef, Vec<ConstantBinary>)>,
 }
 impl ScanOperator {
-    pub fn new(table_name: TableName, table_catalog: &TableCatalog) -> LogicalPlan {
+    pub fn build(table_name: TableName, table_catalog: &TableCatalog) -> LogicalPlan {
         // Fill all Columns in TableCatalog by default
         let columns = table_catalog
             .all_columns()
             .into_iter()
-            .map(|col| ScalarExpression::ColumnRef(col))
+            .map(ScalarExpression::ColumnRef)
             .collect_vec();
 
         LogicalPlan {

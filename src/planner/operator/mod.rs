@@ -1,4 +1,5 @@
 pub mod aggregate;
+pub mod alter_table;
 pub mod copy_from_file;
 pub mod copy_to_file;
 pub mod create_table;
@@ -17,6 +18,7 @@ pub mod update;
 pub mod values;
 
 use crate::catalog::ColumnRef;
+use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
@@ -31,8 +33,9 @@ use crate::planner::operator::values::ValuesOperator;
 use itertools::Itertools;
 
 use self::{
-    aggregate::AggregateOperator, filter::FilterOperator, join::JoinOperator, limit::LimitOperator,
-    project::ProjectOperator, scan::ScanOperator, sort::SortOperator,
+    aggregate::AggregateOperator, alter_table::add_column::AddColumnOperator,
+    filter::FilterOperator, join::JoinOperator, limit::LimitOperator, project::ProjectOperator,
+    scan::ScanOperator, sort::SortOperator,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -52,6 +55,8 @@ pub enum Operator {
     Update(UpdateOperator),
     Delete(DeleteOperator),
     // DDL
+    AddColumn(AddColumnOperator),
+    DropColumn(DropColumnOperator),
     CreateTable(CreateTableOperator),
     DropTable(DropTableOperator),
     Truncate(TruncateOperator),

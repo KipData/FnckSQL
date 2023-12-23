@@ -120,7 +120,7 @@ pub fn binary_op(
         let pattern_option = unpack_utf8(right.clone().cast(&LogicalType::Varchar(None))?);
 
         let mut is_match = if let (Some(value), Some(pattern)) = (value_option, pattern_option) {
-            let regex_pattern = pattern.replace("%", ".*").replace("_", ".");
+            let regex_pattern = pattern.replace('%', ".*").replace('_', ".");
 
             Regex::new(&regex_pattern).unwrap().is_match(&value)
         } else {

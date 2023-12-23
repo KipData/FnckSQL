@@ -3,6 +3,7 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 pub(crate) mod show;
 
+use crate::execution::executor::ddl::alter_table::drop_column::DropColumn;
 use crate::execution::executor::ddl::create_table::CreateTable;
 use crate::execution::executor::ddl::drop_table::DropTable;
 use crate::execution::executor::ddl::truncate::Truncate;
@@ -30,6 +31,8 @@ use crate::types::tuple::Tuple;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use std::cell::RefCell;
+
+use self::ddl::alter_table::add_column::AddColumn;
 
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
@@ -104,6 +107,14 @@ pub fn build<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>) -> Box
             Delete::from((op, input)).execute(transaction)
         }
         Operator::Values(op) => Values::from(op).execute(transaction),
+        Operator::AddColumn(op) => {
+            let input = build(childrens.remove(0), transaction);
+            AddColumn::from((op, input)).execute(transaction)
+        }
+        Operator::DropColumn(op) => {
+            let input = build(childrens.remove(0), transaction);
+            DropColumn::from((op, input)).execute(transaction)
+        }
         Operator::CreateTable(op) => CreateTable::from(op).execute(transaction),
         Operator::DropTable(op) => DropTable::from(op).execute(transaction),
         Operator::Truncate(op) => Truncate::from(op).execute(transaction),

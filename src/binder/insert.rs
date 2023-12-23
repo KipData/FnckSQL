@@ -24,11 +24,15 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let (_, name) = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 
-        if let Some(table) = self.context.table(&table_name) {
+        if let Some(table) = self.context.table(table_name.clone()) {
             let mut columns = Vec::new();
+            let values_len = expr_rows[0].len();
 
             if idents.is_empty() {
                 columns = table.all_columns();
+                if values_len > columns.len() {
+                    return Err(BindError::ValuesLenMismatch(columns.len(), values_len));
+                }
             } else {
                 let bind_table_name = Some(table_name.to_string());
                 for ident in idents {
@@ -40,13 +44,18 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         _ => unreachable!(),
                     }
                 }
+                if values_len != columns.len() {
+                    return Err(BindError::ValuesLenMismatch(columns.len(), values_len));
+                }
             }
             let mut rows = Vec::with_capacity(expr_rows.len());
-
             for expr_row in expr_rows {
+                if expr_row.len() != values_len {
+                    return Err(BindError::ValuesLenNotSame());
+                }
                 let mut row = Vec::with_capacity(expr_row.len());
 
-                for (i, expr) in expr_row.into_iter().enumerate() {
+                for (i, expr) in expr_row.iter().enumerate() {
                     match &self.bind_expr(expr)? {
                         ScalarExpression::Constant(value) => {
                             // Check if the value length is too long

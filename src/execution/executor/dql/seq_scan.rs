@@ -31,7 +31,7 @@ impl SeqScan {
             limit,
             ..
         } = self.op;
-        let mut iter = transaction.read(&table_name, limit, columns)?;
+        let mut iter = transaction.read(table_name, limit, columns)?;
 
         while let Some(tuple) = iter.next_tuple()? {
             yield tuple;

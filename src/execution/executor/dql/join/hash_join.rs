@@ -273,7 +273,7 @@ mod test {
         BoxedExecutor,
         BoxedExecutor,
     ) {
-        let desc = ColumnDesc::new(LogicalType::Integer, false, false);
+        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None);
 
         let t1_columns = vec![
             Arc::new(ColumnCatalog::new(

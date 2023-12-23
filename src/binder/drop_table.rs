@@ -7,13 +7,20 @@ use sqlparser::ast::ObjectName;
 use std::sync::Arc;
 
 impl<'a, T: Transaction> Binder<'a, T> {
-    pub(crate) fn bind_drop_table(&mut self, name: &ObjectName) -> Result<LogicalPlan, BindError> {
-        let name = lower_case_name(&name);
+    pub(crate) fn bind_drop_table(
+        &mut self,
+        name: &ObjectName,
+        if_exists: &bool,
+    ) -> Result<LogicalPlan, BindError> {
+        let name = lower_case_name(name);
         let (_, name) = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 
         let plan = LogicalPlan {
-            operator: Operator::DropTable(DropTableOperator { table_name }),
+            operator: Operator::DropTable(DropTableOperator {
+                table_name,
+                if_exists: *if_exists,
+            }),
             childrens: vec![],
         };
         Ok(plan)

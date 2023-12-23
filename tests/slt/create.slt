@@ -1,2 +1,11 @@
 statement ok
 create table t(id int primary key, v1 int, v2 int, v3 int)
+
+statement error
+create table t(id int primary key, v1 int, v2 int, v3 int)
+
+statement ok
+create table if not exists t(id int primary key, v1 int, v2 int, v3 int)
+
+statement ok
+create table if not exists t(id int primary key, v1 int, v2 int, v3 int)

@@ -1,8 +1,8 @@
 use crate::catalog::TableName;
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct DropTableOperator {
-    /// Table name to insert to
+pub struct DropColumnOperator {
     pub table_name: TableName,
+    pub column_name: String,
     pub if_exists: bool,
 }

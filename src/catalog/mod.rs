@@ -21,4 +21,6 @@ pub enum CatalogError {
     NotFound(&'static str, String),
     #[error("duplicated {0}: {1}")]
     Duplicated(&'static str, String),
+    #[error("columns empty")]
+    ColumnsEmpty,
 }

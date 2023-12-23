@@ -217,16 +217,17 @@ impl Rule for PushPredicateIntoScan {
                         binary.scope_aggregation()?;
                         let rearrange_binaries = binary.rearrange()?;
 
-                        if !rearrange_binaries.is_empty() {
-                            let mut scan_by_index = child_op.clone();
-                            scan_by_index.index_by = Some((meta.clone(), rearrange_binaries));
-
-                            // The constant expression extracted in prewhere is used to
-                            // reduce the data scanning range and cannot replace the role of Filter.
-                            graph.replace_node(child_id, Operator::Scan(scan_by_index));
-
-                            return Ok(());
+                        if rearrange_binaries.is_empty() {
+                            continue;
                         }
+                        let mut scan_by_index = child_op.clone();
+                        scan_by_index.index_by = Some((meta.clone(), rearrange_binaries));
+
+                        // The constant expression extracted in prewhere is used to
+                        // reduce the data scanning range and cannot replace the role of Filter.
+                        graph.replace_node(child_id, Operator::Scan(scan_by_index));
+
+                        return Ok(());
                     }
                 }
             }

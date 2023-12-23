@@ -17,7 +17,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         assignments: &[Assignment],
     ) -> Result<LogicalPlan, BindError> {
         if let TableFactor::Table { name, .. } = &to.relation {
-            let name = lower_case_name(&name);
+            let name = lower_case_name(name);
             let (_, name) = split_name(&name)?;
             let table_name = Arc::new(name.to_string());
 
@@ -40,7 +40,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 for ident in &assignment.id {
                     match self.bind_column_ref_from_identifiers(
-                        slice::from_ref(&ident),
+                        slice::from_ref(ident),
                         bind_table_name.as_ref(),
                     )? {
                         ScalarExpression::ColumnRef(catalog) => {
