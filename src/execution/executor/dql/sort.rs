@@ -12,35 +12,29 @@ use std::mem;
 const BUCKET_SIZE: usize = u8::MAX as usize + 1;
 
 // LSD Radix Sort
-fn radix_sort<T>(tuple_groups: &mut Vec<(T, Vec<u8>)>) {
-    if let Some(max_len) = tuple_groups.iter().map(|(_, bytes)| bytes.len()).max() {
+fn radix_sort<T>(tuples: &mut Vec<(T, Vec<u8>)>) {
+    if let Some(max_len) = tuples.iter().map(|(_, bytes)| bytes.len()).max() {
         // init buckets
         let mut temp_buckets = Vec::new();
         for _ in 0..BUCKET_SIZE {
             temp_buckets.push(Vec::new());
         }
-
-        // Use Option Vector to avoid empty data allocation
-        let mut temp_groups = tuple_groups
-            .drain(..)
-            .into_iter()
-            .map(|item| Some(item))
-            .collect_vec();
+        let mut temp_tuples = tuples.drain(..).collect_vec();
 
         for i in (0..max_len).rev() {
-            for option in temp_groups.into_iter() {
-                let (t, bytes) = option.unwrap();
+            for (t, bytes) in temp_tuples {
                 let index = if bytes.len() > i { bytes[i] } else { 0 };
-                temp_buckets[index as usize].push(Some((t, bytes)));
+
+                temp_buckets[index as usize].push((t, bytes));
             }
 
-            temp_groups = temp_buckets
+            temp_tuples = temp_buckets
                 .iter_mut()
                 .map(|group| mem::replace(group, vec![]))
                 .flatten()
                 .collect_vec();
         }
-        tuple_groups.extend(temp_groups.into_iter().flatten());
+        tuples.extend(temp_tuples.into_iter());
     }
 }
 
