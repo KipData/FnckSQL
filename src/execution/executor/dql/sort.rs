@@ -16,8 +16,8 @@ fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
     if let Some(max_len) = tuples.iter().map(|(_, bytes)| bytes.len()).max() {
         // init buckets
         let mut temp_buckets = Vec::with_capacity(BUCKET_SIZE);
-        for i in 0..BUCKET_SIZE {
-            temp_buckets[i] = Vec::new();
+        for _ in 0..BUCKET_SIZE {
+            temp_buckets.push(Vec::new());
         }
 
         for i in (0..max_len).rev() {
