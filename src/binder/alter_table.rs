@@ -2,7 +2,7 @@ use sqlparser::ast::{AlterTableOperation, ObjectName};
 
 use std::sync::Arc;
 
-use super::Binder;
+use super::{is_valid_identifier, Binder};
 use crate::binder::{lower_case_name, split_name, BindError};
 use crate::planner::operator::alter_table::add_column::AddColumnOperator;
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
@@ -17,7 +17,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         name: &ObjectName,
         operation: &AlterTableOperation,
     ) -> Result<LogicalPlan, BindError> {
-        let table_name: Arc<String> = Arc::new(split_name(&lower_case_name(name))?.1.to_string());
+        let table_name: Arc<String> = Arc::new(split_name(&lower_case_name(name))?.to_string());
 
         if let Some(table) = self.context.table(table_name.clone()) {
             let plan = match operation {
@@ -27,12 +27,18 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     column_def,
                 } => {
                     let plan = ScanOperator::build(table_name.clone(), table);
+                    let column = self.bind_column(column_def)?;
 
+                    if !is_valid_identifier(column.name()) {
+                        return Err(BindError::InvalidColumn(
+                            "illegal column naming".to_string(),
+                        ));
+                    }
                     LogicalPlan {
                         operator: Operator::AddColumn(AddColumnOperator {
                             table_name,
                             if_not_exists: *if_not_exists,
-                            column: self.bind_column(column_def)?,
+                            column,
                         }),
                         childrens: vec![plan],
                     }

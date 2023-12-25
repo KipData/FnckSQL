@@ -16,9 +16,7 @@ use crate::{
 use super::Binder;
 
 use crate::binder::BindError;
-use crate::catalog::{
-    ColumnCatalog, TableCatalog, TableName, DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME,
-};
+use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::execution::executor::dql::join::joins_nullable;
 use crate::expression::BinaryOperator;
 use crate::planner::operator::join::JoinCondition;
@@ -155,11 +153,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     .map(|ident| Ident::new(ident.value.to_lowercase()))
                     .collect_vec();
 
-                let (_database, _schema, table): (&str, &str, &str) = match obj_name.as_slice() {
-                    [table] => (DEFAULT_DATABASE_NAME, DEFAULT_SCHEMA_NAME, &table.value),
-                    [schema, table] => (DEFAULT_DATABASE_NAME, &schema.value, &table.value),
-                    [database, schema, table] => (&database.value, &schema.value, &table.value),
-                    _ => return Err(BindError::InvalidTableName(obj_name)),
+                let table: &str = match obj_name.as_slice() {
+                    [table] => &table.value,
+                    _ => return Err(BindError::InvalidTable(obj_name.iter().join(","))),
                 };
 
                 let (table, plan) =

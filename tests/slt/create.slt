@@ -4,6 +4,18 @@ create table t(id int primary key, v1 int, v2 int, v3 int)
 statement error
 create table t(id int primary key, v1 int, v2 int, v3 int)
 
+statement error
+create table invalid_name&(id int primary key, v1 int)
+
+statement error
+create table 1_invalid_name(id int primary key, v1 int)
+
+statement error
+create table ____(id int primary key, v1 int)
+
+statement error
+create table invalid_column(id int primary key, v1 int, v& int)
+
 statement ok
 create table if not exists t(id int primary key, v1 int, v2 int, v3 int)
 

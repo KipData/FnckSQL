@@ -2,11 +2,13 @@ use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexId, IndexMeta};
 use crate::types::tuple::{Tuple, TupleId};
+use crate::types::LogicalType;
 use bytes::Bytes;
 use lazy_static::lazy_static;
 
 const BOUND_MIN_TAG: u8 = 0;
 const BOUND_MAX_TAG: u8 = 1;
+
 lazy_static! {
     static ref ROOT_BYTES: Vec<u8> = b"Root".to_vec();
 }
@@ -136,7 +138,21 @@ impl TableCodec {
         let mut key_prefix = Self::key_prefix(CodecType::Tuple, table_name);
         key_prefix.push(BOUND_MIN_TAG);
 
-        tuple_id.to_primary_key(&mut key_prefix)?;
+        if !matches!(
+            tuple_id.logical_type(),
+            LogicalType::Tinyint
+                | LogicalType::Smallint
+                | LogicalType::Integer
+                | LogicalType::Bigint
+                | LogicalType::UTinyint
+                | LogicalType::USmallint
+                | LogicalType::UInteger
+                | LogicalType::UBigint
+                | LogicalType::Varchar(_)
+        ) {
+            return Err(TypeError::InvalidType);
+        }
+        tuple_id.memcomparable_encode(&mut key_prefix)?;
 
         Ok(key_prefix)
     }
@@ -195,7 +211,8 @@ impl TableCodec {
         key_prefix.push(BOUND_MIN_TAG);
 
         for col_v in &index.column_values {
-            col_v.to_index_key(&mut key_prefix)?;
+            col_v.memcomparable_encode(&mut key_prefix)?;
+            key_prefix.push(BOUND_MIN_TAG);
         }
 
         Ok(key_prefix)

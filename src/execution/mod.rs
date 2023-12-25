@@ -20,7 +20,7 @@ pub enum ExecutorError {
         #[from]
         TypeError,
     ),
-    #[error("storage_ap error: {0}")]
+    #[error("storage error: {0}")]
     StorageError(
         #[source]
         #[from]

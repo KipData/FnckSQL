@@ -18,7 +18,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     ) -> Result<LogicalPlan, BindError> {
         if let TableFactor::Table { name, .. } = &to.relation {
             let name = lower_case_name(name);
-            let (_, name) = split_name(&name)?;
+            let name = split_name(&name)?;
             let table_name = Arc::new(name.to_string());
 
             let mut plan = self.bind_table_ref(slice::from_ref(to))?;
