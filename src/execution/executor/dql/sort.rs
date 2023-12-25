@@ -15,29 +15,25 @@ const BUCKET_SIZE: usize = u8::MAX as usize + 1;
 fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
     if let Some(max_len) = tuples.iter().map(|(_, bytes)| bytes.len()).max() {
         // init buckets
-        let mut temp_buckets = Vec::new();
-        for _ in 0..BUCKET_SIZE {
-            temp_buckets.push(Vec::new());
+        let mut temp_buckets = Vec::with_capacity(BUCKET_SIZE);
+        for i in 0..BUCKET_SIZE {
+            temp_buckets[i] = Vec::new();
         }
-        let mut temp_tuples = tuples.drain(..).collect_vec();
 
         for i in (0..max_len).rev() {
-            for (t, bytes) in temp_tuples {
+            for (t, bytes) in tuples {
                 let index = if bytes.len() > i { bytes[i] } else { 0 };
 
                 temp_buckets[index as usize].push((t, bytes));
             }
 
-            temp_tuples = temp_buckets
+            tuples = temp_buckets
                 .iter_mut()
                 .map(|group| mem::replace(group, vec![]))
                 .flatten()
                 .collect_vec();
         }
-        return temp_tuples
-            .into_iter()
-            .map(|(tuple, _)| tuple)
-            .collect_vec();
+        return tuples.into_iter().map(|(tuple, _)| tuple).collect_vec();
     }
     Vec::new()
 }
