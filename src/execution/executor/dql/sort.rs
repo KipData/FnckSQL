@@ -12,7 +12,7 @@ use std::mem;
 const BUCKET_SIZE: usize = u8::MAX as usize + 1;
 
 // LSD Radix Sort
-fn radix_sort<T>(tuples: &mut Vec<(T, Vec<u8>)>) {
+fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
     if let Some(max_len) = tuples.iter().map(|(_, bytes)| bytes.len()).max() {
         // init buckets
         let mut temp_buckets = Vec::new();
@@ -34,8 +34,12 @@ fn radix_sort<T>(tuples: &mut Vec<(T, Vec<u8>)>) {
                 .flatten()
                 .collect_vec();
         }
-        tuples.extend(temp_tuples.into_iter());
+        return temp_tuples
+            .into_iter()
+            .map(|(tuple, _)| tuple)
+            .collect_vec();
     }
+    Vec::new()
 }
 
 pub struct Sort {
@@ -74,7 +78,7 @@ impl Sort {
         for tuple in input {
             tuples.push(tuple?);
         }
-        let mut tuples_with_keys: Vec<(Tuple, Vec<u8>)> = tuples
+        let tuples_with_keys: Vec<(Tuple, Vec<u8>)> = tuples
             .into_iter()
             .map(|tuple| {
                 let mut full_key = Vec::new();
@@ -100,12 +104,10 @@ impl Sort {
                 Ok::<(Tuple, Vec<u8>), TypeError>((tuple, full_key))
             })
             .try_collect()?;
+        let mut tuples = radix_sort(tuples_with_keys);
+        let len = limit.unwrap_or(tuples.len());
 
-        radix_sort(&mut tuples_with_keys);
-
-        let len = limit.unwrap_or(tuples_with_keys.len());
-
-        for tuple in tuples_with_keys.drain(..len).map(|(tuple, _)| tuple) {
+        for tuple in tuples.drain(..len) {
             yield tuple;
         }
     }
@@ -113,22 +115,12 @@ impl Sort {
 
 #[test]
 fn test_sort() {
-    let mut tupels = vec![
+    let tupels = vec![
         (0, "abc".as_bytes().to_vec()),
         (1, "abz".as_bytes().to_vec()),
         (2, "abe".as_bytes().to_vec()),
         (3, "abcd".as_bytes().to_vec()),
     ];
 
-    radix_sort(&mut tupels);
-
-    assert_eq!(
-        tupels,
-        vec![
-            (0, "abc".as_bytes().to_vec()),
-            (3, "abcd".as_bytes().to_vec()),
-            (2, "abe".as_bytes().to_vec()),
-            (1, "abz".as_bytes().to_vec()),
-        ]
-    )
+    assert_eq!(radix_sort(tupels), vec![0, 3, 2, 1])
 }
