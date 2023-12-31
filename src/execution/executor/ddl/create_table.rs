@@ -32,10 +32,10 @@ impl CreateTable {
             if_not_exists,
         } = self.op;
         let _ = transaction.create_table(table_name.clone(), columns, if_not_exists)?;
-        let tuple_builder = TupleBuilder::new_result();
-        let tuple = tuple_builder
-            .push_result("CREATE TABLE SUCCESS", format!("{}", table_name).as_str())?;
 
-        yield tuple;
+        yield TupleBuilder::build_result(
+            "CREATE TABLE SUCCESS".to_string(),
+            format!("{}", table_name),
+        )?;
     }
 }

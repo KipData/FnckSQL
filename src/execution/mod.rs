@@ -54,14 +54,12 @@ pub enum ExecutorError {
     ),
     #[error("tuple length mismatch: expected {expected} but got {actual}")]
     LengthMismatch { expected: usize, actual: usize },
-    #[error("abort")]
-    Abort,
-    #[error("unknown error")]
-    Unknown,
     #[error("join error")]
     JoinError(
         #[from]
         #[source]
         tokio::task::JoinError,
     ),
+    #[error("channel close")]
+    ChannelClose,
 }

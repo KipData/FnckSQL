@@ -67,4 +67,6 @@ pub enum TypeError {
         #[from]
         FromUtf8Error,
     ),
+    #[error("{0} and {1} do not match")]
+    MisMatch(String, String),
 }

@@ -71,12 +71,10 @@ impl CopyFromFile {
                 .from_reader(&mut buf_reader),
         };
 
-        let column_count = self.op.types.len();
-        let mut size_count = 0;
+        let column_count = self.op.columns.len();
+        let mut tuple_builder = TupleBuilder::new(self.op.columns.clone());
 
         for record in reader.records() {
-            let mut tuple_builder =
-                TupleBuilder::new(self.op.types.clone(), self.op.columns.clone());
             // read records and push raw str rows into data chunk builder
             let record = record?;
 
@@ -89,23 +87,22 @@ impl CopyFromFile {
                 });
             }
 
-            size_count += 1;
-
-            // push a raw str row and send it if necessary
-            if let Some(chunk) = tuple_builder.push_str_row(record.iter())? {
-                tx.blocking_send(chunk).map_err(|_| ExecutorError::Abort)?;
-            }
+            self.size += 1;
+            tx.blocking_send(tuple_builder.build_with_row(record.iter())?)
+                .map_err(|_| ExecutorError::ChannelClose)?;
         }
-        self.size = size_count;
         Ok(())
     }
 }
 
 fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), ExecutorError> {
-    let tuple_builder = TupleBuilder::new_result();
-    let tuple =
-        tuple_builder.push_result("COPY FROM SOURCE", format!("import {} rows", size).as_str())?;
-    tx.blocking_send(tuple).map_err(|_| ExecutorError::Abort)?;
+    let tuple = TupleBuilder::build_result(
+        "COPY FROM SOURCE".to_string(),
+        format!("import {} rows", size),
+    )?;
+
+    tx.blocking_send(tuple)
+        .map_err(|_| ExecutorError::ChannelClose)?;
     Ok(())
 }
 
@@ -172,12 +169,7 @@ mod tests {
                 },
             },
 
-            types: vec![
-                LogicalType::Integer,
-                LogicalType::Float,
-                LogicalType::Varchar(Some(10)),
-            ],
-            columns: columns.clone(),
+            columns,
         };
         let executor = CopyFromFile {
             op: op.clone(),
@@ -191,13 +183,16 @@ mod tests {
             .await;
         let storage = db.storage;
         let transaction = RefCell::new(storage.transaction().await?);
-        let actual = executor.execute(&transaction).next().await.unwrap()?;
 
-        let tuple_builder = TupleBuilder::new_result();
-        let expected = tuple_builder
-            .push_result("COPY FROM SOURCE", format!("import {} rows", 2).as_str())
-            .unwrap();
-        assert_eq!(actual, expected);
+        let tuple = executor.execute(&transaction).next().await.unwrap()?;
+        assert_eq!(
+            tuple,
+            TupleBuilder::build_result(
+                "COPY FROM SOURCE".to_string(),
+                format!("import {} rows", 2)
+            )
+            .unwrap()
+        );
 
         Ok(())
     }

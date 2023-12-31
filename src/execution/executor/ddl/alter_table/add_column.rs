@@ -73,9 +73,6 @@ impl AddColumn {
             }
         }
 
-        let tuple_builder = TupleBuilder::new_result();
-        let tuple = tuple_builder.push_result("ALTER TABLE SUCCESS", "1")?;
-
-        yield tuple;
+        yield TupleBuilder::build_result("ALTER TABLE SUCCESS".to_string(), "1".to_string())?;
     }
 }
