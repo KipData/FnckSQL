@@ -72,7 +72,7 @@ impl CopyFromFile {
         };
 
         let column_count = self.op.columns.len();
-        let mut tuple_builder = TupleBuilder::new(self.op.columns.clone());
+        let tuple_builder = TupleBuilder::new(self.op.columns.clone());
 
         for record in reader.records() {
             // read records and push raw str rows into data chunk builder
