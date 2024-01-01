@@ -79,27 +79,24 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 },
                 format: FileFormat::from_options(options),
             };
-            let types = cols.iter().map(|c| c.desc.column_datatype).collect();
 
-            let copy = if to {
+            if to {
                 // COPY <source_table> TO <dest_file>
-                LogicalPlan {
+                Ok(LogicalPlan {
                     operator: Operator::CopyToFile(CopyToFileOperator { source: ext_source }),
                     childrens: vec![],
-                }
+                })
             } else {
                 // COPY <dest_table> FROM <source_file>
-                LogicalPlan {
+                Ok(LogicalPlan {
                     operator: Operator::CopyFromFile(CopyFromFileOperator {
                         source: ext_source,
-                        types,
                         columns: cols,
                         table: table_name.to_string(),
                     }),
                     childrens: vec![],
-                }
-            };
-            Ok(copy)
+                })
+            }
         } else {
             Err(BindError::InvalidTable(format!(
                 "not found table {}",
