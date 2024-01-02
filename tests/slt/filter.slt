@@ -112,6 +112,28 @@ select * from t1 where id not in (1, 2)
 0 KipSQL
 3 Cool!
 
+query II
+select * from t1 where v1 like 'Kip%%'
+----
+0 KipSQL
+1 KipDB
+2 KipBlog
+
+query II
+select * from t1 where v1 like 'KC%%'
+----
+
+
+query II
+select * from t1 where v1 like 'Co%%'
+----
+3 Cool!
+
+query II
+select * from t1 where v1 like 'Cool!%'
+----
+3 Cool!
+
 statement ok
 drop table t
 
