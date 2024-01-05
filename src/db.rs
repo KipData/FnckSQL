@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution::executor::{build, try_collect, BoxedExecutor};
+use crate::execution::volcano::{build, try_collect, BoxedExecutor};
 use crate::execution::ExecutorError;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -82,7 +82,7 @@ impl<S: Storage> Database<S> {
         Ok(build(best_plan, &transaction))
     }
 
-    fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
+    pub(crate) fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
             .batch(
                 "Column Pruning".to_string(),
@@ -160,7 +160,7 @@ pub enum DatabaseError {
         #[from]
         StorageError,
     ),
-    #[error("executor error: {0}")]
+    #[error("volcano error: {0}")]
     ExecutorError(
         #[source]
         #[from]

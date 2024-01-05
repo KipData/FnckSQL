@@ -134,7 +134,7 @@ impl ScalarExpression {
         ) {
             // When `ScalarExpression` is a complex type, it itself is also a special Column
             if !only_column_ref {
-                vec.push(expr.output_columns());
+                vec.push(expr.output_column());
             }
             match expr {
                 ScalarExpression::ColumnRef(col) => {
@@ -197,7 +197,7 @@ impl ScalarExpression {
         }
     }
 
-    pub fn output_columns(&self) -> ColumnRef {
+    pub fn output_column(&self) -> ColumnRef {
         match self {
             ScalarExpression::ColumnRef(col) => col.clone(),
             ScalarExpression::Constant(value) => Arc::new(ColumnCatalog::new(
@@ -220,7 +220,7 @@ impl ScalarExpression {
             } => {
                 let args_str = args
                     .iter()
-                    .map(|expr| expr.output_columns().name().to_string())
+                    .map(|expr| expr.output_column().name().to_string())
                     .join(", ");
                 let op = |allow_distinct, distinct| {
                     if allow_distinct && distinct {
@@ -251,9 +251,9 @@ impl ScalarExpression {
             } => {
                 let column_name = format!(
                     "({} {} {})",
-                    left_expr.output_columns().name(),
+                    left_expr.output_column().name(),
                     op,
-                    right_expr.output_columns().name(),
+                    right_expr.output_column().name(),
                 );
 
                 Arc::new(ColumnCatalog::new(
@@ -264,7 +264,7 @@ impl ScalarExpression {
                 ))
             }
             ScalarExpression::Unary { expr, op, ty } => {
-                let column_name = format!("{}{}", op, expr.output_columns().name());
+                let column_name = format!("{}{}", op, expr.output_column().name());
                 Arc::new(ColumnCatalog::new(
                     column_name,
                     true,
@@ -275,7 +275,7 @@ impl ScalarExpression {
             ScalarExpression::IsNull { negated, expr } => {
                 let suffix = if *negated { "is not null" } else { "is null" };
                 Arc::new(ColumnCatalog::new(
-                    format!("{} {}", expr.output_columns().name(), suffix),
+                    format!("{} {}", expr.output_column().name(), suffix),
                     true,
                     ColumnDesc::new(LogicalType::Boolean, false, false, None),
                     Some(self.clone()),
@@ -288,13 +288,13 @@ impl ScalarExpression {
             } => {
                 let args_string = args
                     .iter()
-                    .map(|arg| arg.output_columns().name().to_string())
+                    .map(|arg| arg.output_column().name().to_string())
                     .join(", ");
                 let op_string = if *negated { "not in" } else { "in" };
                 Arc::new(ColumnCatalog::new(
                     format!(
                         "{} {} ({})",
-                        expr.output_columns().name(),
+                        expr.output_column().name(),
                         op_string,
                         args_string
                     ),
@@ -304,7 +304,7 @@ impl ScalarExpression {
                 ))
             }
             ScalarExpression::TypeCast { expr, ty } => Arc::new(ColumnCatalog::new(
-                format!("CAST({} as {})", expr.output_columns().name(), ty),
+                format!("CAST({} as {})", expr.output_column().name(), ty),
                 true,
                 ColumnDesc::new(*ty, false, false, None),
                 Some(self.clone()),

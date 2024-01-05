@@ -11,7 +11,8 @@ pub mod catalog;
 pub mod db;
 pub mod execution;
 pub mod expression;
-pub mod marco;
+#[cfg(feature = "marcos")]
+pub mod marcos;
 mod optimizer;
 pub mod parser;
 pub mod planner;

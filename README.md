@@ -82,7 +82,7 @@ Storage Support:
 - KipDB
 
 ### Features
-- ORM Mapping
+- ORM Mapping: `features = ["marcos"]`
 ```rust
 #[derive(Debug, Clone, Default)]
 pub struct Post {

@@ -15,6 +15,9 @@ categories = ["development-tools", "database"]
 [lib]
 doctest = false
 
+[features]
+marcos = []
+
 [dependencies]
 sqlparser = "0.34.0"
 thiserror = "1"
@@ -40,6 +43,8 @@ rust_decimal = "1"
 csv = "1"
 regex = "1.10.2"
 clap = "4.4.11"
+
+mlua = { version = "0.9.1", features = ["lua54", "vendored", "macros", "async"] }
 
 [dev-dependencies]
 cargo-tarpaulin = "0.27.1"
