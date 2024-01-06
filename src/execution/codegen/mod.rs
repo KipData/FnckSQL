@@ -14,6 +14,7 @@ use crate::types::value::DataValue;
 use mlua::prelude::*;
 use mlua::{UserData, UserDataMethods, UserDataRef, Value};
 use std::sync::Arc;
+use crate::execution::codegen::dql::aggregate::simple_agg::SimpleAgg;
 use crate::execution::codegen::dql::filter::Filter;
 use crate::execution::codegen::dql::limit::Limit;
 use crate::execution::codegen::dql::projection::Projection;
@@ -97,7 +98,14 @@ pub async fn execute(
     lua.globals()
         .set("transaction", KipTransactionPtr(Arc::new(transaction)))?;
 
+    script.push_str(r#"
+            local index = -1
+            local results = {}
+    "#);
     build_script(0, plan, &lua, &mut script, Box::new(|_, _| Ok(())))?;
+    script.push_str(r#"
+            return results"#);
+
     println!("Lua Script: \n{}", script);
 
     Ok(lua.load(script).eval_async().await?)
@@ -152,6 +160,14 @@ pub fn build_script(
             limit.produce(lua, script)?;
             build_script_with_consume!(op_id, limit, childrens, lua, script, consume);
         }
+        Operator::Aggregate(op) => {
+            let mut simple_agg = SimpleAgg::from((op, op_id));
+
+            build_script(op_id + 1, childrens.remove(0), lua, script, Box::new(move |_, _| Ok(())))?;
+            simple_agg.produce(lua, script)?;
+            consume(lua, script)?;
+            simple_agg.consume(lua, script)?;
+        }
         _ => unreachable!(),
     }
 
@@ -181,7 +197,7 @@ mod test {
         let transaction = database.storage.transaction().await?;
 
         // parse
-        let stmts = parse_sql("select c1, c1 + c2 from t1 where c1 > 0 limit 3 offset 1")?;
+        let stmts = parse_sql("select sum(c1) from t1 where c1 > 0 limit 1")?;
         let binder = Binder::new(BinderContext::new(&transaction));
         /// Build a logical plan.
         ///
@@ -194,6 +210,7 @@ mod test {
         // println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan = Database::<KipStorage>::default_optimizer(source_plan).find_best()?;
+        // println!("{:#?}", best_plan);
 
         let tuples = execute(best_plan, transaction).await?;
 

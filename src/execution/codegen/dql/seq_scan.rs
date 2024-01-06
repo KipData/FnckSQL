@@ -70,14 +70,11 @@ impl CodeGenerator for SeqScan {
             let env = format!("scan_op_{}", self.id);
             lua.globals().set(env.as_str(), op)?;
 
-            script.push_str(format!(
-                r#"
-                local index = -1
-                local results = {{}}
-                local seq_scan = transaction:new_seq_scan({})
+            script.push_str(format!(r#"
+            local seq_scan = transaction:new_seq_scan({})
 
-                for tuple in function() return seq_scan:next() end do
-                    index = index + 1
+            for tuple in function() return seq_scan:next() end do
+                index = index + 1
             "#, env).as_str())
         }
 
@@ -85,13 +82,10 @@ impl CodeGenerator for SeqScan {
     }
 
     fn consume(&mut self, _: &Lua, script: &mut String) -> Result<(), ExecutorError> {
-        script.push_str(
-            r#"
-                    table.insert(results, tuple)
-                    ::continue::
-                end
-
-                return results
+        script.push_str(r#"
+                table.insert(results, tuple)
+                ::continue::
+            end
             "#,
         );
 

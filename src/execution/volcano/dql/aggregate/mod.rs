@@ -49,6 +49,6 @@ fn create_accumulator(expr: &ScalarExpression) -> Box<dyn Accumulator> {
     }
 }
 
-fn create_accumulators(exprs: &[ScalarExpression]) -> Vec<Box<dyn Accumulator>> {
+pub(crate) fn create_accumulators(exprs: &[ScalarExpression]) -> Vec<Box<dyn Accumulator>> {
     exprs.iter().map(create_accumulator).collect()
 }

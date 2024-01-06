@@ -11,8 +11,8 @@ use itertools::Itertools;
 use std::cell::RefCell;
 
 pub struct SimpleAggExecutor {
-    pub agg_calls: Vec<ScalarExpression>,
-    pub input: BoxedExecutor,
+    agg_calls: Vec<ScalarExpression>,
+    input: BoxedExecutor,
 }
 
 impl From<(AggregateOperator, BoxedExecutor)> for SimpleAggExecutor {

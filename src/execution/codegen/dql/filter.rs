@@ -29,10 +29,10 @@ impl CodeGenerator for Filter {
             lua.globals().set(env.as_str(), predicate)?;
 
             script.push_str(format!(r#"
-                    if {}:is_filtering(tuple) then
-                        index = index - 1
-                        goto continue
-                    end
+                if {}:is_filtering(tuple) then
+                    index = index - 1
+                    goto continue
+                end
             "#, env).as_str())
         }
 

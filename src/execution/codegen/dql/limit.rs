@@ -40,12 +40,12 @@ impl CodeGenerator for Limit {
 
         script.push_str(
             format!(r#"
-                    if index < {} then
-                        goto continue
-                    end
-                    if index > {} then
-                        break
-                    end
+                if index < {} then
+                    goto continue
+                end
+                if index > {} then
+                    break
+                end
             "#, offset_val, offset_limit).as_str(),
         );
 

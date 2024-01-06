@@ -28,9 +28,8 @@ impl CodeGenerator for Projection {
             let env = format!("project_exprs_{}", self.id);
             lua.globals().set(env.as_str(), exprs)?;
 
-            script.push_str(
-                format!(r#"
-                    tuple:projection({})
+            script.push_str(format!(r#"
+                tuple:projection({})
             "#, env).as_str(),
             )
         }
