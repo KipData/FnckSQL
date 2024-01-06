@@ -30,6 +30,7 @@ impl CodeGenerator for Filter {
 
             script.push_str(format!(r#"
                     if {}:is_filtering(tuple) then
+                        index = index - 1
                         goto continue
                     end
             "#, env).as_str())

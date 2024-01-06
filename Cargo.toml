@@ -16,6 +16,7 @@ categories = ["development-tools", "database"]
 doctest = false
 
 [features]
+default = ["marcos"]
 marcos = []
 
 [dependencies]

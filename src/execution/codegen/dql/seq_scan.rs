@@ -72,10 +72,12 @@ impl CodeGenerator for SeqScan {
 
             script.push_str(format!(
                 r#"
+                local index = -1
                 local results = {{}}
                 local seq_scan = transaction:new_seq_scan({})
 
                 for tuple in function() return seq_scan:next() end do
+                    index = index + 1
             "#, env).as_str())
         }
 

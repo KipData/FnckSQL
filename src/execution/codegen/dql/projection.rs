@@ -26,7 +26,6 @@ impl CodeGenerator for Projection {
     fn consume(&mut self, lua: &Lua, script: &mut String) -> Result<(), ExecutorError> {
         if let Some(exprs) = self.exprs.take() {
             let env = format!("project_exprs_{}", self.id);
-
             lua.globals().set(env.as_str(), exprs)?;
 
             script.push_str(
