@@ -109,11 +109,10 @@ impl CodeGenerator for SimpleAgg {
                 {}:update(tuple)
             end
 
-            index = -1
             results = {{}}
 
-            for _, tuple in ipairs({{{}:to_tuple()}}) do
-                index = index + 1
+            for index, tuple in ipairs({{{}:to_tuple()}}) do
+                index = index - 1
             "#, &env, &env).as_str());
 
             self.is_produced = true;

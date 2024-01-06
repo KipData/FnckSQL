@@ -18,7 +18,10 @@ use crate::execution::codegen::dql::aggregate::simple_agg::SimpleAgg;
 use crate::execution::codegen::dql::filter::Filter;
 use crate::execution::codegen::dql::limit::Limit;
 use crate::execution::codegen::dql::projection::Projection;
+use crate::execution::codegen::dql::sort::Sort;
+use crate::execution::volcano::dql::sort::sort;
 use crate::planner::operator::scan::ScanOperator;
+use crate::planner::operator::sort::SortField;
 
 pub trait CodeGenerator {
     fn produce(&mut self, lua: &Lua, script: &mut String) -> Result<(), ExecutorError>;
@@ -95,8 +98,14 @@ pub async fn execute(
     let lua = Lua::new();
     let mut script = String::new();
 
+    let func_sort = lua.create_function(|_, (sort_fields, tuples): (Vec<SortField>, Vec<Tuple>)| {
+        Ok(sort(&sort_fields, tuples).unwrap())
+    })?;
+
     lua.globals()
         .set("transaction", KipTransactionPtr(Arc::new(transaction)))?;
+    lua.globals()
+        .set("sort", func_sort)?;
 
     script.push_str(r#"
             local index = -1
@@ -168,6 +177,14 @@ pub fn build_script(
             consume(lua, script)?;
             simple_agg.consume(lua, script)?;
         }
+        Operator::Sort(op) => {
+            let mut sort = Sort::from((op, op_id));
+
+            build_script(op_id + 1, childrens.remove(0), lua, script, Box::new(move |_, _| Ok(())))?;
+            sort.produce(lua, script)?;
+            consume(lua, script)?;
+            sort.consume(lua, script)?;
+        }
         _ => unreachable!(),
     }
 
@@ -197,7 +214,7 @@ mod test {
         let transaction = database.storage.transaction().await?;
 
         // parse
-        let stmts = parse_sql("select sum(c1) from t1 where c1 > 0 limit 1")?;
+        let stmts = parse_sql("select sum(c1) from t1 where c1 > 0 order by c1 limit 1")?;
         let binder = Binder::new(BinderContext::new(&transaction));
         /// Build a logical plan.
         ///

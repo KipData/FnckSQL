@@ -38,6 +38,37 @@ fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
     Vec::new()
 }
 
+pub(crate) fn sort(sort_fields: &[SortField], tuples: Vec<Tuple>) -> Result<Vec<Tuple>, ExecutorError> {
+    let tuples_with_keys: Vec<(Tuple, Vec<u8>)> = tuples
+        .into_iter()
+        .map(|tuple| {
+            let mut full_key = Vec::new();
+
+            for SortField {
+                expr,
+                nulls_first,
+                asc,
+            } in sort_fields
+            {
+                let mut key = Vec::new();
+
+                expr.eval(&tuple)?.memcomparable_encode(&mut key)?;
+                key.push(if *nulls_first { u8::MIN } else { u8::MAX });
+
+                if !asc {
+                    for byte in key.iter_mut() {
+                        *byte ^= 0xFF;
+                    }
+                }
+                full_key.extend(key);
+            }
+            Ok::<(Tuple, Vec<u8>), TypeError>((tuple, full_key))
+        })
+        .try_collect()?;
+
+    Ok(radix_sort(tuples_with_keys))
+}
+
 pub struct Sort {
     sort_fields: Vec<SortField>,
     limit: Option<usize>,
@@ -74,33 +105,7 @@ impl Sort {
         for tuple in input {
             tuples.push(tuple?);
         }
-        let tuples_with_keys: Vec<(Tuple, Vec<u8>)> = tuples
-            .into_iter()
-            .map(|tuple| {
-                let mut full_key = Vec::new();
-
-                for SortField {
-                    expr,
-                    nulls_first,
-                    asc,
-                } in &sort_fields
-                {
-                    let mut key = Vec::new();
-
-                    expr.eval(&tuple)?.memcomparable_encode(&mut key)?;
-                    key.push(if *nulls_first { u8::MIN } else { u8::MAX });
-
-                    if !asc {
-                        for byte in key.iter_mut() {
-                            *byte ^= 0xFF;
-                        }
-                    }
-                    full_key.extend(key);
-                }
-                Ok::<(Tuple, Vec<u8>), TypeError>((tuple, full_key))
-            })
-            .try_collect()?;
-        let mut tuples = radix_sort(tuples_with_keys);
+        let mut tuples = sort(&sort_fields, tuples)?;
         let len = limit.unwrap_or(tuples.len());
 
         for tuple in tuples.drain(..len) {
