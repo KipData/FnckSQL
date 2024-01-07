@@ -38,7 +38,10 @@ fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
     Vec::new()
 }
 
-pub(crate) fn sort(sort_fields: &[SortField], tuples: Vec<Tuple>) -> Result<Vec<Tuple>, ExecutorError> {
+pub(crate) fn sort(
+    sort_fields: &[SortField],
+    tuples: Vec<Tuple>,
+) -> Result<Vec<Tuple>, ExecutorError> {
     let tuples_with_keys: Vec<(Tuple, Vec<u8>)> = tuples
         .into_iter()
         .map(|tuple| {

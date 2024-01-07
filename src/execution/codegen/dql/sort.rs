@@ -1,10 +1,10 @@
-use std::mem;
-use mlua::prelude::{LuaValue, LuaResult};
-use mlua::{Lua, UserData, FromLua, Value};
 use crate::execution::codegen::CodeGenerator;
 use crate::execution::ExecutorError;
 use crate::impl_from_lua;
 use crate::planner::operator::sort::{SortField, SortOperator};
+use mlua::prelude::{LuaResult, LuaValue};
+use mlua::{FromLua, Lua, UserData, Value};
+use std::mem;
 
 pub struct Sort {
     id: i64,
@@ -32,13 +32,19 @@ impl CodeGenerator for Sort {
             let env = format!("sort_fields_{}", self.id);
             lua.globals().set(env.as_str(), sort_fields)?;
 
-            script.push_str(format!(r#"
+            script.push_str(
+                format!(
+                    r#"
             local temp = sort({}, results)
             results = {{}}
 
             for index, tuple in ipairs(temp) do
                 index = index - 1
-            "#, &env).as_str());
+            "#,
+                    env
+                )
+                .as_str(),
+            );
 
             self.is_produced = true;
         }
@@ -48,11 +54,13 @@ impl CodeGenerator for Sort {
 
     fn consume(&mut self, _: &Lua, script: &mut String) -> Result<(), ExecutorError> {
         if mem::replace(&mut self.is_produced, false) {
-            script.push_str(r#"
+            script.push_str(
+                r#"
                 table.insert(results, tuple)
                 ::continue::
             end
-            "#);
+            "#,
+            );
         }
 
         Ok(())

@@ -1,8 +1,8 @@
-use mlua::Lua;
 use crate::execution::codegen::CodeGenerator;
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::project::ProjectOperator;
+use mlua::Lua;
 
 pub struct Projection {
     id: i64,
@@ -13,7 +13,7 @@ impl From<(ProjectOperator, i64)> for Projection {
     fn from((ProjectOperator { exprs }, id): (ProjectOperator, i64)) -> Self {
         Projection {
             id,
-            exprs: Some(exprs)
+            exprs: Some(exprs),
         }
     }
 }
@@ -28,9 +28,14 @@ impl CodeGenerator for Projection {
             let env = format!("project_exprs_{}", self.id);
             lua.globals().set(env.as_str(), exprs)?;
 
-            script.push_str(format!(r#"
+            script.push_str(
+                format!(
+                    r#"
                 tuple:projection({})
-            "#, env).as_str(),
+            "#,
+                    env
+                )
+                .as_str(),
             )
         }
 

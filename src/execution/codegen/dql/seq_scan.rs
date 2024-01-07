@@ -1,5 +1,6 @@
 use crate::execution::codegen::{CodeGenerator, KipTransactionPtr};
 use crate::execution::ExecutorError;
+use crate::impl_from_lua;
 use crate::planner::operator::scan::ScanOperator;
 use crate::storage::{Iter, Transaction};
 use crate::types::tuple::Tuple;
@@ -7,7 +8,6 @@ use mlua::prelude::{LuaResult, LuaValue};
 use mlua::{FromLua, Lua, UserData, UserDataMethods, Value};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use crate::impl_from_lua;
 
 const DEFAULT_CHANNEL_BUF: usize = 5;
 
@@ -52,10 +52,7 @@ impl KipChannelSeqNext {
 
 impl UserData for KipChannelSeqNext {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_async_method_mut(
-            "next",
-            |_, next, ()| async move { Ok(next.0.recv().await) },
-        );
+        methods.add_async_method_mut("next", |_, next, ()| async move { Ok(next.0.recv().await) });
     }
 }
 
@@ -70,19 +67,27 @@ impl CodeGenerator for SeqScan {
             let env = format!("scan_op_{}", self.id);
             lua.globals().set(env.as_str(), op)?;
 
-            script.push_str(format!(r#"
-            local seq_scan = transaction:new_seq_scan({})
+            script.push_str(
+                format!(
+                    r#"
+            local seq_scan_{} = transaction:new_seq_scan({})
+            local index = -1
 
-            for tuple in function() return seq_scan:next() end do
+            for tuple in function() return seq_scan_{}:next() end do
                 index = index + 1
-            "#, env).as_str())
+            "#,
+                    self.id, env, self.id
+                )
+                .as_str(),
+            )
         }
 
         Ok(())
     }
 
     fn consume(&mut self, _: &Lua, script: &mut String) -> Result<(), ExecutorError> {
-        script.push_str(r#"
+        script.push_str(
+            r#"
                 table.insert(results, tuple)
                 ::continue::
             end

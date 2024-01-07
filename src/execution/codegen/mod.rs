@@ -3,9 +3,18 @@ mod dql;
 #[macro_use]
 pub(crate) mod marcos;
 
+use crate::execution::codegen::dql::aggregate::simple_agg::SimpleAgg;
+use crate::execution::codegen::dql::filter::Filter;
+use crate::execution::codegen::dql::join::hash_join::HashJoin;
+use crate::execution::codegen::dql::limit::Limit;
+use crate::execution::codegen::dql::projection::Projection;
 use crate::execution::codegen::dql::seq_scan::{KipChannelSeqNext, SeqScan};
+use crate::execution::codegen::dql::sort::Sort;
+use crate::execution::volcano::dql::sort::sort;
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
+use crate::planner::operator::scan::ScanOperator;
+use crate::planner::operator::sort::SortField;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::kip::KipTransaction;
@@ -13,15 +22,8 @@ use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use mlua::prelude::*;
 use mlua::{UserData, UserDataMethods, UserDataRef, Value};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
-use crate::execution::codegen::dql::aggregate::simple_agg::SimpleAgg;
-use crate::execution::codegen::dql::filter::Filter;
-use crate::execution::codegen::dql::limit::Limit;
-use crate::execution::codegen::dql::projection::Projection;
-use crate::execution::codegen::dql::sort::Sort;
-use crate::execution::volcano::dql::sort::sort;
-use crate::planner::operator::scan::ScanOperator;
-use crate::planner::operator::sort::SortField;
 
 pub trait CodeGenerator {
     fn produce(&mut self, lua: &Lua, script: &mut String) -> Result<(), ExecutorError>;
@@ -53,16 +55,16 @@ impl UserData for Tuple {
 
 impl UserData for ScalarExpression {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_async_method(
-            "eval",
-            |_, expr, tuple: UserDataRef<Tuple>| async move {
-                Ok(ValuePtr(expr.eval(&tuple).unwrap()))
-            },
-        );
+        methods.add_async_method("eval", |_, expr, tuple: UserDataRef<Tuple>| async move {
+            Ok(ValuePtr(expr.eval(&tuple).unwrap()))
+        });
         methods.add_async_method(
             "is_filtering",
             |_, expr, tuple: UserDataRef<Tuple>| async move {
-                Ok(!matches!(expr.eval(&tuple).unwrap().as_ref(), DataValue::Boolean(Some(true))))
+                Ok(!matches!(
+                    expr.eval(&tuple).unwrap().as_ref(),
+                    DataValue::Boolean(Some(true))
+                ))
             },
         );
     }
@@ -98,50 +100,79 @@ pub async fn execute(
     let lua = Lua::new();
     let mut script = String::new();
 
-    let func_sort = lua.create_function(|_, (sort_fields, tuples): (Vec<SortField>, Vec<Tuple>)| {
-        Ok(sort(&sort_fields, tuples).unwrap())
-    })?;
+    let func_sort =
+        lua.create_function(|_, (sort_fields, tuples): (Vec<SortField>, Vec<Tuple>)| {
+            Ok(sort(&sort_fields, tuples).unwrap())
+        })?;
 
     lua.globals()
         .set("transaction", KipTransactionPtr(Arc::new(transaction)))?;
-    lua.globals()
-        .set("sort", func_sort)?;
+    lua.globals().set("sort", func_sort)?;
 
-    script.push_str(r#"
-            local index = -1
+    script.push_str(
+        r#"
             local results = {}
-    "#);
+    "#,
+    );
     build_script(0, plan, &lua, &mut script, Box::new(|_, _| Ok(())))?;
-    script.push_str(r#"
-            return results"#);
+    script.push_str(
+        r#"
+            return results"#,
+    );
 
     println!("Lua Script: \n{}", script);
 
     Ok(lua.load(script).eval_async().await?)
 }
 
-macro_rules! build_script_with_consume {
-    ($op_id: expr,$executor:expr, $childrens:expr, $lua:expr, $script:expr, $consume:expr) => {
-        build_script($op_id + 1, $childrens.remove(0), $lua, $script, Box::new(move |lua, script| {
-            $executor.consume(lua, script)?;
-            $consume(lua, script)?;
+macro_rules! consumption {
+    ($child_op_id:expr,$executor:expr, $childrens:expr, $lua:expr, $script:expr, $consume:expr) => {
+        build_script(
+            $child_op_id,
+            $childrens.remove(0),
+            $lua,
+            $script,
+            Box::new(move |lua, script| {
+                $executor.consume(lua, script)?;
+                $consume(lua, script)?;
 
-            Ok(())
-        }))?;
+                Ok(())
+            }),
+        )?;
     };
 }
+
+macro_rules! materialize {
+    ($child_op_id:expr, $executor:expr, $childrens:expr, $lua:expr, $script:expr, $consume:expr) => {
+        build_script(
+            $child_op_id,
+            $childrens.remove(0),
+            $lua,
+            $script,
+            Box::new(move |_, _| Ok(())),
+        )?;
+
+        $executor.produce($lua, $script)?;
+        $consume($lua, $script)?;
+        $executor.consume($lua, $script)?;
+    };
+}
+
+static OP_COUNTER: AtomicI64 = AtomicI64::new(0);
 
 pub fn build_script(
     op_id: i64,
     plan: LogicalPlan,
     lua: &Lua,
     script: &mut String,
-    consume: Box<dyn FnOnce(&Lua, &mut String) -> Result<(), ExecutorError>>
+    consume: Box<dyn FnOnce(&Lua, &mut String) -> Result<(), ExecutorError>>,
 ) -> Result<(), ExecutorError> {
     let LogicalPlan {
         operator,
         mut childrens,
     } = plan;
+
+    let func_op_id = || OP_COUNTER.fetch_add(1, Ordering::SeqCst);
 
     match operator {
         Operator::Scan(op) => {
@@ -155,35 +186,88 @@ pub fn build_script(
             let mut projection = Projection::from((op, op_id));
 
             projection.produce(lua, script)?;
-            build_script_with_consume!(op_id, projection, childrens, lua, script, consume);
+            consumption!(func_op_id(), projection, childrens, lua, script, consume);
         }
         Operator::Filter(op) => {
             let mut filter = Filter::from((op, op_id));
 
             filter.produce(lua, script)?;
-            build_script_with_consume!(op_id, filter, childrens, lua, script, consume);
+            consumption!(func_op_id(), filter, childrens, lua, script, consume);
         }
         Operator::Limit(op) => {
             let mut limit = Limit::from((op, op_id));
 
             limit.produce(lua, script)?;
-            build_script_with_consume!(op_id, limit, childrens, lua, script, consume);
+            consumption!(func_op_id(), limit, childrens, lua, script, consume);
         }
         Operator::Aggregate(op) => {
             let mut simple_agg = SimpleAgg::from((op, op_id));
 
-            build_script(op_id + 1, childrens.remove(0), lua, script, Box::new(move |_, _| Ok(())))?;
-            simple_agg.produce(lua, script)?;
-            consume(lua, script)?;
-            simple_agg.consume(lua, script)?;
+            materialize!(func_op_id(), simple_agg, childrens, lua, script, consume);
         }
         Operator::Sort(op) => {
             let mut sort = Sort::from((op, op_id));
 
-            build_script(op_id + 1, childrens.remove(0), lua, script, Box::new(move |_, _| Ok(())))?;
-            sort.produce(lua, script)?;
+            materialize!(func_op_id(), sort, childrens, lua, script, consume);
+        }
+        Operator::Join(op) => {
+            let env_left_input = format!("hash_join_left_input_{}", op_id);
+            let env_right_input = format!("hash_join_right_input_{}", op_id);
+
+            script.push_str(
+                format!(
+                    r#"
+            local {} = {{}}
+            local {} = {{}}
+            "#,
+                    env_left_input, env_right_input
+                )
+                .as_str(),
+            );
+
+            let insert_into_left = format!(
+                r#"
+                table.insert({}, tuple)
+                goto continue
+                "#,
+                env_left_input
+            );
+            build_script(
+                func_op_id(),
+                childrens.remove(0),
+                lua,
+                script,
+                Box::new(move |_, script| {
+                    script.push_str(insert_into_left.as_str());
+
+                    Ok(())
+                }),
+            )?;
+
+            let insert_into_right = format!(
+                r#"
+                table.insert({}, tuple)
+                goto continue
+                "#,
+                env_right_input
+            );
+            build_script(
+                func_op_id(),
+                childrens.remove(0),
+                lua,
+                script,
+                Box::new(move |_, script| {
+                    script.push_str(insert_into_right.as_str());
+
+                    Ok(())
+                }),
+            )?;
+
+            let mut join = HashJoin::from((op, op_id, env_left_input, env_right_input));
+
+            join.produce(lua, script)?;
             consume(lua, script)?;
-            sort.consume(lua, script)?;
+            join.consume(lua, script)?;
         }
         _ => unreachable!(),
     }
@@ -193,7 +277,6 @@ pub fn build_script(
 
 #[cfg(test)]
 mod test {
-    use tempfile::TempDir;
     use crate::binder::{Binder, BinderContext};
     use crate::db::{Database, DatabaseError};
     use crate::execution::codegen::execute;
@@ -201,6 +284,7 @@ mod test {
     use crate::storage::kip::KipStorage;
     use crate::storage::Storage;
     use crate::types::tuple::create_table;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_scan() -> Result<(), DatabaseError> {
@@ -208,13 +292,25 @@ mod test {
 
         let database = Database::with_kipdb(temp_dir.path()).await?;
 
-        database.run("create table t1 (c1 int primary key, c2 int)").await?;
-        database.run("insert into t1 values(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13)").await?;
+        database
+            .run("create table t1 (c1 int primary key, c2 int)")
+            .await?;
+        database
+            .run("insert into t1 values(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13)")
+            .await?;
+        database
+            .run("create table t2 (c3 int primary key, c4 int)")
+            .await?;
+        database
+            .run("insert into t2 values(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13)")
+            .await?;
 
         let transaction = database.storage.transaction().await?;
 
         // parse
-        let stmts = parse_sql("select sum(c1) from t1 where c1 > 0 order by c1 limit 1")?;
+        let stmts = parse_sql(
+            "select sum(t2.c3) from t1 left join t2 on t1.c1 = t2.c3 and t1.c1 > 3 where t1.c1 > 0",
+        )?;
         let binder = Binder::new(BinderContext::new(&transaction));
         /// Build a logical plan.
         ///

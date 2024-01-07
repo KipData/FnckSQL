@@ -1,8 +1,8 @@
-use mlua::Lua;
 use crate::execution::codegen::CodeGenerator;
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::filter::FilterOperator;
+use mlua::Lua;
 
 pub struct Filter {
     id: i64,
@@ -13,7 +13,7 @@ impl From<(FilterOperator, i64)> for Filter {
     fn from((FilterOperator { predicate, .. }, id): (FilterOperator, i64)) -> Self {
         Filter {
             id,
-            predicate: Some(predicate)
+            predicate: Some(predicate),
         }
     }
 }
@@ -28,12 +28,18 @@ impl CodeGenerator for Filter {
             let env = format!("predicate_{}", self.id);
             lua.globals().set(env.as_str(), predicate)?;
 
-            script.push_str(format!(r#"
+            script.push_str(
+                format!(
+                    r#"
                 if {}:is_filtering(tuple) then
                     index = index - 1
                     goto continue
                 end
-            "#, env).as_str())
+            "#,
+                    env
+                )
+                .as_str(),
+            )
         }
 
         Ok(())

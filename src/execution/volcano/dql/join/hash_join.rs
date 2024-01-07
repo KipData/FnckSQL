@@ -7,11 +7,12 @@ use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
 use crate::storage::Transaction;
 use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
-use crate::types::value::DataValue;
-use ahash::{HashMap, HashMapExt, HashSet, HashSetExt, RandomState};
+use crate::types::value::{DataValue, ValueRef};
+use ahash::{HashMap, HashSet, HashSetExt, RandomState};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use std::cell::RefCell;
+use std::mem;
 use std::sync::Arc;
 
 pub struct HashJoin {
@@ -44,16 +45,25 @@ impl<T: Transaction> Executor<T> for HashJoin {
     }
 }
 
-impl HashJoin {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self) {
-        let HashJoin {
-            on,
-            ty,
-            left_input,
-            right_input,
-        } = self;
+pub(crate) struct JoinStatus {
+    ty: JoinType,
+    filter: Option<ScalarExpression>,
 
+    join_columns: Vec<ColumnRef>,
+    used_set: HashSet<u64>,
+    build_map: HashMap<u64, Vec<Tuple>>,
+    hash_random_state: RandomState,
+
+    left_init_flag: bool,
+    left_force_nullable: bool,
+    on_left_keys: Vec<ScalarExpression>,
+    right_init_flag: bool,
+    right_force_nullable: bool,
+    on_right_keys: Vec<ScalarExpression>,
+}
+
+impl JoinStatus {
+    pub(crate) fn new(on: JoinCondition, ty: JoinType) -> Self {
         if ty == JoinType::Cross {
             unreachable!("Cross join should not be in HashJoinExecutor");
         }
@@ -64,155 +74,192 @@ impl HashJoin {
             JoinCondition::On { on, filter } => (on.into_iter().unzip(), filter),
             JoinCondition::None => unreachable!("HashJoin must has on condition"),
         };
-
-        let mut join_columns = Vec::new();
-        let mut used_set = HashSet::<u64>::new();
-        let mut left_map = HashMap::new();
-
-        let hash_random_state = RandomState::with_seeds(0, 0, 0, 0);
         let (left_force_nullable, right_force_nullable) = joins_nullable(&ty);
 
-        // build phase:
-        // 1.construct hashtable, one hash key may contains multiple rows indices.
-        // 2.merged all left tuples.
-        let mut left_init_flag = false;
-        #[for_await]
-        for tuple in left_input {
-            let tuple: Tuple = tuple?;
-            let hash = Self::hash_row(&on_left_keys, &hash_random_state, &tuple)?;
+        JoinStatus {
+            ty,
+            filter,
 
-            if !left_init_flag {
-                Self::columns_filling(&tuple, &mut join_columns, left_force_nullable);
-                left_init_flag = true;
-            }
+            join_columns: vec![],
+            used_set: HashSet::new(),
+            build_map: Default::default(),
+            hash_random_state: RandomState::with_seeds(0, 0, 0, 0),
 
-            left_map.entry(hash).or_insert(Vec::new()).push(tuple);
+            left_init_flag: false,
+            left_force_nullable,
+            on_left_keys,
+            right_init_flag: false,
+            right_force_nullable,
+            on_right_keys,
+        }
+    }
+
+    pub(crate) fn left_build(&mut self, tuple: Tuple) -> Result<(), ExecutorError> {
+        let JoinStatus {
+            on_left_keys,
+            hash_random_state,
+            left_init_flag,
+            join_columns,
+            left_force_nullable,
+            build_map,
+            ..
+        } = self;
+
+        let hash = Self::hash_row(on_left_keys, hash_random_state, &tuple)?;
+
+        if !*left_init_flag {
+            Self::columns_filling(&tuple, join_columns, *left_force_nullable);
+            let _ = mem::replace(left_init_flag, true);
         }
 
-        // probe phase
-        let mut right_init_flag = false;
-        #[for_await]
-        for tuple in right_input {
-            let tuple: Tuple = tuple?;
-            let right_cols_len = tuple.columns.len();
-            let hash = Self::hash_row(&on_right_keys, &hash_random_state, &tuple)?;
+        build_map.entry(hash).or_insert(Vec::new()).push(tuple);
 
-            if !right_init_flag {
-                Self::columns_filling(&tuple, &mut join_columns, right_force_nullable);
-                right_init_flag = true;
-            }
+        Ok(())
+    }
 
-            let mut join_tuples = if let Some(tuples) = left_map.get(&hash) {
-                let _ = used_set.insert(hash);
+    pub(crate) fn right_probe(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, ExecutorError> {
+        let JoinStatus {
+            hash_random_state,
+            join_columns,
+            on_right_keys,
+            right_init_flag,
+            right_force_nullable,
+            build_map,
+            used_set,
+            ty,
+            filter,
+            ..
+        } = self;
 
-                tuples
-                    .iter()
-                    .map(|Tuple { values, .. }| {
-                        let full_values = values
-                            .iter()
-                            .cloned()
-                            .chain(tuple.values.clone())
-                            .collect_vec();
+        let right_cols_len = tuple.columns.len();
+        let hash = Self::hash_row(&on_right_keys, &hash_random_state, &tuple)?;
 
-                        Tuple {
-                            id: None,
-                            columns: join_columns.clone(),
-                            values: full_values,
-                        }
-                    })
-                    .collect_vec()
-            } else if matches!(ty, JoinType::Right | JoinType::Full) {
-                let empty_len = join_columns.len() - right_cols_len;
-                let values = join_columns[..empty_len]
-                    .iter()
-                    .map(|col| Arc::new(DataValue::none(col.datatype())))
-                    .chain(tuple.values)
-                    .collect_vec();
-
-                vec![Tuple {
-                    id: None,
-                    columns: join_columns.clone(),
-                    values,
-                }]
-            } else {
-                vec![]
-            };
-
-            // on filter
-            if let (Some(expr), false) = (
-                &filter,
-                join_tuples.is_empty() || matches!(ty, JoinType::Full | JoinType::Cross),
-            ) {
-                let mut filter_tuples = Vec::with_capacity(join_tuples.len());
-
-                for mut tuple in join_tuples {
-                    if let DataValue::Boolean(option) = expr.eval(&tuple)?.as_ref() {
-                        if let Some(false) | None = option {
-                            let full_cols_len = tuple.columns.len();
-                            let left_cols_len = full_cols_len - right_cols_len;
-
-                            match ty {
-                                JoinType::Left => {
-                                    for i in left_cols_len..full_cols_len {
-                                        let value_type = tuple.columns[i].datatype();
-
-                                        tuple.values[i] = Arc::new(DataValue::none(value_type))
-                                    }
-                                    filter_tuples.push(tuple)
-                                }
-                                JoinType::Right => {
-                                    for i in 0..left_cols_len {
-                                        let value_type = tuple.columns[i].datatype();
-
-                                        tuple.values[i] = Arc::new(DataValue::none(value_type))
-                                    }
-                                    filter_tuples.push(tuple)
-                                }
-                                _ => (),
-                            }
-                        } else {
-                            filter_tuples.push(tuple)
-                        }
-                    } else {
-                        unreachable!("only bool");
-                    }
-                }
-
-                join_tuples = filter_tuples;
-            }
-
-            for tuple in join_tuples {
-                yield tuple
-            }
+        if !*right_init_flag {
+            Self::columns_filling(&tuple, join_columns, *right_force_nullable);
+            let _ = mem::replace(right_init_flag, true);
         }
 
-        if matches!(ty, JoinType::Left | JoinType::Full) {
-            for (hash, tuples) in left_map {
-                if used_set.contains(&hash) {
-                    continue;
-                }
+        let mut join_tuples = if let Some(tuples) = build_map.get(&hash) {
+            let _ = used_set.insert(hash);
 
-                for Tuple {
-                    mut values,
-                    columns,
-                    ..
-                } in tuples
-                {
-                    let mut right_empties = join_columns[columns.len()..]
+            tuples
+                .iter()
+                .map(|Tuple { values, .. }| {
+                    let full_values = values
                         .iter()
-                        .map(|col| Arc::new(DataValue::none(col.datatype())))
+                        .cloned()
+                        .chain(tuple.values.clone())
                         .collect_vec();
 
-                    values.append(&mut right_empties);
-
-                    yield Tuple {
+                    Tuple {
                         id: None,
                         columns: join_columns.clone(),
-                        values,
+                        values: full_values,
                     }
+                })
+                .collect_vec()
+        } else if matches!(ty, JoinType::Right | JoinType::Full) {
+            let empty_len = join_columns.len() - right_cols_len;
+            let values = join_columns[..empty_len]
+                .iter()
+                .map(|col| Arc::new(DataValue::none(col.datatype())))
+                .chain(tuple.values)
+                .collect_vec();
+
+            vec![Tuple {
+                id: None,
+                columns: join_columns.clone(),
+                values,
+            }]
+        } else {
+            vec![]
+        };
+
+        // on filter
+        if let (Some(expr), false) = (
+            &filter,
+            join_tuples.is_empty() || matches!(ty, JoinType::Full | JoinType::Cross),
+        ) {
+            let mut filter_tuples = Vec::with_capacity(join_tuples.len());
+
+            for mut tuple in join_tuples {
+                if let DataValue::Boolean(option) = expr.eval(&tuple)?.as_ref() {
+                    if let Some(false) | None = option {
+                        let full_cols_len = tuple.columns.len();
+                        let left_cols_len = full_cols_len - right_cols_len;
+
+                        match ty {
+                            JoinType::Left => {
+                                for i in left_cols_len..full_cols_len {
+                                    let value_type = tuple.columns[i].datatype();
+
+                                    tuple.values[i] = Arc::new(DataValue::none(value_type))
+                                }
+                                filter_tuples.push(tuple)
+                            }
+                            JoinType::Right => {
+                                for i in 0..left_cols_len {
+                                    let value_type = tuple.columns[i].datatype();
+
+                                    tuple.values[i] = Arc::new(DataValue::none(value_type))
+                                }
+                                filter_tuples.push(tuple)
+                            }
+                            _ => (),
+                        }
+                    } else {
+                        filter_tuples.push(tuple)
+                    }
+                } else {
+                    unreachable!("only bool");
                 }
             }
+
+            join_tuples = filter_tuples;
         }
+
+        Ok(join_tuples)
+    }
+
+    pub(crate) fn build_drop(&mut self) -> Vec<Tuple> {
+        let JoinStatus {
+            join_columns,
+            build_map,
+            used_set,
+            ty,
+            ..
+        } = self;
+
+        matches!(ty, JoinType::Left | JoinType::Full)
+            .then(|| {
+                build_map
+                    .drain()
+                    .filter(|(hash, _)| !used_set.contains(hash))
+                    .map(|(_, mut tuples)| {
+                        for Tuple {
+                            values,
+                            columns,
+                            id,
+                        } in tuples.iter_mut()
+                        {
+                            let _ = mem::replace(id, None);
+                            let (mut right_values, mut right_columns): (
+                                Vec<ValueRef>,
+                                Vec<ColumnRef>,
+                            ) = join_columns[columns.len()..]
+                                .iter()
+                                .map(|col| (Arc::new(DataValue::none(col.datatype())), col.clone()))
+                                .unzip();
+
+                            values.append(&mut right_values);
+                            columns.append(&mut right_columns);
+                        }
+                        tuples
+                    })
+                    .flatten()
+                    .collect_vec()
+            })
+            .unwrap_or_else(|| vec![])
     }
 
     fn columns_filling(tuple: &Tuple, join_columns: &mut Vec<ColumnRef>, force_nullable: bool) {
@@ -243,6 +290,44 @@ impl HashJoin {
         }
 
         Ok(hash_random_state.hash_one(values))
+    }
+}
+
+impl HashJoin {
+    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    pub async fn _execute(self) {
+        let HashJoin {
+            on,
+            ty,
+            left_input,
+            right_input,
+        } = self;
+
+        let mut join_status = JoinStatus::new(on, ty);
+
+        // build phase:
+        // 1.construct hashtable, one hash key may contains multiple rows indices.
+        // 2.merged all left tuples.
+        #[for_await]
+        for tuple in left_input {
+            let tuple: Tuple = tuple?;
+
+            join_status.left_build(tuple)?;
+        }
+
+        // probe phase
+        #[for_await]
+        for tuple in right_input {
+            let tuple: Tuple = tuple?;
+
+            for tuple in join_status.right_probe(tuple)? {
+                yield tuple
+            }
+        }
+
+        for tuple in join_status.build_drop() {
+            yield tuple
+        }
     }
 }
 

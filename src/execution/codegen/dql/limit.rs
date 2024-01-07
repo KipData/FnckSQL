@@ -1,7 +1,7 @@
-use mlua::Lua;
 use crate::execution::codegen::CodeGenerator;
 use crate::execution::ExecutorError;
 use crate::planner::operator::limit::LimitOperator;
+use mlua::Lua;
 
 pub struct Limit {
     id: i64,
@@ -11,11 +11,7 @@ pub struct Limit {
 
 impl From<(LimitOperator, i64)> for Limit {
     fn from((LimitOperator { offset, limit }, id): (LimitOperator, i64)) -> Self {
-        Limit {
-            offset,
-            limit,
-            id,
-        }
+        Limit { offset, limit, id }
     }
 }
 
@@ -25,11 +21,7 @@ impl CodeGenerator for Limit {
     }
 
     fn consume(&mut self, _: &Lua, script: &mut String) -> Result<(), ExecutorError> {
-        let Limit {
-            offset,
-            limit,
-            ..
-        } = self;
+        let Limit { offset, limit, .. } = self;
 
         if limit.is_some() && limit.unwrap() == 0 {
             return Ok(());
@@ -39,14 +31,18 @@ impl CodeGenerator for Limit {
         let offset_limit = offset_val + limit.unwrap_or(1) - 1;
 
         script.push_str(
-            format!(r#"
+            format!(
+                r#"
                 if index < {} then
                     goto continue
                 end
                 if index > {} then
                     break
                 end
-            "#, offset_val, offset_limit).as_str(),
+            "#,
+                offset_val, offset_limit
+            )
+            .as_str(),
         );
 
         Ok(())
