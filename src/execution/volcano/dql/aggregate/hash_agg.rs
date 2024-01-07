@@ -1,4 +1,5 @@
-use crate::execution::volcano::dql::aggregate::create_accumulators;
+use crate::catalog::ColumnRef;
+use crate::execution::volcano::dql::aggregate::{create_accumulators, Accumulator};
 use crate::execution::volcano::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
@@ -6,15 +7,15 @@ use crate::planner::operator::aggregate::AggregateOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
-use ahash::{HashMap, HashMapExt};
+use ahash::HashMap;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use std::cell::RefCell;
 
 pub struct HashAggExecutor {
-    pub agg_calls: Vec<ScalarExpression>,
-    pub groupby_exprs: Vec<ScalarExpression>,
-    pub input: BoxedExecutor,
+    agg_calls: Vec<ScalarExpression>,
+    groupby_exprs: Vec<ScalarExpression>,
+    input: BoxedExecutor,
 }
 
 impl From<(AggregateOperator, BoxedExecutor)> for HashAggExecutor {
@@ -41,57 +42,76 @@ impl<T: Transaction> Executor<T> for HashAggExecutor {
     }
 }
 
-impl HashAggExecutor {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self) {
-        let mut group_and_agg_columns_option = None;
-        let mut group_hash_accs = HashMap::new();
+pub(crate) struct HashAggStatus {
+    agg_calls: Vec<ScalarExpression>,
+    groupby_exprs: Vec<ScalarExpression>,
 
-        #[for_await]
-        for tuple in self.input {
-            let tuple = tuple?;
+    group_columns: Vec<ColumnRef>,
+    group_hash_accs: HashMap<Vec<ValueRef>, Vec<Box<dyn Accumulator>>>,
+}
 
-            // 1. build group and agg columns for hash_agg columns.
-            // Tips: AggCall First
-            group_and_agg_columns_option.get_or_insert_with(|| {
-                self.agg_calls
-                    .iter()
-                    .chain(self.groupby_exprs.iter())
-                    .map(|expr| expr.output_column())
-                    .collect_vec()
-            });
+impl HashAggStatus {
+    pub(crate) fn new(
+        agg_calls: Vec<ScalarExpression>,
+        groupby_exprs: Vec<ScalarExpression>,
+    ) -> Self {
+        HashAggStatus {
+            agg_calls,
+            groupby_exprs,
+            group_columns: vec![],
+            group_hash_accs: Default::default(),
+        }
+    }
 
-            // 2.1 evaluate agg exprs and collect the result values for later accumulators.
-            let values: Vec<ValueRef> = self
+    pub(crate) fn update(&mut self, tuple: Tuple) -> Result<(), ExecutorError> {
+        // 1. build group and agg columns for hash_agg columns.
+        // Tips: AggCall First
+        if self.group_columns.is_empty() {
+            self.group_columns = self
                 .agg_calls
                 .iter()
-                .map(|expr| {
-                    if let ScalarExpression::AggCall { args, .. } = expr {
-                        args[0].eval(&tuple)
-                    } else {
-                        unreachable!()
-                    }
-                })
-                .try_collect()?;
-
-            let group_keys: Vec<ValueRef> = self
-                .groupby_exprs
-                .iter()
-                .map(|expr| expr.eval(&tuple))
-                .try_collect()?;
-
-            for (acc, value) in group_hash_accs
-                .entry(group_keys)
-                .or_insert_with(|| create_accumulators(&self.agg_calls))
-                .iter_mut()
-                .zip_eq(values.iter())
-            {
-                acc.update_value(value)?;
-            }
+                .chain(self.groupby_exprs.iter())
+                .map(|expr| expr.output_column())
+                .collect_vec();
         }
 
-        if let Some(group_and_agg_columns) = group_and_agg_columns_option {
-            for (group_keys, accs) in group_hash_accs {
+        // 2.1 evaluate agg exprs and collect the result values for later accumulators.
+        let values: Vec<ValueRef> = self
+            .agg_calls
+            .iter()
+            .map(|expr| {
+                if let ScalarExpression::AggCall { args, .. } = expr {
+                    args[0].eval(&tuple)
+                } else {
+                    unreachable!()
+                }
+            })
+            .try_collect()?;
+
+        let group_keys: Vec<ValueRef> = self
+            .groupby_exprs
+            .iter()
+            .map(|expr| expr.eval(&tuple))
+            .try_collect()?;
+
+        for (acc, value) in self
+            .group_hash_accs
+            .entry(group_keys)
+            .or_insert_with(|| create_accumulators(&self.agg_calls))
+            .iter_mut()
+            .zip_eq(values.iter())
+        {
+            acc.update_value(value)?;
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn to_tuples(&mut self) -> Result<Vec<Tuple>, ExecutorError> {
+        Ok(self
+            .group_hash_accs
+            .drain()
+            .map(|(group_keys, accs)| {
                 // Tips: Accumulator First
                 let values: Vec<ValueRef> = accs
                     .iter()
@@ -99,12 +119,34 @@ impl HashAggExecutor {
                     .chain(group_keys.into_iter().map(Ok))
                     .try_collect()?;
 
-                yield Tuple {
+                Ok::<Tuple, ExecutorError>(Tuple {
                     id: None,
-                    columns: group_and_agg_columns.clone(),
+                    columns: self.group_columns.clone(),
                     values,
-                };
-            }
+                })
+            })
+            .try_collect()?)
+    }
+}
+
+impl HashAggExecutor {
+    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    pub async fn _execute(self) {
+        let HashAggExecutor {
+            agg_calls,
+            groupby_exprs,
+            ..
+        } = self;
+
+        let mut agg_status = HashAggStatus::new(agg_calls, groupby_exprs);
+
+        #[for_await]
+        for tuple in self.input {
+            agg_status.update(tuple?)?;
+        }
+
+        for tuple in agg_status.to_tuples()? {
+            yield tuple;
         }
     }
 }

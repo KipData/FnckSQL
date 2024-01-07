@@ -45,7 +45,7 @@ impl<T: Transaction> Executor<T> for HashJoin {
     }
 }
 
-pub(crate) struct JoinStatus {
+pub(crate) struct HashJoinStatus {
     ty: JoinType,
     filter: Option<ScalarExpression>,
 
@@ -62,7 +62,7 @@ pub(crate) struct JoinStatus {
     on_right_keys: Vec<ScalarExpression>,
 }
 
-impl JoinStatus {
+impl HashJoinStatus {
     pub(crate) fn new(on: JoinCondition, ty: JoinType) -> Self {
         if ty == JoinType::Cross {
             unreachable!("Cross join should not be in HashJoinExecutor");
@@ -76,7 +76,7 @@ impl JoinStatus {
         };
         let (left_force_nullable, right_force_nullable) = joins_nullable(&ty);
 
-        JoinStatus {
+        HashJoinStatus {
             ty,
             filter,
 
@@ -95,7 +95,7 @@ impl JoinStatus {
     }
 
     pub(crate) fn left_build(&mut self, tuple: Tuple) -> Result<(), ExecutorError> {
-        let JoinStatus {
+        let HashJoinStatus {
             on_left_keys,
             hash_random_state,
             left_init_flag,
@@ -118,7 +118,7 @@ impl JoinStatus {
     }
 
     pub(crate) fn right_probe(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, ExecutorError> {
-        let JoinStatus {
+        let HashJoinStatus {
             hash_random_state,
             join_columns,
             on_right_keys,
@@ -222,7 +222,7 @@ impl JoinStatus {
     }
 
     pub(crate) fn build_drop(&mut self) -> Vec<Tuple> {
-        let JoinStatus {
+        let HashJoinStatus {
             join_columns,
             build_map,
             used_set,
@@ -303,7 +303,7 @@ impl HashJoin {
             right_input,
         } = self;
 
-        let mut join_status = JoinStatus::new(on, ty);
+        let mut join_status = HashJoinStatus::new(on, ty);
 
         // build phase:
         // 1.construct hashtable, one hash key may contains multiple rows indices.

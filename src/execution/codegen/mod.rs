@@ -3,6 +3,7 @@ mod dql;
 #[macro_use]
 pub(crate) mod marcos;
 
+use crate::execution::codegen::dql::aggregate::hash_agg::HashAgg;
 use crate::execution::codegen::dql::aggregate::simple_agg::SimpleAgg;
 use crate::execution::codegen::dql::filter::Filter;
 use crate::execution::codegen::dql::join::hash_join::HashJoin;
@@ -201,9 +202,15 @@ pub fn build_script(
             consumption!(func_op_id(), limit, childrens, lua, script, consume);
         }
         Operator::Aggregate(op) => {
-            let mut simple_agg = SimpleAgg::from((op, op_id));
+            if op.groupby_exprs.is_empty() {
+                let mut simple_agg = SimpleAgg::from((op, op_id));
 
-            materialize!(func_op_id(), simple_agg, childrens, lua, script, consume);
+                materialize!(func_op_id(), simple_agg, childrens, lua, script, consume);
+            } else {
+                let mut hash_agg = HashAgg::from((op, op_id));
+
+                materialize!(func_op_id(), hash_agg, childrens, lua, script, consume);
+            }
         }
         Operator::Sort(op) => {
             let mut sort = Sort::from((op, op_id));
@@ -308,7 +315,7 @@ mod test {
 
         // parse
         let stmts = parse_sql(
-            "select sum(t2.c3) from t1 left join t2 on t1.c1 = t2.c3 and t1.c1 > 3 where t1.c1 > 0",
+            "select t1.c1, sum(t1.c2), sum(t2.c3), sum(t2.c4) from t1 left join t2 on t1.c1 = t2.c3 and t1.c1 > 3 where t1.c1 > 0 group by t1.c1",
         )?;
         let binder = Binder::new(BinderContext::new(&transaction));
         /// Build a logical plan.

@@ -1,5 +1,5 @@
 use crate::execution::codegen::CodeGenerator;
-use crate::execution::volcano::dql::join::hash_join::JoinStatus;
+use crate::execution::volcano::dql::join::hash_join::HashJoinStatus;
 use crate::execution::ExecutorError;
 use crate::impl_from_lua;
 use crate::planner::operator::join::JoinOperator;
@@ -10,7 +10,7 @@ use std::mem;
 
 pub struct HashJoin {
     pub(crate) id: i64,
-    join_status: Option<JoinStatus>,
+    join_status: Option<HashJoinStatus>,
     is_produced: bool,
 
     env: String,
@@ -20,14 +20,14 @@ impl From<(JoinOperator, i64, String)> for HashJoin {
     fn from((JoinOperator { on, join_type }, id, env): (JoinOperator, i64, String)) -> Self {
         HashJoin {
             id,
-            join_status: Some(JoinStatus::new(on, join_type)),
+            join_status: Some(HashJoinStatus::new(on, join_type)),
             is_produced: false,
             env,
         }
     }
 }
 
-impl UserData for JoinStatus {
+impl UserData for HashJoinStatus {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method_mut("left_build", |_, join_status, tuple: Tuple| {
             join_status.left_build(tuple).unwrap();
@@ -43,7 +43,7 @@ impl UserData for JoinStatus {
     }
 }
 
-impl_from_lua!(JoinStatus);
+impl_from_lua!(HashJoinStatus);
 
 impl CodeGenerator for HashJoin {
     fn produce(&mut self, lua: &Lua, script: &mut String) -> Result<(), ExecutorError> {
