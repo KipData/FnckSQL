@@ -58,7 +58,9 @@ impl TableCatalog {
 
         let col_id = self.columns.len() as u32;
 
+        col.summary.table_name = Some(self.name.clone());
         col.summary.id = Some(col_id);
+
         self.column_idxs.insert(col.name().to_string(), col_id);
         self.columns.insert(col_id, Arc::new(col));
 

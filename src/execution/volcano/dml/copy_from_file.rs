@@ -132,6 +132,7 @@ mod tests {
                 summary: ColumnSummary {
                     id: Some(0),
                     name: "a".to_string(),
+                    table_name: None,
                 },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Integer, true, false, None),
@@ -141,6 +142,7 @@ mod tests {
                 summary: ColumnSummary {
                     id: Some(1),
                     name: "b".to_string(),
+                    table_name: None,
                 },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Float, false, false, None),
@@ -150,6 +152,7 @@ mod tests {
                 summary: ColumnSummary {
                     id: Some(1),
                     name: "c".to_string(),
+                    table_name: None,
                 },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false, None),

@@ -913,6 +913,7 @@ mod test {
             summary: ColumnSummary {
                 id: Some(0),
                 name: "c1".to_string(),
+                table_name: None,
             },
             nullable: false,
             desc: ColumnDesc {
