@@ -4,14 +4,18 @@ use crate::planner::operator::limit::LimitOperator;
 use mlua::Lua;
 
 pub struct Limit {
-    id: i64,
+    _id: i64,
     offset: Option<usize>,
     limit: Option<usize>,
 }
 
 impl From<(LimitOperator, i64)> for Limit {
     fn from((LimitOperator { offset, limit }, id): (LimitOperator, i64)) -> Self {
-        Limit { offset, limit, id }
+        Limit {
+            offset,
+            limit,
+            _id: id,
+        }
     }
 }
 

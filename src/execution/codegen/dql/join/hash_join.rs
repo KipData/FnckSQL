@@ -54,13 +54,13 @@ impl CodeGenerator for HashJoin {
                 format!(
                     r#"
             for _, tuple in ipairs({}:drop_build()) do
-                table.insert(temp, tuple)
+                table.insert(join_temp_{}, tuple)
             end
 
             for index, tuple in ipairs(join_temp_{}) do
                 index = index - 1
             "#,
-                    self.env, self.id
+                    self.env, self.id, self.id
                 )
                 .as_str(),
             );

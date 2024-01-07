@@ -96,7 +96,7 @@ impl_from_lua!(KipTransactionPtr);
 
 pub async fn execute(
     plan: LogicalPlan,
-    transaction: KipTransaction,
+    transaction: Arc<KipTransaction>,
 ) -> Result<Vec<Tuple>, ExecutorError> {
     let lua = Lua::new();
     let mut script = String::new();
@@ -107,7 +107,7 @@ pub async fn execute(
         })?;
 
     lua.globals()
-        .set("transaction", KipTransactionPtr(Arc::new(transaction)))?;
+        .set("transaction", KipTransactionPtr(transaction))?;
     lua.globals().set("sort", func_sort)?;
 
     script.push_str(
@@ -120,8 +120,7 @@ pub async fn execute(
         r#"
             return results"#,
     );
-
-    println!("Lua Script: \n{}", script);
+    // println!("Lua Script: \n{}", script);
 
     Ok(lua.load(script).eval_async().await?)
 }
@@ -290,6 +289,7 @@ mod test {
     use crate::storage::kip::KipStorage;
     use crate::storage::Storage;
     use crate::types::tuple::create_table;
+    use std::sync::Arc;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -331,7 +331,7 @@ mod test {
         let best_plan = Database::<KipStorage>::default_optimizer(source_plan).find_best()?;
         // println!("{:#?}", best_plan);
 
-        let tuples = execute(best_plan, transaction).await?;
+        let tuples = execute(best_plan, Arc::new(transaction)).await?;
 
         println!("{}", create_table(&tuples));
         Ok(())

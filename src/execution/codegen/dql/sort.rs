@@ -35,13 +35,13 @@ impl CodeGenerator for Sort {
             script.push_str(
                 format!(
                     r#"
-            local temp = sort({}, results)
+            local sort_temp_{} = sort({}, results)
             results = {{}}
 
-            for index, tuple in ipairs(temp) do
+            for index, tuple in ipairs(sort_temp_{}) do
                 index = index - 1
             "#,
-                    env
+                    self.id, env, self.id
                 )
                 .as_str(),
             );
