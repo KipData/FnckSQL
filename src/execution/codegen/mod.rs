@@ -211,26 +211,23 @@ pub fn build_script(
             materialize!(func_op_id(), sort, childrens, lua, script, consume);
         }
         Operator::Join(op) => {
-            let env_left_input = format!("hash_join_left_input_{}", op_id);
-            let env_right_input = format!("hash_join_right_input_{}", op_id);
+            let env = format!("hash_join_{}", op_id);
 
             script.push_str(
                 format!(
                     r#"
-            local {} = {{}}
-            local {} = {{}}
-            "#,
-                    env_left_input, env_right_input
+            local join_temp_{op_id} = {{}}
+            "#
                 )
                 .as_str(),
             );
 
             let insert_into_left = format!(
                 r#"
-                table.insert({}, tuple)
+                {}:left_build(tuple)
                 goto continue
                 "#,
-                env_left_input
+                env
             );
             build_script(
                 func_op_id(),
@@ -246,10 +243,12 @@ pub fn build_script(
 
             let insert_into_right = format!(
                 r#"
-                table.insert({}, tuple)
+                for _, tuple in ipairs({}:right_probe(tuple)) do
+                    table.insert(join_temp_{op_id}, tuple)
+                end
                 goto continue
                 "#,
-                env_right_input
+                env
             );
             build_script(
                 func_op_id(),
@@ -263,7 +262,7 @@ pub fn build_script(
                 }),
             )?;
 
-            let mut join = HashJoin::from((op, op_id, env_left_input, env_right_input));
+            let mut join = HashJoin::from((op, op_id, env));
 
             join.produce(lua, script)?;
             consume(lua, script)?;

@@ -13,25 +13,16 @@ pub struct HashJoin {
     join_status: Option<JoinStatus>,
     is_produced: bool,
 
-    env_left_input: String,
-    env_right_input: String,
+    env: String,
 }
 
-impl From<(JoinOperator, i64, String, String)> for HashJoin {
-    fn from(
-        (JoinOperator { on, join_type }, id, env_left_input, env_right_input): (
-            JoinOperator,
-            i64,
-            String,
-            String,
-        ),
-    ) -> Self {
+impl From<(JoinOperator, i64, String)> for HashJoin {
+    fn from((JoinOperator { on, join_type }, id, env): (JoinOperator, i64, String)) -> Self {
         HashJoin {
             id,
             join_status: Some(JoinStatus::new(on, join_type)),
             is_produced: false,
-            env_left_input,
-            env_right_input,
+            env,
         }
     }
 }
@@ -57,38 +48,19 @@ impl_from_lua!(JoinStatus);
 impl CodeGenerator for HashJoin {
     fn produce(&mut self, lua: &Lua, script: &mut String) -> Result<(), ExecutorError> {
         if let Some(join_status) = self.join_status.take() {
-            let env = format!("hash_join_{}", self.id);
-            lua.globals().set(env.as_str(), join_status)?;
+            lua.globals().set(self.env.as_str(), join_status)?;
 
             script.push_str(
                 format!(
                     r#"
-            for _, tuple in ipairs({}) do
-                {env}:left_build(tuple)
-            end
-
-            local temp = {{}}
-            {} = {{}}
-
-            for _, tuple in ipairs({}) do
-                for _, tuple in ipairs({env}:right_probe(tuple)) do
-                    table.insert(temp, tuple)
-                end
-            end
-
-            {} = {{}}
-
-            for _, tuple in ipairs({env}:drop_build()) do
+            for _, tuple in ipairs({}:drop_build()) do
                 table.insert(temp, tuple)
             end
 
-            for index, tuple in ipairs(temp) do
+            for index, tuple in ipairs(join_temp_{}) do
                 index = index - 1
             "#,
-                    self.env_left_input,
-                    self.env_left_input,
-                    self.env_right_input,
-                    self.env_right_input
+                    self.env, self.id
                 )
                 .as_str(),
             );
