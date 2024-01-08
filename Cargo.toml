@@ -18,11 +18,13 @@ doctest = false
 [features]
 default = ["marcos"]
 marcos = []
+codegen_execute = ["dep:mlua"]
 
 [[bench]]
 name = "query_bench"
 path = "benchmarks/query_benchmark.rs"
 harness = false
+required-features = ["codegen_execute"]
 
 [dependencies]
 sqlparser = "0.34.0"
@@ -50,7 +52,7 @@ csv = "1"
 regex = "1.10.2"
 clap = "4.4.11"
 
-mlua = { version = "0.9.1", features = ["luajit", "vendored", "macros", "async"] }
+mlua = { version = "0.9.1", features = ["luajit", "vendored", "macros", "async"], optional = true }
 
 [dev-dependencies]
 cargo-tarpaulin = "0.27.1"

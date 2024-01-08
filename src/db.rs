@@ -2,10 +2,8 @@ use sqlparser::ast::Statement;
 use sqlparser::parser::ParserError;
 use std::cell::RefCell;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution::codegen::execute;
 use crate::execution::volcano::{build_stream, try_collect};
 use crate::execution::ExecutorError;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
@@ -46,18 +44,28 @@ impl Database<KipStorage> {
         match query_execute {
             QueryExecute::Volcano => self.run(sql).await,
             QueryExecute::Codegen => {
-                let transaction = self.storage.transaction().await?;
-                let (plan, statement) = Self::build_plan(sql, &transaction)?;
+                #[cfg(feature = "codegen_execute")]
+                {
+                    use crate::execution::codegen::execute;
+                    use std::sync::Arc;
 
-                if matches!(statement, Statement::Query(_)) {
-                    let transaction = Arc::new(transaction);
+                    let transaction = self.storage.transaction().await?;
+                    let (plan, statement) = Self::build_plan(sql, &transaction)?;
 
-                    let tuples = execute(plan, transaction.clone()).await?;
-                    Arc::into_inner(transaction).unwrap().commit().await?;
+                    if matches!(statement, Statement::Query(_)) {
+                        let transaction = Arc::new(transaction);
 
-                    Ok(tuples)
-                } else {
-                    Self::run_volcano(transaction, plan).await
+                        let tuples = execute(plan, transaction.clone()).await?;
+                        Arc::into_inner(transaction).unwrap().commit().await?;
+
+                        Ok(tuples)
+                    } else {
+                        Self::run_volcano(transaction, plan).await
+                    }
+                }
+                #[cfg(not(feature = "codegen_execute"))]
+                {
+                    unreachable!("open feature: `codegen_execute` plz")
                 }
             }
         }

@@ -109,6 +109,9 @@ implement_from_tuple!(Post, (
     }
 ));
 ```
+- Execute
+  - Volcano
+  - Codegen on LuaJIT: `features = ["codegen_execute"]`
 - MVCC Transaction
   - Optimistic
 - SQL field options

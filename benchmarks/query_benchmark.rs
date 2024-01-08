@@ -7,8 +7,6 @@ use kip_sql::storage::Storage;
 use std::cell::RefCell;
 use std::fs;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::time::sleep;
 
 const QUERY_BENCH_PATH: &'static str = "./query_bench_data";
 const TABLE_ROW_NUM: u64 = 2_00_000;

@@ -1,3 +1,4 @@
+#[cfg(feature = "codegen_execute")]
 pub mod codegen;
 pub mod volcano;
 
@@ -5,6 +6,7 @@ use crate::binder::BindError;
 use crate::catalog::CatalogError;
 use crate::storage::StorageError;
 use crate::types::errors::TypeError;
+#[cfg(feature = "codegen_execute")]
 use mlua::prelude::LuaError;
 use sqlparser::parser::ParserError;
 
@@ -62,6 +64,7 @@ pub enum ExecutorError {
         #[source]
         tokio::task::JoinError,
     ),
+    #[cfg(feature = "codegen_execute")]
     #[error("lua error")]
     LuaError(
         #[from]
