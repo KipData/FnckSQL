@@ -11,7 +11,7 @@ use std::collections::{Bound, HashSet};
 use std::mem;
 use std::sync::Arc;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum ConstantBinary {
     Scope {
         min: Bound<ValueRef>,

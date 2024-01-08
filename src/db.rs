@@ -25,7 +25,7 @@ pub enum QueryExecute {
 }
 
 pub struct Database<S: Storage> {
-    pub(crate) storage: S,
+    pub storage: S,
 }
 
 impl Database<KipStorage> {
@@ -99,7 +99,7 @@ impl<S: Storage> Database<S> {
         })
     }
 
-    fn build_plan(
+    pub fn build_plan(
         sql: &str,
         transaction: &<S as Storage>::TransactionType,
     ) -> Result<(LogicalPlan, Statement), DatabaseError> {

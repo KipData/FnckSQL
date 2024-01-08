@@ -38,7 +38,7 @@ use self::{
     scan::ScanOperator, sort::SortOperator,
 };
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Operator {
     // DQL
     Dummy,

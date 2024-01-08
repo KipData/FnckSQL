@@ -1,6 +1,6 @@
 use crate::catalog::TableName;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct DeleteOperator {
     pub table_name: TableName,
 }

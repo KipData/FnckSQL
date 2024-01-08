@@ -6,7 +6,7 @@ use std::sync::Arc;
 pub type IndexId = u32;
 pub type IndexMetaRef = Arc<IndexMeta>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct IndexMeta {
     pub id: IndexId,
     pub column_ids: Vec<ColumnId>,

@@ -19,6 +19,11 @@ doctest = false
 default = ["marcos"]
 marcos = []
 
+[[bench]]
+name = "query_bench"
+path = "benchmarks/query_benchmark.rs"
+harness = false
+
 [dependencies]
 sqlparser = "0.34.0"
 thiserror = "1"
@@ -39,7 +44,7 @@ ahash = "0.8.3"
 lazy_static = "1.4.0"
 comfy-table = "7.0.1"
 bytes = "1.5.0"
-kip_db = "0.1.2-alpha.20"
+kip_db = "0.1.2-alpha.21"
 rust_decimal = "1"
 csv = "1"
 regex = "1.10.2"
@@ -49,6 +54,8 @@ mlua = { version = "0.9.1", features = ["luajit", "vendored", "macros", "async"]
 
 [dev-dependencies]
 cargo-tarpaulin = "0.27.1"
+criterion = { version = "0.3.5", features = ["async_tokio", "html_reports"] }
+indicatif = "0.17"
 tokio-test = "0.4.2"
 ctor = "0.2.0"
 env_logger = "0.10"

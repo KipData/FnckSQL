@@ -8,7 +8,7 @@ use itertools::Itertools;
 
 use super::Operator;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ScanOperator {
     pub index_metas: Vec<IndexMetaRef>,
 
