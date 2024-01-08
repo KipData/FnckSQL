@@ -341,20 +341,23 @@ mod test {
     #[tokio::test]
     async fn test_crud_sql() -> Result<(), DatabaseError> {
         let mut results_1 = _test_crud_sql(QueryExecute::Volcano).await?;
-        let mut results_2 = _test_crud_sql(QueryExecute::Codegen).await?;
+        #[cfg(feature = "codegen_execute")]
+        {
+            let mut results_2 = _test_crud_sql(QueryExecute::Codegen).await?;
 
-        assert_eq!(results_1.len(), results_2.len());
+            assert_eq!(results_1.len(), results_2.len());
 
-        for i in 0..results_1.len() {
-            results_1[i].sort_by_key(|tuple: &Tuple| tuple.serialize_to());
-            results_2[i].sort_by_key(|tuple: &Tuple| tuple.serialize_to());
+            for i in 0..results_1.len() {
+                results_1[i].sort_by_key(|tuple: &Tuple| tuple.serialize_to());
+                results_2[i].sort_by_key(|tuple: &Tuple| tuple.serialize_to());
 
-            if results_1[i] != results_2[i] {
-                panic!(
-                    "Index: {i} Tuples not match! \n Volcano: \n{}\n Codegen: \n{}",
-                    create_table(&results_1[i]),
-                    create_table(&results_2[i])
-                );
+                if results_1[i] != results_2[i] {
+                    panic!(
+                        "Index: {i} Tuples not match! \n Volcano: \n{}\n Codegen: \n{}",
+                        create_table(&results_1[i]),
+                        create_table(&results_2[i])
+                    );
+                }
             }
         }
 
