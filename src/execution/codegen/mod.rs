@@ -6,6 +6,7 @@ pub(crate) mod marcos;
 use crate::execution::codegen::dql::aggregate::hash_agg::HashAgg;
 use crate::execution::codegen::dql::aggregate::simple_agg::SimpleAgg;
 use crate::execution::codegen::dql::filter::Filter;
+use crate::execution::codegen::dql::index_scan::{IndexScan, KipChannelIndexNext};
 use crate::execution::codegen::dql::join::hash_join::HashJoin;
 use crate::execution::codegen::dql::limit::Limit;
 use crate::execution::codegen::dql::projection::Projection;
@@ -84,6 +85,12 @@ impl UserData for KipTransactionPtr {
             "new_seq_scan",
             |_, transaction, op: ScanOperator| async move {
                 Ok(KipChannelSeqNext::new(transaction, op))
+            },
+        );
+        methods.add_async_method(
+            "new_index_scan",
+            |_, transaction, op: ScanOperator| async move {
+                Ok(KipChannelIndexNext::new(transaction, op))
             },
         );
     }
@@ -176,11 +183,19 @@ pub fn build_script(
 
     match operator {
         Operator::Scan(op) => {
-            let mut seq_scan = SeqScan::from((op, op_id));
+            if op.index_by.is_some() {
+                let mut index = IndexScan::from((op, op_id));
 
-            seq_scan.produce(lua, script)?;
-            consume(lua, script)?;
-            seq_scan.consume(lua, script)?;
+                index.produce(lua, script)?;
+                consume(lua, script)?;
+                index.consume(lua, script)?;
+            } else {
+                let mut seq_scan = SeqScan::from((op, op_id));
+
+                seq_scan.produce(lua, script)?;
+                consume(lua, script)?;
+                seq_scan.consume(lua, script)?;
+            }
         }
         Operator::Project(op) => {
             let mut projection = Projection::from((op, op_id));
