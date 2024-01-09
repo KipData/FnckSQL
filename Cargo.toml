@@ -2,7 +2,7 @@
 
 [package]
 name = "kip-sql"
-version = "0.0.1-alpha.7"
+version = "0.0.1-alpha.8"
 edition = "2021"
 authors = ["Kould <kould2333@gmail.com>", "Xwg <loloxwg@gmail.com>"]
 description = "build the SQL layer of KipDB database"
@@ -14,6 +14,17 @@ categories = ["development-tools", "database"]
 
 [lib]
 doctest = false
+
+[features]
+default = ["marcos"]
+marcos = []
+codegen_execute = ["dep:mlua"]
+
+[[bench]]
+name = "query_bench"
+path = "benchmarks/query_benchmark.rs"
+harness = false
+required-features = ["codegen_execute"]
 
 [dependencies]
 sqlparser = "0.34.0"
@@ -35,14 +46,18 @@ ahash = "0.8.3"
 lazy_static = "1.4.0"
 comfy-table = "7.0.1"
 bytes = "1.5.0"
-kip_db = "0.1.2-alpha.20"
+kip_db = "0.1.2-alpha.21"
 rust_decimal = "1"
 csv = "1"
 regex = "1.10.2"
 clap = "4.4.11"
 
+mlua = { version = "0.9.1", features = ["luajit", "vendored", "macros", "async"], optional = true }
+
 [dev-dependencies]
 cargo-tarpaulin = "0.27.1"
+criterion = { version = "0.3.5", features = ["async_tokio", "html_reports"] }
+indicatif = "0.17"
 tokio-test = "0.4.2"
 ctor = "0.2.0"
 env_logger = "0.10"

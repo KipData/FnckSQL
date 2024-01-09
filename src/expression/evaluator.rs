@@ -1,3 +1,4 @@
+use crate::catalog::ColumnSummary;
 use crate::expression::value_compute::{binary_op, unary_op};
 use crate::expression::ScalarExpression;
 use crate::types::errors::TypeError;
@@ -13,21 +14,26 @@ lazy_static! {
 
 impl ScalarExpression {
     pub fn eval(&self, tuple: &Tuple) -> Result<ValueRef, TypeError> {
-        if let Some(value) = Self::eval_with_name(tuple, self.output_columns().name()) {
+        if let Some(value) = Self::eval_with_summary(tuple, self.output_column().summary()) {
             return Ok(value.clone());
         }
 
         match &self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
             ScalarExpression::ColumnRef(col) => {
-                let value = Self::eval_with_name(tuple, col.name())
+                let value = Self::eval_with_summary(tuple, col.summary())
                     .unwrap_or(&NULL_VALUE)
                     .clone();
 
                 Ok(value)
             }
             ScalarExpression::Alias { expr, alias } => {
-                if let Some(value) = Self::eval_with_name(tuple, alias) {
+                if let Some(value) = tuple
+                    .columns
+                    .iter()
+                    .find_position(|tul_col| tul_col.name() == alias)
+                    .map(|(i, _)| &tuple.values[i])
+                {
                     return Ok(value.clone());
                 }
 
@@ -80,7 +86,7 @@ impl ScalarExpression {
                 Ok(Arc::new(unary_op(&value, op)?))
             }
             ScalarExpression::AggCall { .. } => {
-                let value = Self::eval_with_name(tuple, self.output_columns().name())
+                let value = Self::eval_with_summary(tuple, self.output_column().summary())
                     .unwrap_or(&NULL_VALUE)
                     .clone();
 
@@ -89,11 +95,11 @@ impl ScalarExpression {
         }
     }
 
-    fn eval_with_name<'a>(tuple: &'a Tuple, name: &str) -> Option<&'a ValueRef> {
+    fn eval_with_summary<'a>(tuple: &'a Tuple, summary: &ColumnSummary) -> Option<&'a ValueRef> {
         tuple
             .columns
             .iter()
-            .find_position(|tul_col| tul_col.name() == name)
+            .find_position(|tul_col| tul_col.summary() == summary)
             .map(|(i, _)| &tuple.values[i])
     }
 }

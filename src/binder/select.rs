@@ -17,7 +17,7 @@ use super::Binder;
 
 use crate::binder::BindError;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
-use crate::execution::executor::dql::join::joins_nullable;
+use crate::execution::volcano::dql::join::joins_nullable;
 use crate::expression::BinaryOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};

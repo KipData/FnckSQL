@@ -22,3 +22,5 @@ Cargo.lock
 
 /hello_world
 /transaction
+
+query_bench_data/

@@ -26,6 +26,7 @@ implement_from_tuple!(
     )
 );
 
+#[cfg(feature = "marcos")]
 #[tokio::main]
 async fn main() -> Result<(), DatabaseError> {
     let database = Database::with_kipdb("./hello_world").await?;

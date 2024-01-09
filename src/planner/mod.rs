@@ -3,7 +3,7 @@ pub mod operator;
 use crate::catalog::TableName;
 use crate::planner::operator::Operator;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct LogicalPlan {
     pub operator: Operator,
     pub childrens: Vec<LogicalPlan>,

@@ -1,6 +1,6 @@
 use crate::expression::ScalarExpression;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct SortField {
     pub expr: ScalarExpression,
     pub asc: bool,
@@ -17,7 +17,7 @@ impl SortField {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct SortOperator {
     pub sort_fields: Vec<SortField>,
     /// Support push down limit to sort plan.

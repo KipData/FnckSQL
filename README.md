@@ -82,7 +82,7 @@ Storage Support:
 - KipDB
 
 ### Features
-- ORM Mapping
+- ORM Mapping: `features = ["marcos"]`
 ```rust
 #[derive(Debug, Clone, Default)]
 pub struct Post {
@@ -109,6 +109,9 @@ implement_from_tuple!(Post, (
     }
 ));
 ```
+- Execute
+  - Volcano
+  - Codegen on LuaJIT: `features = ["codegen_execute"]`
 - MVCC Transaction
   - Optimistic
 - SQL field options

@@ -3,7 +3,7 @@ use crate::planner::LogicalPlan;
 
 use super::Operator;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum JoinType {
     Inner,
     Left,
@@ -11,7 +11,7 @@ pub enum JoinType {
     Full,
     Cross,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum JoinCondition {
     On {
         /// Equijoin clause expressed as pairs of (left, right) join columns
@@ -22,7 +22,7 @@ pub enum JoinCondition {
     None,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct JoinOperator {
     pub on: JoinCondition,
     pub join_type: JoinType,

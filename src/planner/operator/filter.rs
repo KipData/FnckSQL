@@ -5,7 +5,7 @@ use crate::planner::LogicalPlan;
 
 use super::Operator;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct FilterOperator {
     pub predicate: ScalarExpression,
     pub having: bool,

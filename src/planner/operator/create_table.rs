@@ -1,6 +1,6 @@
 use crate::catalog::{ColumnCatalog, TableName};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct CreateTableOperator {
     /// Table name to insert to
     pub table_name: TableName,

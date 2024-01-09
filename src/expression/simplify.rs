@@ -11,7 +11,7 @@ use std::collections::{Bound, HashSet};
 use std::mem;
 use std::sync::Arc;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum ConstantBinary {
     Scope {
         min: Bound<ValueRef>,
@@ -913,6 +913,7 @@ mod test {
             summary: ColumnSummary {
                 id: Some(0),
                 name: "c1".to_string(),
+                table_name: None,
             },
             nullable: false,
             desc: ColumnDesc {

@@ -1,9 +1,13 @@
-pub mod executor;
+#[cfg(feature = "codegen_execute")]
+pub mod codegen;
+pub mod volcano;
 
 use crate::binder::BindError;
 use crate::catalog::CatalogError;
 use crate::storage::StorageError;
 use crate::types::errors::TypeError;
+#[cfg(feature = "codegen_execute")]
+use mlua::prelude::LuaError;
 use sqlparser::parser::ParserError;
 
 #[derive(thiserror::Error, Debug)]
@@ -59,6 +63,13 @@ pub enum ExecutorError {
         #[from]
         #[source]
         tokio::task::JoinError,
+    ),
+    #[cfg(feature = "codegen_execute")]
+    #[error("lua error")]
+    LuaError(
+        #[from]
+        #[source]
+        LuaError,
     ),
     #[error("channel close")]
     ChannelClose,

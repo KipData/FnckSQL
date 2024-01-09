@@ -1,3 +1,4 @@
+use crate::catalog::TableName;
 use crate::expression::ScalarExpression;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -20,6 +21,7 @@ pub struct ColumnCatalog {
 pub struct ColumnSummary {
     pub id: Option<ColumnId>,
     pub name: String,
+    pub table_name: Option<TableName>,
 }
 
 impl ColumnCatalog {
@@ -33,6 +35,7 @@ impl ColumnCatalog {
             summary: ColumnSummary {
                 id: None,
                 name: column_name,
+                table_name: None,
             },
             nullable,
             desc: column_desc,
@@ -43,8 +46,9 @@ impl ColumnCatalog {
     pub(crate) fn new_dummy(column_name: String) -> ColumnCatalog {
         ColumnCatalog {
             summary: ColumnSummary {
-                id: Some(0),
+                id: None,
                 name: column_name,
+                table_name: None,
             },
             nullable: false,
             desc: ColumnDesc::new(LogicalType::Varchar(None), false, false, None),
