@@ -36,9 +36,9 @@ impl Database<KipStorage> {
 }
 
 impl Database<KipStorage> {
-    pub async fn run_on_query(
+    pub async fn run_on_query<S: AsRef<str>>(
         &self,
-        sql: &str,
+        sql: S,
         query_execute: QueryExecute,
     ) -> Result<Vec<Tuple>, DatabaseError> {
         match query_execute {
@@ -79,7 +79,7 @@ impl<S: Storage> Database<S> {
     }
 
     /// Run SQL queries.
-    pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
+    pub async fn run<T: AsRef<str>>(&self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
         let (plan, _) = Self::build_plan(sql, &transaction)?;
 
@@ -107,8 +107,8 @@ impl<S: Storage> Database<S> {
         })
     }
 
-    pub fn build_plan(
-        sql: &str,
+    pub fn build_plan<T: AsRef<str>>(
+        sql: T,
         transaction: &<S as Storage>::TransactionType,
     ) -> Result<(LogicalPlan, Statement), DatabaseError> {
         // parse
@@ -176,7 +176,7 @@ pub struct DBTransaction<S: Storage> {
 }
 
 impl<S: Storage> DBTransaction<S> {
-    pub async fn run(&mut self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
+    pub async fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
         let (plan, _) =
             Database::<S>::build_plan(sql, unsafe { self.inner.as_ptr().as_ref().unwrap() })?;
         let mut stream = build_stream(plan, &self.inner);
@@ -340,9 +340,13 @@ mod test {
 
     #[tokio::test]
     async fn test_crud_sql() -> Result<(), DatabaseError> {
-        let mut results_1 = _test_crud_sql(QueryExecute::Volcano).await?;
+        #[cfg(not(feature = "codegen_execute"))]
+        {
+            let _ = crate::db::test::_test_crud_sql(QueryExecute::Volcano).await?;
+        }
         #[cfg(feature = "codegen_execute")]
         {
+            let mut results_1 = _test_crud_sql(QueryExecute::Volcano).await?;
             let mut results_2 = _test_crud_sql(QueryExecute::Codegen).await?;
 
             assert_eq!(results_1.len(), results_2.len());

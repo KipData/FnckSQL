@@ -302,7 +302,7 @@ pub mod test {
         Ok(storage)
     }
 
-    pub async fn select_sql_run(sql: &str) -> Result<LogicalPlan, ExecutorError> {
+    pub async fn select_sql_run<S: AsRef<str>>(sql: S) -> Result<LogicalPlan, ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = build_test_catalog(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;

@@ -1,6 +1,8 @@
 use sqlparser::parser::ParserError;
 use sqlparser::{ast::Statement, dialect::PostgreSqlDialect, parser::Parser};
 
+const DIALECT: PostgreSqlDialect = PostgreSqlDialect {};
+
 /// Parse a string to a collection of statements.
 ///
 /// # Example
@@ -13,7 +15,6 @@ use sqlparser::{ast::Statement, dialect::PostgreSqlDialect, parser::Parser};
 /// let ast = parse_sql(sql).unwrap();
 /// println!("{:?}", ast);
 /// ```
-pub fn parse_sql(sql: &str) -> Result<Vec<Statement>, ParserError> {
-    let dialect = PostgreSqlDialect {};
-    Parser::parse_sql(&dialect, sql)
+pub fn parse_sql<S: AsRef<str>>(sql: S) -> Result<Vec<Statement>, ParserError> {
+    Parser::parse_sql(&DIALECT, sql.as_ref())
 }
