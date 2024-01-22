@@ -14,4 +14,6 @@ pub enum OptimizerError {
         #[from]
         TypeError,
     ),
+    #[error("plan is empty")]
+    EmptyPlan,
 }

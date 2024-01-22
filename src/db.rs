@@ -8,7 +8,7 @@ use crate::execution::volcano::{build_stream, try_collect};
 use crate::execution::ExecutorError;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
-use crate::optimizer::rule::RuleImpl;
+use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::optimizer::OptimizerError;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
@@ -138,34 +138,34 @@ impl<S: Storage> Database<S> {
             .batch(
                 "Column Pruning".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::ColumnPruning],
+                vec![NormalizationRuleImpl::ColumnPruning],
             )
             .batch(
                 "Simplify Filter".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::SimplifyFilter, RuleImpl::ConstantCalculation],
+                vec![NormalizationRuleImpl::SimplifyFilter, NormalizationRuleImpl::ConstantCalculation],
             )
             .batch(
                 "Predicate Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
-                    RuleImpl::PushPredicateThroughJoin,
-                    RuleImpl::PushPredicateIntoScan,
+                    NormalizationRuleImpl::PushPredicateThroughJoin,
+                    NormalizationRuleImpl::PushPredicateIntoScan,
                 ],
             )
             .batch(
                 "Combine Operators".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::CollapseProject, RuleImpl::CombineFilter],
+                vec![NormalizationRuleImpl::CollapseProject, NormalizationRuleImpl::CombineFilter],
             )
             .batch(
                 "Limit Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
-                    RuleImpl::LimitProjectTranspose,
-                    RuleImpl::PushLimitThroughJoin,
-                    RuleImpl::PushLimitIntoTableScan,
-                    RuleImpl::EliminateLimits,
+                    NormalizationRuleImpl::LimitProjectTranspose,
+                    NormalizationRuleImpl::PushLimitThroughJoin,
+                    NormalizationRuleImpl::PushLimitIntoTableScan,
+                    NormalizationRuleImpl::EliminateLimits,
                 ],
             )
     }

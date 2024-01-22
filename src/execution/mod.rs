@@ -73,4 +73,6 @@ pub enum ExecutorError {
     ),
     #[error("channel close")]
     ChannelClose,
+    #[error("invalid index")]
+    InvalidIndex,
 }

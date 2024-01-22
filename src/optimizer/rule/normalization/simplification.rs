@@ -1,5 +1,6 @@
+use itertools::Itertools;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
-use crate::optimizer::core::rule::Rule;
+use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinCondition;
@@ -67,7 +68,7 @@ impl ConstantCalculation {
             }
             _ => (),
         }
-        for child_id in graph.children_at(node_id) {
+        for child_id in graph.children_at(node_id).collect_vec() {
             Self::_apply(child_id, graph)?;
         }
 
@@ -75,11 +76,13 @@ impl ConstantCalculation {
     }
 }
 
-impl Rule for ConstantCalculation {
+impl MatchPattern for ConstantCalculation {
     fn pattern(&self) -> &Pattern {
         &CONSTANT_CALCULATION_RULE
     }
+}
 
+impl NormalizationRule for ConstantCalculation {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         Self::_apply(node_id, graph)?;
         // mark changed to skip this rule batch
@@ -92,11 +95,13 @@ impl Rule for ConstantCalculation {
 #[derive(Copy, Clone)]
 pub struct SimplifyFilter;
 
-impl Rule for SimplifyFilter {
+impl MatchPattern for SimplifyFilter {
     fn pattern(&self) -> &Pattern {
         &SIMPLIFY_FILTER_RULE
     }
+}
 
+impl NormalizationRule for SimplifyFilter {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Filter(mut filter_op) = graph.operator(node_id).clone() {
             filter_op.predicate.simplify()?;
@@ -118,7 +123,7 @@ mod test {
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
-    use crate::optimizer::rule::RuleImpl;
+    use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::filter::FilterOperator;
     use crate::planner::operator::Operator;
     use crate::planner::LogicalPlan;
@@ -138,7 +143,7 @@ mod test {
             .batch(
                 "test_simplification".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::SimplifyFilter, RuleImpl::ConstantCalculation],
+                vec![NormalizationRuleImpl::SimplifyFilter, NormalizationRuleImpl::ConstantCalculation],
             )
             .find_best()?;
         if let Operator::Project(project_op) = best_plan.clone().operator {
@@ -197,7 +202,7 @@ mod test {
                 .batch(
                     "test_simplify_filter".to_string(),
                     HepBatchStrategy::once_topdown(),
-                    vec![RuleImpl::SimplifyFilter],
+                    vec![NormalizationRuleImpl::SimplifyFilter],
                 )
                 .find_best()?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
@@ -241,7 +246,7 @@ mod test {
             .batch(
                 "test_simplify_filter".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::SimplifyFilter],
+                vec![NormalizationRuleImpl::SimplifyFilter],
             )
             .find_best()?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
@@ -322,7 +327,7 @@ mod test {
                 .batch(
                     "test_simplify_filter".to_string(),
                     HepBatchStrategy::once_topdown(),
-                    vec![RuleImpl::SimplifyFilter],
+                    vec![NormalizationRuleImpl::SimplifyFilter],
                 )
                 .find_best()?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
@@ -432,7 +437,7 @@ mod test {
                 .batch(
                     "test_simplify_filter".to_string(),
                     HepBatchStrategy::once_topdown(),
-                    vec![RuleImpl::SimplifyFilter],
+                    vec![NormalizationRuleImpl::SimplifyFilter],
                 )
                 .find_best()?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {

@@ -31,6 +31,7 @@ use crate::planner::operator::truncate::TruncateOperator;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
 use itertools::Itertools;
+use crate::types::index::IndexInfo;
 
 use self::{
     aggregate::AggregateOperator, alter_table::add_column::AddColumnOperator,
@@ -65,6 +66,33 @@ pub enum Operator {
     // Copy
     CopyFromFile(CopyFromFileOperator),
     CopyToFile(CopyToFileOperator),
+}
+
+#[derive(Debug, Clone)]
+pub enum PhysicalOption {
+    Dummy,
+    SimpleAggregate,
+    HashAggregate,
+    Filter,
+    HashJoin,
+    Project,
+    SeqScan,
+    IndexScan(IndexInfo),
+    RadixSort,
+    // NormalSort,
+    Limit,
+    Values,
+    Insert,
+    Update,
+    Delete,
+    AddColumn,
+    DropColumn,
+    CreateTable,
+    DropTable,
+    Truncate,
+    Show,
+    CopyFromFile,
+    CopyToFile,
 }
 
 impl Operator {

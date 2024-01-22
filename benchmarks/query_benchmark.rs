@@ -8,6 +8,7 @@ use kip_sql::storage::Storage;
 use sqlite::Error;
 use std::cell::RefCell;
 use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 
 const QUERY_CASE: &'static str = "select * from t1";
@@ -39,7 +40,7 @@ async fn init_kipsql_query_bench() -> Result<(), DatabaseError> {
 }
 
 fn init_sqlite_query_bench() -> Result<(), Error> {
-    let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned() + "/data")?;
+    let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned())?;
 
     let _ = connection.execute("create table t1 (c1 int primary key, c2 int)")?;
 
@@ -73,7 +74,7 @@ fn query_on_execute(c: &mut Criterion) {
         .build()
         .unwrap();
     let database = rt.block_on(async {
-        if !path_exists_and_is_directory(QUERY_BENCH_SQLITE_PATH) {
+        if !Path::new(QUERY_BENCH_SQLITE_PATH).exists() {
             println!(
                 "SQLITE: The table is not initialized and data insertion is started. => {}",
                 TABLE_ROW_NUM
@@ -134,8 +135,7 @@ fn query_on_execute(c: &mut Criterion) {
 
     c.bench_function(
         format!(
-            "KipSQL: select * from t1 where c1 > {} limit 3000 offset 200",
-            TABLE_ROW_NUM / 2
+            "KipSQL: select * from t1"
         )
         .as_str(),
         |b| {
@@ -145,10 +145,10 @@ fn query_on_execute(c: &mut Criterion) {
         },
     );
 
-    let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned() + "/data").unwrap();
+    let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned()).unwrap();
     c.bench_function(
         format!(
-            "SQLite: select * from t1 where c2 > {} limit 3000 offset 200",
+            "SQLite: select * from t1 where c2 > {}",
             TABLE_ROW_NUM / 2
         )
         .as_str(),

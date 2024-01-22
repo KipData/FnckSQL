@@ -24,4 +24,4 @@ Cargo.lock
 /transaction
 
 kipsql_bench
-sqlite_bench/data
+sqlite_bench

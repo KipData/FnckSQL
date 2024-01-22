@@ -1,6 +1,6 @@
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
-use crate::optimizer::core::rule::Rule;
+use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinType;
@@ -8,6 +8,7 @@ use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::Operator;
 use lazy_static::lazy_static;
 use std::cmp;
+use itertools::Itertools;
 lazy_static! {
     static ref LIMIT_PROJECT_TRANSPOSE_RULE: Pattern = {
         Pattern {
@@ -49,13 +50,17 @@ lazy_static! {
 
 pub struct LimitProjectTranspose;
 
-impl Rule for LimitProjectTranspose {
+impl MatchPattern for LimitProjectTranspose {
     fn pattern(&self) -> &Pattern {
         &LIMIT_PROJECT_TRANSPOSE_RULE
     }
+}
 
+impl NormalizationRule for LimitProjectTranspose {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
-        graph.swap_node(node_id, graph.children_at(node_id)[0]);
+        if let Some(child_id) = graph.eldest_child_at(node_id) {
+            graph.swap_node(node_id, child_id);
+        }
 
         Ok(())
     }
@@ -65,22 +70,25 @@ impl Rule for LimitProjectTranspose {
 /// expression.
 pub struct EliminateLimits;
 
-impl Rule for EliminateLimits {
+impl MatchPattern for EliminateLimits {
     fn pattern(&self) -> &Pattern {
         &ELIMINATE_LIMITS_RULE
     }
+}
 
+impl NormalizationRule for EliminateLimits {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Limit(op) = graph.operator(node_id) {
-            let child_id = graph.children_at(node_id)[0];
-            if let Operator::Limit(child_op) = graph.operator(child_id) {
-                let offset = Self::binary_options(op.offset, child_op.offset, |a, b| a + b);
-                let limit = Self::binary_options(op.limit, child_op.limit, cmp::min);
+            if let Some(child_id) = graph.eldest_child_at(node_id) {
+                if let Operator::Limit(child_op) = graph.operator(child_id) {
+                    let offset = Self::binary_options(op.offset, child_op.offset, |a, b| a + b);
+                    let limit = Self::binary_options(op.limit, child_op.limit, cmp::min);
 
-                let new_limit_op = LimitOperator { offset, limit };
+                    let new_limit_op = LimitOperator { offset, limit };
 
-                graph.remove_node(child_id, false);
-                graph.replace_node(node_id, Operator::Limit(new_limit_op));
+                    graph.remove_node(child_id, false);
+                    graph.replace_node(node_id, Operator::Limit(new_limit_op));
+                }
             }
         }
 
@@ -111,27 +119,32 @@ impl EliminateLimits {
 /// TODO: if join condition is empty.
 pub struct PushLimitThroughJoin;
 
-impl Rule for PushLimitThroughJoin {
+impl MatchPattern for PushLimitThroughJoin {
     fn pattern(&self) -> &Pattern {
         &PUSH_LIMIT_THROUGH_JOIN_RULE
     }
+}
 
+impl NormalizationRule for PushLimitThroughJoin {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Limit(op) = graph.operator(node_id) {
-            let child_id = graph.children_at(node_id)[0];
-            let join_type = if let Operator::Join(op) = graph.operator(child_id) {
-                Some(op.join_type)
-            } else {
-                None
-            };
+            if let Some(child_id) = graph.eldest_child_at(node_id) {
+                let join_type = if let Operator::Join(op) = graph.operator(child_id) {
+                    Some(op.join_type)
+                } else {
+                    None
+                };
 
-            if let Some(ty) = join_type {
-                if let Some(grandson_id) = match ty {
-                    JoinType::Left => Some(graph.children_at(child_id)[0]),
-                    JoinType::Right => Some(graph.children_at(child_id)[1]),
-                    _ => None,
-                } {
-                    graph.add_node(child_id, Some(grandson_id), Operator::Limit(op.clone()));
+                if let Some(ty) = join_type {
+                    let children = graph.children_at(child_id).collect_vec();
+
+                    if let Some(grandson_id) = match ty {
+                        JoinType::Left => children.first(),
+                        JoinType::Right => children.last(),
+                        _ => None,
+                    } {
+                        graph.add_node(child_id, Some(*grandson_id), Operator::Limit(op.clone()));
+                    }
                 }
             }
         }
@@ -143,21 +156,24 @@ impl Rule for PushLimitThroughJoin {
 /// Push down `Limit` past a `Scan`.
 pub struct PushLimitIntoScan;
 
-impl Rule for PushLimitIntoScan {
+impl MatchPattern for PushLimitIntoScan {
     fn pattern(&self) -> &Pattern {
         &PUSH_LIMIT_INTO_TABLE_SCAN_RULE
     }
+}
 
+impl NormalizationRule for PushLimitIntoScan {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Limit(limit_op) = graph.operator(node_id) {
-            let child_index = graph.children_at(node_id)[0];
-            if let Operator::Scan(scan_op) = graph.operator(child_index) {
-                let mut new_scan_op = scan_op.clone();
+            if let Some(child_index) = graph.eldest_child_at(node_id) {
+                if let Operator::Scan(scan_op) = graph.operator(child_index) {
+                    let mut new_scan_op = scan_op.clone();
 
-                new_scan_op.limit = (limit_op.offset, limit_op.limit);
+                    new_scan_op.limit = (limit_op.offset, limit_op.limit);
 
-                graph.remove_node(node_id, false);
-                graph.replace_node(child_index, Operator::Scan(new_scan_op));
+                    graph.remove_node(node_id, false);
+                    graph.replace_node(child_index, Operator::Scan(new_scan_op));
+                }
             }
         }
 
@@ -171,7 +187,7 @@ mod tests {
     use crate::db::DatabaseError;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
-    use crate::optimizer::rule::RuleImpl;
+    use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::limit::LimitOperator;
     use crate::planner::operator::Operator;
 
@@ -183,7 +199,7 @@ mod tests {
             .batch(
                 "test_limit_project_transpose".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::LimitProjectTranspose],
+                vec![NormalizationRuleImpl::LimitProjectTranspose],
             )
             .find_best()?;
 
@@ -207,7 +223,7 @@ mod tests {
         let mut optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_eliminate_limits".to_string(),
             HepBatchStrategy::once_topdown(),
-            vec![RuleImpl::EliminateLimits],
+            vec![NormalizationRuleImpl::EliminateLimits],
         );
 
         let new_limit_op = LimitOperator {
@@ -242,8 +258,8 @@ mod tests {
                 "test_push_limit_through_join".to_string(),
                 HepBatchStrategy::once_topdown(),
                 vec![
-                    RuleImpl::LimitProjectTranspose,
-                    RuleImpl::PushLimitThroughJoin,
+                    NormalizationRuleImpl::LimitProjectTranspose,
+                    NormalizationRuleImpl::PushLimitThroughJoin,
                 ],
             )
             .find_best()?;
@@ -271,8 +287,8 @@ mod tests {
                 "test_push_limit_into_table_scan".to_string(),
                 HepBatchStrategy::once_topdown(),
                 vec![
-                    RuleImpl::LimitProjectTranspose,
-                    RuleImpl::PushLimitIntoTableScan,
+                    NormalizationRuleImpl::LimitProjectTranspose,
+                    NormalizationRuleImpl::PushLimitIntoTableScan,
                 ],
             )
             .find_best()?;

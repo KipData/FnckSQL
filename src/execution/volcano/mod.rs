@@ -3,7 +3,7 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 pub(crate) mod show;
 
-use crate::execution::volcano::ddl::alter_table::drop_column::DropColumn;
+use crate::execution::volcano::ddl::drop_column::DropColumn;
 use crate::execution::volcano::ddl::create_table::CreateTable;
 use crate::execution::volcano::ddl::drop_table::DropTable;
 use crate::execution::volcano::ddl::truncate::Truncate;
@@ -15,7 +15,6 @@ use crate::execution::volcano::dql::aggregate::hash_agg::HashAggExecutor;
 use crate::execution::volcano::dql::aggregate::simple_agg::SimpleAggExecutor;
 use crate::execution::volcano::dql::dummy::Dummy;
 use crate::execution::volcano::dql::filter::Filter;
-use crate::execution::volcano::dql::index_scan::IndexScan;
 use crate::execution::volcano::dql::join::hash_join::HashJoin;
 use crate::execution::volcano::dql::limit::Limit;
 use crate::execution::volcano::dql::projection::Projection;
@@ -32,7 +31,7 @@ use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use std::cell::RefCell;
 
-use self::ddl::alter_table::add_column::AddColumn;
+use self::ddl::add_column::AddColumn;
 
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
@@ -74,11 +73,13 @@ pub fn build_stream<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>)
             Projection::from((op, input)).execute(transaction)
         }
         Operator::Scan(op) => {
-            if op.index_by.is_some() {
-                IndexScan::from(op).execute(transaction)
-            } else {
-                SeqScan::from(op).execute(transaction)
-            }
+            SeqScan::from(op).execute(transaction)
+            // Fixme
+            // if op.index_infos.is_empty() {
+            //     SeqScan::from(op).execute(transaction)
+            // } else {
+            //     IndexScan::from(op).execute(transaction)
+            // }
         }
         Operator::Sort(op) => {
             let input = build_stream(childrens.remove(0), transaction);

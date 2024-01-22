@@ -1,9 +1,9 @@
 use crate::optimizer::core::pattern::PatternMatcher;
-use crate::optimizer::core::rule::Rule;
+use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::batch::{HepBatch, HepBatchStrategy};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
-use crate::optimizer::rule::RuleImpl;
+use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::optimizer::OptimizerError;
 use crate::planner::LogicalPlan;
 
@@ -20,7 +20,7 @@ impl HepOptimizer {
         }
     }
 
-    pub fn batch(mut self, name: String, strategy: HepBatchStrategy, rules: Vec<RuleImpl>) -> Self {
+    pub fn batch(mut self, name: String, strategy: HepBatchStrategy, rules: Vec<NormalizationRuleImpl>) -> Self {
         self.batches.push(HepBatch::new(name, strategy, rules));
         self
     }
@@ -63,7 +63,7 @@ impl HepOptimizer {
         Ok(start_ver != self.graph.version)
     }
 
-    fn apply_rule(&mut self, rule: &RuleImpl, node_id: HepNodeId) -> Result<bool, OptimizerError> {
+    fn apply_rule(&mut self, rule: &NormalizationRuleImpl, node_id: HepNodeId) -> Result<bool, OptimizerError> {
         let after_version = self.graph.version;
 
         if HepMatcher::new(rule.pattern(), node_id, &self.graph).match_opt_expr() {

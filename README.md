@@ -84,30 +84,26 @@ Storage Support:
 ### Features
 - ORM Mapping: `features = ["marcos"]`
 ```rust
-#[derive(Debug, Clone, Default)]
-pub struct Post {
-    pub post_title: String,
-    pub post_date: NaiveDateTime,
-    pub post_body: String,
+#[derive(Default, Debug, PartialEq)]
+struct MyStruct {
+  c1: i32,
+  c2: String,
 }
 
-implement_from_tuple!(Post, (
-    post_title: String => |post: &mut Post, value: DataValue| {
-        if let Some(title) = value.utf8() {
-            post.post_title = title;
+implement_from_tuple!(
+    MyStruct, (
+        c1: i32 => |inner: &mut MyStruct, value| {
+            if let DataValue::Int32(Some(val)) = value {
+                inner.c1 = val;
+            }
+        },
+        c2: String => |inner: &mut MyStruct, value| {
+            if let DataValue::Utf8(Some(val)) = value {
+                inner.c2 = val;
+            }
         }
-    },
-    post_date: NaiveDateTime => |post: &mut Post, value: DataValue| {
-        if let Some(date_time) = value.datetime() {
-            post.post_date = date_time;
-        }
-    },
-    post_body: String => |post: &mut Post, value: DataValue| {
-        if let Some(body) = value.utf8() {
-            post.post_body = body;
-        }
-    }
-));
+    )
+);
 ```
 - Execute
   - Volcano
