@@ -1,3 +1,4 @@
+use std::error::Error;
 use crate::types::errors::TypeError;
 
 /// The architecture and some components,
@@ -5,6 +6,7 @@ use crate::types::errors::TypeError;
 mod core;
 pub mod heuristic;
 pub mod rule;
+pub mod utils;
 
 #[derive(thiserror::Error, Debug)]
 pub enum OptimizerError {
@@ -14,6 +16,16 @@ pub enum OptimizerError {
         #[from]
         TypeError,
     ),
+    #[error("{0}")]
+    BoxError(
+        #[source]
+        #[from]
+        Box<dyn Error>,
+    ),
     #[error("plan is empty")]
     EmptyPlan,
+    #[error("this column must belong to a table")]
+    OwnerLessColumn,
+    #[error("there are more buckets than elements")]
+    TooManyBuckets,
 }

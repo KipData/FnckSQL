@@ -12,7 +12,7 @@ use std::mem;
 const BUCKET_SIZE: usize = u8::MAX as usize + 1;
 
 // LSD Radix Sort
-fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
+pub(crate) fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
     if let Some(max_len) = tuples.iter().map(|(_, bytes)| bytes.len()).max() {
         // init buckets
         let mut temp_buckets = Vec::with_capacity(BUCKET_SIZE);

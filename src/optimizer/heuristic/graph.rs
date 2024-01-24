@@ -47,10 +47,6 @@ impl HepGraph {
         }
     }
 
-    pub fn node_count(&self) -> usize {
-        self.graph.node_count()
-    }
-
     pub fn parent_id(&self, node_id: HepNodeId) -> Option<HepNodeId> {
         self.graph
             .neighbors_directed(node_id, petgraph::Direction::Incoming)

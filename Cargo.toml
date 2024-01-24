@@ -51,6 +51,7 @@ rust_decimal = "1"
 csv = "1"
 regex = "1.10.2"
 clap = "4.4.11"
+rand = "0.8.5"
 
 mlua = { version = "0.9.1", features = ["luajit", "vendored", "macros", "async"], optional = true }
 
@@ -64,6 +65,7 @@ env_logger = "0.10"
 paste = "^1.0"
 rstest = "0.17"
 tempfile = "3.0.7"
+rand_distr = "0.4.3"
 
 sqlite =  "0.32.0"
 
