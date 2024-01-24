@@ -6,9 +6,9 @@ use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::Operator;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::cmp;
-use itertools::Itertools;
 lazy_static! {
     static ref LIMIT_PROJECT_TRANSPOSE_RULE: Pattern = {
         Pattern {

@@ -47,6 +47,10 @@ impl HepGraph {
         }
     }
 
+    pub fn node_count(&self) -> usize {
+        self.graph.node_count()
+    }
+
     pub fn parent_id(&self, node_id: HepNodeId) -> Option<HepNodeId> {
         self.graph
             .neighbors_directed(node_id, petgraph::Direction::Incoming)
@@ -166,10 +170,12 @@ impl HepGraph {
 
     /// If input node is join, we use the edge weight to control the join children order.
     pub fn children_at(&self, id: HepNodeId) -> Box<dyn Iterator<Item = HepNodeId> + '_> {
-        Box::new(self.graph
-            .edges(id)
-            .sorted_by_key(|edge| edge.weight())
-            .map(|edge| edge.target()))
+        Box::new(
+            self.graph
+                .edges(id)
+                .sorted_by_key(|edge| edge.weight())
+                .map(|edge| edge.target()),
+        )
     }
 
     pub fn eldest_child_at(&self, id: HepNodeId) -> Option<HepNodeId> {

@@ -1,4 +1,4 @@
-use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
+use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::expression::simplify::ConstantBinary;
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{
@@ -249,7 +249,8 @@ impl Transaction for KipTransaction {
         columns: Vec<ColumnCatalog>,
         if_not_exists: bool,
     ) -> Result<TableName, StorageError> {
-        let (table_key, value) = TableCodec::encode_root_table(&table_name)?;
+        let (table_key, value) =
+            TableCodec::encode_root_table(&TableMeta::empty(table_name.clone()))?;
         if self.tx.get(&table_key)?.is_some() {
             if if_not_exists {
                 return Ok(table_name);
@@ -310,12 +311,9 @@ impl Transaction for KipTransaction {
 
         if option.is_none() {
             // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
-            let columns = Self::column_collect(table_name.clone(), &self.tx).ok()?;
-            let indexes = Self::index_meta_collect(&table_name, &self.tx)?;
+            let (columns, indexes) = Self::table_collect(table_name.clone(), &self.tx).ok()?;
 
-            if let Ok(catalog) =
-                TableCatalog::new_with_indexes(table_name.clone(), columns, indexes)
-            {
+            if let Ok(catalog) = TableCatalog::reload(table_name.clone(), columns, indexes) {
                 option = self
                     .cache
                     .get_or_insert(table_name.to_string(), |_| Ok(catalog))
@@ -326,20 +324,20 @@ impl Transaction for KipTransaction {
         option
     }
 
-    fn show_tables(&self) -> Result<Vec<String>, StorageError> {
-        let mut tables = vec![];
+    fn table_metas(&self) -> Result<Vec<TableMeta>, StorageError> {
+        let mut metas = vec![];
         let (min, max) = TableCodec::root_table_bound();
         let mut iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
 
         while let Some((_, value_option)) = iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
-                let table_name = TableCodec::decode_root_table(&value)?;
+                let meta = TableCodec::decode_root_table(&value)?;
 
-                tables.push(table_name);
+                metas.push(meta);
             }
         }
 
-        Ok(tables)
+        Ok(metas)
     }
 
     async fn commit(self) -> Result<(), StorageError> {
@@ -350,41 +348,28 @@ impl Transaction for KipTransaction {
 }
 
 impl KipTransaction {
-    fn column_collect(
+    fn table_collect(
         table_name: TableName,
         tx: &mvcc::Transaction,
-    ) -> Result<Vec<ColumnCatalog>, StorageError> {
-        let (column_min, column_max) = TableCodec::columns_bound(&table_name);
-        let mut column_iter =
-            tx.iter(Bound::Included(&column_min), Bound::Included(&column_max))?;
+    ) -> Result<(Vec<ColumnCatalog>, Vec<IndexMetaRef>), StorageError> {
+        let (table_min, table_max) = TableCodec::table_bound(&table_name);
+        let mut column_iter = tx.iter(Bound::Included(&table_min), Bound::Included(&table_max))?;
 
-        let mut columns = vec![];
+        let mut columns = Vec::new();
+        let mut index_metas = Vec::new();
 
-        while let Some((_, value_option)) = column_iter.try_next().ok().flatten() {
+        // Tips: only `Column`, `IndexMeta`, `TableMeta`
+        while let Some((key, value_option)) = column_iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
-                columns.push(TableCodec::decode_column(&value)?);
-            }
-        }
-
-        Ok(columns)
-    }
-
-    fn index_meta_collect(name: &str, tx: &mvcc::Transaction) -> Option<Vec<IndexMetaRef>> {
-        let (index_min, index_max) = TableCodec::index_meta_bound(name);
-        let mut index_metas = vec![];
-        let mut index_iter = tx
-            .iter(Bound::Included(&index_min), Bound::Included(&index_max))
-            .ok()?;
-
-        while let Some((_, value_option)) = index_iter.try_next().ok().flatten() {
-            if let Some(value) = value_option {
-                if let Ok(index_meta) = TableCodec::decode_index_meta(&value) {
-                    index_metas.push(Arc::new(index_meta));
+                if key.starts_with(&table_min) {
+                    columns.push(TableCodec::decode_column(&value)?);
+                } else {
+                    index_metas.push(Arc::new(TableCodec::decode_index_meta(&value)?));
                 }
             }
         }
 
-        Some(index_metas)
+        Ok((columns, index_metas))
     }
 
     fn _drop_data(tx: &mut mvcc::Transaction, min: &[u8], max: &[u8]) -> Result<(), StorageError> {

@@ -7,7 +7,7 @@ use std::string::FromUtf8Error;
 pub enum TypeError {
     #[error("invalid type")]
     InvalidType,
-    #[error("Must contain PrimaryKey!")]
+    #[error("must contain PrimaryKey!")]
     PrimaryKeyNotFound,
     #[error("not implemented sqlparser datatype: {0}")]
     NotImplementedSqlparserDataType(String),
@@ -15,7 +15,7 @@ pub enum TypeError {
     InternalError(String),
     #[error("cast fail")]
     CastFail,
-    #[error("Too long")]
+    #[error("too long")]
     TooLong,
     #[error("cannot be Null")]
     NotNull,
@@ -69,4 +69,10 @@ pub enum TypeError {
     ),
     #[error("{0} and {1} do not match")]
     MisMatch(String, String),
+    #[error("io")]
+    IO(
+        #[source]
+        #[from]
+        std::io::Error,
+    ),
 }

@@ -1,4 +1,3 @@
-use std::error::Error;
 use crate::types::errors::TypeError;
 
 /// The architecture and some components,
@@ -15,12 +14,6 @@ pub enum OptimizerError {
         #[source]
         #[from]
         TypeError,
-    ),
-    #[error("{0}")]
-    BoxError(
-        #[source]
-        #[from]
-        Box<dyn Error>,
     ),
     #[error("plan is empty")]
     EmptyPlan,

@@ -8,10 +8,10 @@ use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::sync::Arc;
-use itertools::Itertools;
 
 lazy_static! {
     static ref COLUMN_PRUNING_RULE: Pattern = {
@@ -144,7 +144,6 @@ impl ColumnPruning {
     }
 }
 
-
 impl MatchPattern for ColumnPruning {
     fn pattern(&self) -> &Pattern {
         &COLUMN_PRUNING_RULE
@@ -152,7 +151,6 @@ impl MatchPattern for ColumnPruning {
 }
 
 impl NormalizationRule for ColumnPruning {
-
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         Self::_apply(&mut HashSet::new(), true, node_id, graph);
         // mark changed to skip this rule batch

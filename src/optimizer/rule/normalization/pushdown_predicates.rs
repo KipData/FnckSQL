@@ -8,10 +8,10 @@ use crate::optimizer::OptimizerError;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
+use crate::types::index::IndexInfo;
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use crate::types::index::IndexInfo;
 
 lazy_static! {
     static ref PUSH_PREDICATE_THROUGH_JOIN: Pattern = {

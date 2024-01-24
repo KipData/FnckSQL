@@ -14,5 +14,9 @@ pub trait NormalizationRule: MatchPattern {
 }
 
 pub trait ImplementationRule: MatchPattern {
-    fn to_expression(&self, op: &Operator, group_expr: &mut GroupExpression) -> Result<(), OptimizerError>;
+    fn to_expression(
+        &self,
+        op: &Operator,
+        group_expr: &mut GroupExpression,
+    ) -> Result<(), OptimizerError>;
 }

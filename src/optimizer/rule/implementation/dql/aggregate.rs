@@ -1,10 +1,10 @@
-use lazy_static::lazy_static;
 use crate::optimizer::core::memo::{Expression, GroupExpression};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
-use crate::planner::operator::{Operator, PhysicalOption};
 use crate::optimizer::OptimizerError;
+use crate::planner::operator::{Operator, PhysicalOption};
 use crate::single_mapping;
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref GROUP_BY_AGGREGATE_PATTERN: Pattern = {
@@ -34,10 +34,16 @@ lazy_static! {
 #[derive(Clone)]
 pub struct GroupByAggregateImplementation;
 
-single_mapping!(GroupByAggregateImplementation, GROUP_BY_AGGREGATE_PATTERN, PhysicalOption::HashAggregate);
+single_mapping!(
+    GroupByAggregateImplementation,
+    GROUP_BY_AGGREGATE_PATTERN,
+    PhysicalOption::HashAggregate
+);
 
 pub struct SimpleAggregateImplementation;
 
-single_mapping!(SimpleAggregateImplementation, SIMPLE_AGGREGATE_PATTERN, PhysicalOption::SimpleAggregate);
-
-
+single_mapping!(
+    SimpleAggregateImplementation,
+    SIMPLE_AGGREGATE_PATTERN,
+    PhysicalOption::SimpleAggregate
+);

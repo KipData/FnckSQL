@@ -1,2 +1,2 @@
-pub(crate) mod normalization;
 pub(crate) mod implementation;
+pub(crate) mod normalization;

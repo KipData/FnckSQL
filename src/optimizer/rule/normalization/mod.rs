@@ -63,13 +63,23 @@ impl NormalizationRule for NormalizationRuleImpl {
             NormalizationRuleImpl::ColumnPruning => ColumnPruning.apply(node_id, graph),
             NormalizationRuleImpl::CollapseProject => CollapseProject.apply(node_id, graph),
             NormalizationRuleImpl::CombineFilter => CombineFilter.apply(node_id, graph),
-            NormalizationRuleImpl::LimitProjectTranspose => LimitProjectTranspose.apply(node_id, graph),
+            NormalizationRuleImpl::LimitProjectTranspose => {
+                LimitProjectTranspose.apply(node_id, graph)
+            }
             NormalizationRuleImpl::EliminateLimits => EliminateLimits.apply(node_id, graph),
-            NormalizationRuleImpl::PushLimitThroughJoin => PushLimitThroughJoin.apply(node_id, graph),
-            NormalizationRuleImpl::PushLimitIntoTableScan => PushLimitIntoScan.apply(node_id, graph),
-            NormalizationRuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin.apply(node_id, graph),
+            NormalizationRuleImpl::PushLimitThroughJoin => {
+                PushLimitThroughJoin.apply(node_id, graph)
+            }
+            NormalizationRuleImpl::PushLimitIntoTableScan => {
+                PushLimitIntoScan.apply(node_id, graph)
+            }
+            NormalizationRuleImpl::PushPredicateThroughJoin => {
+                PushPredicateThroughJoin.apply(node_id, graph)
+            }
             NormalizationRuleImpl::SimplifyFilter => SimplifyFilter.apply(node_id, graph),
-            NormalizationRuleImpl::PushPredicateIntoScan => PushPredicateIntoScan.apply(node_id, graph),
+            NormalizationRuleImpl::PushPredicateIntoScan => {
+                PushPredicateIntoScan.apply(node_id, graph)
+            }
             NormalizationRuleImpl::ConstantCalculation => ConstantCalculation.apply(node_id, graph),
         }
     }

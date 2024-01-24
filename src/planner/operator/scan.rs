@@ -26,7 +26,8 @@ impl ScanOperator {
             .into_iter()
             .map(ScalarExpression::ColumnRef)
             .collect_vec();
-        let index_infos = table_catalog.indexes
+        let index_infos = table_catalog
+            .indexes
             .iter()
             .map(|meta| IndexInfo {
                 meta: meta.clone(),

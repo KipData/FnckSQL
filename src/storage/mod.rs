@@ -1,7 +1,7 @@
 pub mod kip;
 mod table_codec;
 
-use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableName};
+use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableMeta, TableName};
 use crate::expression::simplify::ConstantBinary;
 use crate::expression::ScalarExpression;
 use crate::storage::table_codec::TableCodec;
@@ -93,8 +93,7 @@ pub trait Transaction: Sync + Send + 'static {
     fn drop_table(&mut self, table_name: &str, if_exists: bool) -> Result<(), StorageError>;
     fn drop_data(&mut self, table_name: &str) -> Result<(), StorageError>;
     fn table(&self, table_name: TableName) -> Option<&TableCatalog>;
-
-    fn show_tables(&self) -> Result<Vec<String>, StorageError>;
+    fn table_metas(&self) -> Result<Vec<TableMeta>, StorageError>;
 
     #[allow(async_fn_in_trait)]
     async fn commit(self) -> Result<(), StorageError>;

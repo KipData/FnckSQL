@@ -24,7 +24,6 @@ codegen_execute = ["dep:mlua"]
 name = "query_bench"
 path = "benchmarks/query_benchmark.rs"
 harness = false
-required-features = ["codegen_execute"]
 
 [dependencies]
 sqlparser = "0.34.0"

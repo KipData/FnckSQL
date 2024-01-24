@@ -3,8 +3,8 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 pub(crate) mod show;
 
-use crate::execution::volcano::ddl::drop_column::DropColumn;
 use crate::execution::volcano::ddl::create_table::CreateTable;
+use crate::execution::volcano::ddl::drop_column::DropColumn;
 use crate::execution::volcano::ddl::drop_table::DropTable;
 use crate::execution::volcano::ddl::truncate::Truncate;
 use crate::execution::volcano::dml::copy_from_file::CopyFromFile;

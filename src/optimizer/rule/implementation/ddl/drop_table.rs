@@ -1,10 +1,10 @@
-use lazy_static::lazy_static;
 use crate::optimizer::core::memo::{Expression, GroupExpression};
-use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
-use crate::planner::operator::{Operator, PhysicalOption};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
+use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
 use crate::optimizer::OptimizerError;
+use crate::planner::operator::{Operator, PhysicalOption};
 use crate::single_mapping;
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref DROP_TABLE_PATTERN: Pattern = {
@@ -18,4 +18,8 @@ lazy_static! {
 #[derive(Clone)]
 pub struct DropTableImplementation;
 
-single_mapping!(DropTableImplementation, DROP_TABLE_PATTERN, PhysicalOption::DropTable);
+single_mapping!(
+    DropTableImplementation,
+    DROP_TABLE_PATTERN,
+    PhysicalOption::DropTable
+);

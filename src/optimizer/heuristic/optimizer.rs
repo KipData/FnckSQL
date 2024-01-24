@@ -20,7 +20,12 @@ impl HepOptimizer {
         }
     }
 
-    pub fn batch(mut self, name: String, strategy: HepBatchStrategy, rules: Vec<NormalizationRuleImpl>) -> Self {
+    pub fn batch(
+        mut self,
+        name: String,
+        strategy: HepBatchStrategy,
+        rules: Vec<NormalizationRuleImpl>,
+    ) -> Self {
         self.batches.push(HepBatch::new(name, strategy, rules));
         self
     }
@@ -63,7 +68,11 @@ impl HepOptimizer {
         Ok(start_ver != self.graph.version)
     }
 
-    fn apply_rule(&mut self, rule: &NormalizationRuleImpl, node_id: HepNodeId) -> Result<bool, OptimizerError> {
+    fn apply_rule(
+        &mut self,
+        rule: &NormalizationRuleImpl,
+        node_id: HepNodeId,
+    ) -> Result<bool, OptimizerError> {
         let after_version = self.graph.version;
 
         if HepMatcher::new(rule.pattern(), node_id, &self.graph).match_opt_expr() {

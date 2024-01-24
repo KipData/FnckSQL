@@ -1,4 +1,4 @@
-use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::catalog::{ColumnCatalog, ColumnRef, TableMeta};
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexId, IndexMeta};
 use crate::types::tuple::{Tuple, TupleId};
@@ -40,10 +40,10 @@ impl TableCodec {
                 table_bytes.push(b'1');
             }
             CodecType::Index => {
-                table_bytes.push(b'2');
+                table_bytes.push(b'3');
             }
             CodecType::Tuple => {
-                table_bytes.push(b'3');
+                table_bytes.push(b'8');
             }
             CodecType::Root => {
                 let mut bytes = ROOT_BYTES.clone();
@@ -112,6 +112,16 @@ impl TableCodec {
         };
 
         (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
+    }
+
+    pub fn table_bound(table_name: &str) -> (Vec<u8>, Vec<u8>) {
+        let mut column_prefix = Self::key_prefix(CodecType::Column, table_name);
+        column_prefix.push(BOUND_MIN_TAG);
+
+        let mut index_prefix = Self::key_prefix(CodecType::IndexMeta, table_name);
+        index_prefix.push(BOUND_MAX_TAG);
+
+        (column_prefix, index_prefix)
     }
 
     pub fn columns_bound(table_name: &str) -> (Vec<u8>, Vec<u8>) {
@@ -245,27 +255,27 @@ impl TableCodec {
 
     /// Key: Root{BOUND_MIN_TAG}{TableName}
     /// Value: TableName
-    pub fn encode_root_table(table_name: &str) -> Result<(Bytes, Bytes), TypeError> {
-        let key = Self::encode_root_table_key(table_name);
+    pub fn encode_root_table(meta: &TableMeta) -> Result<(Bytes, Bytes), TypeError> {
+        let key = Self::encode_root_table_key(&meta.table_name);
 
-        Ok((
-            Bytes::from(key),
-            Bytes::from(table_name.to_owned().into_bytes()),
-        ))
+        let mut bytes = Vec::new();
+        meta.encode(&mut bytes)?;
+
+        Ok((Bytes::from(key), Bytes::from(bytes)))
     }
 
     pub fn encode_root_table_key(table_name: &str) -> Vec<u8> {
         Self::key_prefix(CodecType::Root, table_name)
     }
 
-    pub fn decode_root_table(bytes: &[u8]) -> Result<String, TypeError> {
-        Ok(String::from_utf8(bytes.to_vec())?)
+    pub fn decode_root_table(bytes: &[u8]) -> Result<TableMeta, TypeError> {
+        Ok(TableMeta::decode(bytes)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog, TableMeta};
     use crate::storage::table_codec::TableCodec;
     use crate::types::errors::TypeError;
     use crate::types::index::{Index, IndexMeta};
@@ -322,11 +332,16 @@ mod tests {
     #[test]
     fn test_root_catalog() {
         let table_catalog = build_table_codec();
-        let (_, bytes) = TableCodec::encode_root_table(&table_catalog.name).unwrap();
+        let (_, bytes) = TableCodec::encode_root_table(&TableMeta {
+            histogram_gen: None,
+            table_name: table_catalog.name.clone(),
+        })
+        .unwrap();
 
-        let table_name = TableCodec::decode_root_table(&bytes).unwrap();
+        let table_meta = TableCodec::decode_root_table(&bytes).unwrap();
 
-        assert_eq!(table_name, table_catalog.name.as_str());
+        assert_eq!(table_meta.table_name.as_str(), table_catalog.name.as_str());
+        assert_eq!(table_meta.histogram_gen, None);
     }
 
     #[test]

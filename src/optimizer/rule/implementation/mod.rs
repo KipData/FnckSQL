@@ -1,12 +1,11 @@
-pub(crate) mod dql;
-pub(crate) mod dml;
 pub(crate) mod ddl;
+pub(crate) mod dml;
+pub(crate) mod dql;
 pub(crate) mod marcos;
 
 use crate::optimizer::core::memo::GroupExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
-use crate::optimizer::OptimizerError;
 use crate::optimizer::rule::implementation::ddl::add_column::AddColumnImplementation;
 use crate::optimizer::rule::implementation::ddl::create_table::CreateTableImplementation;
 use crate::optimizer::rule::implementation::ddl::drop_column::DropColumnImplementation;
@@ -17,15 +16,20 @@ use crate::optimizer::rule::implementation::dml::copy_to_file::CopyToFileImpleme
 use crate::optimizer::rule::implementation::dml::delete::DeleteImplementation;
 use crate::optimizer::rule::implementation::dml::insert::InsertImplementation;
 use crate::optimizer::rule::implementation::dml::update::UpdateImplementation;
-use crate::optimizer::rule::implementation::dql::aggregate::{GroupByAggregateImplementation, SimpleAggregateImplementation};
+use crate::optimizer::rule::implementation::dql::aggregate::{
+    GroupByAggregateImplementation, SimpleAggregateImplementation,
+};
 use crate::optimizer::rule::implementation::dql::dummy::DummyImplementation;
 use crate::optimizer::rule::implementation::dql::filter::FilterImplementation;
 use crate::optimizer::rule::implementation::dql::join::HashJoinImplementation;
 use crate::optimizer::rule::implementation::dql::limit::LimitImplementation;
 use crate::optimizer::rule::implementation::dql::projection::ProjectionImplementation;
-use crate::optimizer::rule::implementation::dql::scan::{IndexScanImplementation, SeqScanImplementation};
+use crate::optimizer::rule::implementation::dql::scan::{
+    IndexScanImplementation, SeqScanImplementation,
+};
 use crate::optimizer::rule::implementation::dql::sort::SortImplementation;
 use crate::optimizer::rule::implementation::dql::values::ValuesImplementation;
+use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
 
 #[derive(Debug, Copy, Clone)]
@@ -85,29 +89,75 @@ impl MatchPattern for ImplementationRuleImpl {
 }
 
 impl ImplementationRule for ImplementationRuleImpl {
-    fn to_expression(&self, operator: &Operator, group_expr: &mut GroupExpression) -> Result<(), OptimizerError> {
+    fn to_expression(
+        &self,
+        operator: &Operator,
+        group_expr: &mut GroupExpression,
+    ) -> Result<(), OptimizerError> {
         match self {
-            ImplementationRuleImpl::GroupByAggregate => GroupByAggregateImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::SimpleAggregate => SimpleAggregateImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Dummy => DummyImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Filter => FilterImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::HashJoin => HashJoinImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Limit => LimitImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Projection => ProjectionImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::SeqScan => SeqScanImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::IndexScan => IndexScanImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Sort => SortImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Values => ValuesImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::CopyFromFile => CopyFromFileImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::CopyToFile => CopyToFileImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Delete => DeleteImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Insert => InsertImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Update => UpdateImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::AddColumn => AddColumnImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::CreateTable => CreateTableImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::DropColumn => DropColumnImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::DropTable => DropTableImplementation.to_expression(operator, group_expr)?,
-            ImplementationRuleImpl::Truncate => TruncateImplementation.to_expression(operator, group_expr)?,
+            ImplementationRuleImpl::GroupByAggregate => {
+                GroupByAggregateImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::SimpleAggregate => {
+                SimpleAggregateImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Dummy => {
+                DummyImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Filter => {
+                FilterImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::HashJoin => {
+                HashJoinImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Limit => {
+                LimitImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Projection => {
+                ProjectionImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::SeqScan => {
+                SeqScanImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::IndexScan => {
+                IndexScanImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Sort => {
+                SortImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Values => {
+                ValuesImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::CopyFromFile => {
+                CopyFromFileImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::CopyToFile => {
+                CopyToFileImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Delete => {
+                DeleteImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Insert => {
+                InsertImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Update => {
+                UpdateImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::AddColumn => {
+                AddColumnImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::CreateTable => {
+                CreateTableImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::DropColumn => {
+                DropColumnImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::DropTable => {
+                DropTableImplementation.to_expression(operator, group_expr)?
+            }
+            ImplementationRuleImpl::Truncate => {
+                TruncateImplementation.to_expression(operator, group_expr)?
+            }
         }
 
         Ok(())

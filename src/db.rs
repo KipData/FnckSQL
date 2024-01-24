@@ -143,7 +143,10 @@ impl<S: Storage> Database<S> {
             .batch(
                 "Simplify Filter".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![NormalizationRuleImpl::SimplifyFilter, NormalizationRuleImpl::ConstantCalculation],
+                vec![
+                    NormalizationRuleImpl::SimplifyFilter,
+                    NormalizationRuleImpl::ConstantCalculation,
+                ],
             )
             .batch(
                 "Predicate Pushdown".to_string(),
@@ -156,7 +159,10 @@ impl<S: Storage> Database<S> {
             .batch(
                 "Combine Operators".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![NormalizationRuleImpl::CollapseProject, NormalizationRuleImpl::CombineFilter],
+                vec![
+                    NormalizationRuleImpl::CollapseProject,
+                    NormalizationRuleImpl::CombineFilter,
+                ],
             )
             .batch(
                 "Limit Pushdown".to_string(),

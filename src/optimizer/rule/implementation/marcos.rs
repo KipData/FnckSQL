@@ -8,10 +8,12 @@ macro_rules! single_mapping {
         }
 
         impl ImplementationRule for $ty {
-            fn to_expression(&self, _: &Operator, group_expr: &mut GroupExpression) -> Result<(), OptimizerError> {
-                group_expr.append_expr(Expression {
-                    ops: vec![$option]
-                });
+            fn to_expression(
+                &self,
+                _: &Operator,
+                group_expr: &mut GroupExpression,
+            ) -> Result<(), OptimizerError> {
+                group_expr.append_expr(Expression { ops: vec![$option] });
 
                 Ok(())
             }

@@ -3,8 +3,8 @@ use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
 use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::optimizer::heuristic::graph::HepGraph;
 use crate::optimizer::heuristic::matcher::HepMatcher;
-use crate::optimizer::OptimizerError;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
+use crate::optimizer::OptimizerError;
 use crate::planner::operator::PhysicalOption;
 
 #[derive(Debug, Clone)]
@@ -14,7 +14,7 @@ pub struct Expression {
 
 #[derive(Debug, Clone)]
 pub struct GroupExpression {
-    exprs: Vec<Expression>
+    exprs: Vec<Expression>,
 }
 
 impl GroupExpression {
@@ -25,11 +25,14 @@ impl GroupExpression {
 
 #[derive(Debug)]
 pub struct Memo {
-    groups: Vec<GroupExpression>
+    groups: Vec<GroupExpression>,
 }
 
 impl Memo {
-    pub(crate) fn new(graph: &HepGraph, implementations: &[ImplementationRuleImpl]) -> Result<Self, OptimizerError> {
+    pub(crate) fn new(
+        graph: &HepGraph,
+        implementations: &[ImplementationRuleImpl],
+    ) -> Result<Self, OptimizerError> {
         let node_count = graph.node_count();
         let mut groups = vec![GroupExpression { exprs: Vec::new() }; node_count];
 
@@ -64,7 +67,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_build_memo() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select c1, c3 from t1 inner join t2 on c1 = c3 where c1 > 10 and c3 > 22").await?;
+        let plan = select_sql_run(
+            "select c1, c3 from t1 inner join t2 on c1 = c3 where c1 > 10 and c3 > 22",
+        )
+        .await?;
         let best_plan = HepOptimizer::new(plan)
             .batch(
                 "Simplify Filter".to_string(),
@@ -82,11 +88,11 @@ mod tests {
             .find_best()?;
         let graph = HepGraph::new(best_plan);
         let rules = vec![
-          ImplementationRuleImpl::Projection,
-          ImplementationRuleImpl::Filter,
-          ImplementationRuleImpl::HashJoin,
-          ImplementationRuleImpl::SeqScan,
-          ImplementationRuleImpl::IndexScan,
+            ImplementationRuleImpl::Projection,
+            ImplementationRuleImpl::Filter,
+            ImplementationRuleImpl::HashJoin,
+            ImplementationRuleImpl::SeqScan,
+            ImplementationRuleImpl::IndexScan,
         ];
 
         let memo = Memo::new(&graph, &rules)?;

@@ -9,7 +9,11 @@ pub struct HepBatch {
 }
 
 impl HepBatch {
-    pub fn new(name: String, strategy: HepBatchStrategy, rules: Vec<NormalizationRuleImpl>) -> Self {
+    pub fn new(
+        name: String,
+        strategy: HepBatchStrategy,
+        rules: Vec<NormalizationRuleImpl>,
+    ) -> Self {
         Self {
             name,
             strategy,

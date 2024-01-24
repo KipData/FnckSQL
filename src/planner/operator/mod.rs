@@ -30,8 +30,8 @@ use crate::planner::operator::show::ShowTablesOperator;
 use crate::planner::operator::truncate::TruncateOperator;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
-use itertools::Itertools;
 use crate::types::index::IndexInfo;
+use itertools::Itertools;
 
 use self::{
     aggregate::AggregateOperator, alter_table::add_column::AddColumnOperator,

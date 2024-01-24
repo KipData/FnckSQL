@@ -1,10 +1,10 @@
-use itertools::Itertools;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 lazy_static! {
     static ref CONSTANT_CALCULATION_RULE: Pattern = {
@@ -143,7 +143,10 @@ mod test {
             .batch(
                 "test_simplification".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![NormalizationRuleImpl::SimplifyFilter, NormalizationRuleImpl::ConstantCalculation],
+                vec![
+                    NormalizationRuleImpl::SimplifyFilter,
+                    NormalizationRuleImpl::ConstantCalculation,
+                ],
             )
             .find_best()?;
         if let Operator::Project(project_op) = best_plan.clone().operator {

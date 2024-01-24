@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use kip_sql::db::{Database, DatabaseError};
-use kip_sql::execution::{codegen, volcano};
+use kip_sql::execution::volcano;
 use kip_sql::storage::kip::KipStorage;
 use kip_sql::storage::Storage;
 use sqlite::Error;
@@ -98,60 +98,55 @@ fn query_on_execute(c: &mut Criterion) {
 
     println!("Table initialization completed");
 
-    let (codegen_transaction, plan) = rt.block_on(async {
-        let transaction = database.storage.transaction().await.unwrap();
-        let (plan, _) = Database::<KipStorage>::build_plan(QUERY_CASE, &transaction).unwrap();
+    #[cfg(feature = "codegen_execute")]
+    {
+        use kip_sql::execution::codegen;
 
-        (Arc::new(transaction), plan)
-    });
+        let (codegen_transaction, plan) = rt.block_on(async {
+            let transaction = database.storage.transaction().await.unwrap();
+            let (plan, _) = Database::<KipStorage>::build_plan(QUERY_CASE, &transaction).unwrap();
 
-    c.bench_function(format!("Codegen: {}", QUERY_CASE).as_str(), |b| {
-        b.to_async(&rt).iter(|| async {
-            let tuples = codegen::execute(plan.clone(), codegen_transaction.clone())
-                .await
-                .unwrap();
-            if tuples.len() as u64 != TABLE_ROW_NUM {
-                panic!("{}", tuples.len());
-            }
-        })
-    });
+            (Arc::new(transaction), plan)
+        });
 
-    let (volcano_transaction, plan) = rt.block_on(async {
-        let transaction = database.storage.transaction().await.unwrap();
-        let (plan, _) = Database::<KipStorage>::build_plan(QUERY_CASE, &transaction).unwrap();
-
-        (RefCell::new(transaction), plan)
-    });
-
-    c.bench_function(format!("Volcano: {}", QUERY_CASE).as_str(), |b| {
-        b.to_async(&rt).iter(|| async {
-            let mut stream = volcano::build_stream(plan.clone(), &volcano_transaction);
-            let tuples = volcano::try_collect(&mut stream).await.unwrap();
-            if tuples.len() as u64 != TABLE_ROW_NUM {
-                panic!("{}", tuples.len());
-            }
-        })
-    });
-
-    c.bench_function(
-        format!(
-            "KipSQL: select * from t1"
-        )
-        .as_str(),
-        |b| {
+        c.bench_function(format!("Codegen: {}", QUERY_CASE).as_str(), |b| {
             b.to_async(&rt).iter(|| async {
-                let _tuples = database.run(QUERY_CASE).await.unwrap();
+                let tuples = codegen::execute(plan.clone(), codegen_transaction.clone())
+                    .await
+                    .unwrap();
+                if tuples.len() as u64 != TABLE_ROW_NUM {
+                    panic!("{}", tuples.len());
+                }
             })
-        },
-    );
+        });
+
+        let (volcano_transaction, plan) = rt.block_on(async {
+            let transaction = database.storage.transaction().await.unwrap();
+            let (plan, _) = Database::<KipStorage>::build_plan(QUERY_CASE, &transaction).unwrap();
+
+            (RefCell::new(transaction), plan)
+        });
+
+        c.bench_function(format!("Volcano: {}", QUERY_CASE).as_str(), |b| {
+            b.to_async(&rt).iter(|| async {
+                let mut stream = volcano::build_stream(plan.clone(), &volcano_transaction);
+                let tuples = volcano::try_collect(&mut stream).await.unwrap();
+                if tuples.len() as u64 != TABLE_ROW_NUM {
+                    panic!("{}", tuples.len());
+                }
+            })
+        });
+    }
+
+    c.bench_function(format!("KipSQL: select * from t1").as_str(), |b| {
+        b.to_async(&rt).iter(|| async {
+            let _tuples = database.run(QUERY_CASE).await.unwrap();
+        })
+    });
 
     let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned()).unwrap();
     c.bench_function(
-        format!(
-            "SQLite: select * from t1 where c2 > {}",
-            TABLE_ROW_NUM / 2
-        )
-        .as_str(),
+        format!("SQLite: select * from t1 where c2 > {}", TABLE_ROW_NUM / 2).as_str(),
         |b| {
             b.to_async(&rt).iter(|| async {
                 let _tuples = connection

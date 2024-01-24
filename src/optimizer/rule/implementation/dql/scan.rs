@@ -1,11 +1,10 @@
-use lazy_static::lazy_static;
 use crate::optimizer::core::memo::{Expression, GroupExpression};
-use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
-use crate::planner::operator::{Operator, PhysicalOption};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
+use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
 use crate::optimizer::OptimizerError;
+use crate::planner::operator::{Operator, PhysicalOption};
 use crate::single_mapping;
-
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref SCAN_PATTERN: Pattern = {
@@ -21,7 +20,6 @@ pub struct SeqScanImplementation;
 
 single_mapping!(SeqScanImplementation, SCAN_PATTERN, PhysicalOption::SeqScan);
 
-
 pub struct IndexScanImplementation;
 
 impl MatchPattern for IndexScanImplementation {
@@ -31,7 +29,11 @@ impl MatchPattern for IndexScanImplementation {
 }
 
 impl ImplementationRule for IndexScanImplementation {
-    fn to_expression(&self, op: &Operator, group_expr: &mut GroupExpression) -> Result<(), OptimizerError> {
+    fn to_expression(
+        &self,
+        op: &Operator,
+        group_expr: &mut GroupExpression,
+    ) -> Result<(), OptimizerError> {
         if let Operator::Scan(scan_op) = op {
             for index_info in scan_op.index_infos.iter() {
                 if index_info.binaries.is_none() {

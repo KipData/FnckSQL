@@ -1,17 +1,19 @@
+use integer_encoding::{FixedInt, FixedIntWriter};
+use rand::random;
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::fmt;
-use rand::random;
 #[allow(deprecated)]
 use std::hash::{Hash, Hasher, SipHasher};
+use std::{f64, fmt};
 
 #[derive(Debug)]
 pub enum Estimator {
     HyperLogLog,
-    LinearCounting, // スモールレンジの見積もりに使用する。
+    LinearCounting,
 }
 
 // https://qiita.com/tatsuya6502/items/832f71b78c62ecad65c5
+#[derive(PartialEq)]
 pub struct HyperLogLog {
     b: u8,
     #[allow(unused)]
@@ -63,6 +65,38 @@ impl HyperLogLog {
         1.04 / (self.m as f64).sqrt()
     }
 
+    pub fn encode(&self, bytes: &mut Vec<u8>) -> std::io::Result<()> {
+        bytes.push(self.b);
+        let _ = bytes.write_fixedint(self.b_mask as u64)?;
+        let _ = bytes.write_fixedint(self.m as u64)?;
+        let _ = bytes.write_fixedint(self.hasher_key0)?;
+        let _ = bytes.write_fixedint(self.hasher_key1)?;
+        // skip alpha
+        bytes.extend(&self.registers);
+
+        Ok(())
+    }
+
+    pub fn decode(bytes: &[u8]) -> Self {
+        let b = bytes[0];
+        let b_mask = u64::decode_fixed(&bytes[1..9]) as usize;
+        let m = u64::decode_fixed(&bytes[9..17]) as usize;
+        let hasher_key0 = u64::decode_fixed(&bytes[17..25]);
+        let hasher_key1 = u64::decode_fixed(&bytes[25..33]);
+        let registers = bytes[33..].to_vec();
+        let alpha = Self::get_alpha(b).unwrap();
+
+        Self {
+            b,
+            b_mask,
+            m,
+            alpha,
+            registers,
+            hasher_key0,
+            hasher_key1,
+        }
+    }
+
     pub fn histgram_of_register_value_distribution(&self) -> String {
         let mut histgram = Vec::new();
 
@@ -109,7 +143,7 @@ impl HyperLogLog {
     }
 
     #[allow(deprecated)]
-    fn hash<H: Hash>(&self, value: &H) ->u64 {
+    fn hash<H: Hash>(&self, value: &H) -> u64 {
         let mut hasher = SipHasher::new_with_keys(self.hasher_key0, self.hasher_key1);
         value.hash(&mut hasher);
         hasher.finish()
@@ -135,7 +169,10 @@ impl HyperLogLog {
         if est < (5.0 / 2.0 * m_f64) {
             match Self::count_zero_registers(&hll.registers) {
                 0 => (est, Estimator::HyperLogLog),
-                v => (Self::linear_counting_estimate(m_f64, v as f64), Estimator::LinearCounting),
+                v => (
+                    Self::linear_counting_estimate(m_f64, v as f64),
+                    Estimator::LinearCounting,
+                ),
             }
         } else {
             (est, Estimator::HyperLogLog)
@@ -147,7 +184,10 @@ impl HyperLogLog {
     }
 
     fn raw_hyperloglog_estimate(alpha: f64, m: f64, registers: &[u8]) -> f64 {
-        let sum = registers.iter().map(|&x| 2.0f64.powi(-(x as i32))).sum::<f64>();
+        let sum = registers
+            .iter()
+            .map(|&x| 2.0f64.powi(-(x as i32)))
+            .sum::<f64>();
         alpha * m * m / sum
     }
 
@@ -159,8 +199,9 @@ impl HyperLogLog {
 impl fmt::Debug for HyperLogLog {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (est, est_method) = Self::estimate_cardinality(self);
-        write!(f,
-               r#"HyperLogLog
+        write!(
+            f,
+            r#"HyperLogLog
   estimated cardinality: {}
   estimation method:     {:?}
   -----------------------------------------------------
@@ -168,24 +209,25 @@ impl fmt::Debug for HyperLogLog {
   m:      {} registers
   alpha:  {}
   hasher: ({}, {})"#,
-               est,
-               est_method,
-               self.b,
-               self.typical_error_rate() * 100.0,
-               self.m,
-               self.alpha,
-               self.hasher_key0,
-               self.hasher_key1)
+            est,
+            est_method,
+            self.b,
+            self.typical_error_rate() * 100.0,
+            self.m,
+            self.alpha,
+            self.hasher_key0,
+            self.hasher_key1
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use ordered_float::OrderedFloat;
-    use rand_distr::Normal;
-    use rand::thread_rng;
-    use rand::distributions::Distribution;
     use crate::optimizer::utils::hyper_log_log::HyperLogLog;
+    use ordered_float::OrderedFloat;
+    use rand::distributions::Distribution;
+    use rand::thread_rng;
+    use rand_distr::Normal;
 
     #[allow(unused)]
     fn plot_normal_distribution(data: &[f64], num: usize) {
@@ -207,7 +249,12 @@ mod tests {
             let upper_bound = lower_bound + bin_width;
             let bin_count = bin_counts[bin];
 
-            print!("{: <width$} - {: <width$} | ", lower_bound, upper_bound, width = 8);
+            print!(
+                "{: <width$} - {: <width$} | ",
+                lower_bound,
+                upper_bound,
+                width = 8
+            );
 
             for _ in 0..bin_count {
                 print!("#");
@@ -235,7 +282,7 @@ mod tests {
     }
 
     #[test]
-    fn normal_distribution() {
+    fn test_encode_and_decode() {
         let item_num = 100000;
 
         let mut rng = thread_rng();
@@ -252,10 +299,20 @@ mod tests {
         }
         println!("\n=== Cardinality: {}\n", hll.cardinality());
 
-        println!("Histogram: \n{}", hll.histgram_of_register_value_distribution());
+        println!(
+            "Histogram: \n{}",
+            hll.histgram_of_register_value_distribution()
+        );
 
         println!("Samples Len: {}", samples.len());
 
         // plot_normal_distribution(&samples, item_num);
+
+        let mut bytes = Vec::new();
+        hll.encode(&mut bytes).unwrap();
+
+        let hll_decoded = HyperLogLog::decode(&bytes);
+
+        assert_eq!(hll, hll_decoded)
     }
 }
