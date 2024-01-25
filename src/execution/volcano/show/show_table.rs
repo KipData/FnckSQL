@@ -33,16 +33,16 @@ impl ShowTables {
 
         for TableMeta {
             table_name,
-            histogram_gen,
+            histogram_paths,
         } in metas
         {
             let columns: Vec<ColumnRef> = vec![
                 Arc::new(ColumnCatalog::new_dummy("TABLE".to_string())),
-                Arc::new(ColumnCatalog::new_dummy("HISTOGRAM_GEN".to_string())),
+                Arc::new(ColumnCatalog::new_dummy("HISTOGRAM_LEN".to_string())),
             ];
             let values: Vec<ValueRef> = vec![
                 Arc::new(DataValue::Utf8(Some(table_name.to_string()))),
-                Arc::new(DataValue::UInt64(histogram_gen)),
+                Arc::new(DataValue::UInt32(Some(histogram_paths.len() as u32))),
             ];
 
             yield Tuple {

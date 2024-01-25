@@ -7,13 +7,15 @@ macro_rules! single_mapping {
             }
         }
 
-        impl ImplementationRule for $ty {
+        impl<T: Transaction> ImplementationRule<T> for $ty {
             fn to_expression(
                 &self,
                 _: &Operator,
+                _: &HistogramLoader<'_, T>,
                 group_expr: &mut GroupExpression,
             ) -> Result<(), OptimizerError> {
-                group_expr.append_expr(Expression { ops: vec![$option] });
+                //TODO: CostModel
+                group_expr.append_expr(Expression { ops: vec![$option], cost: None });
 
                 Ok(())
             }

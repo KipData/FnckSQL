@@ -258,10 +258,7 @@ impl TableCodec {
     pub fn encode_root_table(meta: &TableMeta) -> Result<(Bytes, Bytes), TypeError> {
         let key = Self::encode_root_table_key(&meta.table_name);
 
-        let mut bytes = Vec::new();
-        meta.encode(&mut bytes)?;
-
-        Ok((Bytes::from(key), Bytes::from(bytes)))
+        Ok((Bytes::from(key), Bytes::from(bincode::serialize(meta)?)))
     }
 
     pub fn encode_root_table_key(table_name: &str) -> Vec<u8> {
@@ -269,7 +266,7 @@ impl TableCodec {
     }
 
     pub fn decode_root_table(bytes: &[u8]) -> Result<TableMeta, TypeError> {
-        Ok(TableMeta::decode(bytes)?)
+        Ok(bincode::deserialize(bytes)?)
     }
 }
 
@@ -333,7 +330,7 @@ mod tests {
     fn test_root_catalog() {
         let table_catalog = build_table_codec();
         let (_, bytes) = TableCodec::encode_root_table(&TableMeta {
-            histogram_gen: None,
+            histogram_paths: vec![],
             table_name: table_catalog.name.clone(),
         })
         .unwrap();
@@ -341,7 +338,7 @@ mod tests {
         let table_meta = TableCodec::decode_root_table(&bytes).unwrap();
 
         assert_eq!(table_meta.table_name.as_str(), table_catalog.name.as_str());
-        assert_eq!(table_meta.histogram_gen, None);
+        assert!(table_meta.histogram_paths.is_empty());
     }
 
     #[test]

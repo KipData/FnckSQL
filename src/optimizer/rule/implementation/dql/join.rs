@@ -1,4 +1,6 @@
 use crate::optimizer::core::memo::{Expression, GroupExpression};
+use crate::storage::Transaction;
+use crate::optimizer::rule::implementation::HistogramLoader;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
 use crate::optimizer::OptimizerError;

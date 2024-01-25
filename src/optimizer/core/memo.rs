@@ -1,3 +1,4 @@
+use crate::optimizer::core::histogram::HistogramLoader;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
 use crate::optimizer::heuristic::batch::HepMatchOrder;
@@ -6,10 +7,12 @@ use crate::optimizer::heuristic::matcher::HepMatcher;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::PhysicalOption;
+use crate::storage::Transaction;
 
 #[derive(Debug, Clone)]
 pub struct Expression {
     pub(crate) ops: Vec<PhysicalOption>,
+    pub(crate) cost: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,8 +32,9 @@ pub struct Memo {
 }
 
 impl Memo {
-    pub(crate) fn new(
+    pub(crate) fn new<T: Transaction>(
         graph: &HepGraph,
+        loader: &HistogramLoader<'_, T>,
         implementations: &[ImplementationRuleImpl],
     ) -> Result<Self, OptimizerError> {
         let node_count = graph.node_count();
@@ -45,7 +49,7 @@ impl Memo {
                 if HepMatcher::new(rule.pattern(), node_id, graph).match_opt_expr() {
                     let op = graph.operator(node_id);
 
-                    rule.to_expression(op, &mut groups[node_id.index()])?;
+                    rule.to_expression(op, loader, &mut groups[node_id.index()])?;
                 }
             }
         }
@@ -56,21 +60,27 @@ impl Memo {
 
 #[cfg(test)]
 mod tests {
-    use crate::binder::test::select_sql_run;
+    use tempfile::TempDir;
+    use crate::binder::{Binder, BinderContext};
+    use crate::binder::test::build_test_catalog;
     use crate::db::DatabaseError;
+    use crate::optimizer::core::histogram::HistogramLoader;
     use crate::optimizer::core::memo::Memo;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::graph::HepGraph;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::implementation::ImplementationRuleImpl;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
+    use crate::storage::Storage;
 
     #[tokio::test]
     async fn test_build_memo() -> Result<(), DatabaseError> {
-        let plan = select_sql_run(
-            "select c1, c3 from t1 inner join t2 on c1 = c3 where c1 > 10 and c3 > 22",
-        )
-        .await?;
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = build_test_catalog(temp_dir.path()).await?;
+        let transaction = storage.transaction().await?;
+        let binder = Binder::new(BinderContext::new(&transaction));
+        let stmt = crate::parser::parse_sql("select c1, c3 from t1 inner join t2 on c1 = c3 where c1 > 10 and c3 > 22")?;
+        let plan = binder.bind(&stmt[0])?;
         let best_plan = HepOptimizer::new(plan)
             .batch(
                 "Simplify Filter".to_string(),
@@ -95,7 +105,7 @@ mod tests {
             ImplementationRuleImpl::IndexScan,
         ];
 
-        let memo = Memo::new(&graph, &rules)?;
+        let memo = Memo::new(&graph, &HistogramLoader::new(&transaction)?, &rules)?;
 
         println!("{:#?}", memo);
 

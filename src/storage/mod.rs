@@ -94,6 +94,7 @@ pub trait Transaction: Sync + Send + 'static {
     fn drop_data(&mut self, table_name: &str) -> Result<(), StorageError>;
     fn table(&self, table_name: TableName) -> Option<&TableCatalog>;
     fn table_metas(&self) -> Result<Vec<TableMeta>, StorageError>;
+    fn histogram_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError>;
 
     #[allow(async_fn_in_trait)]
     async fn commit(self) -> Result<(), StorageError>;

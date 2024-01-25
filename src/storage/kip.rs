@@ -176,10 +176,10 @@ impl Transaction for KipTransaction {
 
             for col in catalog.all_columns() {
                 if col.name() == column.name() {
-                    if if_not_exists {
-                        return Ok(col.id().unwrap());
+                    return if if_not_exists {
+                        Ok(col.id().unwrap())
                     } else {
-                        return Err(StorageError::DuplicateColumn);
+                        Err(StorageError::DuplicateColumn)
                     }
                 }
             }
@@ -338,6 +338,16 @@ impl Transaction for KipTransaction {
         }
 
         Ok(metas)
+    }
+
+    fn histogram_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError> {
+        if let Some(bytes) = self.tx.get(&TableCodec::encode_root_table_key(table_name))? {
+            let meta = TableCodec::decode_root_table(&bytes)?;
+
+            return Ok(meta.histogram_paths)
+        }
+
+        Ok(vec![])
     }
 
     async fn commit(self) -> Result<(), StorageError> {

@@ -1,4 +1,4 @@
-use crate::catalog::ColumnCatalog;
+use crate::catalog::{ColumnCatalog, TableName};
 use crate::execution::volcano::dql::sort::radix_sort;
 use crate::expression::simplify::ConstantBinary;
 use crate::optimizer::utils::hyper_log_log::HyperLogLog;
@@ -9,6 +9,13 @@ use std::cmp::Ordering;
 use std::collections::Bound;
 use std::sync::Arc;
 use std::{cmp, mem};
+use std::fs::OpenOptions;
+use std::hash::RandomState;
+use std::io::{Read, Write};
+use std::path::Path;
+use kip_db::kernel::utils::lru_cache::ShardingLruCache;
+use serde::{Deserialize, Serialize};
+use crate::storage::Transaction;
 
 const DEFAULT_HYPERLOGLOG_BUCKET_SIZE: u8 = 14;
 
@@ -23,15 +30,20 @@ pub struct HistogramBuilder {
     value_index: usize,
 }
 
+pub struct HistogramLoader<'a, T: Transaction> {
+    cache: ShardingLruCache<TableName, Vec<Histogram>>,
+    tx: &'a T
+}
+
 // Equal depth histogram
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Histogram {
     column_id: ColumnId,
     data_type: LogicalType,
 
     hyperloglog: HyperLogLog,
     null_count: usize,
-    row_count: usize,
+    values_len: usize,
 
     buckets: Vec<Bucket>,
     // Correlation is the statistical correlation between physical row ordering and logical ordering of
@@ -39,7 +51,7 @@ pub(crate) struct Histogram {
     correlation: f64,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct Bucket {
     lower: ValueRef,
     upper: ValueRef,
@@ -126,7 +138,7 @@ impl HistogramBuilder {
             data_type,
             hyperloglog,
             null_count,
-            row_count: values_len,
+            values_len,
             buckets,
             correlation: Self::calc_correlation(corr_xy_sum, values_len),
         })
@@ -145,7 +157,48 @@ impl HistogramBuilder {
     }
 }
 
+impl<'a, T: Transaction> HistogramLoader<'a, T> {
+    pub fn new(tx: &'a T) -> Result<HistogramLoader<T>, OptimizerError> {
+        let cache = ShardingLruCache::new(128, 16, RandomState::new())?;
+
+        Ok(HistogramLoader {
+            cache,
+            tx,
+        })
+    }
+
+    pub fn load(&self, table_name: TableName) -> Result<&Vec<Histogram>, OptimizerError> {
+        let option = self.cache.get(&table_name);
+
+        return if let Some(histograms) = option {
+            Ok(histograms)
+        } else {
+            let paths = self.tx.histogram_paths(&table_name)?;
+            let mut histograms = Vec::with_capacity(paths.len());
+
+            for path in paths {
+                histograms.push(Histogram::from_file(path)?);
+            }
+
+            Ok(self
+                .cache
+                .get_or_insert(table_name, |_| Ok(histograms))?)
+        }
+    }
+}
+
 impl Histogram {
+    pub fn column_id(&self) -> ColumnId {
+        self.column_id
+    }
+    pub fn data_type(&self) -> LogicalType {
+        self.data_type
+    }
+
+    pub fn values_len(&self) -> usize {
+        self.values_len
+    }
+
     /// Tips: binaries must be used `ConstantBinary::scope_aggregation` and `ConstantBinary::rearrange`
     pub fn collect_count(&self, binaries: &[ConstantBinary]) -> usize {
         if self.buckets.is_empty() || binaries.is_empty() {
@@ -231,6 +284,31 @@ impl Histogram {
             }
         }
     }
+
+    pub fn to_file(&self, path: impl AsRef<Path>) -> Result<(), OptimizerError> {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .read(true)
+            .open(path)?;
+        let _ = file.write_all(&bincode::serialize(self)?)?;
+        file.flush()?;
+
+        Ok(())
+    }
+
+    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, OptimizerError> {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .read(true)
+            .open(path)?;
+
+        let mut bytes = Vec::new();
+        let _ = file.read_to_end(&mut bytes)?;
+
+        Ok(bincode::deserialize(&bytes)?)
+    }
 }
 
 impl Bucket {
@@ -249,12 +327,13 @@ impl Bucket {
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::expression::simplify::ConstantBinary;
-    use crate::optimizer::core::histogram::{Bucket, HistogramBuilder};
+    use crate::optimizer::core::histogram::{Bucket, Histogram, HistogramBuilder};
     use crate::optimizer::OptimizerError;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::ops::Bound;
     use std::sync::Arc;
+    use tempfile::TempDir;
 
     fn int32_column() -> ColumnCatalog {
         ColumnCatalog {
@@ -507,6 +586,45 @@ mod tests {
         ]);
 
         assert_eq!(count, 12);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_file_and_from_file() -> Result<(), OptimizerError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let column = int32_column();
+
+        let mut builder = HistogramBuilder::new(&column, Some(15))?;
+
+        builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(12))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(11))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(10))))?;
+
+        builder.append(&Arc::new(DataValue::Int32(Some(4))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(3))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(2))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(1))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(0))))?;
+
+        builder.append(&Arc::new(DataValue::Int32(Some(9))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(8))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(7))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(6))))?;
+        builder.append(&Arc::new(DataValue::Int32(Some(5))))?;
+
+        builder.append(&Arc::new(DataValue::Null))?;
+        builder.append(&Arc::new(DataValue::Int32(None)))?;
+
+        let histogram = builder.build(4)?;
+        let path = temp_dir.path().join("histogram");
+
+        histogram.to_file(path.clone())?;
+        let histogram_from_file = Histogram::from_file(path)?;
+
+        assert_eq!(histogram, histogram_from_file);
 
         Ok(())
     }

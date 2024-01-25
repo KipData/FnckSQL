@@ -1,3 +1,5 @@
+use kip_db::KernelError;
+use crate::storage::StorageError;
 use crate::types::errors::TypeError;
 
 /// The architecture and some components,
@@ -21,4 +23,25 @@ pub enum OptimizerError {
     OwnerLessColumn,
     #[error("there are more buckets than elements")]
     TooManyBuckets,
+    #[error("io")]
+    IO(
+        #[source]
+        #[from]
+        std::io::Error,
+    ),
+    #[error("cache error")]
+    Cache(
+        #[source]
+        #[from]
+        KernelError
+    ),
+    /// Serialization or deserialization error
+    #[error(transparent)]
+    SerdeBinCode(#[from] Box<bincode::ErrorKind>),
+    #[error("storage error")]
+    Storage(
+        #[source]
+        #[from]
+        StorageError
+    )
 }

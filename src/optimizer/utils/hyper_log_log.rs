@@ -5,6 +5,7 @@ use std::error::Error;
 #[allow(deprecated)]
 use std::hash::{Hash, Hasher, SipHasher};
 use std::{f64, fmt};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum Estimator {
@@ -13,7 +14,7 @@ pub enum Estimator {
 }
 
 // https://qiita.com/tatsuya6502/items/832f71b78c62ecad65c5
-#[derive(PartialEq)]
+#[derive(PartialEq, Serialize, Deserialize)]
 pub struct HyperLogLog {
     b: u8,
     #[allow(unused)]

@@ -3,6 +3,7 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 pub(crate) mod marcos;
 
+use crate::optimizer::core::histogram::HistogramLoader;
 use crate::optimizer::core::memo::GroupExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
@@ -31,6 +32,7 @@ use crate::optimizer::rule::implementation::dql::sort::SortImplementation;
 use crate::optimizer::rule::implementation::dql::values::ValuesImplementation;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
+use crate::storage::Transaction;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ImplementationRuleImpl {
@@ -88,75 +90,76 @@ impl MatchPattern for ImplementationRuleImpl {
     }
 }
 
-impl ImplementationRule for ImplementationRuleImpl {
+impl<T: Transaction> ImplementationRule<T> for ImplementationRuleImpl {
     fn to_expression(
         &self,
         operator: &Operator,
+        loader: &HistogramLoader<'_, T>,
         group_expr: &mut GroupExpression,
     ) -> Result<(), OptimizerError> {
         match self {
             ImplementationRuleImpl::GroupByAggregate => {
-                GroupByAggregateImplementation.to_expression(operator, group_expr)?
+                GroupByAggregateImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::SimpleAggregate => {
-                SimpleAggregateImplementation.to_expression(operator, group_expr)?
+                SimpleAggregateImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Dummy => {
-                DummyImplementation.to_expression(operator, group_expr)?
+                DummyImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Filter => {
-                FilterImplementation.to_expression(operator, group_expr)?
+                FilterImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::HashJoin => {
-                HashJoinImplementation.to_expression(operator, group_expr)?
+                HashJoinImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Limit => {
-                LimitImplementation.to_expression(operator, group_expr)?
+                LimitImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Projection => {
-                ProjectionImplementation.to_expression(operator, group_expr)?
+                ProjectionImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::SeqScan => {
-                SeqScanImplementation.to_expression(operator, group_expr)?
+                SeqScanImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::IndexScan => {
-                IndexScanImplementation.to_expression(operator, group_expr)?
+                IndexScanImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Sort => {
-                SortImplementation.to_expression(operator, group_expr)?
+                SortImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Values => {
-                ValuesImplementation.to_expression(operator, group_expr)?
+                ValuesImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::CopyFromFile => {
-                CopyFromFileImplementation.to_expression(operator, group_expr)?
+                CopyFromFileImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::CopyToFile => {
-                CopyToFileImplementation.to_expression(operator, group_expr)?
+                CopyToFileImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Delete => {
-                DeleteImplementation.to_expression(operator, group_expr)?
+                DeleteImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Insert => {
-                InsertImplementation.to_expression(operator, group_expr)?
+                InsertImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Update => {
-                UpdateImplementation.to_expression(operator, group_expr)?
+                UpdateImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::AddColumn => {
-                AddColumnImplementation.to_expression(operator, group_expr)?
+                AddColumnImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::CreateTable => {
-                CreateTableImplementation.to_expression(operator, group_expr)?
+                CreateTableImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::DropColumn => {
-                DropColumnImplementation.to_expression(operator, group_expr)?
+                DropColumnImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::DropTable => {
-                DropTableImplementation.to_expression(operator, group_expr)?
+                DropTableImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Truncate => {
-                TruncateImplementation.to_expression(operator, group_expr)?
+                TruncateImplementation.to_expression(operator, loader, group_expr)?
             }
         }
 

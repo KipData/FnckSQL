@@ -1,7 +1,6 @@
-use integer_encoding::{FixedInt, FixedIntWriter};
 use std::collections::BTreeMap;
-use std::string::FromUtf8Error;
 use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 
 use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::index::{IndexMeta, IndexMetaRef};
@@ -18,9 +17,9 @@ pub struct TableCatalog {
     pub(crate) indexes: Vec<IndexMetaRef>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TableMeta {
-    pub(crate) histogram_gen: Option<u64>,
+    pub(crate) histogram_paths: Vec<String>,
     pub(crate) table_name: TableName,
 }
 
@@ -64,7 +63,7 @@ impl TableCatalog {
             return Err(CatalogError::Duplicated("column", col.name().to_string()));
         }
 
-        let col_id = self.columns.len() as u32;
+        let col_id = self.columns.iter().last().map(|(column_id, _)| column_id + 1).unwrap_or(0);
 
         col.summary.table_name = Some(self.name.clone());
         col.summary.id = Some(col_id);
@@ -131,37 +130,9 @@ impl TableCatalog {
 impl TableMeta {
     pub(crate) fn empty(table_name: TableName) -> Self {
         TableMeta {
-            histogram_gen: None,
+            histogram_paths: vec![],
             table_name,
         }
-    }
-
-    pub(crate) fn encode(&self, bytes: &mut Vec<u8>) -> std::io::Result<()> {
-        if let Some(gen) = self.histogram_gen {
-            bytes.push(b'1');
-            let _ = bytes.write_fixedint(gen)?;
-        } else {
-            bytes.push(b'0');
-        }
-        bytes.extend(self.table_name.as_bytes());
-
-        Ok(())
-    }
-
-    pub(crate) fn decode(bytes: &[u8]) -> Result<TableMeta, FromUtf8Error> {
-        let mut histogram_gen = None;
-
-        let table_name = if bytes[0] == b'1' {
-            histogram_gen = Some(u64::decode_fixed(&bytes[1..9]));
-            Arc::new(String::from_utf8(bytes[9..].to_vec())?)
-        } else {
-            Arc::new(String::from_utf8(bytes[1..].to_vec())?)
-        };
-
-        Ok(TableMeta {
-            histogram_gen,
-            table_name,
-        })
     }
 }
 
@@ -211,26 +182,5 @@ mod tests {
         let column_catalog = table_catalog.get_column_by_id(&col_b_id).unwrap();
         assert_eq!(column_catalog.name(), "b");
         assert_eq!(*column_catalog.datatype(), LogicalType::Boolean,);
-    }
-
-    #[test]
-    fn test_table_meta_encode_and_decode() {
-        let meta_1 = TableMeta {
-            histogram_gen: Some(42),
-            table_name: Arc::new("some".to_string()),
-        };
-        let mut bytes = Vec::new();
-        meta_1.encode(&mut bytes).unwrap();
-
-        assert_eq!(meta_1, TableMeta::decode(&bytes).unwrap());
-
-        let meta_2 = TableMeta {
-            histogram_gen: None,
-            table_name: Arc::new("none".to_string()),
-        };
-        let mut bytes = Vec::new();
-        meta_2.encode(&mut bytes).unwrap();
-
-        assert_eq!(meta_2, TableMeta::decode(&bytes).unwrap());
     }
 }
