@@ -180,7 +180,7 @@ impl Transaction for KipTransaction {
                         Ok(col.id().unwrap())
                     } else {
                         Err(StorageError::DuplicateColumn)
-                    }
+                    };
                 }
             }
 
@@ -340,11 +340,21 @@ impl Transaction for KipTransaction {
         Ok(metas)
     }
 
+    fn save_meta(&mut self, table_meta: &TableMeta) -> Result<(), StorageError> {
+        let (key, value) = TableCodec::encode_root_table(table_meta)?;
+        self.tx.set(key, value);
+
+        Ok(())
+    }
+
     fn histogram_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError> {
-        if let Some(bytes) = self.tx.get(&TableCodec::encode_root_table_key(table_name))? {
+        if let Some(bytes) = self
+            .tx
+            .get(&TableCodec::encode_root_table_key(table_name))?
+        {
             let meta = TableCodec::decode_root_table(&bytes)?;
 
-            return Ok(meta.histogram_paths)
+            return Ok(meta.histogram_paths);
         }
 
         Ok(vec![])

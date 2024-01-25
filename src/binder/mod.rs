@@ -1,5 +1,6 @@
 pub mod aggregate;
 mod alter_table;
+mod analyze;
 pub mod copy;
 mod create_table;
 mod delete;
@@ -173,6 +174,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     self.bind_delete(table, selection)?
                 }
             }
+            Statement::Analyze { table_name, .. } => self.bind_analyze(table_name)?,
             Statement::Truncate { table_name, .. } => self.bind_truncate(table_name)?,
             Statement::ShowTables { .. } => self.bind_show_tables()?,
             Statement::Copy {

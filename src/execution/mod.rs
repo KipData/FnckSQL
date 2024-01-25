@@ -4,6 +4,7 @@ pub mod volcano;
 
 use crate::binder::BindError;
 use crate::catalog::CatalogError;
+use crate::optimizer::OptimizerError;
 use crate::storage::StorageError;
 use crate::types::errors::TypeError;
 #[cfg(feature = "codegen_execute")]
@@ -35,6 +36,12 @@ pub enum ExecutorError {
         #[source]
         #[from]
         BindError,
+    ),
+    #[error("optimizer error: {0}")]
+    Optimizer(
+        #[source]
+        #[from]
+        OptimizerError,
     ),
     #[error("parser error: {0}")]
     ParserError(

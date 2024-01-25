@@ -1,11 +1,11 @@
 use integer_encoding::{FixedInt, FixedIntWriter};
 use rand::random;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::error::Error;
 #[allow(deprecated)]
 use std::hash::{Hash, Hasher, SipHasher};
 use std::{f64, fmt};
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum Estimator {

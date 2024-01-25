@@ -105,7 +105,10 @@ impl ColumnPruning {
             // Last Operator
             Operator::Dummy | Operator::Values(_) => (),
             // DDL Based on Other Plan
-            Operator::Insert(_) | Operator::Update(_) | Operator::Delete(_) => {
+            Operator::Insert(_)
+            | Operator::Update(_)
+            | Operator::Delete(_)
+            | Operator::Analyze(_) => {
                 let op_ref_columns = operator.referenced_columns(false);
 
                 if let Some(child_id) = graph.eldest_child_at(node_id) {

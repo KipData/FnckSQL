@@ -205,19 +205,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
             .table(table_name.clone())
             .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
+        let scan_op = ScanOperator::build(table_name.clone(), &table_catalog);
 
         self.context
-            .add_bind_table(table_name.clone(), table_catalog.clone(), join_type)?;
+            .add_bind_table(table_name.clone(), table_catalog, join_type)?;
 
         if let Some(alias) = alias {
             self.context
                 .add_table_alias(alias.to_string(), table_name.clone())?;
         }
 
-        Ok((
-            table_name.clone(),
-            ScanOperator::build(table_name, &table_catalog),
-        ))
+        Ok((table_name, scan_op))
     }
 
     /// Normalize select item.

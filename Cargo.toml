@@ -51,6 +51,7 @@ csv = "1"
 regex = "1.10.2"
 clap = "4.4.11"
 rand = "0.8.5"
+dirs = "5.0.1"
 
 mlua = { version = "0.9.1", features = ["luajit", "vendored", "macros", "async"], optional = true }
 

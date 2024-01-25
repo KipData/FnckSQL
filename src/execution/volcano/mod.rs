@@ -7,6 +7,7 @@ use crate::execution::volcano::ddl::create_table::CreateTable;
 use crate::execution::volcano::ddl::drop_column::DropColumn;
 use crate::execution::volcano::ddl::drop_table::DropTable;
 use crate::execution::volcano::ddl::truncate::Truncate;
+use crate::execution::volcano::dml::analyze::Analyze;
 use crate::execution::volcano::dml::copy_from_file::CopyFromFile;
 use crate::execution::volcano::dml::delete::Delete;
 use crate::execution::volcano::dml::insert::Insert;
@@ -124,6 +125,11 @@ pub fn build_stream<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>)
         #[warn(unused_assignments)]
         Operator::CopyToFile(_op) => {
             todo!()
+        }
+        Operator::Analyze(op) => {
+            let input = build_stream(childrens.remove(0), transaction);
+
+            Analyze::from((op, input)).execute(transaction)
         }
     }
 }

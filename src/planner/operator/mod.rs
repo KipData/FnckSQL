@@ -1,5 +1,6 @@
 pub mod aggregate;
 pub mod alter_table;
+pub mod analyze;
 pub mod copy_from_file;
 pub mod copy_to_file;
 pub mod create_table;
@@ -19,6 +20,7 @@ pub mod values;
 
 use crate::catalog::ColumnRef;
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
+use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
@@ -55,6 +57,7 @@ pub enum Operator {
     Insert(InsertOperator),
     Update(UpdateOperator),
     Delete(DeleteOperator),
+    Analyze(AnalyzeOperator),
     // DDL
     AddColumn(AddColumnOperator),
     DropColumn(DropColumnOperator),
@@ -137,6 +140,8 @@ impl Operator {
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Values(op) => op.columns.clone(),
+            Operator::Analyze(op) => op.columns.clone(),
+            Operator::Delete(op) => vec![op.primary_key_column.clone()],
             _ => vec![],
         }
     }

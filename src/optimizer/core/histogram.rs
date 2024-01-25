@@ -3,19 +3,19 @@ use crate::execution::volcano::dql::sort::radix_sort;
 use crate::expression::simplify::ConstantBinary;
 use crate::optimizer::utils::hyper_log_log::HyperLogLog;
 use crate::optimizer::OptimizerError;
+use crate::storage::Transaction;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::{ColumnId, LogicalType};
+use kip_db::kernel::utils::lru_cache::ShardingLruCache;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::Bound;
-use std::sync::Arc;
-use std::{cmp, mem};
 use std::fs::OpenOptions;
 use std::hash::RandomState;
 use std::io::{Read, Write};
 use std::path::Path;
-use kip_db::kernel::utils::lru_cache::ShardingLruCache;
-use serde::{Deserialize, Serialize};
-use crate::storage::Transaction;
+use std::sync::Arc;
+use std::{cmp, mem};
 
 const DEFAULT_HYPERLOGLOG_BUCKET_SIZE: u8 = 14;
 
@@ -32,7 +32,7 @@ pub struct HistogramBuilder {
 
 pub struct HistogramLoader<'a, T: Transaction> {
     cache: ShardingLruCache<TableName, Vec<Histogram>>,
-    tx: &'a T
+    tx: &'a T,
 }
 
 // Equal depth histogram
@@ -91,8 +91,8 @@ impl HistogramBuilder {
         Ok(())
     }
 
-    pub fn build(self, number_of_bucket: usize) -> Result<Histogram, OptimizerError> {
-        if number_of_bucket > self.values.len() {
+    pub fn build(self, number_of_buckets: usize) -> Result<Histogram, OptimizerError> {
+        if number_of_buckets > self.values.len() {
             return Err(OptimizerError::TooManyBuckets);
         }
 
@@ -104,16 +104,16 @@ impl HistogramBuilder {
             values,
             ..
         } = self;
-        let mut buckets = Vec::with_capacity(number_of_bucket);
+        let mut buckets = Vec::with_capacity(number_of_buckets);
         let values_len = values.len();
-        let bucket_len = if values_len % number_of_bucket == 0 {
-            values_len / number_of_bucket
+        let bucket_len = if values_len % number_of_buckets == 0 {
+            values_len / number_of_buckets
         } else {
-            (values_len + number_of_bucket) / number_of_bucket
+            (values_len + number_of_buckets) / number_of_buckets
         };
         let sorted_values = radix_sort(values);
 
-        for i in 0..number_of_bucket {
+        for i in 0..number_of_buckets {
             let mut bucket = Bucket::empty(&data_type);
             let j = (i + 1) * bucket_len;
 
@@ -161,10 +161,7 @@ impl<'a, T: Transaction> HistogramLoader<'a, T> {
     pub fn new(tx: &'a T) -> Result<HistogramLoader<T>, OptimizerError> {
         let cache = ShardingLruCache::new(128, 16, RandomState::new())?;
 
-        Ok(HistogramLoader {
-            cache,
-            tx,
-        })
+        Ok(HistogramLoader { cache, tx })
     }
 
     pub fn load(&self, table_name: TableName) -> Result<&Vec<Histogram>, OptimizerError> {
@@ -180,10 +177,50 @@ impl<'a, T: Transaction> HistogramLoader<'a, T> {
                 histograms.push(Histogram::from_file(path)?);
             }
 
-            Ok(self
-                .cache
-                .get_or_insert(table_name, |_| Ok(histograms))?)
-        }
+            Ok(self.cache.get_or_insert(table_name, |_| Ok(histograms))?)
+        };
+    }
+}
+
+fn is_under(value: &ValueRef, target: &Bound<ValueRef>, is_min: bool) -> bool {
+    let _is_under = |value: &ValueRef, target: &ValueRef, is_min: bool| {
+        value
+            .partial_cmp(target)
+            .map(|order| {
+                if is_min {
+                    Ordering::is_lt(order)
+                } else {
+                    Ordering::is_le(order)
+                }
+            })
+            .unwrap()
+    };
+
+    match target {
+        Bound::Included(target) => _is_under(value, target, is_min),
+        Bound::Excluded(target) => _is_under(value, target, !is_min),
+        Bound::Unbounded => !is_min,
+    }
+}
+
+fn is_above(value: &ValueRef, target: &Bound<ValueRef>, is_min: bool) -> bool {
+    let _is_above = |value: &ValueRef, target: &ValueRef, is_min: bool| {
+        value
+            .partial_cmp(target)
+            .map(|order| {
+                if is_min {
+                    Ordering::is_ge(order)
+                } else {
+                    Ordering::is_gt(order)
+                }
+            })
+            .unwrap()
+    };
+
+    match target {
+        Bound::Included(target) => _is_above(value, target, is_min),
+        Bound::Excluded(target) => _is_above(value, target, !is_min),
+        Bound::Unbounded => is_min,
     }
 }
 
@@ -230,32 +267,25 @@ impl Histogram {
             ConstantBinary::Scope { min, max } => {
                 let bucket = &self.buckets[*bucket_i];
 
-                let is_above = |value: &ValueRef, target: &Bound<ValueRef>| match target {
-                    Bound::Included(target) => {
-                        value.partial_cmp(target).map(Ordering::is_ge).unwrap()
-                    }
-                    Bound::Excluded(target) => {
-                        value.partial_cmp(target).map(Ordering::is_gt).unwrap()
-                    }
-                    Bound::Unbounded => true,
-                };
-                let is_under = |value: &ValueRef, target: &Bound<ValueRef>| match target {
-                    Bound::Included(target) => {
-                        value.partial_cmp(target).map(Ordering::is_le).unwrap()
-                    }
-                    Bound::Excluded(target) => {
-                        value.partial_cmp(target).map(Ordering::is_lt).unwrap()
-                    }
-                    Bound::Unbounded => true,
+                let is_eq = |value: &ValueRef, target: &Bound<ValueRef>| match target {
+                    Bound::Included(target) => target.eq(value),
+                    _ => false,
                 };
 
-                let is_meet = (is_under(&bucket.lower, min) && is_above(&bucket.upper, min))
-                    || (is_under(&bucket.lower, max) && is_above(&bucket.upper, max))
-                    || (is_under(&bucket.lower, min) && is_above(&bucket.upper, max))
-                    || (is_above(&bucket.lower, min) && is_under(&bucket.upper, max));
+                let is_meet = (is_under(&bucket.lower, min, true)
+                    && is_above(&bucket.upper, min, true))
+                    || (is_under(&bucket.lower, max, false) && is_above(&bucket.upper, max, false))
+                    || (is_under(&bucket.lower, min, true) && is_above(&bucket.upper, max, false))
+                    || (is_above(&bucket.lower, min, true) && is_under(&bucket.upper, max, false))
+                    || is_eq(&bucket.lower, min)
+                    || is_eq(&bucket.lower, max)
+                    || is_eq(&bucket.upper, min)
+                    || is_eq(&bucket.upper, max);
 
                 if is_meet {
                     bucket_idxs.push(mem::replace(bucket_i, *bucket_i + 1));
+                } else if is_under(&bucket.lower, min, true) {
+                    *bucket_i += 1
                 } else {
                     *binary_i += 1;
                 }
@@ -577,7 +607,7 @@ mod tests {
 
         let histogram = builder.build(4)?;
 
-        let count = histogram.collect_count(&vec![
+        let count_1 = histogram.collect_count(&vec![
             ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(2)))),
             ConstantBinary::Scope {
                 min: Bound::Included(Arc::new(DataValue::Int32(Some(4)))),
@@ -585,7 +615,35 @@ mod tests {
             },
         ]);
 
-        assert_eq!(count, 12);
+        assert_eq!(count_1, 12);
+
+        let count_2 = histogram.collect_count(&vec![ConstantBinary::Scope {
+            min: Bound::Included(Arc::new(DataValue::Int32(Some(4)))),
+            max: Bound::Unbounded,
+        }]);
+
+        assert_eq!(count_2, 11);
+
+        let count_3 = histogram.collect_count(&vec![ConstantBinary::Scope {
+            min: Bound::Excluded(Arc::new(DataValue::Int32(Some(7)))),
+            max: Bound::Unbounded,
+        }]);
+
+        assert_eq!(count_3, 7);
+
+        let count_4 = histogram.collect_count(&vec![ConstantBinary::Scope {
+            min: Bound::Unbounded,
+            max: Bound::Included(Arc::new(DataValue::Int32(Some(11)))),
+        }]);
+
+        assert_eq!(count_4, 12);
+
+        let count_5 = histogram.collect_count(&vec![ConstantBinary::Scope {
+            min: Bound::Unbounded,
+            max: Bound::Excluded(Arc::new(DataValue::Int32(Some(8)))),
+        }]);
+
+        assert_eq!(count_5, 8);
 
         Ok(())
     }

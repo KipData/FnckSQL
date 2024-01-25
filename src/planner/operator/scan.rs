@@ -3,8 +3,8 @@ use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use crate::storage::Bounds;
 use crate::types::index::IndexInfo;
-use itertools::Itertools;
 use crate::types::ColumnId;
+use itertools::Itertools;
 
 use super::Operator;
 

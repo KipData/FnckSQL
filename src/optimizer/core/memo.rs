@@ -60,10 +60,8 @@ impl Memo {
 
 #[cfg(test)]
 mod tests {
-    use tempfile::TempDir;
     use crate::binder::{Binder, BinderContext};
-    use crate::binder::test::build_test_catalog;
-    use crate::db::DatabaseError;
+    use crate::db::{Database, DatabaseError};
     use crate::optimizer::core::histogram::HistogramLoader;
     use crate::optimizer::core::memo::Memo;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
@@ -72,14 +70,32 @@ mod tests {
     use crate::optimizer::rule::implementation::ImplementationRuleImpl;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::storage::Storage;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_build_memo() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let storage = build_test_catalog(temp_dir.path()).await?;
-        let transaction = storage.transaction().await?;
+
+        let database = Database::with_kipdb(temp_dir.path()).await?;
+        database
+            .run("create table t1 (c1 int primary key, c2 int)")
+            .await?;
+        database
+            .run("create table t2 (c3 int primary key, c4 int)")
+            .await?;
+
+        for i in 0..1000 {
+            let _ = database
+                .run(format!("insert into t1 values({}, {})", i, i + 1).as_str())
+                .await?;
+        }
+        database.run("analyze table t1").await?;
+
+        let transaction = database.storage.transaction().await?;
         let binder = Binder::new(BinderContext::new(&transaction));
-        let stmt = crate::parser::parse_sql("select c1, c3 from t1 inner join t2 on c1 = c3 where c1 > 10 and c3 > 22")?;
+        let stmt = crate::parser::parse_sql(
+            "select c1, c3 from t1 inner join t2 on c1 = c3 where c1 > 40 and c3 > 22",
+        )?;
         let plan = binder.bind(&stmt[0])?;
         let best_plan = HepOptimizer::new(plan)
             .batch(

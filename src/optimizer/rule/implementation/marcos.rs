@@ -15,7 +15,10 @@ macro_rules! single_mapping {
                 group_expr: &mut GroupExpression,
             ) -> Result<(), OptimizerError> {
                 //TODO: CostModel
-                group_expr.append_expr(Expression { ops: vec![$option], cost: None });
+                group_expr.append_expr(Expression {
+                    ops: vec![$option],
+                    cost: None,
+                });
 
                 Ok(())
             }

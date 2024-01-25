@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 
 use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
 use crate::types::index::{IndexMeta, IndexMetaRef};
@@ -63,7 +63,12 @@ impl TableCatalog {
             return Err(CatalogError::Duplicated("column", col.name().to_string()));
         }
 
-        let col_id = self.columns.iter().last().map(|(column_id, _)| column_id + 1).unwrap_or(0);
+        let col_id = self
+            .columns
+            .iter()
+            .last()
+            .map(|(column_id, _)| column_id + 1)
+            .unwrap_or(0);
 
         col.summary.table_name = Some(self.name.clone());
         col.summary.id = Some(col_id);

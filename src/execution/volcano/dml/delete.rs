@@ -15,7 +15,7 @@ pub struct Delete {
 }
 
 impl From<(DeleteOperator, BoxedExecutor)> for Delete {
-    fn from((DeleteOperator { table_name }, input): (DeleteOperator, BoxedExecutor)) -> Self {
+    fn from((DeleteOperator { table_name, .. }, input): (DeleteOperator, BoxedExecutor)) -> Self {
         Delete { table_name, input }
     }
 }

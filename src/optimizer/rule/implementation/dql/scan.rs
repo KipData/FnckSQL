@@ -1,13 +1,13 @@
+use crate::optimizer::core::histogram::Histogram;
 use crate::optimizer::core::memo::{Expression, GroupExpression};
-use crate::storage::Transaction;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
+use crate::optimizer::rule::implementation::HistogramLoader;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::{Operator, PhysicalOption};
-use lazy_static::lazy_static;
-use crate::optimizer::core::histogram::Histogram;
-use crate::optimizer::rule::implementation::HistogramLoader;
+use crate::storage::Transaction;
 use crate::types::ColumnId;
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref SCAN_PATTERN: Pattern = {
@@ -27,8 +27,13 @@ impl MatchPattern for SeqScanImplementation {
     }
 }
 
-impl <T: Transaction> ImplementationRule<T> for SeqScanImplementation {
-    fn to_expression(&self, op: &Operator, loader: &HistogramLoader<T>, group_expr: &mut GroupExpression) -> Result<(), OptimizerError> {
+impl<T: Transaction> ImplementationRule<T> for SeqScanImplementation {
+    fn to_expression(
+        &self,
+        op: &Operator,
+        loader: &HistogramLoader<T>,
+        group_expr: &mut GroupExpression,
+    ) -> Result<(), OptimizerError> {
         if let Operator::Scan(scan_op) = op {
             let histograms = loader.load(scan_op.table_name.clone())?;
             let mut cost = None;
@@ -74,7 +79,9 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
 
                 if let Some(binaries) = &index_info.binaries {
                     // FIXME: Only UniqueIndex
-                    if let Some(histogram) = find_histogram(histograms, &index_info.meta.column_ids[0]) {
+                    if let Some(histogram) =
+                        find_histogram(histograms, &index_info.meta.column_ids[0])
+                    {
                         // need to return table query(non-covering index)
                         cost = Some(histogram.collect_count(binaries) * 2);
                     }
@@ -93,7 +100,12 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
     }
 }
 
-fn find_histogram<'a>(histograms: &'a Vec<Histogram>, column_id: &ColumnId) -> Option<&'a Histogram> {
-    histograms.binary_search_by(|histogram| histogram.column_id().cmp(column_id)).ok()
+fn find_histogram<'a>(
+    histograms: &'a Vec<Histogram>,
+    column_id: &ColumnId,
+) -> Option<&'a Histogram> {
+    histograms
+        .binary_search_by(|histogram| histogram.column_id().cmp(column_id))
+        .ok()
         .map(|i| &histograms[i])
 }
