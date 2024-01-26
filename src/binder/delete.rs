@@ -49,6 +49,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     primary_key_column,
                 }),
                 childrens: vec![plan],
+                physical_option: None,
             })
         } else {
             unreachable!("only table")

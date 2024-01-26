@@ -43,7 +43,7 @@ impl<T: Transaction> ImplementationRule<T> for SeqScanImplementation {
             }
 
             group_expr.append_expr(Expression {
-                ops: vec![PhysicalOption::SeqScan],
+                op: PhysicalOption::SeqScan,
                 cost,
             });
 
@@ -88,7 +88,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
                 }
 
                 group_expr.append_expr(Expression {
-                    ops: vec![PhysicalOption::IndexScan(index_info.clone())],
+                    op: PhysicalOption::IndexScan(index_info.clone()),
                     cost,
                 })
             }

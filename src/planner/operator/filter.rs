@@ -16,6 +16,7 @@ impl FilterOperator {
         LogicalPlan {
             operator: Operator::Filter(FilterOperator { predicate, having }),
             childrens: vec![children],
+            physical_option: None,
         }
     }
 }

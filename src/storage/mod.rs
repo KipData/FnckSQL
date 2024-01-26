@@ -4,6 +4,7 @@ mod table_codec;
 use crate::catalog::{CatalogError, ColumnCatalog, TableCatalog, TableMeta, TableName};
 use crate::expression::simplify::ConstantBinary;
 use crate::expression::ScalarExpression;
+use crate::optimizer::core::histogram::HistogramLoader;
 use crate::storage::table_codec::TableCodec;
 use crate::types::errors::TypeError;
 use crate::types::index::{Index, IndexMetaRef};
@@ -96,6 +97,9 @@ pub trait Transaction: Sync + Send + 'static {
     fn table_metas(&self) -> Result<Vec<TableMeta>, StorageError>;
     fn save_meta(&mut self, table_meta: &TableMeta) -> Result<(), StorageError>;
     fn histogram_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError>;
+    fn histogram_loader(&self) -> HistogramLoader<Self>
+    where
+        Self: Sized;
 
     #[allow(async_fn_in_trait)]
     async fn commit(self) -> Result<(), StorageError>;

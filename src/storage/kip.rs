@@ -1,5 +1,6 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::expression::simplify::ConstantBinary;
+use crate::optimizer::core::histogram::{Histogram, HistogramLoader};
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{
     tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, StorageError, Transaction,
@@ -21,6 +22,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct KipStorage {
     pub inner: Arc<storage::KipStorage>,
+    pub(crate) histogram_cache: Arc<ShardingLruCache<TableName, Vec<Histogram>>>,
 }
 
 impl KipStorage {
@@ -28,9 +30,11 @@ impl KipStorage {
         let storage =
             storage::KipStorage::open_with_config(Config::new(path).enable_level_0_memorization())
                 .await?;
+        let histogram_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new()).unwrap());
 
         Ok(KipStorage {
             inner: Arc::new(storage),
+            histogram_cache,
         })
     }
 }
@@ -43,14 +47,16 @@ impl Storage for KipStorage {
 
         Ok(KipTransaction {
             tx,
-            cache: ShardingLruCache::new(8, 2, RandomState::default())?,
+            table_cache: ShardingLruCache::new(8, 2, RandomState::default())?,
+            histogram_cache: self.histogram_cache.clone(),
         })
     }
 }
 
 pub struct KipTransaction {
     tx: mvcc::Transaction,
-    cache: ShardingLruCache<String, TableCatalog>,
+    table_cache: ShardingLruCache<String, TableCatalog>,
+    histogram_cache: Arc<ShardingLruCache<TableName, Vec<Histogram>>>,
 }
 
 impl Transaction for KipTransaction {
@@ -200,7 +206,7 @@ impl Transaction for KipTransaction {
             let column = catalog.get_column_by_id(&col_id).unwrap();
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
-            self.cache.remove(table_name);
+            self.table_cache.remove(table_name);
 
             Ok(col_id)
         } else {
@@ -235,7 +241,7 @@ impl Transaction for KipTransaction {
                 }
                 err => err?,
             }
-            self.cache.remove(table_name);
+            self.table_cache.remove(table_name);
 
             Ok(())
         } else {
@@ -267,7 +273,7 @@ impl Transaction for KipTransaction {
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
         }
-        self.cache.put(table_name.to_string(), table_catalog);
+        self.table_cache.put(table_name.to_string(), table_catalog);
 
         Ok(table_name)
     }
@@ -291,7 +297,7 @@ impl Transaction for KipTransaction {
         self.tx
             .remove(&TableCodec::encode_root_table_key(table_name))?;
 
-        let _ = self.cache.remove(&table_name.to_string());
+        let _ = self.table_cache.remove(&table_name.to_string());
 
         Ok(())
     }
@@ -307,7 +313,7 @@ impl Transaction for KipTransaction {
     }
 
     fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
-        let mut option = self.cache.get(&table_name);
+        let mut option = self.table_cache.get(&table_name);
 
         if option.is_none() {
             // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
@@ -315,7 +321,7 @@ impl Transaction for KipTransaction {
 
             if let Ok(catalog) = TableCatalog::reload(table_name.clone(), columns, indexes) {
                 option = self
-                    .cache
+                    .table_cache
                     .get_or_insert(table_name.to_string(), |_| Ok(catalog))
                     .ok();
             }
@@ -341,6 +347,7 @@ impl Transaction for KipTransaction {
     }
 
     fn save_meta(&mut self, table_meta: &TableMeta) -> Result<(), StorageError> {
+        let _ = self.histogram_cache.remove(&table_meta.table_name);
         let (key, value) = TableCodec::encode_root_table(table_meta)?;
         self.tx.set(key, value);
 
@@ -358,6 +365,13 @@ impl Transaction for KipTransaction {
         }
 
         Ok(vec![])
+    }
+
+    fn histogram_loader(&self) -> HistogramLoader<Self>
+    where
+        Self: Sized,
+    {
+        HistogramLoader::new(self, &self.histogram_cache)
     }
 
     async fn commit(self) -> Result<(), StorageError> {

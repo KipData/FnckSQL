@@ -6,8 +6,10 @@ use std::path::PathBuf;
 use crate::binder::{BindError, Binder, BinderContext};
 use crate::execution::volcano::{build_stream, try_collect};
 use crate::execution::ExecutorError;
+use crate::optimizer::core::histogram::HistogramLoader;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
+use crate::optimizer::rule::implementation::ImplementationRuleImpl;
 use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::optimizer::OptimizerError;
 use crate::parser::parse_sql;
@@ -81,7 +83,7 @@ impl<S: Storage> Database<S> {
     /// Run SQL queries.
     pub async fn run<T: AsRef<str>>(&self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
-        let (plan, _) = Self::build_plan(sql, &transaction)?;
+        let (plan, _) = Self::build_plan::<T, S::TransactionType>(sql, &transaction)?;
 
         Self::run_volcano(transaction, plan).await
     }
@@ -107,8 +109,8 @@ impl<S: Storage> Database<S> {
         })
     }
 
-    pub fn build_plan<T: AsRef<str>>(
-        sql: T,
+    pub fn build_plan<V: AsRef<str>, T: Transaction>(
+        sql: V,
         transaction: &<S as Storage>::TransactionType,
     ) -> Result<(LogicalPlan, Statement), DatabaseError> {
         // parse
@@ -127,13 +129,17 @@ impl<S: Storage> Database<S> {
         let source_plan = binder.bind(&stmts[0])?;
         // println!("source_plan plan: {:#?}", source_plan);
 
-        let best_plan = Self::default_optimizer(source_plan).find_best()?;
+        let best_plan =
+            Self::default_optimizer(source_plan, &transaction.histogram_loader())?.find_best()?;
         // println!("best_plan plan: {:#?}", best_plan);
 
         Ok((best_plan, stmts.remove(0)))
     }
 
-    pub(crate) fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
+    pub(crate) fn default_optimizer<T: Transaction>(
+        source_plan: LogicalPlan,
+        loader: &HistogramLoader<'_, T>,
+    ) -> Result<HepOptimizer, OptimizerError> {
         HepOptimizer::new(source_plan)
             .batch(
                 "Column Pruning".to_string(),
@@ -174,6 +180,36 @@ impl<S: Storage> Database<S> {
                     NormalizationRuleImpl::EliminateLimits,
                 ],
             )
+            .build_memo(
+                loader,
+                &[
+                    // DQL
+                    ImplementationRuleImpl::SimpleAggregate,
+                    ImplementationRuleImpl::GroupByAggregate,
+                    ImplementationRuleImpl::Dummy,
+                    ImplementationRuleImpl::Filter,
+                    ImplementationRuleImpl::HashJoin,
+                    ImplementationRuleImpl::Limit,
+                    ImplementationRuleImpl::Projection,
+                    ImplementationRuleImpl::SeqScan,
+                    ImplementationRuleImpl::IndexScan,
+                    ImplementationRuleImpl::Sort,
+                    ImplementationRuleImpl::Values,
+                    // DML
+                    ImplementationRuleImpl::Analyze,
+                    ImplementationRuleImpl::CopyFromFile,
+                    ImplementationRuleImpl::CopyToFile,
+                    ImplementationRuleImpl::Delete,
+                    ImplementationRuleImpl::Insert,
+                    ImplementationRuleImpl::Update,
+                    // DLL
+                    ImplementationRuleImpl::AddColumn,
+                    ImplementationRuleImpl::CreateTable,
+                    ImplementationRuleImpl::DropColumn,
+                    ImplementationRuleImpl::DropTable,
+                    ImplementationRuleImpl::Truncate,
+                ],
+            )
     }
 }
 
@@ -183,8 +219,9 @@ pub struct DBTransaction<S: Storage> {
 
 impl<S: Storage> DBTransaction<S> {
     pub async fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
-        let (plan, _) =
-            Database::<S>::build_plan(sql, unsafe { self.inner.as_ptr().as_ref().unwrap() })?;
+        let (plan, _) = Database::<S>::build_plan::<T, S::TransactionType>(sql, unsafe {
+            self.inner.as_ptr().as_ref().unwrap()
+        })?;
         let mut stream = build_stream(plan, &self.inner);
 
         Ok(try_collect(&mut stream).await?)

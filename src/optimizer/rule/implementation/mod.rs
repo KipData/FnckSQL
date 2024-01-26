@@ -12,6 +12,7 @@ use crate::optimizer::rule::implementation::ddl::create_table::CreateTableImplem
 use crate::optimizer::rule::implementation::ddl::drop_column::DropColumnImplementation;
 use crate::optimizer::rule::implementation::ddl::drop_table::DropTableImplementation;
 use crate::optimizer::rule::implementation::ddl::truncate::TruncateImplementation;
+use crate::optimizer::rule::implementation::dml::analyze::AnalyzeImplementation;
 use crate::optimizer::rule::implementation::dml::copy_from_file::CopyFromFileImplementation;
 use crate::optimizer::rule::implementation::dml::copy_to_file::CopyToFileImplementation;
 use crate::optimizer::rule::implementation::dml::delete::DeleteImplementation;
@@ -49,6 +50,7 @@ pub enum ImplementationRuleImpl {
     Sort,
     Values,
     // DML
+    Analyze,
     CopyFromFile,
     CopyToFile,
     Delete,
@@ -86,6 +88,7 @@ impl MatchPattern for ImplementationRuleImpl {
             ImplementationRuleImpl::DropColumn => DropColumnImplementation.pattern(),
             ImplementationRuleImpl::DropTable => DropTableImplementation.pattern(),
             ImplementationRuleImpl::Truncate => TruncateImplementation.pattern(),
+            ImplementationRuleImpl::Analyze => AnalyzeImplementation.pattern(),
         }
     }
 }
@@ -160,6 +163,9 @@ impl<T: Transaction> ImplementationRule<T> for ImplementationRuleImpl {
             }
             ImplementationRuleImpl::Truncate => {
                 TruncateImplementation.to_expression(operator, loader, group_expr)?
+            }
+            ImplementationRuleImpl::Analyze => {
+                AnalyzeImplementation.to_expression(operator, loader, group_expr)?
             }
         }
 

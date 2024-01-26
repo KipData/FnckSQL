@@ -35,6 +35,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 columns,
             }),
             childrens: vec![scan_op],
+            physical_option: None,
         };
         Ok(plan)
     }

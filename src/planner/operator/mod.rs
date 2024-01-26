@@ -71,7 +71,7 @@ pub enum Operator {
     CopyToFile(CopyToFileOperator),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum PhysicalOption {
     Dummy,
     SimpleAggregate,
@@ -96,6 +96,7 @@ pub enum PhysicalOption {
     Show,
     CopyFromFile,
     CopyToFile,
+    Analyze,
 }
 
 impl Operator {

@@ -1,3 +1,4 @@
+use crate::optimizer::core::memo::Memo;
 use crate::optimizer::core::opt_expr::OptExprNodeId;
 use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::planner::operator::Operator;
@@ -10,7 +11,7 @@ use std::mem;
 /// HepNodeId is used in optimizer to identify a node.
 pub type HepNodeId = NodeIndex<OptExprNodeId>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HepGraph {
     graph: StableDiGraph<Operator, usize, usize>,
     root_index: HepNodeId,
@@ -24,6 +25,7 @@ impl HepGraph {
             LogicalPlan {
                 operator,
                 childrens,
+                ..
             }: LogicalPlan,
         ) -> HepNodeId {
             let index = graph.add_node(operator);
@@ -163,11 +165,6 @@ impl HepGraph {
         &mut self.graph[node_id]
     }
 
-    // FIXME
-    pub fn to_plan(&self) -> LogicalPlan {
-        self.to_plan_with_index(self.root_index)
-    }
-
     /// If input node is join, we use the edge weight to control the join children order.
     pub fn children_at(&self, id: HepNodeId) -> Box<dyn Iterator<Item = HepNodeId> + '_> {
         Box::new(
@@ -185,27 +182,25 @@ impl HepGraph {
             .map(|edge| edge.target())
     }
 
-    pub fn to_plan_with_index(&self, start_index: HepNodeId) -> LogicalPlan {
-        let mut root_plan = LogicalPlan {
-            operator: self.operator(start_index).clone(),
-            childrens: vec![],
-        };
-
-        self.build_childrens(&mut root_plan, start_index);
-
-        root_plan
+    pub fn to_plan(mut self, memo: Option<&Memo>) -> Option<LogicalPlan> {
+        self.build_childrens(self.root_index, memo)
     }
 
-    fn build_childrens(&self, plan: &mut LogicalPlan, start: HepNodeId) {
-        for child_id in self.children_at(start) {
-            let mut child_plan = LogicalPlan {
-                operator: self.operator(child_id).clone(),
-                childrens: vec![],
-            };
+    fn build_childrens(&mut self, start: HepNodeId, memo: Option<&Memo>) -> Option<LogicalPlan> {
+        let mut childrens = Vec::with_capacity(2);
+        let physical_option = memo.and_then(|memo| memo.cheapest_physical_option(start.index()));
 
-            self.build_childrens(&mut child_plan, child_id);
-            plan.childrens.push(child_plan);
+        for child_id in self.children_at(start).collect_vec() {
+            if let Some(child_plan) = self.build_childrens(child_id, memo) {
+                childrens.push(child_plan);
+            }
         }
+
+        self.graph.remove_node(start).map(|operator| LogicalPlan {
+            operator,
+            childrens,
+            physical_option,
+        })
     }
 }
 
@@ -350,13 +345,9 @@ mod tests {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let graph = HepGraph::new(plan.clone());
 
-        let plan_for_graph = graph.to_plan();
+        let plan_for_graph = graph.to_plan(None).unwrap();
 
         assert_eq!(plan, plan_for_graph);
-
-        let plan_by_index = graph.to_plan_with_index(HepNodeId::new(1));
-
-        assert_eq!(plan.childrens[0], plan_by_index);
 
         Ok(())
     }

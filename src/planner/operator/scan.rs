@@ -54,6 +54,7 @@ impl ScanOperator {
                 limit: (None, None),
             }),
             childrens: vec![],
+            physical_option: None,
         }
     }
 }

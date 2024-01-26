@@ -2,6 +2,7 @@ use crate::catalog::{ColumnCatalog, ColumnRef, TableMeta, TableName};
 use crate::execution::volcano::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
 use crate::optimizer::core::histogram::HistogramBuilder;
+use crate::optimizer::OptimizerError;
 use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
@@ -89,11 +90,15 @@ impl Analyze {
             .join(ts.to_string());
         fs::create_dir_all(&dir_path)?;
 
-        let mut meta = TableMeta::empty(table_name);
+        let mut meta = TableMeta::empty(table_name.clone());
 
         for (column_id, builder) in builders {
             let path = dir_path.join(column_id.unwrap().to_string());
-            let histogram = builder.build(DEFAULT_NUM_OF_BUCKETS)?;
+            let histogram = match builder.build(DEFAULT_NUM_OF_BUCKETS) {
+                Ok(histogram) => histogram,
+                Err(OptimizerError::TooManyBuckets) => continue,
+                err => err?,
+            };
 
             histogram.to_file(&path)?;
 

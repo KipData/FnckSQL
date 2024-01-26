@@ -118,6 +118,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             return Ok(LogicalPlan {
                 operator: Operator::Dummy,
                 childrens: vec![],
+                physical_option: None,
             });
         }
 
@@ -340,6 +341,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         LogicalPlan {
             operator: Operator::Project(ProjectOperator { exprs: select_list }),
             childrens: vec![children],
+            physical_option: None,
         }
     }
 
@@ -350,6 +352,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 limit: None,
             }),
             childrens: vec![children],
+            physical_option: None,
         }
     }
 

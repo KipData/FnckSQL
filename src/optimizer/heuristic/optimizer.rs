@@ -1,14 +1,19 @@
+use crate::optimizer::core::histogram::HistogramLoader;
+use crate::optimizer::core::memo::Memo;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::batch::{HepBatch, HepBatchStrategy};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
+use crate::optimizer::rule::implementation::ImplementationRuleImpl;
 use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::optimizer::OptimizerError;
 use crate::planner::LogicalPlan;
+use crate::storage::Transaction;
 
 pub struct HepOptimizer {
     batches: Vec<HepBatch>,
+    memo: Option<Memo>,
     pub graph: HepGraph,
 }
 
@@ -16,6 +21,7 @@ impl HepOptimizer {
     pub fn new(root: LogicalPlan) -> Self {
         Self {
             batches: vec![],
+            memo: None,
             graph: HepGraph::new(root),
         }
     }
@@ -30,7 +36,17 @@ impl HepOptimizer {
         self
     }
 
-    pub fn find_best(&mut self) -> Result<LogicalPlan, OptimizerError> {
+    pub fn build_memo<T: Transaction>(
+        mut self,
+        loader: &HistogramLoader<'_, T>,
+        implementations: &[ImplementationRuleImpl],
+    ) -> Result<Self, OptimizerError> {
+        self.memo = Some(Memo::new(&self.graph, &loader, implementations)?);
+
+        Ok(self)
+    }
+
+    pub fn find_best(mut self) -> Result<LogicalPlan, OptimizerError> {
         let batches = self.batches.clone();
 
         for batch in batches {
@@ -46,7 +62,7 @@ impl HepOptimizer {
             }
         }
 
-        Ok(self.graph.to_plan())
+        Ok(self.graph.to_plan(None).ok_or(OptimizerError::EmptyPlan)?)
     }
 
     fn apply_batch(

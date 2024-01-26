@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::Bound;
 use std::fs::OpenOptions;
-use std::hash::RandomState;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Arc;
@@ -31,13 +30,13 @@ pub struct HistogramBuilder {
 }
 
 pub struct HistogramLoader<'a, T: Transaction> {
-    cache: ShardingLruCache<TableName, Vec<Histogram>>,
+    cache: &'a ShardingLruCache<TableName, Vec<Histogram>>,
     tx: &'a T,
 }
 
 // Equal depth histogram
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub(crate) struct Histogram {
+pub struct Histogram {
     column_id: ColumnId,
     data_type: LogicalType,
 
@@ -158,10 +157,11 @@ impl HistogramBuilder {
 }
 
 impl<'a, T: Transaction> HistogramLoader<'a, T> {
-    pub fn new(tx: &'a T) -> Result<HistogramLoader<T>, OptimizerError> {
-        let cache = ShardingLruCache::new(128, 16, RandomState::new())?;
-
-        Ok(HistogramLoader { cache, tx })
+    pub fn new(
+        tx: &'a T,
+        cache: &'a ShardingLruCache<TableName, Vec<Histogram>>,
+    ) -> HistogramLoader<'a, T> {
+        HistogramLoader { cache, tx }
     }
 
     pub fn load(&self, table_name: TableName) -> Result<&Vec<Histogram>, OptimizerError> {

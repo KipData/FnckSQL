@@ -9,6 +9,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let plan = LogicalPlan {
             operator: Operator::Show(ShowTablesOperator {}),
             childrens: vec![],
+            physical_option: None,
         };
         Ok(plan)
     }

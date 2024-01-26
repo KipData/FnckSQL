@@ -8,10 +8,11 @@ use crate::optimizer::rule::implementation::ImplementationRuleImpl;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::PhysicalOption;
 use crate::storage::Transaction;
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 pub struct Expression {
-    pub(crate) ops: Vec<PhysicalOption>,
+    pub(crate) op: PhysicalOption,
     pub(crate) cost: Option<usize>,
 }
 
@@ -56,20 +57,33 @@ impl Memo {
 
         Ok(Memo { groups })
     }
+
+    pub(crate) fn cheapest_physical_option(&self, group_index: usize) -> Option<PhysicalOption> {
+        self.groups[group_index]
+            .exprs
+            .iter()
+            .min_by(|expr_1, expr_2| match (expr_1.cost, expr_2.cost) {
+                (Some(cost_1), Some(cost_2)) => cost_1.cmp(&cost_2),
+                (None, Some(_)) => Ordering::Greater,
+                (Some(_), None) => Ordering::Less,
+                (None, None) => Ordering::Equal,
+            })
+            .map(|expr| expr.op.clone())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::binder::{Binder, BinderContext};
     use crate::db::{Database, DatabaseError};
-    use crate::optimizer::core::histogram::HistogramLoader;
     use crate::optimizer::core::memo::Memo;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::graph::HepGraph;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::implementation::ImplementationRuleImpl;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
-    use crate::storage::Storage;
+    use crate::planner::operator::PhysicalOption;
+    use crate::storage::{Storage, Transaction};
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -121,9 +135,19 @@ mod tests {
             ImplementationRuleImpl::IndexScan,
         ];
 
-        let memo = Memo::new(&graph, &HistogramLoader::new(&transaction)?, &rules)?;
+        let memo = Memo::new(&graph, &transaction.histogram_loader(), &rules)?;
+        let best_plan = graph.to_plan(Some(&memo));
+        let exprs = &memo.groups[3];
 
-        println!("{:#?}", memo);
+        assert_eq!(exprs.exprs.len(), 2);
+        assert_eq!(exprs.exprs[0].cost, Some(1000));
+        assert_eq!(exprs.exprs[0].op, PhysicalOption::SeqScan);
+        assert_eq!(exprs.exprs[1].cost, Some(1920));
+        assert!(matches!(exprs.exprs[1].op, PhysicalOption::IndexScan(_)));
+        assert_eq!(
+            best_plan.as_ref().unwrap().childrens[0].childrens[0].childrens[0].physical_option,
+            Some(PhysicalOption::SeqScan)
+        );
 
         Ok(())
     }

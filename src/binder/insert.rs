@@ -86,6 +86,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     is_overwrite,
                 }),
                 childrens: vec![values_plan],
+                physical_option: None,
             })
         } else {
             Err(BindError::InvalidTable(format!(
@@ -103,6 +104,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         LogicalPlan {
             operator: Operator::Values(ValuesOperator { rows, columns }),
             childrens: vec![],
+            physical_option: None,
         }
     }
 }

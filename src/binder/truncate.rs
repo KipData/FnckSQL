@@ -15,6 +15,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let plan = LogicalPlan {
             operator: Operator::Truncate(TruncateOperator { table_name }),
             childrens: vec![],
+            physical_option: None,
         };
         Ok(plan)
     }

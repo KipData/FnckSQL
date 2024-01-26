@@ -24,13 +24,15 @@ use crate::execution::volcano::dql::sort::Sort;
 use crate::execution::volcano::dql::values::Values;
 use crate::execution::volcano::show::show_table::ShowTables;
 use crate::execution::ExecutorError;
-use crate::planner::operator::Operator;
+use crate::planner::operator::{Operator, PhysicalOption};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use std::cell::RefCell;
+use crate::execution::volcano::dql::index_scan::IndexScan;
+use crate::types::index::IndexInfo;
 
 use self::ddl::add_column::AddColumn;
 
@@ -44,6 +46,7 @@ pub fn build_stream<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>)
     let LogicalPlan {
         operator,
         mut childrens,
+        ..
     } = plan;
 
     match operator {
@@ -74,13 +77,11 @@ pub fn build_stream<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>)
             Projection::from((op, input)).execute(transaction)
         }
         Operator::Scan(op) => {
-            SeqScan::from(op).execute(transaction)
-            // Fixme
-            // if op.index_infos.is_empty() {
-            //     SeqScan::from(op).execute(transaction)
-            // } else {
-            //     IndexScan::from(op).execute(transaction)
-            // }
+            if let Some(PhysicalOption::IndexScan(IndexInfo { meta, binaries: Some(binaries) })) = plan.physical_option {
+                IndexScan::from((op, meta, binaries)).execute(transaction)
+            } else {
+                SeqScan::from(op).execute(transaction)
+            }
         }
         Operator::Sort(op) => {
             let input = build_stream(childrens.remove(0), transaction);
