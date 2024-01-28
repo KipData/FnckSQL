@@ -1,9 +1,9 @@
 use itertools::Itertools;
-use kip_sql::db::{Database, DatabaseError};
-use kip_sql::implement_from_tuple;
-use kip_sql::types::tuple::Tuple;
-use kip_sql::types::value::DataValue;
-use kip_sql::types::LogicalType;
+use fnck_sql::db::{Database, DatabaseError};
+use fnck_sql::implement_from_tuple;
+use fnck_sql::types::tuple::Tuple;
+use fnck_sql::types::value::DataValue;
+use fnck_sql::types::LogicalType;
 
 #[derive(Default, Debug, PartialEq)]
 struct MyStruct {

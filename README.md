@@ -1,17 +1,19 @@
 <pre align="center">
 Built by @KipData
 
-██╗  ██╗██╗██████╗ ███████╗ ██████╗ ██╗
-██║ ██╔╝██║██╔══██╗██╔════╝██╔═══██╗██║
-█████╔╝ ██║██████╔╝███████╗██║   ██║██║
-██╔═██╗ ██║██╔═══╝ ╚════██║██║▄▄ ██║██║
-     ██║  ██╗██║██║     ███████║╚██████╔╝███████╗
-     ╚═╝  ╚═╝╚═╝╚═╝     ╚══════╝ ╚══▀▀═╝ ╚══════╝
+
+███████╗███╗   ██╗ ██████╗██╗  ██╗    ███████╗ ██████╗ ██╗     
+██╔════╝████╗  ██║██╔════╝██║ ██╔╝    ██╔════╝██╔═══██╗██║     
+█████╗  ██╔██╗ ██║██║     █████╔╝     ███████╗██║   ██║██║     
+██╔══╝  ██║╚██╗██║██║     ██╔═██╗     ╚════██║██║▄▄ ██║██║     
+██║     ██║ ╚████║╚██████╗██║  ██╗    ███████║╚██████╔╝███████╗
+╚═╝     ╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝    ╚══════╝ ╚══▀▀═╝ ╚══════╝
+
 -----------------------------------
-Embedded SQL DBMS
+🖕
 </pre>
 <h3 align="center">
-    The Lightweight Embedded OLTP Open-source Database
+    Lightweight DBMS
 </h3>
 
 <p align="center">
@@ -29,17 +31,16 @@ Embedded SQL DBMS
   </a>
 </p>
 
-### What is KipSQL
+### What is FnckSQL
 
-KipSQL is designed to allow small Rust projects to reduce external dependencies and get rid of heavy database maintenance, 
-so that the Rust application itself can provide SQL storage capabilities.
+FnckSQL individual developers independently implemented LSM KV-based SQL DBMS out of hobby. This SQL database will prove to you that anyone can write a database (even the core author cannot find a job). If you are also a database-related Enthusiastic, let us give this "beautiful" industry a middle finger🖕.
 
-Welcome to our WebSite, Power By KipSQL: **http://www.kipdata.site/**
+Welcome to our WebSite, Power By FnckSQL: **http://www.kipdata.site/**
 
 ### Quick Started
 Clone the repository
 ``` shell
-git clone https://github.com/KipData/KipSQL.git
+git clone https://github.com/KipData/fncksql.git
 ```
 
 Install rust toolchain first.
@@ -50,7 +51,7 @@ Example
 ```sql
 create table blog (id int primary key, title varchar unique);
 
-insert into blog (id, title) values (0, 'KipSQL'), (1, 'KipDB'), (2, 'KipBlog');
+insert into blog (id, title) values (0, 'FnckSQL'), (1, 'KipDB');
 
 update blog set title = 'KipData' where id = 2;
 
@@ -64,9 +65,9 @@ truncate table blog;
 
 drop table blog;
 ```
-Using KipSQL in code
+Using FnckSQL in code
 ```rust
-let kipsql = Database::with_kipdb("./data").await?;
+let fnck_sql = Database::with_kipdb("./data").await?;
 
 let tupes = db.run("select * from t1").await?;
 ```
@@ -105,18 +106,14 @@ implement_from_tuple!(
   - Codegen on LuaJIT: `features = ["codegen_execute"]`
 - MVCC Transaction
   - Optimistic
-- SQL field options
-  - not null
-  - null
+- Field options
+  - [not] null
   - unique
   - primary key
 - SQL where options
-  - is null
-  - is not null
-  - like
-  - not like
-  - in
-  - not in
+  - is [not] null
+  - [not] like
+  - [not] in
 - Supports index type
   - Unique Index
 - Supports multiple primary key types
@@ -128,7 +125,12 @@ implement_from_tuple!(
   - UInteger
   - Bigint
   - UBigint
+  - Float
+  - Double
   - Varchar
+  - Date
+  - DateTime
+  - Decimal
 - DDL
   - Create
     - [x] Table
@@ -177,7 +179,7 @@ implement_from_tuple!(
 
 ## License
 
-KipSQL uses the [Apache 2.0 license][1] to strike a balance between
+FnckSQL uses the [Apache 2.0 license][1] to strike a balance between
 open contributions and allowing you to use the software however you want.
 
 [1]: <https://github.com/KipData/KipSQL/blob/main/LICENSE>

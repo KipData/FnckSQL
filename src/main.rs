@@ -1,16 +1,18 @@
 use clap::Parser;
-use kip_sql::db::Database;
-use kip_sql::types::tuple::create_table;
+use fnck_sql::db::Database;
+use fnck_sql::types::tuple::create_table;
 use std::error::Error;
 use std::{env, io};
 
 pub(crate) const BANNER: &str = "
-██╗  ██╗██╗██████╗ ███████╗ ██████╗ ██╗
-██║ ██╔╝██║██╔══██╗██╔════╝██╔═══██╗██║
-█████╔╝ ██║██████╔╝███████╗██║   ██║██║
-██╔═██╗ ██║██╔═══╝ ╚════██║██║▄▄ ██║██║
-██║  ██╗██║██║     ███████║╚██████╔╝███████╗
-╚═╝  ╚═╝╚═╝╚═╝     ╚══════╝ ╚══▀▀═╝ ╚══════╝";
+███████╗███╗   ██╗ ██████╗██╗  ██╗    ███████╗ ██████╗ ██╗
+██╔════╝████╗  ██║██╔════╝██║ ██╔╝    ██╔════╝██╔═══██╗██║
+█████╗  ██╔██╗ ██║██║     █████╔╝     ███████╗██║   ██║██║
+██╔══╝  ██║╚██╗██║██║     ██╔═██╗     ╚════██║██║▄▄ ██║██║
+██║     ██║ ╚████║╚██████╗██║  ██╗    ███████║╚██████╔╝███████╗
+╚═╝     ╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝    ╚══════╝ ╚══▀▀═╝ ╚══════╝
+
+";
 
 pub const BLOOM: &str = "
           _ ._  _ , _ ._
@@ -24,7 +26,6 @@ pub const BLOOM: &str = "
 _____________/_ __ \\_____________
 ";
 
-/// KipSQL is a embedded database
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -37,13 +38,14 @@ struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     println!("{} \nVersion: {}\n", BANNER, env!("CARGO_PKG_VERSION"));
-    println!(":) Welcome to the KipSQL, Please input sql.\n");
+    println!(":) Welcome to the FnckSQL🖕\n");
     println!("Tips🔞: ");
     println!("1. input \"quit\" to shutdown");
     println!(
         "2. all data is in the \'{}\' folder in the directory where the application is run",
         args.path
     );
+    println!("If you want to customize the location of the data directory, please add parameters: \"-- --path './knck_sql/data'\"");
     server_run(args.path).await?;
     Ok(())
 }
@@ -52,7 +54,7 @@ async fn server_run(path: String) -> Result<(), Box<dyn Error>> {
     let db = Database::with_kipdb(path).await?;
 
     loop {
-        println!("> 👇👇🏻👇🏼👇🏽👇🏾👇🏿 <");
+        println!("> 🖕🖕🏻🖕🏼🖕🏼🖕🏾🖕🏿 <");
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
 

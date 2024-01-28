@@ -588,13 +588,13 @@ mod test {
     #[tokio::test]
     async fn test_index_iter_pk() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let kipsql = Database::with_kipdb(temp_dir.path()).await?;
+        let fnck_sql = Database::with_kipdb(temp_dir.path()).await?;
 
-        let _ = kipsql.run("create table t1 (a int primary key)").await?;
-        let _ = kipsql
+        let _ = fnck_sql.run("create table t1 (a int primary key)").await?;
+        let _ = fnck_sql
             .run("insert into t1 (a) values (0), (1), (2), (3), (4)")
             .await?;
-        let transaction = kipsql.storage.transaction().await?;
+        let transaction = fnck_sql.storage.transaction().await?;
 
         let table = transaction
             .table(Arc::new("t1".to_string()))
@@ -648,14 +648,14 @@ mod test {
     #[tokio::test]
     async fn test_read_by_index() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let kipsql = Database::with_kipdb(temp_dir.path()).await?;
-        let _ = kipsql
+        let fnck_sql = Database::with_kipdb(temp_dir.path()).await?;
+        let _ = fnck_sql
             .run("create table t1 (a int primary key, b int unique)")
             .await?;
-        let _ = kipsql
+        let _ = fnck_sql
             .run("insert into t1 (a, b) values (0, 0), (1, 1), (2, 2)")
             .await?;
-        let transaction = kipsql.storage.transaction().await.unwrap();
+        let transaction = fnck_sql.storage.transaction().await.unwrap();
 
         let table = transaction
             .table(Arc::new("t1".to_string()))

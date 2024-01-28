@@ -1,4 +1,4 @@
-use kip_sql::db::{Database, DatabaseError};
+use fnck_sql::db::{Database, DatabaseError};
 
 #[tokio::main]
 async fn main() -> Result<(), DatabaseError> {

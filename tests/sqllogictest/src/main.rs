@@ -1,4 +1,4 @@
-use kip_sql::db::Database;
+use fnck_sql::db::Database;
 use sqllogictest::Runner;
 use sqllogictest_test::KipSQL;
 use std::path::Path;

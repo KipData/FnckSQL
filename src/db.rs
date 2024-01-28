@@ -313,10 +313,10 @@ mod test {
     #[tokio::test]
     async fn test_transaction_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let kipsql = Database::with_kipdb(temp_dir.path()).await?;
+        let fnck_sql = Database::with_kipdb(temp_dir.path()).await?;
 
-        let mut tx_1 = kipsql.new_transaction().await?;
-        let mut tx_2 = kipsql.new_transaction().await?;
+        let mut tx_1 = fnck_sql.new_transaction().await?;
+        let mut tx_2 = fnck_sql.new_transaction().await?;
 
         let _ = tx_1
             .run("create table t1 (a int primary key, b int)")
@@ -407,30 +407,30 @@ mod test {
     async fn _test_crud_sql(query_execute: QueryExecute) -> Result<Vec<Vec<Tuple>>, DatabaseError> {
         let mut results = Vec::new();
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let kipsql = Database::with_kipdb(temp_dir.path()).await?;
+        let fnck_sql = Database::with_kipdb(temp_dir.path()).await?;
 
-        let _ = kipsql.run_on_query("create table t1 (a int primary key, b int unique null, k int, z varchar unique null)", query_execute).await?;
-        let _ = kipsql
+        let _ = fnck_sql.run_on_query("create table t1 (a int primary key, b int unique null, k int, z varchar unique null)", query_execute).await?;
+        let _ = fnck_sql
             .run_on_query(
                 "create table t2 (c int primary key, d int unsigned null, e datetime)",
                 query_execute,
             )
             .await?;
-        let _ = kipsql.run_on_query("insert into t1 (a, b, k, z) values (-99, 1, 1, 'k'), (-1, 2, 2, 'i'), (5, 3, 2, 'p'), (29, 4, 2, 'db')", query_execute).await?;
-        let _ = kipsql.run_on_query("insert into t2 (d, c, e) values (2, 1, '2021-05-20 21:00:00'), (3, 4, '2023-09-10 00:00:00')", query_execute).await?;
-        let _ = kipsql
+        let _ = fnck_sql.run_on_query("insert into t1 (a, b, k, z) values (-99, 1, 1, 'k'), (-1, 2, 2, 'i'), (5, 3, 2, 'p'), (29, 4, 2, 'db')", query_execute).await?;
+        let _ = fnck_sql.run_on_query("insert into t2 (d, c, e) values (2, 1, '2021-05-20 21:00:00'), (3, 4, '2023-09-10 00:00:00')", query_execute).await?;
+        let _ = fnck_sql
             .run_on_query(
                 "create table t3 (a int primary key, b decimal(4,2))",
                 query_execute,
             )
             .await?;
-        let _ = kipsql
+        let _ = fnck_sql
             .run_on_query(
                 "insert into t3 (a, b) values (1, 1111), (2, 2.01), (3, 3.00)",
                 query_execute,
             )
             .await?;
-        let _ = kipsql
+        let _ = fnck_sql
             .run_on_query(
                 "insert into t3 (a, b) values (4, 4444), (5, 5222), (6, 1.00)",
                 query_execute,
@@ -438,159 +438,159 @@ mod test {
             .await?;
 
         println!("show tables:");
-        let tuples_show_tables = kipsql.run_on_query("show tables", query_execute).await?;
+        let tuples_show_tables = fnck_sql.run_on_query("show tables", query_execute).await?;
         println!("{}", create_table(&tuples_show_tables));
         results.push(tuples_show_tables);
 
         println!("full t1:");
-        let tuples_full_fields_t1 = kipsql
+        let tuples_full_fields_t1 = fnck_sql
             .run_on_query("select * from t1", query_execute)
             .await?;
         println!("{}", create_table(&tuples_full_fields_t1));
         results.push(tuples_full_fields_t1);
 
         println!("full t2:");
-        let tuples_full_fields_t2 = kipsql
+        let tuples_full_fields_t2 = fnck_sql
             .run_on_query("select * from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_full_fields_t2));
         results.push(tuples_full_fields_t2);
 
         println!("projection_and_filter:");
-        let tuples_projection_and_filter = kipsql
+        let tuples_projection_and_filter = fnck_sql
             .run_on_query("select a from t1 where b > 1", query_execute)
             .await?;
         println!("{}", create_table(&tuples_projection_and_filter));
         results.push(tuples_projection_and_filter);
 
         println!("projection_and_sort:");
-        let tuples_projection_and_sort = kipsql
+        let tuples_projection_and_sort = fnck_sql
             .run_on_query("select * from t1 order by a, b", query_execute)
             .await?;
         println!("{}", create_table(&tuples_projection_and_sort));
         results.push(tuples_projection_and_sort);
 
         println!("like t1 1:");
-        let tuples_like_1_t1 = kipsql
+        let tuples_like_1_t1 = fnck_sql
             .run_on_query("select * from t1 where z like '%k'", query_execute)
             .await?;
         println!("{}", create_table(&tuples_like_1_t1));
         results.push(tuples_like_1_t1);
 
         println!("like t1 2:");
-        let tuples_like_2_t1 = kipsql
+        let tuples_like_2_t1 = fnck_sql
             .run_on_query("select * from t1 where z like '_b'", query_execute)
             .await?;
         println!("{}", create_table(&tuples_like_2_t1));
         results.push(tuples_like_2_t1);
 
         println!("not like t1:");
-        let tuples_not_like_t1 = kipsql
+        let tuples_not_like_t1 = fnck_sql
             .run_on_query("select * from t1 where z not like '_b'", query_execute)
             .await?;
         println!("{}", create_table(&tuples_not_like_t1));
         results.push(tuples_not_like_t1);
 
         println!("in t1:");
-        let tuples_in_t1 = kipsql
+        let tuples_in_t1 = fnck_sql
             .run_on_query("select * from t1 where a in (5, 29)", query_execute)
             .await?;
         println!("{}", create_table(&tuples_in_t1));
         results.push(tuples_in_t1);
 
         println!("not in t1:");
-        let tuples_not_in_t1 = kipsql
+        let tuples_not_in_t1 = fnck_sql
             .run_on_query("select * from t1 where a not in (5, 29)", query_execute)
             .await?;
         println!("{}", create_table(&tuples_not_in_t1));
         results.push(tuples_not_in_t1);
 
         println!("limit:");
-        let tuples_limit = kipsql
+        let tuples_limit = fnck_sql
             .run_on_query("select * from t1 limit 1 offset 1", query_execute)
             .await?;
         println!("{}", create_table(&tuples_limit));
         results.push(tuples_limit);
 
         println!("inner join:");
-        let tuples_inner_join = kipsql
+        let tuples_inner_join = fnck_sql
             .run_on_query("select * from t1 inner join t2 on a = c", query_execute)
             .await?;
         println!("{}", create_table(&tuples_inner_join));
         results.push(tuples_inner_join);
 
         println!("left join:");
-        let tuples_left_join = kipsql
+        let tuples_left_join = fnck_sql
             .run_on_query("select * from t1 left join t2 on a = c", query_execute)
             .await?;
         println!("{}", create_table(&tuples_left_join));
         results.push(tuples_left_join);
 
         println!("right join:");
-        let tuples_right_join = kipsql
+        let tuples_right_join = fnck_sql
             .run_on_query("select * from t1 right join t2 on a = c", query_execute)
             .await?;
         println!("{}", create_table(&tuples_right_join));
         results.push(tuples_right_join);
 
         println!("full join:");
-        let tuples_full_join = kipsql
+        let tuples_full_join = fnck_sql
             .run_on_query("select * from t1 full join t2 on a = c", query_execute)
             .await?;
         println!("{}", create_table(&tuples_full_join));
         results.push(tuples_full_join);
 
         println!("count agg:");
-        let tuples_count_agg = kipsql
+        let tuples_count_agg = fnck_sql
             .run_on_query("select count(d) from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_count_agg));
         results.push(tuples_count_agg);
 
         println!("count wildcard agg:");
-        let tuples_count_wildcard_agg = kipsql
+        let tuples_count_wildcard_agg = fnck_sql
             .run_on_query("select count(*) from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_count_wildcard_agg));
         results.push(tuples_count_wildcard_agg);
 
         println!("count distinct agg:");
-        let tuples_count_distinct_agg = kipsql
+        let tuples_count_distinct_agg = fnck_sql
             .run_on_query("select count(distinct d) from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_count_distinct_agg));
         results.push(tuples_count_distinct_agg);
 
         println!("sum agg:");
-        let tuples_sum_agg = kipsql
+        let tuples_sum_agg = fnck_sql
             .run_on_query("select sum(d) from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_sum_agg));
         results.push(tuples_sum_agg);
 
         println!("sum distinct agg:");
-        let tuples_sum_distinct_agg = kipsql
+        let tuples_sum_distinct_agg = fnck_sql
             .run_on_query("select sum(distinct d) from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_sum_distinct_agg));
         results.push(tuples_sum_distinct_agg);
 
         println!("avg agg:");
-        let tuples_avg_agg = kipsql
+        let tuples_avg_agg = fnck_sql
             .run_on_query("select avg(d) from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_avg_agg));
         results.push(tuples_avg_agg);
 
         println!("min_max agg:");
-        let tuples_min_max_agg = kipsql
+        let tuples_min_max_agg = fnck_sql
             .run_on_query("select min(d), max(d) from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_min_max_agg));
         results.push(tuples_min_max_agg);
 
         println!("group agg:");
-        let tuples_group_agg = kipsql
+        let tuples_group_agg = fnck_sql
             .run_on_query(
                 "select c, max(d) from t2 group by c having c = 1",
                 query_execute,
@@ -599,14 +599,14 @@ mod test {
         println!("{}", create_table(&tuples_group_agg));
 
         println!("alias:");
-        let tuples_group_agg = kipsql
+        let tuples_group_agg = fnck_sql
             .run_on_query("select c as o from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_group_agg));
         results.push(tuples_group_agg);
 
         println!("alias agg:");
-        let tuples_group_agg = kipsql
+        let tuples_group_agg = fnck_sql
             .run_on_query(
                 "select c, max(d) as max_d from t2 group by c having c = 1",
                 query_execute,
@@ -616,14 +616,14 @@ mod test {
         results.push(tuples_group_agg);
 
         println!("time max:");
-        let tuples_time_max = kipsql
+        let tuples_time_max = fnck_sql
             .run_on_query("select max(e) as max_time from t2", query_execute)
             .await?;
         println!("{}", create_table(&tuples_time_max));
         results.push(tuples_time_max);
 
         println!("time where:");
-        let tuples_time_where_t2 = kipsql
+        let tuples_time_where_t2 = fnck_sql
             .run_on_query(
                 "select (c + 1) from t2 where e > '2021-05-20'",
                 query_execute,
@@ -632,45 +632,45 @@ mod test {
         println!("{}", create_table(&tuples_time_where_t2));
         results.push(tuples_time_where_t2);
 
-        assert!(kipsql
+        assert!(fnck_sql
             .run_on_query("select max(d) from t2 group by c", query_execute)
             .await
             .is_err());
 
         println!("distinct t1:");
-        let tuples_distinct_t1 = kipsql
+        let tuples_distinct_t1 = fnck_sql
             .run_on_query("select distinct b, k from t1", query_execute)
             .await?;
         println!("{}", create_table(&tuples_distinct_t1));
         results.push(tuples_distinct_t1);
 
         println!("update t1 with filter:");
-        let _ = kipsql
+        let _ = fnck_sql
             .run_on_query("update t1 set b = 0 where b = 1", query_execute)
             .await?;
         println!("after t1:");
 
-        let update_after_full_t1 = kipsql
+        let update_after_full_t1 = fnck_sql
             .run_on_query("select * from t1", query_execute)
             .await?;
         println!("{}", create_table(&update_after_full_t1));
         results.push(update_after_full_t1);
 
         println!("insert overwrite t1:");
-        let _ = kipsql
+        let _ = fnck_sql
             .run_on_query(
                 "insert overwrite t1 (a, b, k) values (-99, 1, 0)",
                 query_execute,
             )
             .await?;
         println!("after t1:");
-        let insert_overwrite_after_full_t1 = kipsql
+        let insert_overwrite_after_full_t1 = fnck_sql
             .run_on_query("select * from t1", query_execute)
             .await?;
         println!("{}", create_table(&insert_overwrite_after_full_t1));
         results.push(insert_overwrite_after_full_t1);
 
-        assert!(kipsql
+        assert!(fnck_sql
             .run_on_query(
                 "insert overwrite t1 (a, b, k) values (-1, 1, 0)",
                 query_execute
@@ -679,24 +679,24 @@ mod test {
             .is_err());
 
         println!("delete t1 with filter:");
-        let _ = kipsql
+        let _ = fnck_sql
             .run_on_query("delete from t1 where b = 0", query_execute)
             .await?;
         println!("after t1:");
-        let delete_after_full_t1 = kipsql
+        let delete_after_full_t1 = fnck_sql
             .run_on_query("select * from t1", query_execute)
             .await?;
         println!("{}", create_table(&delete_after_full_t1));
         results.push(delete_after_full_t1);
 
         println!("trun_on_querycate t1:");
-        let _ = kipsql.run_on_query("truncate t1", query_execute).await?;
+        let _ = fnck_sql.run_on_query("truncate t1", query_execute).await?;
 
         println!("drop t1:");
-        let _ = kipsql.run_on_query("drop table t1", query_execute).await?;
+        let _ = fnck_sql.run_on_query("drop table t1", query_execute).await?;
 
         println!("decimal:");
-        let tuples_decimal = kipsql
+        let tuples_decimal = fnck_sql
             .run_on_query("select * from t3", query_execute)
             .await?;
         println!("{}", create_table(&tuples_decimal));
