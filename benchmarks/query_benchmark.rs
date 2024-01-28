@@ -1,10 +1,10 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use indicatif::{ProgressBar, ProgressStyle};
-use itertools::Itertools;
 use fnck_sql::db::{Database, DatabaseError};
 use fnck_sql::execution::volcano;
 use fnck_sql::storage::kip::KipStorage;
 use fnck_sql::storage::Storage;
+use indicatif::{ProgressBar, ProgressStyle};
+use itertools::Itertools;
 use sqlite::Error;
 use std::cell::RefCell;
 use std::fs;
@@ -17,7 +17,9 @@ const QUERY_BENCH_SQLITE_PATH: &'static str = "./sqlite_bench";
 const TABLE_ROW_NUM: u64 = 2_00_000;
 
 async fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
-    let database = Database::with_kipdb(QUERY_BENCH_FNCK_SQL_PATH).await.unwrap();
+    let database = Database::with_kipdb(QUERY_BENCH_FNCK_SQL_PATH)
+        .await
+        .unwrap();
     database
         .run("create table t1 (c1 int primary key, c2 int)")
         .await?;

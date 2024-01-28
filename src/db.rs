@@ -693,7 +693,9 @@ mod test {
         let _ = fnck_sql.run_on_query("truncate t1", query_execute).await?;
 
         println!("drop t1:");
-        let _ = fnck_sql.run_on_query("drop table t1", query_execute).await?;
+        let _ = fnck_sql
+            .run_on_query("drop table t1", query_execute)
+            .await?;
 
         println!("decimal:");
         let tuples_decimal = fnck_sql

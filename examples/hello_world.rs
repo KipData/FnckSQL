@@ -1,9 +1,9 @@
-use itertools::Itertools;
 use fnck_sql::db::{Database, DatabaseError};
 use fnck_sql::implement_from_tuple;
 use fnck_sql::types::tuple::Tuple;
 use fnck_sql::types::value::DataValue;
 use fnck_sql::types::LogicalType;
+use itertools::Itertools;
 
 #[derive(Default, Debug, PartialEq)]
 struct MyStruct {
