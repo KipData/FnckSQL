@@ -40,7 +40,7 @@ Welcome to our WebSite, Power By FnckSQL: **http://www.kipdata.site/**
 ### Quick Started
 Clone the repository
 ``` shell
-git clone https://github.com/KipData/fncksql.git
+git clone https://github.com/KipData/FnckSQL.git
 ```
 
 Install rust toolchain first.
