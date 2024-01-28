@@ -11,7 +11,7 @@ macro_rules! single_mapping {
             fn to_expression(
                 &self,
                 _: &Operator,
-                _: &HistogramLoader<'_, T>,
+                _: &ColumnMetaLoader<'_, T>,
                 group_expr: &mut GroupExpression,
             ) -> Result<(), OptimizerError> {
                 //TODO: CostModel

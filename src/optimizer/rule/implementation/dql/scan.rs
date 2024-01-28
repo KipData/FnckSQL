@@ -1,8 +1,7 @@
-use crate::optimizer::core::histogram::Histogram;
+use crate::optimizer::core::column_meta::{ColumnMeta, ColumnMetaLoader};
 use crate::optimizer::core::memo::{Expression, GroupExpression};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
-use crate::optimizer::rule::implementation::HistogramLoader;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::storage::Transaction;
@@ -31,15 +30,15 @@ impl<T: Transaction> ImplementationRule<T> for SeqScanImplementation {
     fn to_expression(
         &self,
         op: &Operator,
-        loader: &HistogramLoader<T>,
+        loader: &ColumnMetaLoader<T>,
         group_expr: &mut GroupExpression,
     ) -> Result<(), OptimizerError> {
         if let Operator::Scan(scan_op) = op {
-            let histograms = loader.load(scan_op.table_name.clone())?;
+            let column_metas = loader.load(scan_op.table_name.clone())?;
             let mut cost = None;
 
-            if let Some(histogram) = find_histogram(histograms, &scan_op.primary_key) {
-                cost = Some(histogram.values_len());
+            if let Some(column_meta) = find_column_meta(column_metas, &scan_op.primary_key) {
+                cost = Some(column_meta.histogram().values_len());
             }
 
             group_expr.append_expr(Expression {
@@ -66,7 +65,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
     fn to_expression(
         &self,
         op: &Operator,
-        loader: &HistogramLoader<'_, T>,
+        loader: &ColumnMetaLoader<'_, T>,
         group_expr: &mut GroupExpression,
     ) -> Result<(), OptimizerError> {
         if let Operator::Scan(scan_op) = op {
@@ -80,7 +79,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
                 if let Some(binaries) = &index_info.binaries {
                     // FIXME: Only UniqueIndex
                     if let Some(histogram) =
-                        find_histogram(histograms, &index_info.meta.column_ids[0])
+                        find_column_meta(histograms, &index_info.meta.column_ids[0])
                     {
                         // need to return table query(non-covering index)
                         cost = Some(histogram.collect_count(binaries) * 2);
@@ -100,12 +99,13 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
     }
 }
 
-fn find_histogram<'a>(
-    histograms: &'a Vec<Histogram>,
+fn find_column_meta<'a>(
+    column_metas: &'a Vec<ColumnMeta>,
     column_id: &ColumnId,
-) -> Option<&'a Histogram> {
-    histograms
-        .binary_search_by(|histogram| histogram.column_id().cmp(column_id))
+) -> Option<&'a ColumnMeta> {
+    assert!(column_metas.is_sorted_by_key(ColumnMeta::column_id));
+    column_metas
+        .binary_search_by(|column_meta| column_meta.column_id().cmp(column_id))
         .ok()
-        .map(|i| &histograms[i])
+        .map(|i| &column_metas[i])
 }

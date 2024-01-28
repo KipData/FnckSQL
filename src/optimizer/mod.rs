@@ -7,7 +7,6 @@ use kip_db::KernelError;
 pub mod core;
 pub mod heuristic;
 pub mod rule;
-pub mod utils;
 
 #[derive(thiserror::Error, Debug)]
 pub enum OptimizerError {

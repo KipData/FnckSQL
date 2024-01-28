@@ -1,12 +1,12 @@
 use crate::execution::volcano::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
+use crate::expression::simplify::ConstantBinary;
 use crate::planner::operator::scan::ScanOperator;
 use crate::storage::{Iter, Transaction};
 use crate::types::index::IndexMetaRef;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
 use std::cell::RefCell;
-use crate::expression::simplify::ConstantBinary;
 
 pub(crate) struct IndexScan {
     op: ScanOperator,
@@ -16,7 +16,11 @@ pub(crate) struct IndexScan {
 
 impl From<(ScanOperator, IndexMetaRef, Vec<ConstantBinary>)> for IndexScan {
     fn from((op, index_by, binaries): (ScanOperator, IndexMetaRef, Vec<ConstantBinary>)) -> Self {
-        IndexScan { op, index_by, binaries }
+        IndexScan {
+            op,
+            index_by,
+            binaries,
+        }
     }
 }
 
@@ -35,7 +39,8 @@ impl IndexScan {
             limit,
             ..
         } = self.op;
-        let mut iter = transaction.read_by_index(table_name, limit, columns, self.index_by, self.binaries)?;
+        let mut iter =
+            transaction.read_by_index(table_name, limit, columns, self.index_by, self.binaries)?;
 
         while let Some(tuple) = iter.next_tuple()? {
             yield tuple;

@@ -330,7 +330,7 @@ mod tests {
     fn test_root_catalog() {
         let table_catalog = build_table_codec();
         let (_, bytes) = TableCodec::encode_root_table(&TableMeta {
-            histogram_paths: vec![],
+            colum_meta_paths: vec![],
             table_name: table_catalog.name.clone(),
         })
         .unwrap();
@@ -338,7 +338,7 @@ mod tests {
         let table_meta = TableCodec::decode_root_table(&bytes).unwrap();
 
         assert_eq!(table_meta.table_name.as_str(), table_catalog.name.as_str());
-        assert!(table_meta.histogram_paths.is_empty());
+        assert!(table_meta.colum_meta_paths.is_empty());
     }
 
     #[test]

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::binder::{BindError, Binder, BinderContext};
 use crate::execution::volcano::{build_stream, try_collect};
 use crate::execution::ExecutorError;
-use crate::optimizer::core::histogram::HistogramLoader;
+use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
@@ -130,7 +130,7 @@ impl<S: Storage> Database<S> {
         // println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan =
-            Self::default_optimizer(source_plan, &transaction.histogram_loader())?.find_best()?;
+            Self::default_optimizer(source_plan, &transaction.meta_loader())?.find_best()?;
         // println!("best_plan plan: {:#?}", best_plan);
 
         Ok((best_plan, stmts.remove(0)))
@@ -138,7 +138,7 @@ impl<S: Storage> Database<S> {
 
     pub(crate) fn default_optimizer<T: Transaction>(
         source_plan: LogicalPlan,
-        loader: &HistogramLoader<'_, T>,
+        loader: &ColumnMetaLoader<'_, T>,
     ) -> Result<HepOptimizer, OptimizerError> {
         HepOptimizer::new(source_plan)
             .batch(

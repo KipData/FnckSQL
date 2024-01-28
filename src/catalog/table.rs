@@ -19,7 +19,7 @@ pub struct TableCatalog {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TableMeta {
-    pub(crate) histogram_paths: Vec<String>,
+    pub(crate) colum_meta_paths: Vec<String>,
     pub(crate) table_name: TableName,
 }
 
@@ -135,7 +135,7 @@ impl TableCatalog {
 impl TableMeta {
     pub(crate) fn empty(table_name: TableName) -> Self {
         TableMeta {
-            histogram_paths: vec![],
+            colum_meta_paths: vec![],
             table_name,
         }
     }

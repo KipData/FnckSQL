@@ -33,7 +33,7 @@ impl ShowTables {
 
         for TableMeta {
             table_name,
-            histogram_paths,
+            colum_meta_paths: histogram_paths,
         } in metas
         {
             let columns: Vec<ColumnRef> = vec![

@@ -8,11 +8,11 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::{fmt, mem};
+use std::{cmp, fmt, mem};
 
 use crate::types::errors::TypeError;
 use ordered_float::OrderedFloat;
-use rust_decimal::prelude::FromPrimitive;
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 
 use super::LogicalType;
@@ -606,6 +606,7 @@ impl DataValue {
             },
             DataValue::Float64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(
@@ -687,6 +688,7 @@ impl DataValue {
                 }
                 LogicalType::Integer => Ok(DataValue::Int32(value)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
+                LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
@@ -710,6 +712,8 @@ impl DataValue {
                     Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
                 }
                 LogicalType::Bigint => Ok(DataValue::Int64(value)),
+                LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
+                LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v as f64))),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -762,6 +766,7 @@ impl DataValue {
                 LogicalType::UInteger => Ok(DataValue::UInt32(value)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
+                LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
@@ -775,6 +780,8 @@ impl DataValue {
             DataValue::UInt64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
                 LogicalType::UBigint => Ok(DataValue::UInt64(value)),
+                LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
+                LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v as f64))),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -880,11 +887,38 @@ impl DataValue {
             },
             DataValue::Decimal(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Float => Ok(DataValue::Float32(value.and_then(|v| v.to_f32()))),
+                LogicalType::Double => Ok(DataValue::Float64(value.and_then(|v| v.to_f64()))),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(value)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 _ => Err(TypeError::CastFail),
             },
         }
+    }
+
+    pub fn common_prefix_length(&self, target: &DataValue) -> Option<usize> {
+        if self.is_null() && target.is_null() {
+            return Some(0);
+        }
+        if self.is_null() || target.is_null() {
+            return None;
+        }
+
+        if let (DataValue::Utf8(Some(v1)), DataValue::Utf8(Some(v2))) = (self, target) {
+            let min_len = cmp::min(v1.len(), v2.len());
+
+            let mut v1_iter = v1.get(0..min_len).unwrap().chars();
+            let mut v2_iter = v2.get(0..min_len).unwrap().chars();
+
+            for i in 0..min_len {
+                if v1_iter.next() != v2_iter.next() {
+                    return Some(i);
+                }
+            }
+
+            return Some(min_len);
+        }
+        Some(0)
     }
 
     fn decimal_round_i(option: &Option<u8>, decimal: &mut Decimal) {

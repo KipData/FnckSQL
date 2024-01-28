@@ -1,4 +1,4 @@
-use crate::optimizer::core::histogram::HistogramLoader;
+use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::GroupExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
@@ -19,7 +19,7 @@ pub trait ImplementationRule<T: Transaction>: MatchPattern {
     fn to_expression(
         &self,
         op: &Operator,
-        loader: &HistogramLoader<T>,
+        loader: &ColumnMetaLoader<T>,
         group_expr: &mut GroupExpression,
     ) -> Result<(), OptimizerError>;
 }

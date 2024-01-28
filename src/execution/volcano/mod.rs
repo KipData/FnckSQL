@@ -16,6 +16,7 @@ use crate::execution::volcano::dql::aggregate::hash_agg::HashAggExecutor;
 use crate::execution::volcano::dql::aggregate::simple_agg::SimpleAggExecutor;
 use crate::execution::volcano::dql::dummy::Dummy;
 use crate::execution::volcano::dql::filter::Filter;
+use crate::execution::volcano::dql::index_scan::IndexScan;
 use crate::execution::volcano::dql::join::hash_join::HashJoin;
 use crate::execution::volcano::dql::limit::Limit;
 use crate::execution::volcano::dql::projection::Projection;
@@ -27,12 +28,11 @@ use crate::execution::ExecutorError;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
+use crate::types::index::IndexInfo;
 use crate::types::tuple::Tuple;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use std::cell::RefCell;
-use crate::execution::volcano::dql::index_scan::IndexScan;
-use crate::types::index::IndexInfo;
 
 use self::ddl::add_column::AddColumn;
 
@@ -77,7 +77,11 @@ pub fn build_stream<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>)
             Projection::from((op, input)).execute(transaction)
         }
         Operator::Scan(op) => {
-            if let Some(PhysicalOption::IndexScan(IndexInfo { meta, binaries: Some(binaries) })) = plan.physical_option {
+            if let Some(PhysicalOption::IndexScan(IndexInfo {
+                meta,
+                binaries: Some(binaries),
+            })) = plan.physical_option
+            {
                 IndexScan::from((op, meta, binaries)).execute(transaction)
             } else {
                 SeqScan::from(op).execute(transaction)

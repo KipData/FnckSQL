@@ -4,6 +4,7 @@
 #![feature(coroutines)]
 #![feature(iterator_try_collect)]
 #![feature(slice_pattern)]
+#![feature(is_sorted)]
 extern crate core;
 pub mod binder;
 pub mod catalog;

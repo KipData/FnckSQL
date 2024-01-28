@@ -1,4 +1,4 @@
-use crate::optimizer::core::histogram::HistogramLoader;
+use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::Memo;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
@@ -38,7 +38,7 @@ impl HepOptimizer {
 
     pub fn build_memo<T: Transaction>(
         mut self,
-        loader: &HistogramLoader<'_, T>,
+        loader: &ColumnMetaLoader<'_, T>,
         implementations: &[ImplementationRuleImpl],
     ) -> Result<Self, OptimizerError> {
         self.memo = Some(Memo::new(&self.graph, &loader, implementations)?);

@@ -1,7 +1,7 @@
+use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::{Expression, GroupExpression};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
-use crate::optimizer::rule::implementation::HistogramLoader;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::single_mapping;

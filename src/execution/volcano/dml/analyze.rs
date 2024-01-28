@@ -1,6 +1,7 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableMeta, TableName};
 use crate::execution::volcano::{BoxedExecutor, Executor};
 use crate::execution::ExecutorError;
+use crate::optimizer::core::column_meta::ColumnMeta;
 use crate::optimizer::core::histogram::HistogramBuilder;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::analyze::AnalyzeOperator;
@@ -94,23 +95,23 @@ impl Analyze {
 
         for (column_id, builder) in builders {
             let path = dir_path.join(column_id.unwrap().to_string());
-            let histogram = match builder.build(DEFAULT_NUM_OF_BUCKETS) {
-                Ok(histogram) => histogram,
+            let (histogram, sketch) = match builder.build(DEFAULT_NUM_OF_BUCKETS) {
+                Ok(build) => build,
                 Err(OptimizerError::TooManyBuckets) => continue,
                 err => err?,
             };
 
-            histogram.to_file(&path)?;
+            ColumnMeta::new(histogram, sketch).to_file(&path)?;
 
-            meta.histogram_paths.push(path.to_string_lossy().into());
+            meta.colum_meta_paths.push(path.to_string_lossy().into());
         }
-        transaction.save_meta(&meta)?;
+        transaction.save_table_meta(&meta)?;
 
         let columns: Vec<ColumnRef> = vec![Arc::new(ColumnCatalog::new_dummy(
             "HISTOGRAM_PATH".to_string(),
         ))];
         let values = meta
-            .histogram_paths
+            .colum_meta_paths
             .into_iter()
             .map(|path| Arc::new(DataValue::Utf8(Some(path))))
             .collect_vec();

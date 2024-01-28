@@ -3,7 +3,7 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 pub(crate) mod marcos;
 
-use crate::optimizer::core::histogram::HistogramLoader;
+use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::GroupExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
@@ -97,7 +97,7 @@ impl<T: Transaction> ImplementationRule<T> for ImplementationRuleImpl {
     fn to_expression(
         &self,
         operator: &Operator,
-        loader: &HistogramLoader<'_, T>,
+        loader: &ColumnMetaLoader<'_, T>,
         group_expr: &mut GroupExpression,
     ) -> Result<(), OptimizerError> {
         match self {
