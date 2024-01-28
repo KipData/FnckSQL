@@ -33,6 +33,7 @@ pub struct Histogram {
     values_len: usize,
 
     buckets: Vec<Bucket>,
+    // TODO: How to use?
     // Correlation is the statistical correlation between physical row ordering and logical ordering of
     // the column values
     correlation: f64,

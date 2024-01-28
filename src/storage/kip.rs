@@ -354,7 +354,7 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn histogram_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError> {
+    fn column_meta_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError> {
         if let Some(bytes) = self
             .tx
             .get(&TableCodec::encode_root_table_key(table_name))?

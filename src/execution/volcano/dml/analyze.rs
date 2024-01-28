@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_NUM_OF_BUCKETS: usize = 100;
-const DEFAULT_HISTOGRAM_PATH: &'static str = "kipsql_histograms";
+const DEFAULT_COLUMN_METAS_PATH: &'static str = "kipsql_column_metas";
 
 pub struct Analyze {
     table_name: TableName,
@@ -86,7 +86,7 @@ impl Analyze {
             .as_secs();
         let dir_path = dirs::config_dir()
             .expect("Your system does not have a Config directory!")
-            .join(DEFAULT_HISTOGRAM_PATH)
+            .join(DEFAULT_COLUMN_METAS_PATH)
             .join(table_name.as_str())
             .join(ts.to_string());
         fs::create_dir_all(&dir_path)?;
@@ -108,7 +108,7 @@ impl Analyze {
         transaction.save_table_meta(&meta)?;
 
         let columns: Vec<ColumnRef> = vec![Arc::new(ColumnCatalog::new_dummy(
-            "HISTOGRAM_PATH".to_string(),
+            "COLUMN_META_PATH".to_string(),
         ))];
         let values = meta
             .colum_meta_paths

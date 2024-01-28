@@ -96,7 +96,7 @@ pub trait Transaction: Sync + Send + 'static {
     fn table(&self, table_name: TableName) -> Option<&TableCatalog>;
     fn table_metas(&self) -> Result<Vec<TableMeta>, StorageError>;
     fn save_table_meta(&mut self, table_meta: &TableMeta) -> Result<(), StorageError>;
-    fn histogram_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError>;
+    fn column_meta_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError>;
     fn meta_loader(&self) -> ColumnMetaLoader<Self>
     where
         Self: Sized;

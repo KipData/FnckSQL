@@ -31,7 +31,7 @@ impl<'a, T: Transaction> ColumnMetaLoader<'a, T> {
         return if let Some(column_metas) = option {
             Ok(column_metas)
         } else {
-            let paths = self.tx.histogram_paths(&table_name)?;
+            let paths = self.tx.column_meta_paths(&table_name)?;
             let mut column_metas = Vec::with_capacity(paths.len());
 
             for path in paths {
