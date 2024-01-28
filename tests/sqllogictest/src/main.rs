@@ -1,4 +1,4 @@
-use kip_sql::db::Database;
+use fnck_sql::db::Database;
 use sqllogictest::Runner;
 use sqllogictest_test::KipSQL;
 use std::path::Path;
@@ -11,7 +11,7 @@ async fn main() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
     std::env::set_current_dir(path).unwrap();
 
-    println!("KipSQL Test Start!\n");
+    println!("FnckSQL Test Start!\n");
 
     for slt_file in glob::glob(SLT_PATTERN).expect("failed to find slt files") {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");

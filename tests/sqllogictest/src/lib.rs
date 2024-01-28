@@ -1,5 +1,5 @@
-use kip_sql::db::{Database, DatabaseError};
-use kip_sql::storage::kip::KipStorage;
+use fnck_sql::db::{Database, DatabaseError};
+use fnck_sql::storage::kip::KipStorage;
 use sqllogictest::{AsyncDB, DBOutput, DefaultColumnType};
 use std::time::Instant;
 

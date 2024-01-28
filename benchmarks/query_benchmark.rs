@@ -1,10 +1,10 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use fnck_sql::db::{Database, DatabaseError};
+use fnck_sql::execution::volcano;
+use fnck_sql::storage::kip::KipStorage;
+use fnck_sql::storage::Storage;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use kip_sql::db::{Database, DatabaseError};
-use kip_sql::execution::volcano;
-use kip_sql::storage::kip::KipStorage;
-use kip_sql::storage::Storage;
 use sqlite::Error;
 use std::cell::RefCell;
 use std::fs;
@@ -12,12 +12,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 const QUERY_CASE: &'static str = "select * from t1 where c1 = 1000";
-const QUERY_BENCH_KIPSQL_PATH: &'static str = "./kipsql_bench";
+const QUERY_BENCH_FNCK_SQL_PATH: &'static str = "./fncksql_bench";
 const QUERY_BENCH_SQLITE_PATH: &'static str = "./sqlite_bench";
 const TABLE_ROW_NUM: u64 = 2_00_000;
 
-async fn init_kipsql_query_bench() -> Result<(), DatabaseError> {
-    let database = Database::with_kipdb(QUERY_BENCH_KIPSQL_PATH).await.unwrap();
+async fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
+    let database = Database::with_kipdb(QUERY_BENCH_FNCK_SQL_PATH)
+        .await
+        .unwrap();
     database
         .run("create table t1 (c1 int primary key, c2 int)")
         .await?;
@@ -84,16 +86,16 @@ fn query_on_execute(c: &mut Criterion) {
 
             init_sqlite_query_bench().unwrap();
         }
-        if !path_exists_and_is_directory(QUERY_BENCH_KIPSQL_PATH) {
+        if !path_exists_and_is_directory(QUERY_BENCH_FNCK_SQL_PATH) {
             println!(
-                "KipSQL: The table is not initialized and data insertion is started. => {}",
+                "FnckSQL: The table is not initialized and data insertion is started. => {}",
                 TABLE_ROW_NUM
             );
 
-            init_kipsql_query_bench().await.unwrap();
+            init_fncksql_query_bench().await.unwrap();
         }
 
-        Database::<KipStorage>::with_kipdb(QUERY_BENCH_KIPSQL_PATH)
+        Database::<KipStorage>::with_kipdb(QUERY_BENCH_FNCK_SQL_PATH)
             .await
             .unwrap()
     });
@@ -140,7 +142,7 @@ fn query_on_execute(c: &mut Criterion) {
         });
     }
 
-    c.bench_function(format!("KipSQL: {}", QUERY_CASE).as_str(), |b| {
+    c.bench_function(format!("FnckSQL: {}", QUERY_CASE).as_str(), |b| {
         b.to_async(&rt).iter(|| async {
             let _tuples = database.run(QUERY_CASE).await.unwrap();
         })
