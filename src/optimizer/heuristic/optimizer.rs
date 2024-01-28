@@ -10,19 +10,20 @@ use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::optimizer::OptimizerError;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
+use std::ops::Not;
 
 pub struct HepOptimizer {
     batches: Vec<HepBatch>,
-    memo: Option<Memo>,
     pub graph: HepGraph,
+    implementations: Vec<ImplementationRuleImpl>,
 }
 
 impl HepOptimizer {
     pub fn new(root: LogicalPlan) -> Self {
         Self {
             batches: vec![],
-            memo: None,
             graph: HepGraph::new(root),
+            implementations: vec![],
         }
     }
 
@@ -36,65 +37,72 @@ impl HepOptimizer {
         self
     }
 
-    pub fn build_memo<T: Transaction>(
-        mut self,
-        loader: &ColumnMetaLoader<'_, T>,
-        implementations: &[ImplementationRuleImpl],
-    ) -> Result<Self, OptimizerError> {
-        self.memo = Some(Memo::new(&self.graph, &loader, implementations)?);
-
-        Ok(self)
+    pub fn implementations(mut self, implementations: Vec<ImplementationRuleImpl>) -> Self {
+        self.implementations = implementations;
+        self
     }
 
-    pub fn find_best(mut self) -> Result<LogicalPlan, OptimizerError> {
-        let batches = self.batches.clone();
-
-        for batch in batches {
+    pub fn find_best<T: Transaction>(
+        mut self,
+        loader: Option<&ColumnMetaLoader<'_, T>>,
+    ) -> Result<LogicalPlan, OptimizerError> {
+        for ref batch in self.batches {
             let mut batch_over = false;
             let mut iteration = 1usize;
 
             while iteration <= batch.strategy.max_iteration && !batch_over {
-                if self.apply_batch(&batch)? {
+                if Self::apply_batch(&mut self.graph, batch)? {
                     iteration += 1;
                 } else {
                     batch_over = true
                 }
             }
         }
+        let memo = loader
+            .and_then(|loader| {
+                self.implementations
+                    .is_empty()
+                    .not()
+                    .then(|| Memo::new(&self.graph, loader, &self.implementations))
+            })
+            .transpose()?;
 
-        Ok(self.graph.to_plan(None).ok_or(OptimizerError::EmptyPlan)?)
+        Ok(self
+            .graph
+            .to_plan(memo.as_ref())
+            .ok_or(OptimizerError::EmptyPlan)?)
     }
 
     fn apply_batch(
-        &mut self,
+        graph: &mut HepGraph,
         HepBatch {
             rules, strategy, ..
         }: &HepBatch,
     ) -> Result<bool, OptimizerError> {
-        let start_ver = self.graph.version;
+        let before_version = graph.version;
 
         for rule in rules {
-            for node_id in self.graph.nodes_iter(strategy.match_order, None) {
-                if self.apply_rule(rule, node_id)? {
+            for node_id in graph.nodes_iter(strategy.match_order, None) {
+                if Self::apply_rule(graph, rule, node_id)? {
                     break;
                 }
             }
         }
 
-        Ok(start_ver != self.graph.version)
+        Ok(before_version != graph.version)
     }
 
     fn apply_rule(
-        &mut self,
+        graph: &mut HepGraph,
         rule: &NormalizationRuleImpl,
         node_id: HepNodeId,
     ) -> Result<bool, OptimizerError> {
-        let after_version = self.graph.version;
+        let before_version = graph.version;
 
-        if HepMatcher::new(rule.pattern(), node_id, &self.graph).match_opt_expr() {
-            rule.apply(node_id, &mut self.graph)?;
+        if HepMatcher::new(rule.pattern(), node_id, graph).match_opt_expr() {
+            rule.apply(node_id, graph)?;
         }
 
-        Ok(after_version != self.graph.version)
+        Ok(before_version != graph.version)
     }
 }

@@ -302,7 +302,7 @@ mod test {
     use crate::execution::codegen::execute;
     use crate::parser::parse_sql;
     use crate::storage::kip::KipStorage;
-    use crate::storage::Storage;
+    use crate::storage::{Storage, Transaction};
     use crate::types::tuple::create_table;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -343,7 +343,8 @@ mod test {
         let source_plan = binder.bind(&stmts[0])?;
         // println!("source_plan plan: {:#?}", source_plan);
 
-        let best_plan = Database::<KipStorage>::default_optimizer(source_plan).find_best()?;
+        let best_plan = Database::<KipStorage>::default_optimizer(source_plan)
+            .find_best(Some(&transaction.meta_loader()))?;
         // println!("{:#?}", best_plan);
 
         let tuples = execute(best_plan, Arc::new(transaction)).await?;

@@ -188,7 +188,7 @@ impl HepGraph {
 
     fn build_childrens(&mut self, start: HepNodeId, memo: Option<&Memo>) -> Option<LogicalPlan> {
         let mut childrens = Vec::with_capacity(2);
-        let physical_option = memo.and_then(|memo| memo.cheapest_physical_option(start.index()));
+        let physical_option = memo.and_then(|memo| memo.cheapest_physical_option(&start));
 
         for child_id in self.children_at(start).collect_vec() {
             if let Some(child_plan) = self.build_childrens(child_id, memo) {

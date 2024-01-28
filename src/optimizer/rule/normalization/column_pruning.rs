@@ -172,6 +172,7 @@ mod tests {
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::join::JoinCondition;
     use crate::planner::operator::Operator;
+    use crate::storage::kip::KipTransaction;
 
     #[tokio::test]
     async fn test_column_pruning() -> Result<(), DatabaseError> {
@@ -183,7 +184,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::ColumnPruning],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         assert_eq!(best_plan.childrens.len(), 1);
         match best_plan.operator {

@@ -69,7 +69,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
         group_expr: &mut GroupExpression,
     ) -> Result<(), OptimizerError> {
         if let Operator::Scan(scan_op) = op {
-            let histograms = loader.load(scan_op.table_name.clone())?;
+            let column_metas = loader.load(scan_op.table_name.clone())?;
             for index_info in scan_op.index_infos.iter() {
                 if index_info.binaries.is_none() {
                     continue;
@@ -79,7 +79,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
                 if let Some(binaries) = &index_info.binaries {
                     // FIXME: Only UniqueIndex
                     if let Some(histogram) =
-                        find_column_meta(histograms, &index_info.meta.column_ids[0])
+                        find_column_meta(column_metas, &index_info.meta.column_ids[0])
                     {
                         // need to return table query(non-covering index)
                         cost = Some(histogram.collect_count(binaries) * 2);

@@ -43,7 +43,7 @@ impl<'a, T: Transaction> ColumnMetaLoader<'a, T> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ColumnMeta {
     column_id: ColumnId,
     data_type: LogicalType,

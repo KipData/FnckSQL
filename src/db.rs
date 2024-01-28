@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use crate::binder::{BindError, Binder, BinderContext};
 use crate::execution::volcano::{build_stream, try_collect};
 use crate::execution::ExecutorError;
-use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
@@ -130,16 +129,13 @@ impl<S: Storage> Database<S> {
         // println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan =
-            Self::default_optimizer(source_plan, &transaction.meta_loader())?.find_best()?;
+            Self::default_optimizer(source_plan).find_best(Some(&transaction.meta_loader()))?;
         // println!("best_plan plan: {:#?}", best_plan);
 
         Ok((best_plan, stmts.remove(0)))
     }
 
-    pub(crate) fn default_optimizer<T: Transaction>(
-        source_plan: LogicalPlan,
-        loader: &ColumnMetaLoader<'_, T>,
-    ) -> Result<HepOptimizer, OptimizerError> {
+    pub(crate) fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
             .batch(
                 "Column Pruning".to_string(),
@@ -180,36 +176,33 @@ impl<S: Storage> Database<S> {
                     NormalizationRuleImpl::EliminateLimits,
                 ],
             )
-            .build_memo(
-                loader,
-                &[
-                    // DQL
-                    ImplementationRuleImpl::SimpleAggregate,
-                    ImplementationRuleImpl::GroupByAggregate,
-                    ImplementationRuleImpl::Dummy,
-                    ImplementationRuleImpl::Filter,
-                    ImplementationRuleImpl::HashJoin,
-                    ImplementationRuleImpl::Limit,
-                    ImplementationRuleImpl::Projection,
-                    ImplementationRuleImpl::SeqScan,
-                    ImplementationRuleImpl::IndexScan,
-                    ImplementationRuleImpl::Sort,
-                    ImplementationRuleImpl::Values,
-                    // DML
-                    ImplementationRuleImpl::Analyze,
-                    ImplementationRuleImpl::CopyFromFile,
-                    ImplementationRuleImpl::CopyToFile,
-                    ImplementationRuleImpl::Delete,
-                    ImplementationRuleImpl::Insert,
-                    ImplementationRuleImpl::Update,
-                    // DLL
-                    ImplementationRuleImpl::AddColumn,
-                    ImplementationRuleImpl::CreateTable,
-                    ImplementationRuleImpl::DropColumn,
-                    ImplementationRuleImpl::DropTable,
-                    ImplementationRuleImpl::Truncate,
-                ],
-            )
+            .implementations(vec![
+                // DQL
+                ImplementationRuleImpl::SimpleAggregate,
+                ImplementationRuleImpl::GroupByAggregate,
+                ImplementationRuleImpl::Dummy,
+                ImplementationRuleImpl::Filter,
+                ImplementationRuleImpl::HashJoin,
+                ImplementationRuleImpl::Limit,
+                ImplementationRuleImpl::Projection,
+                ImplementationRuleImpl::SeqScan,
+                ImplementationRuleImpl::IndexScan,
+                ImplementationRuleImpl::Sort,
+                ImplementationRuleImpl::Values,
+                // DML
+                ImplementationRuleImpl::Analyze,
+                ImplementationRuleImpl::CopyFromFile,
+                ImplementationRuleImpl::CopyToFile,
+                ImplementationRuleImpl::Delete,
+                ImplementationRuleImpl::Insert,
+                ImplementationRuleImpl::Update,
+                // DLL
+                ImplementationRuleImpl::AddColumn,
+                ImplementationRuleImpl::CreateTable,
+                ImplementationRuleImpl::DropColumn,
+                ImplementationRuleImpl::DropTable,
+                ImplementationRuleImpl::Truncate,
+            ])
     }
 }
 

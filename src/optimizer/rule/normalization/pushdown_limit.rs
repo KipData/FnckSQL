@@ -190,6 +190,7 @@ mod tests {
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::limit::LimitOperator;
     use crate::planner::operator::Operator;
+    use crate::storage::kip::KipTransaction;
 
     #[tokio::test]
     async fn test_limit_project_transpose() -> Result<(), DatabaseError> {
@@ -201,7 +202,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::LimitProjectTranspose],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Project(_) = &best_plan.operator {
         } else {
@@ -233,7 +234,7 @@ mod tests {
 
         optimizer.graph.add_root(Operator::Limit(new_limit_op));
 
-        let best_plan = optimizer.find_best()?;
+        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
 
         if let Operator::Limit(op) = &best_plan.operator {
             assert_eq!(op.limit, Some(1));
@@ -262,7 +263,7 @@ mod tests {
                     NormalizationRuleImpl::PushLimitThroughJoin,
                 ],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Join(_) = &best_plan.childrens[0].childrens[0].operator {
         } else {
@@ -291,7 +292,7 @@ mod tests {
                     NormalizationRuleImpl::PushLimitIntoTableScan,
                 ],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Scan(op) = &best_plan.childrens[0].operator {
             assert_eq!(op.limit, (Some(1), Some(1)))

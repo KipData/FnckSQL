@@ -98,6 +98,7 @@ mod tests {
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
+    use crate::storage::kip::KipTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;
@@ -122,7 +123,7 @@ mod tests {
 
         optimizer.graph.add_root(new_project_op);
 
-        let best_plan = optimizer.find_best()?;
+        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
 
         if let Operator::Project(op) = &best_plan.operator {
             assert_eq!(op.exprs.len(), 1);
@@ -166,7 +167,7 @@ mod tests {
             .graph
             .add_node(HepNodeId::new(0), Some(HepNodeId::new(1)), new_filter_op);
 
-        let best_plan = optimizer.find_best()?;
+        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             if let ScalarExpression::Binary { op, .. } = &op.predicate {

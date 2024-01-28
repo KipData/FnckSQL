@@ -127,6 +127,7 @@ mod test {
     use crate::planner::operator::filter::FilterOperator;
     use crate::planner::operator::Operator;
     use crate::planner::LogicalPlan;
+    use crate::storage::kip::KipTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::collections::Bound;
@@ -148,7 +149,7 @@ mod test {
                     NormalizationRuleImpl::ConstantCalculation,
                 ],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
         if let Operator::Project(project_op) = best_plan.clone().operator {
             let constant_expr = ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(3))));
             if let ScalarExpression::Binary { right_expr, .. } = &project_op.exprs[0] {
@@ -207,7 +208,7 @@ mod test {
                     HepBatchStrategy::once_topdown(),
                     vec![NormalizationRuleImpl::SimplifyFilter],
                 )
-                .find_best()?;
+                .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 println!(
                     "{expr}: {:#?}",
@@ -251,7 +252,7 @@ mod test {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::SimplifyFilter],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
             let c1_col = ColumnCatalog {
                 summary: ColumnSummary {
@@ -332,7 +333,7 @@ mod test {
                     HepBatchStrategy::once_topdown(),
                     vec![NormalizationRuleImpl::SimplifyFilter],
                 )
-                .find_best()?;
+                .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 println!("{expr}: {:#?}", filter_op);
 
@@ -442,7 +443,7 @@ mod test {
                     HepBatchStrategy::once_topdown(),
                     vec![NormalizationRuleImpl::SimplifyFilter],
                 )
-                .find_best()?;
+                .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 println!("{expr}: {:#?}", filter_op);
 
@@ -473,7 +474,7 @@ mod test {
                     HepBatchStrategy::once_topdown(),
                     vec![NormalizationRuleImpl::SimplifyFilter],
                 )
-                .find_best()?;
+                .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 println!("{expr}: {:#?}", filter_op);
 
@@ -512,7 +513,7 @@ mod test {
                     HepBatchStrategy::once_topdown(),
                     vec![NormalizationRuleImpl::SimplifyFilter],
                 )
-                .find_best()?;
+                .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 println!("{expr}: {:#?}", filter_op);
 

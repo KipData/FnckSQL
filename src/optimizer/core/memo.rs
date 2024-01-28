@@ -2,13 +2,14 @@ use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
 use crate::optimizer::heuristic::batch::HepMatchOrder;
-use crate::optimizer::heuristic::graph::HepGraph;
+use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::PhysicalOption;
 use crate::storage::Transaction;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Expression {
@@ -29,7 +30,7 @@ impl GroupExpression {
 
 #[derive(Debug)]
 pub struct Memo {
-    groups: Vec<GroupExpression>,
+    groups: HashMap<HepNodeId, GroupExpression>,
 }
 
 impl Memo {
@@ -39,7 +40,7 @@ impl Memo {
         implementations: &[ImplementationRuleImpl],
     ) -> Result<Self, OptimizerError> {
         let node_count = graph.node_count();
-        let mut groups = vec![GroupExpression { exprs: Vec::new() }; node_count];
+        let mut groups = HashMap::new();
 
         if node_count == 0 {
             return Err(OptimizerError::EmptyPlan);
@@ -49,8 +50,11 @@ impl Memo {
             for rule in implementations {
                 if HepMatcher::new(rule.pattern(), node_id, graph).match_opt_expr() {
                     let op = graph.operator(node_id);
+                    let group_expr = groups
+                        .entry(node_id)
+                        .or_insert_with(|| GroupExpression { exprs: vec![] });
 
-                    rule.to_expression(op, loader, &mut groups[node_id.index()])?;
+                    rule.to_expression(op, loader, group_expr)?;
                 }
             }
         }
@@ -58,17 +62,19 @@ impl Memo {
         Ok(Memo { groups })
     }
 
-    pub(crate) fn cheapest_physical_option(&self, group_index: usize) -> Option<PhysicalOption> {
-        self.groups[group_index]
-            .exprs
-            .iter()
-            .min_by(|expr_1, expr_2| match (expr_1.cost, expr_2.cost) {
-                (Some(cost_1), Some(cost_2)) => cost_1.cmp(&cost_2),
-                (None, Some(_)) => Ordering::Greater,
-                (Some(_), None) => Ordering::Less,
-                (None, None) => Ordering::Equal,
-            })
-            .map(|expr| expr.op.clone())
+    pub(crate) fn cheapest_physical_option(&self, node_id: &HepNodeId) -> Option<PhysicalOption> {
+        self.groups.get(node_id).and_then(|exprs| {
+            exprs
+                .exprs
+                .iter()
+                .min_by(|expr_1, expr_2| match (expr_1.cost, expr_2.cost) {
+                    (Some(cost_1), Some(cost_2)) => cost_1.cmp(&cost_2),
+                    (None, Some(_)) => Ordering::Greater,
+                    (Some(_), None) => Ordering::Less,
+                    (None, None) => Ordering::Equal,
+                })
+                .map(|expr| expr.op.clone())
+        })
     }
 }
 
@@ -83,7 +89,9 @@ mod tests {
     use crate::optimizer::rule::implementation::ImplementationRuleImpl;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::PhysicalOption;
+    use crate::storage::kip::KipTransaction;
     use crate::storage::{Storage, Transaction};
+    use petgraph::stable_graph::NodeIndex;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -126,7 +134,7 @@ mod tests {
                     NormalizationRuleImpl::PushPredicateIntoScan,
                 ],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
         let graph = HepGraph::new(best_plan);
         let rules = vec![
             ImplementationRuleImpl::Projection,
@@ -138,7 +146,7 @@ mod tests {
 
         let memo = Memo::new(&graph, &transaction.meta_loader(), &rules)?;
         let best_plan = graph.to_plan(Some(&memo));
-        let exprs = &memo.groups[3];
+        let exprs = &memo.groups.get(&NodeIndex::new(3)).unwrap();
 
         assert_eq!(exprs.exprs.len(), 2);
         assert_eq!(exprs.exprs[0].cost, Some(1000));

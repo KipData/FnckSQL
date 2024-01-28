@@ -247,6 +247,7 @@ mod tests {
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
+    use crate::storage::kip::KipTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::collections::Bound;
@@ -268,7 +269,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::PushPredicateIntoScan],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Scan(op) = &best_plan.childrens[0].childrens[0].operator {
             let mock_binaries = vec![Scope {
@@ -296,7 +297,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::PushPredicateThroughJoin],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -339,7 +340,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::PushPredicateThroughJoin],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -382,7 +383,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::PushPredicateThroughJoin],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Join(_) = &best_plan.childrens[0].operator {
         } else {

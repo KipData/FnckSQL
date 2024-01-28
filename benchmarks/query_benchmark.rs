@@ -11,7 +11,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-const QUERY_CASE: &'static str = "select * from t1";
+const QUERY_CASE: &'static str = "select * from t1 where c1 = 1000";
 const QUERY_BENCH_KIPSQL_PATH: &'static str = "./kipsql_bench";
 const QUERY_BENCH_SQLITE_PATH: &'static str = "./sqlite_bench";
 const TABLE_ROW_NUM: u64 = 2_00_000;
@@ -35,6 +35,8 @@ async fn init_kipsql_query_bench() -> Result<(), DatabaseError> {
         pb.set_position(i + 1);
     }
     pb.finish_with_message("Insert completed!");
+
+    let _ = database.run("analyze table t1").await?;
 
     Ok(())
 }
@@ -138,26 +140,23 @@ fn query_on_execute(c: &mut Criterion) {
         });
     }
 
-    c.bench_function(format!("KipSQL: select * from t1").as_str(), |b| {
+    c.bench_function(format!("KipSQL: {}", QUERY_CASE).as_str(), |b| {
         b.to_async(&rt).iter(|| async {
             let _tuples = database.run(QUERY_CASE).await.unwrap();
         })
     });
 
     let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned()).unwrap();
-    c.bench_function(
-        format!("SQLite: select * from t1 where c2 > {}", TABLE_ROW_NUM / 2).as_str(),
-        |b| {
-            b.to_async(&rt).iter(|| async {
-                let _tuples = connection
-                    .prepare(QUERY_CASE)
-                    .unwrap()
-                    .into_iter()
-                    .map(|row| row.unwrap())
-                    .collect_vec();
-            })
-        },
-    );
+    c.bench_function(format!("SQLite: {}", QUERY_CASE).as_str(), |b| {
+        b.to_async(&rt).iter(|| async {
+            let _tuples = connection
+                .prepare(QUERY_CASE)
+                .unwrap()
+                .into_iter()
+                .map(|row| row.unwrap())
+                .collect_vec();
+        })
+    });
 }
 
 criterion_group!(

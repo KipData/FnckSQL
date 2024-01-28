@@ -34,14 +34,6 @@ Embedded SQL DBMS
 KipSQL is designed to allow small Rust projects to reduce external dependencies and get rid of heavy database maintenance, 
 so that the Rust application itself can provide SQL storage capabilities.
 
-
-If you are a developer of the following applications, we very much welcome you to try using KipSQL 
-and provide your experience and opinions on using it.
-- personal website
-- desktop/mobile application
-- learning database
-- platform bot
-
 Welcome to our WebSite, Power By KipSQL: **http://www.kipdata.site/**
 
 ### Quick Started
@@ -105,6 +97,9 @@ implement_from_tuple!(
     )
 );
 ```
+- Optimizer
+  - RBO
+  - CBO based on RBO(Physical Selection)
 - Execute
   - Volcano
   - Codegen on LuaJIT: `features = ["codegen_execute"]`
@@ -161,6 +156,7 @@ implement_from_tuple!(
   - [x] Insert Overwrite
   - [x] Update
   - [x] Delete
+  - [x] Analyze
 - DataTypes
   - Invalid
   - SqlNull
@@ -178,14 +174,6 @@ implement_from_tuple!(
   - Varchar
   - Date
   - DateTime
-- Optimizer rules
-  - Limit Project Transpose
-  - Eliminate Limits
-  - Push Limit Through Join
-  - Push Limit Into Scan
-  - Combine Filters
-  - Column Pruning
-  - Collapse Project
 
 ## License
 
