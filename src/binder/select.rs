@@ -118,6 +118,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             return Ok(LogicalPlan {
                 operator: Operator::Dummy,
                 childrens: vec![],
+                physical_option: None,
             });
         }
 
@@ -205,19 +206,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
             .table(table_name.clone())
             .cloned()
             .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
+        let scan_op = ScanOperator::build(table_name.clone(), &table_catalog);
 
         self.context
-            .add_bind_table(table_name.clone(), table_catalog.clone(), join_type)?;
+            .add_bind_table(table_name.clone(), table_catalog, join_type)?;
 
         if let Some(alias) = alias {
             self.context
                 .add_table_alias(alias.to_string(), table_name.clone())?;
         }
 
-        Ok((
-            table_name.clone(),
-            ScanOperator::build(table_name, &table_catalog),
-        ))
+        Ok((table_name, scan_op))
     }
 
     /// Normalize select item.
@@ -342,6 +341,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         LogicalPlan {
             operator: Operator::Project(ProjectOperator { exprs: select_list }),
             childrens: vec![children],
+            physical_option: None,
         }
     }
 
@@ -352,6 +352,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 limit: None,
             }),
             childrens: vec![children],
+            physical_option: None,
         }
     }
 

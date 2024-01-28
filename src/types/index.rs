@@ -1,3 +1,4 @@
+use crate::expression::simplify::ConstantBinary;
 use crate::types::value::ValueRef;
 use crate::types::ColumnId;
 use serde::{Deserialize, Serialize};
@@ -5,6 +6,12 @@ use std::sync::Arc;
 
 pub type IndexId = u32;
 pub type IndexMetaRef = Arc<IndexMeta>;
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct IndexInfo {
+    pub(crate) meta: IndexMetaRef,
+    pub(crate) binaries: Option<Vec<ConstantBinary>>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct IndexMeta {

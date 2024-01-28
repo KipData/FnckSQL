@@ -2,12 +2,13 @@ use crate::catalog::{ColumnRef, ColumnSummary};
 use crate::expression::agg::AggKind;
 use crate::expression::ScalarExpression;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
-use crate::optimizer::core::rule::Rule;
+use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -84,7 +85,7 @@ impl ColumnPruning {
                     // Todo: Order Project
                     // https://github.com/duckdb/duckdb/blob/main/src/optimizer/remove_unused_columns.cpp#L174
                 }
-                for child_id in graph.children_at(node_id) {
+                for child_id in graph.children_at(node_id).collect_vec() {
                     Self::_apply(column_references, true, child_id, graph);
                 }
             }
@@ -97,17 +98,24 @@ impl ColumnPruning {
                 for column in operator.referenced_columns(false) {
                     column_references.insert(column.summary().clone());
                 }
-                for child_id in graph.children_at(node_id) {
+                for child_id in graph.children_at(node_id).collect_vec() {
                     Self::_apply(column_references, all_referenced, child_id, graph);
                 }
             }
             // Last Operator
             Operator::Dummy | Operator::Values(_) => (),
             // DDL Based on Other Plan
-            Operator::Insert(_) | Operator::Update(_) | Operator::Delete(_) => {
+            Operator::Insert(_)
+            | Operator::Update(_)
+            | Operator::Delete(_)
+            | Operator::Analyze(_) => {
                 let op_ref_columns = operator.referenced_columns(false);
 
-                Self::recollect_apply(op_ref_columns, true, graph.children_at(node_id)[0], graph);
+                if let Some(child_id) = graph.eldest_child_at(node_id) {
+                    Self::recollect_apply(op_ref_columns, true, child_id, graph);
+                } else {
+                    unreachable!();
+                }
             }
             // DDL Single Plan
             Operator::CreateTable(_)
@@ -127,7 +135,7 @@ impl ColumnPruning {
         node_id: HepNodeId,
         graph: &mut HepGraph,
     ) {
-        for child_id in graph.children_at(node_id) {
+        for child_id in graph.children_at(node_id).collect_vec() {
             let mut new_references: HashSet<ColumnSummary> = referenced_columns
                 .iter()
                 .map(|column| column.summary())
@@ -139,11 +147,13 @@ impl ColumnPruning {
     }
 }
 
-impl Rule for ColumnPruning {
+impl MatchPattern for ColumnPruning {
     fn pattern(&self) -> &Pattern {
         &COLUMN_PRUNING_RULE
     }
+}
 
+impl NormalizationRule for ColumnPruning {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         Self::_apply(&mut HashSet::new(), true, node_id, graph);
         // mark changed to skip this rule batch
@@ -159,9 +169,10 @@ mod tests {
     use crate::db::DatabaseError;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
-    use crate::optimizer::rule::RuleImpl;
+    use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::join::JoinCondition;
     use crate::planner::operator::Operator;
+    use crate::storage::kip::KipTransaction;
 
     #[tokio::test]
     async fn test_column_pruning() -> Result<(), DatabaseError> {
@@ -171,9 +182,9 @@ mod tests {
             .batch(
                 "test_column_pruning".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::ColumnPruning],
+                vec![NormalizationRuleImpl::ColumnPruning],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         assert_eq!(best_plan.childrens.len(), 1);
         match best_plan.operator {

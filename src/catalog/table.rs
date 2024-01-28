@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -14,6 +15,12 @@ pub struct TableCatalog {
     column_idxs: BTreeMap<String, ColumnId>,
     pub(crate) columns: BTreeMap<ColumnId, ColumnRef>,
     pub(crate) indexes: Vec<IndexMetaRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TableMeta {
+    pub(crate) colum_meta_paths: Vec<String>,
+    pub(crate) table_name: TableName,
 }
 
 impl TableCatalog {
@@ -56,7 +63,12 @@ impl TableCatalog {
             return Err(CatalogError::Duplicated("column", col.name().to_string()));
         }
 
-        let col_id = self.columns.len() as u32;
+        let col_id = self
+            .columns
+            .iter()
+            .last()
+            .map(|(column_id, _)| column_id + 1)
+            .unwrap_or(0);
 
         col.summary.table_name = Some(self.name.clone());
         col.summary.id = Some(col_id);
@@ -108,7 +120,7 @@ impl TableCatalog {
         Ok(table_catalog)
     }
 
-    pub(crate) fn new_with_indexes(
+    pub(crate) fn reload(
         name: TableName,
         columns: Vec<ColumnCatalog>,
         indexes: Vec<IndexMetaRef>,
@@ -117,6 +129,15 @@ impl TableCatalog {
         catalog.indexes = indexes;
 
         Ok(catalog)
+    }
+}
+
+impl TableMeta {
+    pub(crate) fn empty(table_name: TableName) -> Self {
+        TableMeta {
+            colum_meta_paths: vec![],
+            table_name,
+        }
     }
 }
 

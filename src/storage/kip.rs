@@ -1,5 +1,6 @@
-use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
+use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::expression::simplify::ConstantBinary;
+use crate::optimizer::core::column_meta::{ColumnMeta, ColumnMetaLoader};
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{
     tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, StorageError, Transaction,
@@ -21,6 +22,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct KipStorage {
     pub inner: Arc<storage::KipStorage>,
+    pub(crate) meta_cache: Arc<ShardingLruCache<TableName, Vec<ColumnMeta>>>,
 }
 
 impl KipStorage {
@@ -28,9 +30,11 @@ impl KipStorage {
         let storage =
             storage::KipStorage::open_with_config(Config::new(path).enable_level_0_memorization())
                 .await?;
+        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new()).unwrap());
 
         Ok(KipStorage {
             inner: Arc::new(storage),
+            meta_cache,
         })
     }
 }
@@ -43,14 +47,16 @@ impl Storage for KipStorage {
 
         Ok(KipTransaction {
             tx,
-            cache: ShardingLruCache::new(8, 2, RandomState::default())?,
+            table_cache: ShardingLruCache::new(8, 2, RandomState::default())?,
+            meta_cache: self.meta_cache.clone(),
         })
     }
 }
 
 pub struct KipTransaction {
     tx: mvcc::Transaction,
-    cache: ShardingLruCache<String, TableCatalog>,
+    table_cache: ShardingLruCache<String, TableCatalog>,
+    meta_cache: Arc<ShardingLruCache<TableName, Vec<ColumnMeta>>>,
 }
 
 impl Transaction for KipTransaction {
@@ -176,11 +182,11 @@ impl Transaction for KipTransaction {
 
             for col in catalog.all_columns() {
                 if col.name() == column.name() {
-                    if if_not_exists {
-                        return Ok(col.id().unwrap());
+                    return if if_not_exists {
+                        Ok(col.id().unwrap())
                     } else {
-                        return Err(StorageError::DuplicateColumn);
-                    }
+                        Err(StorageError::DuplicateColumn)
+                    };
                 }
             }
 
@@ -200,7 +206,7 @@ impl Transaction for KipTransaction {
             let column = catalog.get_column_by_id(&col_id).unwrap();
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
-            self.cache.remove(table_name);
+            self.table_cache.remove(table_name);
 
             Ok(col_id)
         } else {
@@ -235,7 +241,7 @@ impl Transaction for KipTransaction {
                 }
                 err => err?,
             }
-            self.cache.remove(table_name);
+            self.table_cache.remove(table_name);
 
             Ok(())
         } else {
@@ -249,7 +255,8 @@ impl Transaction for KipTransaction {
         columns: Vec<ColumnCatalog>,
         if_not_exists: bool,
     ) -> Result<TableName, StorageError> {
-        let (table_key, value) = TableCodec::encode_root_table(&table_name)?;
+        let (table_key, value) =
+            TableCodec::encode_root_table(&TableMeta::empty(table_name.clone()))?;
         if self.tx.get(&table_key)?.is_some() {
             if if_not_exists {
                 return Ok(table_name);
@@ -266,7 +273,7 @@ impl Transaction for KipTransaction {
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
         }
-        self.cache.put(table_name.to_string(), table_catalog);
+        self.table_cache.put(table_name.to_string(), table_catalog);
 
         Ok(table_name)
     }
@@ -290,7 +297,7 @@ impl Transaction for KipTransaction {
         self.tx
             .remove(&TableCodec::encode_root_table_key(table_name))?;
 
-        let _ = self.cache.remove(&table_name.to_string());
+        let _ = self.table_cache.remove(&table_name.to_string());
 
         Ok(())
     }
@@ -306,18 +313,15 @@ impl Transaction for KipTransaction {
     }
 
     fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
-        let mut option = self.cache.get(&table_name);
+        let mut option = self.table_cache.get(&table_name);
 
         if option.is_none() {
             // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
-            let columns = Self::column_collect(table_name.clone(), &self.tx).ok()?;
-            let indexes = Self::index_meta_collect(&table_name, &self.tx)?;
+            let (columns, indexes) = Self::table_collect(table_name.clone(), &self.tx).ok()?;
 
-            if let Ok(catalog) =
-                TableCatalog::new_with_indexes(table_name.clone(), columns, indexes)
-            {
+            if let Ok(catalog) = TableCatalog::reload(table_name.clone(), columns, indexes) {
                 option = self
-                    .cache
+                    .table_cache
                     .get_or_insert(table_name.to_string(), |_| Ok(catalog))
                     .ok();
             }
@@ -326,20 +330,48 @@ impl Transaction for KipTransaction {
         option
     }
 
-    fn show_tables(&self) -> Result<Vec<String>, StorageError> {
-        let mut tables = vec![];
+    fn table_metas(&self) -> Result<Vec<TableMeta>, StorageError> {
+        let mut metas = vec![];
         let (min, max) = TableCodec::root_table_bound();
         let mut iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
 
         while let Some((_, value_option)) = iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
-                let table_name = TableCodec::decode_root_table(&value)?;
+                let meta = TableCodec::decode_root_table(&value)?;
 
-                tables.push(table_name);
+                metas.push(meta);
             }
         }
 
-        Ok(tables)
+        Ok(metas)
+    }
+
+    fn save_table_meta(&mut self, table_meta: &TableMeta) -> Result<(), StorageError> {
+        let _ = self.meta_cache.remove(&table_meta.table_name);
+        let (key, value) = TableCodec::encode_root_table(table_meta)?;
+        self.tx.set(key, value);
+
+        Ok(())
+    }
+
+    fn column_meta_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError> {
+        if let Some(bytes) = self
+            .tx
+            .get(&TableCodec::encode_root_table_key(table_name))?
+        {
+            let meta = TableCodec::decode_root_table(&bytes)?;
+
+            return Ok(meta.colum_meta_paths);
+        }
+
+        Ok(vec![])
+    }
+
+    fn meta_loader(&self) -> ColumnMetaLoader<Self>
+    where
+        Self: Sized,
+    {
+        ColumnMetaLoader::new(self, &self.meta_cache)
     }
 
     async fn commit(self) -> Result<(), StorageError> {
@@ -350,41 +382,28 @@ impl Transaction for KipTransaction {
 }
 
 impl KipTransaction {
-    fn column_collect(
+    fn table_collect(
         table_name: TableName,
         tx: &mvcc::Transaction,
-    ) -> Result<Vec<ColumnCatalog>, StorageError> {
-        let (column_min, column_max) = TableCodec::columns_bound(&table_name);
-        let mut column_iter =
-            tx.iter(Bound::Included(&column_min), Bound::Included(&column_max))?;
+    ) -> Result<(Vec<ColumnCatalog>, Vec<IndexMetaRef>), StorageError> {
+        let (table_min, table_max) = TableCodec::table_bound(&table_name);
+        let mut column_iter = tx.iter(Bound::Included(&table_min), Bound::Included(&table_max))?;
 
-        let mut columns = vec![];
+        let mut columns = Vec::new();
+        let mut index_metas = Vec::new();
 
-        while let Some((_, value_option)) = column_iter.try_next().ok().flatten() {
+        // Tips: only `Column`, `IndexMeta`, `TableMeta`
+        while let Some((key, value_option)) = column_iter.try_next().ok().flatten() {
             if let Some(value) = value_option {
-                columns.push(TableCodec::decode_column(&value)?);
-            }
-        }
-
-        Ok(columns)
-    }
-
-    fn index_meta_collect(name: &str, tx: &mvcc::Transaction) -> Option<Vec<IndexMetaRef>> {
-        let (index_min, index_max) = TableCodec::index_meta_bound(name);
-        let mut index_metas = vec![];
-        let mut index_iter = tx
-            .iter(Bound::Included(&index_min), Bound::Included(&index_max))
-            .ok()?;
-
-        while let Some((_, value_option)) = index_iter.try_next().ok().flatten() {
-            if let Some(value) = value_option {
-                if let Ok(index_meta) = TableCodec::decode_index_meta(&value) {
-                    index_metas.push(Arc::new(index_meta));
+                if key.starts_with(&table_min) {
+                    columns.push(TableCodec::decode_column(&value)?);
+                } else {
+                    index_metas.push(Arc::new(TableCodec::decode_index_meta(&value)?));
                 }
             }
         }
 
-        Some(index_metas)
+        Ok((columns, index_metas))
     }
 
     fn _drop_data(tx: &mut mvcc::Transaction, min: &[u8], max: &[u8]) -> Result<(), StorageError> {

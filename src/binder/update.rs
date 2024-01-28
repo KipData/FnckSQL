@@ -58,6 +58,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             Ok(LogicalPlan {
                 operator: Operator::Update(UpdateOperator { table_name }),
                 childrens: vec![plan, values_plan],
+                physical_option: None,
             })
         } else {
             unreachable!("only table")

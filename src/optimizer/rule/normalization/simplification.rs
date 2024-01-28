@@ -1,9 +1,10 @@
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
-use crate::optimizer::core::rule::Rule;
+use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 lazy_static! {
     static ref CONSTANT_CALCULATION_RULE: Pattern = {
@@ -67,7 +68,7 @@ impl ConstantCalculation {
             }
             _ => (),
         }
-        for child_id in graph.children_at(node_id) {
+        for child_id in graph.children_at(node_id).collect_vec() {
             Self::_apply(child_id, graph)?;
         }
 
@@ -75,11 +76,13 @@ impl ConstantCalculation {
     }
 }
 
-impl Rule for ConstantCalculation {
+impl MatchPattern for ConstantCalculation {
     fn pattern(&self) -> &Pattern {
         &CONSTANT_CALCULATION_RULE
     }
+}
 
+impl NormalizationRule for ConstantCalculation {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         Self::_apply(node_id, graph)?;
         // mark changed to skip this rule batch
@@ -92,11 +95,13 @@ impl Rule for ConstantCalculation {
 #[derive(Copy, Clone)]
 pub struct SimplifyFilter;
 
-impl Rule for SimplifyFilter {
+impl MatchPattern for SimplifyFilter {
     fn pattern(&self) -> &Pattern {
         &SIMPLIFY_FILTER_RULE
     }
+}
 
+impl NormalizationRule for SimplifyFilter {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Filter(mut filter_op) = graph.operator(node_id).clone() {
             filter_op.predicate.simplify()?;
@@ -118,10 +123,11 @@ mod test {
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
-    use crate::optimizer::rule::RuleImpl;
+    use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::filter::FilterOperator;
     use crate::planner::operator::Operator;
     use crate::planner::LogicalPlan;
+    use crate::storage::kip::KipTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::collections::Bound;
@@ -138,9 +144,12 @@ mod test {
             .batch(
                 "test_simplification".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::SimplifyFilter, RuleImpl::ConstantCalculation],
+                vec![
+                    NormalizationRuleImpl::SimplifyFilter,
+                    NormalizationRuleImpl::ConstantCalculation,
+                ],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
         if let Operator::Project(project_op) = best_plan.clone().operator {
             let constant_expr = ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(3))));
             if let ScalarExpression::Binary { right_expr, .. } = &project_op.exprs[0] {
@@ -197,9 +206,9 @@ mod test {
                 .batch(
                     "test_simplify_filter".to_string(),
                     HepBatchStrategy::once_topdown(),
-                    vec![RuleImpl::SimplifyFilter],
+                    vec![NormalizationRuleImpl::SimplifyFilter],
                 )
-                .find_best()?;
+                .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 println!(
                     "{expr}: {:#?}",
@@ -241,9 +250,9 @@ mod test {
             .batch(
                 "test_simplify_filter".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::SimplifyFilter],
+                vec![NormalizationRuleImpl::SimplifyFilter],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
             let c1_col = ColumnCatalog {
                 summary: ColumnSummary {
@@ -322,9 +331,9 @@ mod test {
                 .batch(
                     "test_simplify_filter".to_string(),
                     HepBatchStrategy::once_topdown(),
-                    vec![RuleImpl::SimplifyFilter],
+                    vec![NormalizationRuleImpl::SimplifyFilter],
                 )
-                .find_best()?;
+                .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 println!("{expr}: {:#?}", filter_op);
 
@@ -432,9 +441,9 @@ mod test {
                 .batch(
                     "test_simplify_filter".to_string(),
                     HepBatchStrategy::once_topdown(),
-                    vec![RuleImpl::SimplifyFilter],
+                    vec![NormalizationRuleImpl::SimplifyFilter],
                 )
-                .find_best()?;
+                .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 println!("{expr}: {:#?}", filter_op);
 
@@ -449,6 +458,75 @@ mod test {
         let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(cb_1_c1, None);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_simplify_filter_multiple_dispersed_same_column_in_or() -> Result<(), DatabaseError>
+    {
+        let plan_1 = select_sql_run("select * from t1 where c1 = 4 and c1 > c2 or c1 > 1").await?;
+
+        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
+            let best_plan = HepOptimizer::new(plan.clone())
+                .batch(
+                    "test_simplify_filter".to_string(),
+                    HepBatchStrategy::once_topdown(),
+                    vec![NormalizationRuleImpl::SimplifyFilter],
+                )
+                .find_best::<KipTransaction>(None)?;
+            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+                println!("{expr}: {:#?}", filter_op);
+
+                Ok(Some(filter_op))
+            } else {
+                Ok(None)
+            }
+        };
+
+        let op_1 = op(plan_1, "c1 = 4 and c2 > c1 or c1 > 1")?.unwrap();
+
+        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        println!("op_1 => c1: {:#?}", cb_1_c1);
+        assert_eq!(
+            cb_1_c1,
+            Some(ConstantBinary::Or(vec![
+                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(4)))),
+                ConstantBinary::Scope {
+                    min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
+                    max: Bound::Unbounded
+                }
+            ]))
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_simplify_filter_column_is_null() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1 where c1 is null").await?;
+
+        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
+            let best_plan = HepOptimizer::new(plan.clone())
+                .batch(
+                    "test_simplify_filter".to_string(),
+                    HepBatchStrategy::once_topdown(),
+                    vec![NormalizationRuleImpl::SimplifyFilter],
+                )
+                .find_best::<KipTransaction>(None)?;
+            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+                println!("{expr}: {:#?}", filter_op);
+
+                Ok(Some(filter_op))
+            } else {
+                Ok(None)
+            }
+        };
+
+        let op_1 = op(plan_1, "c1 is null")?.unwrap();
+
+        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        println!("op_1 => c1: {:#?}", cb_1_c1);
 
         Ok(())
     }

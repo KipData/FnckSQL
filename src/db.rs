@@ -8,7 +8,8 @@ use crate::execution::volcano::{build_stream, try_collect};
 use crate::execution::ExecutorError;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
-use crate::optimizer::rule::RuleImpl;
+use crate::optimizer::rule::implementation::ImplementationRuleImpl;
+use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::optimizer::OptimizerError;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
@@ -36,9 +37,9 @@ impl Database<KipStorage> {
 }
 
 impl Database<KipStorage> {
-    pub async fn run_on_query(
+    pub async fn run_on_query<S: AsRef<str>>(
         &self,
-        sql: &str,
+        sql: S,
         query_execute: QueryExecute,
     ) -> Result<Vec<Tuple>, DatabaseError> {
         match query_execute {
@@ -79,9 +80,9 @@ impl<S: Storage> Database<S> {
     }
 
     /// Run SQL queries.
-    pub async fn run(&self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
+    pub async fn run<T: AsRef<str>>(&self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
-        let (plan, _) = Self::build_plan(sql, &transaction)?;
+        let (plan, _) = Self::build_plan::<T, S::TransactionType>(sql, &transaction)?;
 
         Self::run_volcano(transaction, plan).await
     }
@@ -107,8 +108,8 @@ impl<S: Storage> Database<S> {
         })
     }
 
-    pub fn build_plan(
-        sql: &str,
+    pub fn build_plan<V: AsRef<str>, T: Transaction>(
+        sql: V,
         transaction: &<S as Storage>::TransactionType,
     ) -> Result<(LogicalPlan, Statement), DatabaseError> {
         // parse
@@ -127,7 +128,8 @@ impl<S: Storage> Database<S> {
         let source_plan = binder.bind(&stmts[0])?;
         // println!("source_plan plan: {:#?}", source_plan);
 
-        let best_plan = Self::default_optimizer(source_plan).find_best()?;
+        let best_plan =
+            Self::default_optimizer(source_plan).find_best(Some(&transaction.meta_loader()))?;
         // println!("best_plan plan: {:#?}", best_plan);
 
         Ok((best_plan, stmts.remove(0)))
@@ -138,36 +140,69 @@ impl<S: Storage> Database<S> {
             .batch(
                 "Column Pruning".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::ColumnPruning],
+                vec![NormalizationRuleImpl::ColumnPruning],
             )
             .batch(
                 "Simplify Filter".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::SimplifyFilter, RuleImpl::ConstantCalculation],
+                vec![
+                    NormalizationRuleImpl::SimplifyFilter,
+                    NormalizationRuleImpl::ConstantCalculation,
+                ],
             )
             .batch(
                 "Predicate Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
-                    RuleImpl::PushPredicateThroughJoin,
-                    RuleImpl::PushPredicateIntoScan,
+                    NormalizationRuleImpl::PushPredicateThroughJoin,
+                    NormalizationRuleImpl::PushPredicateIntoScan,
                 ],
             )
             .batch(
                 "Combine Operators".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
-                vec![RuleImpl::CollapseProject, RuleImpl::CombineFilter],
+                vec![
+                    NormalizationRuleImpl::CollapseProject,
+                    NormalizationRuleImpl::CombineFilter,
+                ],
             )
             .batch(
                 "Limit Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
-                    RuleImpl::LimitProjectTranspose,
-                    RuleImpl::PushLimitThroughJoin,
-                    RuleImpl::PushLimitIntoTableScan,
-                    RuleImpl::EliminateLimits,
+                    NormalizationRuleImpl::LimitProjectTranspose,
+                    NormalizationRuleImpl::PushLimitThroughJoin,
+                    NormalizationRuleImpl::PushLimitIntoTableScan,
+                    NormalizationRuleImpl::EliminateLimits,
                 ],
             )
+            .implementations(vec![
+                // DQL
+                ImplementationRuleImpl::SimpleAggregate,
+                ImplementationRuleImpl::GroupByAggregate,
+                ImplementationRuleImpl::Dummy,
+                ImplementationRuleImpl::Filter,
+                ImplementationRuleImpl::HashJoin,
+                ImplementationRuleImpl::Limit,
+                ImplementationRuleImpl::Projection,
+                ImplementationRuleImpl::SeqScan,
+                ImplementationRuleImpl::IndexScan,
+                ImplementationRuleImpl::Sort,
+                ImplementationRuleImpl::Values,
+                // DML
+                ImplementationRuleImpl::Analyze,
+                ImplementationRuleImpl::CopyFromFile,
+                ImplementationRuleImpl::CopyToFile,
+                ImplementationRuleImpl::Delete,
+                ImplementationRuleImpl::Insert,
+                ImplementationRuleImpl::Update,
+                // DLL
+                ImplementationRuleImpl::AddColumn,
+                ImplementationRuleImpl::CreateTable,
+                ImplementationRuleImpl::DropColumn,
+                ImplementationRuleImpl::DropTable,
+                ImplementationRuleImpl::Truncate,
+            ])
     }
 }
 
@@ -176,9 +211,10 @@ pub struct DBTransaction<S: Storage> {
 }
 
 impl<S: Storage> DBTransaction<S> {
-    pub async fn run(&mut self, sql: &str) -> Result<Vec<Tuple>, DatabaseError> {
-        let (plan, _) =
-            Database::<S>::build_plan(sql, unsafe { self.inner.as_ptr().as_ref().unwrap() })?;
+    pub async fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
+        let (plan, _) = Database::<S>::build_plan::<T, S::TransactionType>(sql, unsafe {
+            self.inner.as_ptr().as_ref().unwrap()
+        })?;
         let mut stream = build_stream(plan, &self.inner);
 
         Ok(try_collect(&mut stream).await?)
@@ -340,9 +376,13 @@ mod test {
 
     #[tokio::test]
     async fn test_crud_sql() -> Result<(), DatabaseError> {
-        let mut results_1 = _test_crud_sql(QueryExecute::Volcano).await?;
+        #[cfg(not(feature = "codegen_execute"))]
+        {
+            let _ = crate::db::test::_test_crud_sql(QueryExecute::Volcano).await?;
+        }
         #[cfg(feature = "codegen_execute")]
         {
+            let mut results_1 = _test_crud_sql(QueryExecute::Volcano).await?;
             let mut results_2 = _test_crud_sql(QueryExecute::Codegen).await?;
 
             assert_eq!(results_1.len(), results_2.len());

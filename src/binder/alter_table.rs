@@ -41,6 +41,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                             column,
                         }),
                         childrens: vec![plan],
+                        physical_option: None,
                     }
                 }
                 AlterTableOperation::DropColumn {
@@ -58,6 +59,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                             column_name,
                         }),
                         childrens: vec![plan],
+                        physical_option: None,
                     }
                 }
                 AlterTableOperation::DropPrimaryKey => todo!(),

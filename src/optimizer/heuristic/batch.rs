@@ -1,15 +1,19 @@
-use crate::optimizer::rule::RuleImpl;
+use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 
 /// A batch of rules.
 #[derive(Clone)]
 pub struct HepBatch {
     pub name: String,
     pub strategy: HepBatchStrategy,
-    pub rules: Vec<RuleImpl>,
+    pub rules: Vec<NormalizationRuleImpl>,
 }
 
 impl HepBatch {
-    pub fn new(name: String, strategy: HepBatchStrategy, rules: Vec<RuleImpl>) -> Self {
+    pub fn new(
+        name: String,
+        strategy: HepBatchStrategy,
+        rules: Vec<NormalizationRuleImpl>,
+    ) -> Self {
         Self {
             name,
             strategy,

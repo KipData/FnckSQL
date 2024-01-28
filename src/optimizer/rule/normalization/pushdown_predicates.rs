@@ -2,12 +2,13 @@ use crate::catalog::ColumnRef;
 use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
-use crate::optimizer::core::rule::Rule;
+use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
+use crate::types::index::IndexInfo;
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -94,14 +95,19 @@ pub fn is_subset_cols(left: &[ColumnRef], right: &[ColumnRef]) -> bool {
 /// attributes of the left or right side of sub query when applicable.
 pub struct PushPredicateThroughJoin;
 
-impl Rule for PushPredicateThroughJoin {
+impl MatchPattern for PushPredicateThroughJoin {
     fn pattern(&self) -> &Pattern {
         &PUSH_PREDICATE_THROUGH_JOIN
     }
+}
 
+impl NormalizationRule for PushPredicateThroughJoin {
     // TODO: pushdown_predicates need to consider output columns
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
-        let child_id = graph.children_at(node_id)[0];
+        let child_id = match graph.eldest_child_at(node_id) {
+            Some(child_id) => child_id,
+            None => return Ok(()),
+        };
         if let Operator::Join(child_op) = graph.operator(child_id) {
             if !matches!(
                 child_op.join_type,
@@ -110,7 +116,7 @@ impl Rule for PushPredicateThroughJoin {
                 return Ok(());
             }
 
-            let join_childs = graph.children_at(child_id);
+            let join_childs = graph.children_at(child_id).collect_vec();
             let left_columns = graph.operator(join_childs[0]).referenced_columns(true);
             let right_columns = graph.operator(join_childs[1]).referenced_columns(true);
 
@@ -196,38 +202,32 @@ impl Rule for PushPredicateThroughJoin {
 
 pub struct PushPredicateIntoScan;
 
-impl Rule for PushPredicateIntoScan {
+impl MatchPattern for PushPredicateIntoScan {
     fn pattern(&self) -> &Pattern {
         &PUSH_PREDICATE_INTO_SCAN
     }
+}
 
+impl NormalizationRule for PushPredicateIntoScan {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
-        if let Operator::Filter(op) = graph.operator(node_id) {
-            let child_id = graph.children_at(node_id)[0];
-            if let Operator::Scan(child_op) = graph.operator(child_id) {
-                if child_op.index_by.is_some() {
-                    return Ok(());
-                }
+        if let Operator::Filter(op) = graph.operator(node_id).clone() {
+            if let Some(child_id) = graph.eldest_child_at(node_id) {
+                if let Operator::Scan(child_op) = graph.operator_mut(child_id) {
+                    //FIXME: now only support unique
+                    for IndexInfo { meta, binaries } in &mut child_op.index_infos {
+                        let mut option = op.predicate.convert_binary(&meta.column_ids[0])?;
 
-                //FIXME: now only support unique
-                for meta in &child_op.index_metas {
-                    let mut option = op.predicate.convert_binary(&meta.column_ids[0])?;
+                        if let Some(mut binary) = option.take() {
+                            binary.scope_aggregation()?;
+                            let rearrange_binaries = binary.rearrange()?;
 
-                    if let Some(mut binary) = option.take() {
-                        binary.scope_aggregation()?;
-                        let rearrange_binaries = binary.rearrange()?;
+                            if rearrange_binaries.is_empty() {
+                                continue;
+                            }
+                            let _ = binaries.replace(rearrange_binaries);
 
-                        if rearrange_binaries.is_empty() {
-                            continue;
+                            return Ok(());
                         }
-                        let mut scan_by_index = child_op.clone();
-                        scan_by_index.index_by = Some((meta.clone(), rearrange_binaries));
-
-                        // The constant expression extracted in prewhere is used to
-                        // reduce the data scanning range and cannot replace the role of Filter.
-                        graph.replace_node(child_id, Operator::Scan(scan_by_index));
-
-                        return Ok(());
                     }
                 }
             }
@@ -245,8 +245,9 @@ mod tests {
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
-    use crate::optimizer::rule::RuleImpl;
+    use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
+    use crate::storage::kip::KipTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::collections::Bound;
@@ -261,14 +262,14 @@ mod tests {
             .batch(
                 "simplify_filter".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::SimplifyFilter],
+                vec![NormalizationRuleImpl::SimplifyFilter],
             )
             .batch(
                 "test_push_predicate_into_scan".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushPredicateIntoScan],
+                vec![NormalizationRuleImpl::PushPredicateIntoScan],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Scan(op) = &best_plan.childrens[0].childrens[0].operator {
             let mock_binaries = vec![Scope {
@@ -276,7 +277,7 @@ mod tests {
                 max: Bound::Unbounded,
             }];
 
-            assert_eq!(op.index_by.clone().unwrap().1, mock_binaries);
+            assert_eq!(op.index_infos[1].binaries, Some(mock_binaries));
         } else {
             unreachable!("Should be a filter operator")
         }
@@ -294,9 +295,9 @@ mod tests {
             .batch(
                 "test_push_predicate_through_join".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushPredicateThroughJoin],
+                vec![NormalizationRuleImpl::PushPredicateThroughJoin],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -337,9 +338,9 @@ mod tests {
             .batch(
                 "test_push_predicate_through_join".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushPredicateThroughJoin],
+                vec![NormalizationRuleImpl::PushPredicateThroughJoin],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -380,9 +381,9 @@ mod tests {
             .batch(
                 "test_push_predicate_through_join".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![RuleImpl::PushPredicateThroughJoin],
+                vec![NormalizationRuleImpl::PushPredicateThroughJoin],
             )
-            .find_best()?;
+            .find_best::<KipTransaction>(None)?;
 
         if let Operator::Join(_) = &best_plan.childrens[0].operator {
         } else {

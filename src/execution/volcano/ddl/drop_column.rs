@@ -33,13 +33,13 @@ impl DropColumn {
             column_name,
             if_exists,
         } = &self.op;
-        let mut option_column_index = None;
+        let mut option_column_i = None;
 
         #[for_await]
         for tuple in self.input {
             let mut tuple: Tuple = tuple?;
 
-            if option_column_index.is_none() {
+            if option_column_i.is_none() {
                 if let Some((column_index, is_primary)) = tuple
                     .columns
                     .iter()
@@ -52,17 +52,17 @@ impl DropColumn {
                             "drop of primary key column is not allowed.".to_owned(),
                         ))?;
                     }
-                    option_column_index = Some(column_index);
+                    option_column_i = Some(column_index);
                 }
             }
-            if option_column_index.is_none() && *if_exists {
+            if option_column_i.is_none() && *if_exists {
                 return Ok(());
             }
-            let column_index = option_column_index
+            let column_i = option_column_i
                 .ok_or_else(|| BindError::InvalidColumn("not found column".to_string()))?;
 
-            let _ = tuple.columns.remove(column_index);
-            let _ = tuple.values.remove(column_index);
+            let _ = tuple.columns.remove(column_i);
+            let _ = tuple.values.remove(column_i);
 
             transaction.append(table_name, tuple, true)?;
         }

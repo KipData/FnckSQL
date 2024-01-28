@@ -22,6 +22,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 if_exists: *if_exists,
             }),
             childrens: vec![],
+            physical_option: None,
         };
         Ok(plan)
     }

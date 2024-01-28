@@ -43,6 +43,7 @@ impl OptExpr {
         LogicalPlan {
             operator: self.root.clone(),
             childrens,
+            physical_option: None,
         }
     }
 }

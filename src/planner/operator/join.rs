@@ -38,6 +38,7 @@ impl JoinOperator {
         LogicalPlan {
             operator: Operator::Join(JoinOperator { on, join_type }),
             childrens: vec![left, right],
+            physical_option: None,
         }
     }
 }

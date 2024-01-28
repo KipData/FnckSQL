@@ -17,6 +17,7 @@ impl LimitOperator {
         LogicalPlan {
             operator: Operator::Limit(LimitOperator { offset, limit }),
             childrens: vec![children],
+            physical_option: None,
         }
     }
 }

@@ -19,6 +19,7 @@ impl AggregateOperator {
                 agg_calls,
             }),
             childrens: vec![children],
+            physical_option: None,
         }
     }
 }

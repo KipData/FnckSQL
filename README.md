@@ -34,14 +34,6 @@ Embedded SQL DBMS
 KipSQL is designed to allow small Rust projects to reduce external dependencies and get rid of heavy database maintenance, 
 so that the Rust application itself can provide SQL storage capabilities.
 
-
-If you are a developer of the following applications, we very much welcome you to try using KipSQL 
-and provide your experience and opinions on using it.
-- personal website
-- desktop/mobile application
-- learning database
-- platform bot
-
 Welcome to our WebSite, Power By KipSQL: **http://www.kipdata.site/**
 
 ### Quick Started
@@ -84,31 +76,30 @@ Storage Support:
 ### Features
 - ORM Mapping: `features = ["marcos"]`
 ```rust
-#[derive(Debug, Clone, Default)]
-pub struct Post {
-    pub post_title: String,
-    pub post_date: NaiveDateTime,
-    pub post_body: String,
+#[derive(Default, Debug, PartialEq)]
+struct MyStruct {
+  c1: i32,
+  c2: String,
 }
 
-implement_from_tuple!(Post, (
-    post_title: String => |post: &mut Post, value: DataValue| {
-        if let Some(title) = value.utf8() {
-            post.post_title = title;
+implement_from_tuple!(
+    MyStruct, (
+        c1: i32 => |inner: &mut MyStruct, value| {
+            if let DataValue::Int32(Some(val)) = value {
+                inner.c1 = val;
+            }
+        },
+        c2: String => |inner: &mut MyStruct, value| {
+            if let DataValue::Utf8(Some(val)) = value {
+                inner.c2 = val;
+            }
         }
-    },
-    post_date: NaiveDateTime => |post: &mut Post, value: DataValue| {
-        if let Some(date_time) = value.datetime() {
-            post.post_date = date_time;
-        }
-    },
-    post_body: String => |post: &mut Post, value: DataValue| {
-        if let Some(body) = value.utf8() {
-            post.post_body = body;
-        }
-    }
-));
+    )
+);
 ```
+- Optimizer
+  - RBO
+  - CBO based on RBO(Physical Selection)
 - Execute
   - Volcano
   - Codegen on LuaJIT: `features = ["codegen_execute"]`
@@ -165,6 +156,7 @@ implement_from_tuple!(Post, (
   - [x] Insert Overwrite
   - [x] Update
   - [x] Delete
+  - [x] Analyze
 - DataTypes
   - Invalid
   - SqlNull
@@ -182,14 +174,6 @@ implement_from_tuple!(Post, (
   - Varchar
   - Date
   - DateTime
-- Optimizer rules
-  - Limit Project Transpose
-  - Eliminate Limits
-  - Push Limit Through Join
-  - Push Limit Into Scan
-  - Combine Filters
-  - Column Pruning
-  - Collapse Project
 
 ## License
 

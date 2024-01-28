@@ -85,6 +85,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 Ok(LogicalPlan {
                     operator: Operator::CopyToFile(CopyToFileOperator { source: ext_source }),
                     childrens: vec![],
+                    physical_option: None,
                 })
             } else {
                 // COPY <dest_table> FROM <source_file>
@@ -95,6 +96,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         table: table_name.to_string(),
                     }),
                     childrens: vec![],
+                    physical_option: None,
                 })
             }
         } else {

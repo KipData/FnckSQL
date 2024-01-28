@@ -3,10 +3,11 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 pub(crate) mod show;
 
-use crate::execution::volcano::ddl::alter_table::drop_column::DropColumn;
 use crate::execution::volcano::ddl::create_table::CreateTable;
+use crate::execution::volcano::ddl::drop_column::DropColumn;
 use crate::execution::volcano::ddl::drop_table::DropTable;
 use crate::execution::volcano::ddl::truncate::Truncate;
+use crate::execution::volcano::dml::analyze::Analyze;
 use crate::execution::volcano::dml::copy_from_file::CopyFromFile;
 use crate::execution::volcano::dml::delete::Delete;
 use crate::execution::volcano::dml::insert::Insert;
@@ -24,15 +25,16 @@ use crate::execution::volcano::dql::sort::Sort;
 use crate::execution::volcano::dql::values::Values;
 use crate::execution::volcano::show::show_table::ShowTables;
 use crate::execution::ExecutorError;
-use crate::planner::operator::Operator;
+use crate::planner::operator::{Operator, PhysicalOption};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
+use crate::types::index::IndexInfo;
 use crate::types::tuple::Tuple;
 use futures::stream::BoxStream;
 use futures::TryStreamExt;
 use std::cell::RefCell;
 
-use self::ddl::alter_table::add_column::AddColumn;
+use self::ddl::add_column::AddColumn;
 
 pub type BoxedExecutor = BoxStream<'static, Result<Tuple, ExecutorError>>;
 
@@ -44,6 +46,7 @@ pub fn build_stream<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>)
     let LogicalPlan {
         operator,
         mut childrens,
+        ..
     } = plan;
 
     match operator {
@@ -74,8 +77,12 @@ pub fn build_stream<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>)
             Projection::from((op, input)).execute(transaction)
         }
         Operator::Scan(op) => {
-            if op.index_by.is_some() {
-                IndexScan::from(op).execute(transaction)
+            if let Some(PhysicalOption::IndexScan(IndexInfo {
+                meta,
+                binaries: Some(binaries),
+            })) = plan.physical_option
+            {
+                IndexScan::from((op, meta, binaries)).execute(transaction)
             } else {
                 SeqScan::from(op).execute(transaction)
             }
@@ -123,6 +130,11 @@ pub fn build_stream<T: Transaction>(plan: LogicalPlan, transaction: &RefCell<T>)
         #[warn(unused_assignments)]
         Operator::CopyToFile(_op) => {
             todo!()
+        }
+        Operator::Analyze(op) => {
+            let input = build_stream(childrens.remove(0), transaction);
+
+            Analyze::from((op, input)).execute(transaction)
         }
     }
 }

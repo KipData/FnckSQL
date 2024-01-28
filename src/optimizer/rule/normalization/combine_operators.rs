@@ -1,10 +1,9 @@
 use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
-use crate::optimizer::core::rule::Rule;
+use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
-use crate::optimizer::rule::is_subset_exprs;
+use crate::optimizer::rule::normalization::is_subset_exprs;
 use crate::optimizer::OptimizerError;
-use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::Operator;
 use crate::types::LogicalType;
 use lazy_static::lazy_static;
@@ -33,19 +32,22 @@ lazy_static! {
 /// Combine two adjacent project operators into one.
 pub struct CollapseProject;
 
-impl Rule for CollapseProject {
+impl MatchPattern for CollapseProject {
     fn pattern(&self) -> &Pattern {
         &COLLAPSE_PROJECT_RULE
     }
+}
 
+impl NormalizationRule for CollapseProject {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
         if let Operator::Project(op) = graph.operator(node_id) {
-            let child_id = graph.children_at(node_id)[0];
-            if let Operator::Project(child_op) = graph.operator(child_id) {
-                if is_subset_exprs(&op.exprs, &child_op.exprs) {
-                    graph.remove_node(child_id, false);
-                } else {
-                    graph.remove_node(node_id, false);
+            if let Some(child_id) = graph.eldest_child_at(node_id) {
+                if let Operator::Project(child_op) = graph.operator(child_id) {
+                    if is_subset_exprs(&op.exprs, &child_op.exprs) {
+                        graph.remove_node(child_id, false);
+                    } else {
+                        graph.remove_node(node_id, false);
+                    }
                 }
             }
         }
@@ -57,26 +59,27 @@ impl Rule for CollapseProject {
 /// Combine two adjacent filter operators into one.
 pub struct CombineFilter;
 
-impl Rule for CombineFilter {
+impl MatchPattern for CombineFilter {
     fn pattern(&self) -> &Pattern {
         &COMBINE_FILTERS_RULE
     }
+}
 
+impl NormalizationRule for CombineFilter {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
-        if let Operator::Filter(op) = graph.operator(node_id) {
-            let child_id = graph.children_at(node_id)[0];
-            if let Operator::Filter(child_op) = graph.operator(child_id) {
-                let new_filter_op = FilterOperator {
-                    predicate: ScalarExpression::Binary {
+        if let Operator::Filter(op) = graph.operator(node_id).clone() {
+            if let Some(child_id) = graph.eldest_child_at(node_id) {
+                if let Operator::Filter(child_op) = graph.operator_mut(child_id) {
+                    child_op.predicate = ScalarExpression::Binary {
                         op: BinaryOperator::And,
-                        left_expr: Box::new(op.predicate.clone()),
+                        left_expr: Box::new(op.predicate),
                         right_expr: Box::new(child_op.predicate.clone()),
                         ty: LogicalType::Boolean,
-                    },
-                    having: op.having || child_op.having,
-                };
-                graph.replace_node(node_id, Operator::Filter(new_filter_op));
-                graph.remove_node(child_id, false);
+                    };
+                    child_op.having = op.having || child_op.having;
+
+                    graph.remove_node(node_id, false);
+                }
             }
         }
 
@@ -93,8 +96,9 @@ mod tests {
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::graph::HepNodeId;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
-    use crate::optimizer::rule::RuleImpl;
+    use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
+    use crate::storage::kip::KipTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;
@@ -106,7 +110,7 @@ mod tests {
         let mut optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_collapse_project".to_string(),
             HepBatchStrategy::once_topdown(),
-            vec![RuleImpl::CollapseProject],
+            vec![NormalizationRuleImpl::CollapseProject],
         );
 
         let mut new_project_op = optimizer.graph.operator(HepNodeId::new(0)).clone();
@@ -119,7 +123,7 @@ mod tests {
 
         optimizer.graph.add_root(new_project_op);
 
-        let best_plan = optimizer.find_best()?;
+        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
 
         if let Operator::Project(op) = &best_plan.operator {
             assert_eq!(op.exprs.len(), 1);
@@ -143,7 +147,7 @@ mod tests {
         let mut optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_combine_filter".to_string(),
             HepBatchStrategy::once_topdown(),
-            vec![RuleImpl::CombineFilter],
+            vec![NormalizationRuleImpl::CombineFilter],
         );
 
         let mut new_filter_op = optimizer.graph.operator(HepNodeId::new(1)).clone();
@@ -163,7 +167,7 @@ mod tests {
             .graph
             .add_node(HepNodeId::new(0), Some(HepNodeId::new(1)), new_filter_op);
 
-        let best_plan = optimizer.find_best()?;
+        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             if let ScalarExpression::Binary { op, .. } = &op.predicate {

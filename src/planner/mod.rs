@@ -1,12 +1,13 @@
 pub mod operator;
 
 use crate::catalog::TableName;
-use crate::planner::operator::Operator;
+use crate::planner::operator::{Operator, PhysicalOption};
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct LogicalPlan {
     pub operator: Operator,
     pub childrens: Vec<LogicalPlan>,
+    pub physical_option: Option<PhysicalOption>,
 }
 
 impl LogicalPlan {

@@ -1,5 +1,6 @@
 pub mod aggregate;
 pub mod alter_table;
+pub mod analyze;
 pub mod copy_from_file;
 pub mod copy_to_file;
 pub mod create_table;
@@ -19,6 +20,7 @@ pub mod values;
 
 use crate::catalog::ColumnRef;
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
+use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
@@ -30,6 +32,7 @@ use crate::planner::operator::show::ShowTablesOperator;
 use crate::planner::operator::truncate::TruncateOperator;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
+use crate::types::index::IndexInfo;
 use itertools::Itertools;
 
 use self::{
@@ -54,6 +57,7 @@ pub enum Operator {
     Insert(InsertOperator),
     Update(UpdateOperator),
     Delete(DeleteOperator),
+    Analyze(AnalyzeOperator),
     // DDL
     AddColumn(AddColumnOperator),
     DropColumn(DropColumnOperator),
@@ -65,6 +69,34 @@ pub enum Operator {
     // Copy
     CopyFromFile(CopyFromFileOperator),
     CopyToFile(CopyToFileOperator),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub enum PhysicalOption {
+    Dummy,
+    SimpleAggregate,
+    HashAggregate,
+    Filter,
+    HashJoin,
+    Project,
+    SeqScan,
+    IndexScan(IndexInfo),
+    RadixSort,
+    // NormalSort,
+    Limit,
+    Values,
+    Insert,
+    Update,
+    Delete,
+    AddColumn,
+    DropColumn,
+    CreateTable,
+    DropTable,
+    Truncate,
+    Show,
+    CopyFromFile,
+    CopyToFile,
+    Analyze,
 }
 
 impl Operator {
@@ -109,6 +141,8 @@ impl Operator {
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Values(op) => op.columns.clone(),
+            Operator::Analyze(op) => op.columns.clone(),
+            Operator::Delete(op) => vec![op.primary_key_column.clone()],
             _ => vec![],
         }
     }

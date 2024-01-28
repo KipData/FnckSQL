@@ -63,11 +63,7 @@ async fn server_run(path: String) -> Result<(), Box<dyn Error>> {
 
         match db.run(&input).await {
             Ok(tuples) => {
-                if tuples.is_empty() {
-                    println!("\nEmpty\n");
-                } else {
-                    println!("\n{}\n", create_table(&tuples));
-                }
+                println!("\n{}\nRow len: {}\n", create_table(&tuples), tuples.len());
             }
             Err(err) => {
                 println!("Oops!: {}", err);

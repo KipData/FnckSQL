@@ -97,24 +97,28 @@ impl ConstantBinary {
                     let mut is_push = merged_binaries.is_empty();
 
                     for binary in merged_binaries.iter_mut().rev() {
-                        if let ConstantBinary::Scope { max, .. } = binary {
-                            let (condition_min, condition_max) = op(&condition);
-                            let is_lt_min = Self::bound_compared(max, &condition_min, false)
-                                .unwrap_or(Ordering::Equal)
-                                .is_lt();
-                            let is_lt_max = Self::bound_compared(max, &condition_max, false)
-                                .unwrap_or(Ordering::Equal)
-                                .is_lt();
+                        match binary {
+                            ConstantBinary::Scope { max, .. } => {
+                                let (condition_min, condition_max) = op(&condition);
+                                let is_lt_min = Self::bound_compared(max, &condition_min, false)
+                                    .unwrap_or(Ordering::Equal)
+                                    .is_lt();
+                                let is_lt_max = Self::bound_compared(max, &condition_max, false)
+                                    .unwrap_or(Ordering::Equal)
+                                    .is_lt();
 
-                            if !is_lt_min && is_lt_max {
-                                let _ = mem::replace(max, condition_max);
-                            } else if !matches!(condition, ConstantBinary::Scope { .. }) {
-                                is_push = is_lt_max;
-                            } else if is_lt_min && is_lt_max {
-                                is_push = true
+                                if !is_lt_min && is_lt_max {
+                                    let _ = mem::replace(max, condition_max);
+                                } else if !matches!(condition, ConstantBinary::Scope { .. }) {
+                                    is_push = is_lt_max;
+                                } else if is_lt_min && is_lt_max {
+                                    is_push = true
+                                }
+
+                                break;
                             }
-
-                            break;
+                            ConstantBinary::Eq(_) => is_push = true,
+                            _ => (),
                         }
                     }
 
@@ -828,11 +832,14 @@ impl ScalarExpression {
                     (None, Some(binary)) => Ok(Self::check_or(col_id, left_expr, op, binary)),
                 }
             }
-            ScalarExpression::Alias { expr, .. } => expr.convert_binary(col_id),
-            ScalarExpression::TypeCast { expr, .. } => expr.convert_binary(col_id),
-            ScalarExpression::IsNull { expr, .. } => expr.convert_binary(col_id),
-            ScalarExpression::Unary { expr, .. } => expr.convert_binary(col_id),
-            _ => Ok(None),
+            ScalarExpression::Alias { expr, .. }
+            | ScalarExpression::TypeCast { expr, .. }
+            | ScalarExpression::IsNull { expr, .. }
+            | ScalarExpression::Unary { expr, .. }
+            | ScalarExpression::In { expr, .. } => expr.convert_binary(col_id),
+            ScalarExpression::Constant(_)
+            | ScalarExpression::ColumnRef(_)
+            | ScalarExpression::AggCall { .. } => Ok(None),
         }
     }
 
