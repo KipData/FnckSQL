@@ -156,12 +156,14 @@ mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::execution::volcano::dql::aggregate::hash_agg::HashAggExecutor;
     use crate::execution::volcano::dql::test::build_integers;
-    use crate::execution::volcano::{ReadExecutor, try_collect};
+    use crate::execution::volcano::{try_collect, ReadExecutor};
     use crate::execution::ExecutorError;
     use crate::expression::agg::AggKind;
     use crate::expression::ScalarExpression;
     use crate::planner::operator::aggregate::AggregateOperator;
     use crate::planner::operator::values::ValuesOperator;
+    use crate::planner::operator::Operator;
+    use crate::planner::LogicalPlan;
     use crate::storage::kip::KipStorage;
     use crate::storage::Storage;
     use crate::types::tuple::create_table;
@@ -170,8 +172,6 @@ mod test {
     use itertools::Itertools;
     use std::sync::Arc;
     use tempfile::TempDir;
-    use crate::planner::LogicalPlan;
-    use crate::planner::operator::Operator;
 
     #[tokio::test]
     async fn test_hash_agg() -> Result<(), ExecutorError> {

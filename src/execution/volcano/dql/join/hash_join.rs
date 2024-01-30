@@ -344,6 +344,8 @@ mod test {
     use crate::expression::ScalarExpression;
     use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
     use crate::planner::operator::values::ValuesOperator;
+    use crate::planner::operator::Operator;
+    use crate::planner::LogicalPlan;
     use crate::storage::kip::KipStorage;
     use crate::storage::Storage;
     use crate::types::tuple::create_table;
@@ -351,8 +353,6 @@ mod test {
     use crate::types::LogicalType;
     use std::sync::Arc;
     use tempfile::TempDir;
-    use crate::planner::LogicalPlan;
-    use crate::planner::operator::Operator;
 
     fn build_join_values() -> (
         Vec<(ScalarExpression, ScalarExpression)>,
@@ -408,7 +408,7 @@ mod test {
             ScalarExpression::ColumnRef(t2_columns[0].clone()),
         )];
 
-        let values_t1 = LogicalPlan{
+        let values_t1 = LogicalPlan {
             operator: Operator::Values(ValuesOperator {
                 rows: vec![
                     vec![
@@ -463,11 +463,7 @@ mod test {
             physical_option: None,
         };
 
-        (
-            on_keys,
-            values_t1,
-            values_t2,
-        )
+        (on_keys, values_t1, values_t2)
     }
 
     #[tokio::test]

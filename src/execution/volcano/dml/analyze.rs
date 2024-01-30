@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_NUM_OF_BUCKETS: usize = 100;
-const DEFAULT_COLUMN_METAS_PATH: &'static str = "fnck_sql_column_metas";
+const DEFAULT_COLUMN_METAS_PATH: &str = "fnck_sql_column_metas";
 
 pub struct Analyze {
     table_name: TableName,

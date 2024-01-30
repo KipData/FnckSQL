@@ -186,7 +186,11 @@ mod tests {
         let storage = db.storage;
         let mut transaction = storage.transaction().await?;
 
-        let tuple = executor.execute_mut(&mut transaction).next().await.unwrap()?;
+        let tuple = executor
+            .execute_mut(&mut transaction)
+            .next()
+            .await
+            .unwrap()?;
         assert_eq!(
             tuple,
             TupleBuilder::build_result(
