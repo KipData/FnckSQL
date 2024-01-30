@@ -869,10 +869,16 @@ impl ScalarExpression {
             | ScalarExpression::TypeCast { expr, .. }
             | ScalarExpression::Unary { expr, .. }
             | ScalarExpression::In { expr, .. } => expr.convert_binary(col_id),
-            ScalarExpression::IsNull { expr, .. } => match expr.as_ref() {
-                ScalarExpression::ColumnRef(column) => Ok(
-                    (column.id() == column.id()).then(|| ConstantBinary::Eq(NULL_VALUE.clone()))
-                ),
+            ScalarExpression::IsNull { expr, negated, .. } => match expr.as_ref() {
+                ScalarExpression::ColumnRef(column) => {
+                    Ok((column.id() == column.id()).then(|| {
+                        if *negated {
+                            ConstantBinary::NotEq(NULL_VALUE.clone())
+                        } else {
+                            ConstantBinary::Eq(NULL_VALUE.clone())
+                        }
+                    }))
+                }
                 ScalarExpression::Constant(_)
                 | ScalarExpression::Alias { .. }
                 | ScalarExpression::TypeCast { .. }
