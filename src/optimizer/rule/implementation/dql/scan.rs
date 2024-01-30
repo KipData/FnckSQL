@@ -85,6 +85,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
                         cost = Some(histogram.collect_count(binaries) * 2);
                     }
                 }
+                assert!(!matches!(cost, Some(0)));
 
                 group_expr.append_expr(Expression {
                     op: PhysicalOption::IndexScan(index_info.clone()),

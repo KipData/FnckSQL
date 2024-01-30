@@ -527,6 +527,114 @@ mod test {
 
         let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
+        assert_eq!(cb_1_c1, Some(ConstantBinary::Eq(Arc::new(DataValue::Null))));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_simplify_filter_column_is_not_null() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1 where c1 is not null").await?;
+
+        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
+            let best_plan = HepOptimizer::new(plan.clone())
+                .batch(
+                    "test_simplify_filter".to_string(),
+                    HepBatchStrategy::once_topdown(),
+                    vec![NormalizationRuleImpl::SimplifyFilter],
+                )
+                .find_best::<KipTransaction>(None)?;
+            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+                println!("{expr}: {:#?}", filter_op);
+
+                Ok(Some(filter_op))
+            } else {
+                Ok(None)
+            }
+        };
+
+        let op_1 = op(plan_1, "c1 is not null")?.unwrap();
+
+        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        println!("op_1 => c1: {:#?}", cb_1_c1);
+        assert_eq!(
+            cb_1_c1,
+            Some(ConstantBinary::NotEq(Arc::new(DataValue::Null)))
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_simplify_filter_column_in() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1 where c1 in (1, 2, 3)").await?;
+
+        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
+            let best_plan = HepOptimizer::new(plan.clone())
+                .batch(
+                    "test_simplify_filter".to_string(),
+                    HepBatchStrategy::once_topdown(),
+                    vec![NormalizationRuleImpl::SimplifyFilter],
+                )
+                .find_best::<KipTransaction>(None)?;
+            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+                println!("{expr}: {:#?}", filter_op);
+
+                Ok(Some(filter_op))
+            } else {
+                Ok(None)
+            }
+        };
+
+        let op_1 = op(plan_1, "c1 in (1, 2, 3)")?.unwrap();
+
+        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        println!("op_1 => c1: {:#?}", cb_1_c1);
+        assert_eq!(
+            cb_1_c1,
+            Some(ConstantBinary::Or(vec![
+                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(2)))),
+                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(1)))),
+                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(3)))),
+            ]))
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_simplify_filter_column_not_in() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1 where c1 not in (1, 2, 3)").await?;
+
+        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
+            let best_plan = HepOptimizer::new(plan.clone())
+                .batch(
+                    "test_simplify_filter".to_string(),
+                    HepBatchStrategy::once_topdown(),
+                    vec![NormalizationRuleImpl::SimplifyFilter],
+                )
+                .find_best::<KipTransaction>(None)?;
+            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+                println!("{expr}: {:#?}", filter_op);
+
+                Ok(Some(filter_op))
+            } else {
+                Ok(None)
+            }
+        };
+
+        let op_1 = op(plan_1, "c1 not in (1, 2, 3)")?.unwrap();
+
+        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        println!("op_1 => c1: {:#?}", cb_1_c1);
+        assert_eq!(
+            cb_1_c1,
+            Some(ConstantBinary::And(vec![
+                ConstantBinary::NotEq(Arc::new(DataValue::Int32(Some(2)))),
+                ConstantBinary::NotEq(Arc::new(DataValue::Int32(Some(1)))),
+                ConstantBinary::NotEq(Arc::new(DataValue::Int32(Some(3)))),
+            ]))
+        );
 
         Ok(())
     }

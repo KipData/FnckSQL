@@ -2,7 +2,7 @@ use crate::catalog::ColumnRef;
 use crate::expression::value_compute::{binary_op, unary_op};
 use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
 use crate::types::errors::TypeError;
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::{DataValue, ValueRef, FALSE_VALUE, NULL_VALUE, TRUE_VALUE};
 use crate::types::{ColumnId, LogicalType};
 use ahash::RandomState;
 use itertools::Itertools;
@@ -611,6 +611,39 @@ impl ScalarExpression {
                     }));
                 }
             }
+            ScalarExpression::In {
+                expr,
+                negated,
+                args,
+            } => {
+                let (op_1, op_2, value) = if *negated {
+                    (
+                        BinaryOperator::NotEq,
+                        BinaryOperator::And,
+                        TRUE_VALUE.clone(),
+                    )
+                } else {
+                    (BinaryOperator::Eq, BinaryOperator::Or, FALSE_VALUE.clone())
+                };
+
+                let mut new_expr = ScalarExpression::Constant(value);
+
+                for arg in args.drain(..) {
+                    new_expr = ScalarExpression::Binary {
+                        op: op_2.clone(),
+                        left_expr: Box::new(ScalarExpression::Binary {
+                            op: op_1.clone(),
+                            left_expr: expr.clone(),
+                            right_expr: Box::new(arg),
+                            ty: LogicalType::Boolean,
+                        }),
+                        right_expr: Box::new(new_expr),
+                        ty: LogicalType::Boolean,
+                    }
+                }
+
+                let _ = mem::replace(self, new_expr);
+            }
             _ => (),
         }
 
@@ -834,9 +867,27 @@ impl ScalarExpression {
             }
             ScalarExpression::Alias { expr, .. }
             | ScalarExpression::TypeCast { expr, .. }
-            | ScalarExpression::IsNull { expr, .. }
             | ScalarExpression::Unary { expr, .. }
             | ScalarExpression::In { expr, .. } => expr.convert_binary(col_id),
+            ScalarExpression::IsNull { expr, negated, .. } => match expr.as_ref() {
+                ScalarExpression::ColumnRef(column) => {
+                    Ok((column.id() == column.id()).then(|| {
+                        if *negated {
+                            ConstantBinary::NotEq(NULL_VALUE.clone())
+                        } else {
+                            ConstantBinary::Eq(NULL_VALUE.clone())
+                        }
+                    }))
+                }
+                ScalarExpression::Constant(_)
+                | ScalarExpression::Alias { .. }
+                | ScalarExpression::TypeCast { .. }
+                | ScalarExpression::IsNull { .. }
+                | ScalarExpression::Unary { .. }
+                | ScalarExpression::Binary { .. }
+                | ScalarExpression::AggCall { .. }
+                | ScalarExpression::In { .. } => expr.convert_binary(col_id),
+            },
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)
             | ScalarExpression::AggCall { .. } => Ok(None),
