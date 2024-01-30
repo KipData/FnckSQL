@@ -1,12 +1,12 @@
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::sort::{SortField, SortOperator};
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use std::cell::RefCell;
 use std::mem;
 
 const BUCKET_SIZE: usize = u8::MAX as usize + 1;
@@ -75,11 +75,11 @@ pub(crate) fn sort(
 pub struct Sort {
     sort_fields: Vec<SortField>,
     limit: Option<usize>,
-    input: BoxedExecutor,
+    input: LogicalPlan,
 }
 
-impl From<(SortOperator, BoxedExecutor)> for Sort {
-    fn from((SortOperator { sort_fields, limit }, input): (SortOperator, BoxedExecutor)) -> Self {
+impl From<(SortOperator, LogicalPlan)> for Sort {
+    fn from((SortOperator { sort_fields, limit }, input): (SortOperator, LogicalPlan)) -> Self {
         Sort {
             sort_fields,
             limit,
@@ -88,15 +88,15 @@ impl From<(SortOperator, BoxedExecutor)> for Sort {
     }
 }
 
-impl<T: Transaction> Executor<T> for Sort {
-    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute()
+impl<T: Transaction> ReadExecutor<T> for Sort {
+    fn execute(self, transaction: &T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
 impl Sort {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self) {
+    pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let Sort {
             sort_fields,
             limit,
@@ -105,7 +105,7 @@ impl Sort {
         let mut tuples: Vec<Tuple> = vec![];
 
         #[for_await]
-        for tuple in input {
+        for tuple in build_read(input, transaction) {
             tuples.push(tuple?);
         }
         let mut tuples = sort(&sort_fields, tuples)?;

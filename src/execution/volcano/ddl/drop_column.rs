@@ -1,27 +1,27 @@
 use crate::binder::BindError;
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 
 pub struct DropColumn {
     op: DropColumnOperator,
-    input: BoxedExecutor,
+    input: LogicalPlan,
 }
 
-impl From<(DropColumnOperator, BoxedExecutor)> for DropColumn {
-    fn from((op, input): (DropColumnOperator, BoxedExecutor)) -> Self {
+impl From<(DropColumnOperator, LogicalPlan)> for DropColumn {
+    fn from((op, input): (DropColumnOperator, LogicalPlan)) -> Self {
         Self { op, input }
     }
 }
 
-impl<T: Transaction> Executor<T> for DropColumn {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
+impl<T: Transaction> WriteExecutor<T> for DropColumn {
+    fn execute_mut(self, transaction: &mut T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
@@ -34,9 +34,10 @@ impl DropColumn {
             if_exists,
         } = &self.op;
         let mut option_column_i = None;
+        let mut tuples = Vec::new();
 
         #[for_await]
-        for tuple in self.input {
+        for tuple in build_read(self.input, transaction) {
             let mut tuple: Tuple = tuple?;
 
             if option_column_i.is_none() {
@@ -64,6 +65,9 @@ impl DropColumn {
             let _ = tuple.columns.remove(column_i);
             let _ = tuple.values.remove(column_i);
 
+            tuples.push(tuple);
+        }
+        for tuple in tuples {
             transaction.append(table_name, tuple, true)?;
         }
         transaction.drop_column(table_name, column_name, *if_exists)?;

@@ -1,9 +1,10 @@
 use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::execution::volcano::dql::join::joins_nullable;
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
@@ -11,23 +12,22 @@ use crate::types::value::{DataValue, ValueRef};
 use ahash::{HashMap, HashSet, HashSetExt, RandomState};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use std::cell::RefCell;
 use std::mem;
 use std::sync::Arc;
 
 pub struct HashJoin {
     on: JoinCondition,
     ty: JoinType,
-    left_input: BoxedExecutor,
-    right_input: BoxedExecutor,
+    left_input: LogicalPlan,
+    right_input: LogicalPlan,
 }
 
-impl From<(JoinOperator, BoxedExecutor, BoxedExecutor)> for HashJoin {
+impl From<(JoinOperator, LogicalPlan, LogicalPlan)> for HashJoin {
     fn from(
         (JoinOperator { on, join_type }, left_input, right_input): (
             JoinOperator,
-            BoxedExecutor,
-            BoxedExecutor,
+            LogicalPlan,
+            LogicalPlan,
         ),
     ) -> Self {
         HashJoin {
@@ -39,9 +39,9 @@ impl From<(JoinOperator, BoxedExecutor, BoxedExecutor)> for HashJoin {
     }
 }
 
-impl<T: Transaction> Executor<T> for HashJoin {
-    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute()
+impl<T: Transaction> ReadExecutor<T> for HashJoin {
+    fn execute(self, transaction: &T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
@@ -298,7 +298,7 @@ impl HashJoinStatus {
 
 impl HashJoin {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self) {
+    pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let HashJoin {
             on,
             ty,
@@ -312,7 +312,7 @@ impl HashJoin {
         // 1.construct hashtable, one hash key may contains multiple rows indices.
         // 2.merged all left tuples.
         #[for_await]
-        for tuple in left_input {
+        for tuple in build_read(left_input, transaction) {
             let tuple: Tuple = tuple?;
 
             join_status.left_build(tuple)?;
@@ -320,7 +320,7 @@ impl HashJoin {
 
         // probe phase
         #[for_await]
-        for tuple in right_input {
+        for tuple in build_read(right_input, transaction) {
             let tuple: Tuple = tuple?;
 
             for tuple in join_status.right_probe(tuple)? {
@@ -339,27 +339,25 @@ mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::execution::volcano::dql::join::hash_join::HashJoin;
     use crate::execution::volcano::dql::test::build_integers;
-    use crate::execution::volcano::dql::values::Values;
-    use crate::execution::volcano::{try_collect, BoxedExecutor, Executor};
+    use crate::execution::volcano::{try_collect, ReadExecutor};
     use crate::execution::ExecutorError;
     use crate::expression::ScalarExpression;
     use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
     use crate::planner::operator::values::ValuesOperator;
     use crate::storage::kip::KipStorage;
-    use crate::storage::{Storage, Transaction};
+    use crate::storage::Storage;
     use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
-    use std::cell::RefCell;
     use std::sync::Arc;
     use tempfile::TempDir;
+    use crate::planner::LogicalPlan;
+    use crate::planner::operator::Operator;
 
-    fn build_join_values<T: Transaction>(
-        _t: &RefCell<T>,
-    ) -> (
+    fn build_join_values() -> (
         Vec<(ScalarExpression, ScalarExpression)>,
-        BoxedExecutor,
-        BoxedExecutor,
+        LogicalPlan,
+        LogicalPlan,
     ) {
         let desc = ColumnDesc::new(LogicalType::Integer, false, false, None);
 
@@ -410,62 +408,74 @@ mod test {
             ScalarExpression::ColumnRef(t2_columns[0].clone()),
         )];
 
-        let values_t1 = Values::from(ValuesOperator {
-            rows: vec![
-                vec![
-                    Arc::new(DataValue::Int32(Some(0))),
-                    Arc::new(DataValue::Int32(Some(2))),
-                    Arc::new(DataValue::Int32(Some(4))),
+        let values_t1 = LogicalPlan{
+            operator: Operator::Values(ValuesOperator {
+                rows: vec![
+                    vec![
+                        Arc::new(DataValue::Int32(Some(0))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(4))),
+                    ],
+                    vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(3))),
+                        Arc::new(DataValue::Int32(Some(5))),
+                    ],
+                    vec![
+                        Arc::new(DataValue::Int32(Some(3))),
+                        Arc::new(DataValue::Int32(Some(5))),
+                        Arc::new(DataValue::Int32(Some(7))),
+                    ],
                 ],
-                vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Int32(Some(3))),
-                    Arc::new(DataValue::Int32(Some(5))),
-                ],
-                vec![
-                    Arc::new(DataValue::Int32(Some(3))),
-                    Arc::new(DataValue::Int32(Some(5))),
-                    Arc::new(DataValue::Int32(Some(7))),
-                ],
-            ],
-            columns: t1_columns,
-        });
+                columns: t1_columns,
+            }),
+            childrens: vec![],
+            physical_option: None,
+        };
 
-        let values_t2 = Values::from(ValuesOperator {
-            rows: vec![
-                vec![
-                    Arc::new(DataValue::Int32(Some(0))),
-                    Arc::new(DataValue::Int32(Some(2))),
-                    Arc::new(DataValue::Int32(Some(4))),
+        let values_t2 = LogicalPlan {
+            operator: Operator::Values(ValuesOperator {
+                rows: vec![
+                    vec![
+                        Arc::new(DataValue::Int32(Some(0))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(4))),
+                    ],
+                    vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(3))),
+                        Arc::new(DataValue::Int32(Some(5))),
+                    ],
+                    vec![
+                        Arc::new(DataValue::Int32(Some(4))),
+                        Arc::new(DataValue::Int32(Some(6))),
+                        Arc::new(DataValue::Int32(Some(8))),
+                    ],
+                    vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                    ],
                 ],
-                vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Int32(Some(3))),
-                    Arc::new(DataValue::Int32(Some(5))),
-                ],
-                vec![
-                    Arc::new(DataValue::Int32(Some(4))),
-                    Arc::new(DataValue::Int32(Some(6))),
-                    Arc::new(DataValue::Int32(Some(8))),
-                ],
-                vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Int32(Some(1))),
-                ],
-            ],
-            columns: t2_columns,
-        });
+                columns: t2_columns,
+            }),
+            childrens: vec![],
+            physical_option: None,
+        };
 
-        (on_keys, values_t1.execute(&_t), values_t2.execute(&_t))
+        (
+            on_keys,
+            values_t1,
+            values_t2,
+        )
     }
 
     #[tokio::test]
     async fn test_inner_join() -> Result<(), ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
-        let transaction = RefCell::new(storage.transaction().await?);
-        let (keys, left, right) = build_join_values(&transaction);
+        let transaction = storage.transaction().await?;
+        let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -501,8 +511,8 @@ mod test {
     async fn test_left_join() -> Result<(), ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
-        let transaction = RefCell::new(storage.transaction().await?);
-        let (keys, left, right) = build_join_values(&transaction);
+        let transaction = storage.transaction().await?;
+        let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -542,8 +552,8 @@ mod test {
     async fn test_right_join() -> Result<(), ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
-        let transaction = RefCell::new(storage.transaction().await?);
-        let (keys, left, right) = build_join_values(&transaction);
+        let transaction = storage.transaction().await?;
+        let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -583,8 +593,8 @@ mod test {
     async fn test_full_join() -> Result<(), ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
-        let transaction = RefCell::new(storage.transaction().await?);
-        let (keys, left, right) = build_join_values(&transaction);
+        let transaction = storage.transaction().await?;
+        let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
             on: JoinCondition::On {

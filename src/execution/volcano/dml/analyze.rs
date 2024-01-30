@@ -1,16 +1,16 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableMeta, TableName};
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::execution::ExecutorError;
 use crate::optimizer::core::column_meta::ColumnMeta;
 use crate::optimizer::core::histogram::HistogramBuilder;
 use crate::optimizer::OptimizerError;
 use crate::planner::operator::analyze::AnalyzeOperator;
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
@@ -21,11 +21,11 @@ const DEFAULT_COLUMN_METAS_PATH: &'static str = "fnck_sql_column_metas";
 
 pub struct Analyze {
     table_name: TableName,
-    input: BoxedExecutor,
+    input: LogicalPlan,
     columns: Vec<ColumnRef>,
 }
 
-impl From<(AnalyzeOperator, BoxedExecutor)> for Analyze {
+impl From<(AnalyzeOperator, LogicalPlan)> for Analyze {
     fn from(
         (
             AnalyzeOperator {
@@ -33,7 +33,7 @@ impl From<(AnalyzeOperator, BoxedExecutor)> for Analyze {
                 columns,
             },
             input,
-        ): (AnalyzeOperator, BoxedExecutor),
+        ): (AnalyzeOperator, LogicalPlan),
     ) -> Self {
         Analyze {
             table_name,
@@ -43,9 +43,9 @@ impl From<(AnalyzeOperator, BoxedExecutor)> for Analyze {
     }
 }
 
-impl<T: Transaction> Executor<T> for Analyze {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
+impl<T: Transaction> WriteExecutor<T> for Analyze {
+    fn execute_mut(self, transaction: &mut T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
@@ -65,7 +65,7 @@ impl Analyze {
         }
 
         #[for_await]
-        for tuple in input {
+        for tuple in build_read(input, transaction) {
             let Tuple {
                 columns, values, ..
             } = tuple?;

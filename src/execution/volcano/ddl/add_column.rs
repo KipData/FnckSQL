@@ -1,31 +1,28 @@
-use crate::execution::volcano::BoxedExecutor;
+use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use crate::{execution::ExecutorError, types::tuple_builder::TupleBuilder};
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 use std::sync::Arc;
 
+use crate::planner::LogicalPlan;
 use crate::types::index::Index;
-use crate::{
-    execution::volcano::Executor, planner::operator::alter_table::add_column::AddColumnOperator,
-    storage::Transaction,
-};
+use crate::{planner::operator::alter_table::add_column::AddColumnOperator, storage::Transaction};
 
 pub struct AddColumn {
     op: AddColumnOperator,
-    input: BoxedExecutor,
+    input: LogicalPlan,
 }
 
-impl From<(AddColumnOperator, BoxedExecutor)> for AddColumn {
-    fn from((op, input): (AddColumnOperator, BoxedExecutor)) -> Self {
+impl From<(AddColumnOperator, LogicalPlan)> for AddColumn {
+    fn from((op, input): (AddColumnOperator, LogicalPlan)) -> Self {
         Self { op, input }
     }
 }
 
-impl<T: Transaction> Executor<T> for AddColumn {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
+impl<T: Transaction> WriteExecutor<T> for AddColumn {
+    fn execute_mut(self, transaction: &mut T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
@@ -38,9 +35,10 @@ impl AddColumn {
             if_not_exists,
         } = &self.op;
         let mut unique_values = column.desc().is_unique.then(|| Vec::new());
+        let mut tuples = Vec::new();
 
         #[for_await]
-        for tuple in self.input {
+        for tuple in build_read(self.input, transaction) {
             let mut tuple: Tuple = tuple?;
 
             tuple.columns.push(Arc::new(column.clone()));
@@ -52,6 +50,9 @@ impl AddColumn {
             } else {
                 tuple.values.push(Arc::new(DataValue::Null));
             }
+            tuples.push(tuple);
+        }
+        for tuple in tuples {
             transaction.append(table_name, tuple, true)?;
         }
         let col_id = transaction.add_column(table_name, column, *if_not_exists)?;

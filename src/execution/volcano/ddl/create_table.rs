@@ -1,11 +1,10 @@
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{BoxedExecutor, WriteExecutor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 
 pub struct CreateTable {
     op: CreateTableOperator,
@@ -17,9 +16,9 @@ impl From<CreateTableOperator> for CreateTable {
     }
 }
 
-impl<T: Transaction> Executor<T> for CreateTable {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
+impl<T: Transaction> WriteExecutor<T> for CreateTable {
+    fn execute_mut(self, transaction: &mut T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 

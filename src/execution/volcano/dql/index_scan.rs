@@ -1,4 +1,4 @@
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::execution::ExecutorError;
 use crate::expression::simplify::ConstantBinary;
 use crate::planner::operator::scan::ScanOperator;
@@ -6,7 +6,6 @@ use crate::storage::{Iter, Transaction};
 use crate::types::index::IndexMetaRef;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 
 pub(crate) struct IndexScan {
     op: ScanOperator,
@@ -24,9 +23,9 @@ impl From<(ScanOperator, IndexMetaRef, Vec<ConstantBinary>)> for IndexScan {
     }
 }
 
-impl<T: Transaction> Executor<T> for IndexScan {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_ref().unwrap()) }
+impl<T: Transaction> ReadExecutor<T> for IndexScan {
+    fn execute(self, transaction: &T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 

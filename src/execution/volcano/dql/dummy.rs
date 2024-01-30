@@ -1,14 +1,13 @@
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::execution::ExecutorError;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 
 pub struct Dummy {}
 
-impl<T: Transaction> Executor<T> for Dummy {
-    fn execute<'a>(self, _transaction: &RefCell<T>) -> BoxedExecutor {
+impl<T: Transaction> ReadExecutor<T> for Dummy {
+    fn execute(self, _: &T) -> BoxedExecutor {
         self._execute()
     }
 }

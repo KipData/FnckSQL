@@ -1,13 +1,12 @@
 use crate::catalog::ColumnRef;
 use crate::catalog::{ColumnCatalog, TableMeta};
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::show::ShowTablesOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 use std::sync::Arc;
 
 pub struct ShowTables {
@@ -20,9 +19,9 @@ impl From<ShowTablesOperator> for ShowTables {
     }
 }
 
-impl<T: Transaction> Executor<T> for ShowTables {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_ref().unwrap()) }
+impl<T: Transaction> ReadExecutor<T> for ShowTables {
+    fn execute(self, transaction: &T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 

@@ -1,10 +1,9 @@
 use sqlparser::ast::Statement;
 use sqlparser::parser::ParserError;
-use std::cell::RefCell;
 use std::path::PathBuf;
 
 use crate::binder::{BindError, Binder, BinderContext};
-use crate::execution::volcano::{build_stream, try_collect};
+use crate::execution::volcano::{build_write, try_collect};
 use crate::execution::ExecutorError;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -88,14 +87,14 @@ impl<S: Storage> Database<S> {
     }
 
     pub(crate) async fn run_volcano(
-        transaction: <S as Storage>::TransactionType,
+        mut transaction: <S as Storage>::TransactionType,
         plan: LogicalPlan,
     ) -> Result<Vec<Tuple>, DatabaseError> {
-        let transaction = RefCell::new(transaction);
-        let mut stream = build_stream(plan, &transaction);
+        let mut stream = build_write(plan, &mut transaction);
         let tuples = try_collect(&mut stream).await?;
 
-        transaction.into_inner().commit().await?;
+        drop(stream);
+        transaction.commit().await?;
 
         Ok(tuples)
     }
@@ -103,9 +102,7 @@ impl<S: Storage> Database<S> {
     pub async fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
 
-        Ok(DBTransaction {
-            inner: RefCell::new(transaction),
-        })
+        Ok(DBTransaction { inner: transaction })
     }
 
     pub fn build_plan<V: AsRef<str>, T: Transaction>(
@@ -207,21 +204,19 @@ impl<S: Storage> Database<S> {
 }
 
 pub struct DBTransaction<S: Storage> {
-    inner: RefCell<S::TransactionType>,
+    inner: S::TransactionType,
 }
 
 impl<S: Storage> DBTransaction<S> {
     pub async fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
-        let (plan, _) = Database::<S>::build_plan::<T, S::TransactionType>(sql, unsafe {
-            self.inner.as_ptr().as_ref().unwrap()
-        })?;
-        let mut stream = build_stream(plan, &self.inner);
+        let (plan, _) = Database::<S>::build_plan::<T, S::TransactionType>(sql, &self.inner)?;
+        let mut stream = build_write(plan, &mut self.inner);
 
         Ok(try_collect(&mut stream).await?)
     }
 
     pub async fn commit(self) -> Result<(), DatabaseError> {
-        self.inner.into_inner().commit().await?;
+        self.inner.commit().await?;
 
         Ok(())
     }
