@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize};
 use super::LogicalType;
 
 lazy_static! {
+    pub static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
+    pub static ref FALSE_VALUE: ValueRef = Arc::new(DataValue::Boolean(Some(false)));
+    pub static ref TRUE_VALUE: ValueRef = Arc::new(DataValue::Boolean(Some(true)));
     static ref UNIX_DATETIME: NaiveDateTime = NaiveDateTime::from_timestamp_opt(0, 0).unwrap();
 }
 
@@ -86,6 +89,11 @@ generate_get_option!(DataValue,
 impl PartialEq for DataValue {
     fn eq(&self, other: &Self) -> bool {
         use DataValue::*;
+
+        if self.is_null() && other.is_null() {
+            return true;
+        }
+
         match (self, other) {
             (Boolean(v1), Boolean(v2)) => v1.eq(v2),
             (Boolean(_), _) => false,
