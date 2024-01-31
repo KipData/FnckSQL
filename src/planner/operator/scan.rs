@@ -5,6 +5,8 @@ use crate::storage::Bounds;
 use crate::types::index::IndexInfo;
 use crate::types::ColumnId;
 use itertools::Itertools;
+use std::fmt;
+use std::fmt::Formatter;
 
 use super::Operator;
 
@@ -12,7 +14,7 @@ use super::Operator;
 pub struct ScanOperator {
     pub table_name: TableName,
     pub primary_key: ColumnId,
-    pub columns: Vec<ScalarExpression>,
+    pub projection_columns: Vec<ScalarExpression>,
     // Support push down limit.
     pub limit: Bounds,
 
@@ -49,12 +51,33 @@ impl ScanOperator {
                 index_infos,
                 table_name,
                 primary_key: primary_key_option.unwrap(),
-                columns,
+                projection_columns: columns,
 
                 limit: (None, None),
             }),
             childrens: vec![],
             physical_option: None,
         }
+    }
+}
+
+impl fmt::Display for ScanOperator {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let projection_columns = self
+            .projection_columns
+            .iter()
+            .map(|column| format!("{}", column))
+            .join(", ");
+        let (offset, limit) = self.limit;
+
+        write!(f, "Scan {} -> [{}]", self.table_name, projection_columns)?;
+        if let Some(limit) = limit {
+            write!(f, ", Limit: {}", limit)?;
+        }
+        if let Some(offset) = offset {
+            write!(f, ", Offset: {}", offset)?;
+        }
+
+        Ok(())
     }
 }

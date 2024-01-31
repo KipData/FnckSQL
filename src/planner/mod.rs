@@ -29,4 +29,19 @@ impl LogicalPlan {
         collect_table(self, &mut tables);
         tables
     }
+
+    pub fn explain(&self, indentation: usize) -> String {
+        let mut result = format!("{:indent$}{}", "", self.operator, indent = indentation);
+
+        if let Some(physical_option) = &self.physical_option {
+            result.push_str(&format!(" [{}]", physical_option));
+        }
+
+        for child in &self.childrens {
+            result.push('\n');
+            result.push_str(&child.explain(indentation + 2));
+        }
+
+        result
+    }
 }

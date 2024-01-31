@@ -1,7 +1,6 @@
 pub(crate) mod ddl;
 pub(crate) mod dml;
 pub(crate) mod dql;
-pub(crate) mod show;
 
 use crate::execution::volcano::ddl::create_table::CreateTable;
 use crate::execution::volcano::ddl::drop_column::DropColumn;
@@ -15,15 +14,16 @@ use crate::execution::volcano::dml::update::Update;
 use crate::execution::volcano::dql::aggregate::hash_agg::HashAggExecutor;
 use crate::execution::volcano::dql::aggregate::simple_agg::SimpleAggExecutor;
 use crate::execution::volcano::dql::dummy::Dummy;
+use crate::execution::volcano::dql::explain::Explain;
 use crate::execution::volcano::dql::filter::Filter;
 use crate::execution::volcano::dql::index_scan::IndexScan;
 use crate::execution::volcano::dql::join::hash_join::HashJoin;
 use crate::execution::volcano::dql::limit::Limit;
 use crate::execution::volcano::dql::projection::Projection;
 use crate::execution::volcano::dql::seq_scan::SeqScan;
+use crate::execution::volcano::dql::show_table::ShowTables;
 use crate::execution::volcano::dql::sort::Sort;
 use crate::execution::volcano::dql::values::Values;
-use crate::execution::volcano::show::show_table::ShowTables;
 use crate::execution::ExecutorError;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::planner::LogicalPlan;
@@ -101,7 +101,12 @@ pub fn build_read<T: Transaction>(plan: LogicalPlan, transaction: &T) -> BoxedEx
             Limit::from((op, input)).execute(transaction)
         }
         Operator::Values(op) => Values::from(op).execute(transaction),
-        Operator::Show(op) => ShowTables::from(op).execute(transaction),
+        Operator::Show => ShowTables.execute(transaction),
+        Operator::Explain => {
+            let input = childrens.remove(0);
+
+            Explain::from(input).execute(transaction)
+        }
         _ => unreachable!(),
     }
 }

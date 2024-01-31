@@ -78,14 +78,16 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
 
                 if let Some(binaries) = &index_info.binaries {
                     // FIXME: Only UniqueIndex
-                    if let Some(histogram) =
+                    if let Some(column_meta) =
                         find_column_meta(column_metas, &index_info.meta.column_ids[0])
                     {
                         // need to return table query(non-covering index)
-                        cost = Some(histogram.collect_count(binaries) * 2);
+                        cost = Some(column_meta.collect_count(binaries) * 2);
                     }
                 }
-                assert!(!matches!(cost, Some(0)));
+                if matches!(cost, Some(0)) {
+                   continue
+                }
 
                 group_expr.append_expr(Expression {
                     op: PhysicalOption::IndexScan(index_info.clone()),

@@ -8,8 +8,9 @@ use ahash::RandomState;
 use itertools::Itertools;
 use std::cmp::Ordering;
 use std::collections::{Bound, HashSet};
-use std::mem;
+use std::fmt::Formatter;
 use std::sync::Arc;
+use std::{fmt, mem};
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum ConstantBinary {
@@ -376,6 +377,13 @@ impl ConstantBinary {
             })
             .chain(eqs.into_iter().map(|val| ConstantBinary::Eq(val.clone())))
             .collect_vec()
+    }
+
+    fn join_write(f: &mut Formatter, binaries: &Vec<ConstantBinary>, op: &str) -> fmt::Result {
+        let binaries = binaries.iter().map(|binary| format!("{}", binary)).join(op);
+        write!(f, " {} ", binaries)?;
+
+        Ok(())
     }
 }
 
@@ -871,7 +879,7 @@ impl ScalarExpression {
             | ScalarExpression::In { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::IsNull { expr, negated, .. } => match expr.as_ref() {
                 ScalarExpression::ColumnRef(column) => {
-                    Ok((column.id() == column.id()).then(|| {
+                    Ok(column.id().is_some_and(|id| col_id == &id).then(|| {
                         if *negated {
                             ConstantBinary::NotEq(NULL_VALUE.clone())
                         } else {
@@ -950,6 +958,34 @@ impl ScalarExpression {
             BinaryOperator::Eq | BinaryOperator::Spaceship => Some(ConstantBinary::Eq(val.clone())),
             BinaryOperator::NotEq => Some(ConstantBinary::NotEq(val.clone())),
             _ => None,
+        }
+    }
+}
+
+impl fmt::Display for ConstantBinary {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            ConstantBinary::Scope { min, max } => {
+                match min {
+                    Bound::Unbounded => write!(f, "-∞")?,
+                    Bound::Included(value) => write!(f, "[{}", value)?,
+                    Bound::Excluded(value) => write!(f, "({}", value)?,
+                }
+
+                write!(f, ", ")?;
+
+                match max {
+                    Bound::Unbounded => write!(f, "+∞")?,
+                    Bound::Included(value) => write!(f, "{}]", value)?,
+                    Bound::Excluded(value) => write!(f, "{})", value)?,
+                }
+
+                Ok(())
+            }
+            ConstantBinary::Eq(value) => write!(f, "{}", value),
+            ConstantBinary::NotEq(value) => write!(f, "!{}", value),
+            ConstantBinary::And(binaries) => Self::join_write(f, binaries, " AND "),
+            ConstantBinary::Or(binaries) => Self::join_write(f, binaries, " OR "),
         }
     }
 }

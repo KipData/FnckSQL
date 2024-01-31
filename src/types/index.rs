@@ -1,7 +1,10 @@
 use crate::expression::simplify::ConstantBinary;
 use crate::types::value::ValueRef;
 use crate::types::ColumnId;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::fmt::Formatter;
 use std::sync::Arc;
 
 pub type IndexId = u32;
@@ -30,5 +33,30 @@ pub struct Index {
 impl Index {
     pub fn new(id: IndexId, column_values: Vec<ValueRef>) -> Self {
         Index { id, column_values }
+    }
+}
+
+impl fmt::Display for IndexInfo {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.meta)?;
+        write!(f, " => ")?;
+
+        if let Some(binaries) = &self.binaries {
+            let binaries = binaries
+                .iter()
+                .map(|binary| format!("{}", binary))
+                .join(", ");
+            write!(f, "{}", binaries)?;
+        } else {
+            write!(f, "NONE")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl fmt::Display for IndexMeta {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }

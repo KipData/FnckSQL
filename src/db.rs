@@ -114,7 +114,7 @@ impl<S: Storage> Database<S> {
         if stmts.is_empty() {
             return Err(DatabaseError::EmptyStatement);
         }
-        let binder = Binder::new(BinderContext::new(transaction));
+        let mut binder = Binder::new(BinderContext::new(transaction));
         /// Build a logical plan.
         ///
         /// SELECT a,b FROM t1 ORDER BY a LIMIT 1;

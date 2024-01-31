@@ -26,7 +26,7 @@ impl SeqScan {
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let ScanOperator {
             table_name,
-            columns,
+            projection_columns: columns,
             limit,
             ..
         } = self.op;

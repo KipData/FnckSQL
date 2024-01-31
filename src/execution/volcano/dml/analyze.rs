@@ -12,9 +12,10 @@ use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::fs;
+use std::fmt::Formatter;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fmt, fs};
 
 const DEFAULT_NUM_OF_BUCKETS: usize = 100;
 const DEFAULT_COLUMN_METAS_PATH: &str = "fnck_sql_column_metas";
@@ -121,5 +122,19 @@ impl Analyze {
             columns,
             values,
         };
+    }
+}
+
+impl fmt::Display for AnalyzeOperator {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let columns = self
+            .columns
+            .iter()
+            .map(|column| format!("{}", column.name()))
+            .join(", ");
+
+        write!(f, "Analyze {} -> [{}]", self.table_name, columns)?;
+
+        Ok(())
     }
 }

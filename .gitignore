@@ -25,3 +25,5 @@ Cargo.lock
 
 fncksql_bench
 sqlite_bench
+
+tests/data/row_20000.csv

@@ -1,3 +1,6 @@
+use std::fs::File;
+use std::io;
+use std::io::Write;
 use fnck_sql::db::Database;
 use sqllogictest::Runner;
 use sqllogictest_test::KipSQL;
@@ -12,6 +15,7 @@ async fn main() {
     std::env::set_current_dir(path).unwrap();
 
     println!("FnckSQL Test Start!\n");
+    init_20000_row_csv().expect("failed to init csv");
 
     for slt_file in glob::glob(SLT_PATTERN).expect("failed to find slt files") {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
@@ -32,4 +36,19 @@ async fn main() {
         }
         println!("-> Pass!\n\n")
     }
+}
+
+fn init_20000_row_csv() -> io::Result<()> {
+    let path = "tests/data/row_20000.csv";
+
+    if !Path::new(path).exists() {
+        let mut file = File::create(path)?;
+
+        for i in 0..20_000 {
+            let row = (0..3).map(|j| (i * 3 + j).to_string()).collect::<Vec<_>>().join("|");
+            writeln!(file, "{}", row)?;
+        }
+    }
+
+    Ok(())
 }
