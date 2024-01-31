@@ -28,11 +28,14 @@ insert into t(id, v1, v2, v3) values (0, 0, 0)
 statement ok
 insert into t values (8,NULL,NULL,NULL)
 
+statement ok
+insert overwrite t values (1, 9, 9, 9)
+
 query IIII rowsort
 select * from t
 ----
 0 1 10 100
-1 1 10 100
+1 9 9 9
 2 2 20 200
 3 3 30 300
 4 4 40 400

@@ -51,13 +51,13 @@ pub enum ExecutorError {
     ),
     #[error("Internal error: {0}")]
     InternalError(String),
-    #[error("io error")]
+    #[error("io error: {0}")]
     Io(
         #[from]
         #[source]
         std::io::Error,
     ),
-    #[error("csv error")]
+    #[error("csv error: {0}")]
     Csv(
         #[from]
         #[source]

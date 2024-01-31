@@ -12,7 +12,6 @@ pub mod join;
 pub mod limit;
 pub mod project;
 pub mod scan;
-pub mod show;
 pub mod sort;
 pub mod truncate;
 pub mod update;
@@ -28,12 +27,13 @@ use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
-use crate::planner::operator::show::ShowTablesOperator;
 use crate::planner::operator::truncate::TruncateOperator;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::types::index::IndexInfo;
 use itertools::Itertools;
+use std::fmt;
+use std::fmt::Formatter;
 
 use self::{
     aggregate::AggregateOperator, alter_table::add_column::AddColumnOperator,
@@ -53,6 +53,8 @@ pub enum Operator {
     Sort(SortOperator),
     Limit(LimitOperator),
     Values(ValuesOperator),
+    Show,
+    Explain,
     // DML
     Insert(InsertOperator),
     Update(UpdateOperator),
@@ -64,8 +66,6 @@ pub enum Operator {
     CreateTable(CreateTableOperator),
     DropTable(DropTableOperator),
     Truncate(TruncateOperator),
-    // Show
-    Show(ShowTablesOperator),
     // Copy
     CopyFromFile(CopyFromFileOperator),
     CopyToFile(CopyToFileOperator),
@@ -130,7 +130,7 @@ impl Operator {
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Scan(op) => op
-                .columns
+                .projection_columns
                 .iter()
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
@@ -144,6 +144,65 @@ impl Operator {
             Operator::Analyze(op) => op.columns.clone(),
             Operator::Delete(op) => vec![op.primary_key_column.clone()],
             _ => vec![],
+        }
+    }
+}
+
+impl fmt::Display for Operator {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Operator::Dummy => write!(f, "Dummy"),
+            Operator::Aggregate(op) => write!(f, "{}", op),
+            Operator::Filter(op) => write!(f, "{}", op),
+            Operator::Join(op) => write!(f, "{}", op),
+            Operator::Project(op) => write!(f, "{}", op),
+            Operator::Scan(op) => write!(f, "{}", op),
+            Operator::Sort(op) => write!(f, "{}", op),
+            Operator::Limit(op) => write!(f, "{}", op),
+            Operator::Values(op) => write!(f, "{}", op),
+            Operator::Show => write!(f, "Show Tables"),
+            Operator::Explain => unreachable!(),
+            Operator::Insert(op) => write!(f, "{}", op),
+            Operator::Update(op) => write!(f, "{}", op),
+            Operator::Delete(op) => write!(f, "{}", op),
+            Operator::Analyze(op) => write!(f, "{}", op),
+            Operator::AddColumn(op) => write!(f, "{}", op),
+            Operator::DropColumn(op) => write!(f, "{}", op),
+            Operator::CreateTable(op) => write!(f, "{}", op),
+            Operator::DropTable(op) => write!(f, "{}", op),
+            Operator::Truncate(op) => write!(f, "{}", op),
+            Operator::CopyFromFile(op) => write!(f, "{}", op),
+            Operator::CopyToFile(_) => todo!(),
+        }
+    }
+}
+
+impl fmt::Display for PhysicalOption {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            PhysicalOption::Dummy => write!(f, "Dummy"),
+            PhysicalOption::SimpleAggregate => write!(f, "SimpleAggregate"),
+            PhysicalOption::HashAggregate => write!(f, "HashAggregate"),
+            PhysicalOption::Filter => write!(f, "Filter"),
+            PhysicalOption::HashJoin => write!(f, "HashJoin"),
+            PhysicalOption::Project => write!(f, "Project"),
+            PhysicalOption::SeqScan => write!(f, "SeqScan"),
+            PhysicalOption::IndexScan(index) => write!(f, "IndexScan By {}", index),
+            PhysicalOption::RadixSort => write!(f, "RadixSort"),
+            PhysicalOption::Limit => write!(f, "Limit"),
+            PhysicalOption::Values => write!(f, "Values"),
+            PhysicalOption::Insert => write!(f, "Insert"),
+            PhysicalOption::Update => write!(f, "Update"),
+            PhysicalOption::Delete => write!(f, "Delete"),
+            PhysicalOption::AddColumn => write!(f, "AddColumn"),
+            PhysicalOption::DropColumn => write!(f, "DropColumn"),
+            PhysicalOption::CreateTable => write!(f, "CreateTable"),
+            PhysicalOption::DropTable => write!(f, "DropTable"),
+            PhysicalOption::Truncate => write!(f, "Truncate"),
+            PhysicalOption::Show => write!(f, "Show"),
+            PhysicalOption::CopyFromFile => write!(f, "CopyFromFile"),
+            PhysicalOption::CopyToFile => write!(f, "CopyToFile"),
+            PhysicalOption::Analyze => write!(f, "Analyze"),
         }
     }
 }

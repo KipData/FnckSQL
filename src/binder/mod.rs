@@ -6,6 +6,7 @@ mod create_table;
 mod delete;
 mod distinct;
 mod drop_table;
+mod explain;
 pub mod expr;
 mod insert;
 mod select;
@@ -118,7 +119,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Binder { context }
     }
 
-    pub fn bind(mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
+    pub fn bind(&mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query)?,
             Statement::AlterTable { name, operation } => self.bind_alter_table(name, operation)?,
@@ -184,6 +185,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 options,
                 ..
             } => self.bind_copy(source.clone(), *to, target.clone(), options)?,
+            Statement::Explain { statement, .. } => {
+                let plan = self.bind(statement)?;
+
+                self.bind_explain(plan)?
+            }
             _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
@@ -308,7 +314,7 @@ pub mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = build_test_catalog(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;
-        let binder = Binder::new(BinderContext::new(&transaction));
+        let mut binder = Binder::new(BinderContext::new(&transaction));
         let stmt = crate::parser::parse_sql(sql)?;
 
         Ok(binder.bind(&stmt[0])?)

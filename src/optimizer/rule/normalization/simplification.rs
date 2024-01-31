@@ -57,7 +57,7 @@ impl ConstantCalculation {
                 }
             }
             Operator::Scan(op) => {
-                for expr in &mut op.columns {
+                for expr in &mut op.projection_columns {
                     expr.constant_calculation()?;
                 }
             }

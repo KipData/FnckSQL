@@ -356,6 +356,12 @@ pub enum BinaryOperator {
     Xor,
 }
 
+impl fmt::Display for ScalarExpression {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.output_column().name())
+    }
+}
+
 impl fmt::Display for BinaryOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {

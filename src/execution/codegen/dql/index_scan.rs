@@ -30,7 +30,7 @@ impl KipChannelIndexNext {
 
         let ScanOperator {
             table_name,
-            columns,
+            projection_columns: columns,
             limit,
             index_by,
             ..

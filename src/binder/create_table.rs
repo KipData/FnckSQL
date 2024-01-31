@@ -151,7 +151,7 @@ mod tests {
         let transaction = storage.transaction().await?;
 
         let sql = "create table t1 (id int primary key, name varchar(10) null)";
-        let binder = Binder::new(BinderContext::new(&transaction));
+        let mut binder = Binder::new(BinderContext::new(&transaction));
         let stmt = crate::parser::parse_sql(sql).unwrap();
         let plan1 = binder.bind(&stmt[0]).unwrap();
 

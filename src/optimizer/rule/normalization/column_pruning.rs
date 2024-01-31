@@ -91,7 +91,7 @@ impl ColumnPruning {
             }
             Operator::Scan(op) => {
                 if !all_referenced {
-                    Self::clear_exprs(column_references, &mut op.columns);
+                    Self::clear_exprs(column_references, &mut op.projection_columns);
                 }
             }
             Operator::Limit(_) | Operator::Join(_) | Operator::Filter(_) => {
@@ -104,6 +104,13 @@ impl ColumnPruning {
             }
             // Last Operator
             Operator::Dummy | Operator::Values(_) => (),
+            Operator::Explain => {
+                if let Some(child_id) = graph.eldest_child_at(node_id) {
+                    Self::_apply(column_references, true, child_id, graph);
+                } else {
+                    unreachable!()
+                }
+            }
             // DDL Based on Other Plan
             Operator::Insert(_)
             | Operator::Update(_)
@@ -121,7 +128,7 @@ impl ColumnPruning {
             Operator::CreateTable(_)
             | Operator::DropTable(_)
             | Operator::Truncate(_)
-            | Operator::Show(_)
+            | Operator::Show
             | Operator::CopyFromFile(_)
             | Operator::CopyToFile(_)
             | Operator::AddColumn(_)
@@ -209,7 +216,7 @@ mod tests {
         for grandson_plan in &best_plan.childrens[0].childrens {
             match &grandson_plan.operator {
                 Operator::Scan(op) => {
-                    assert_eq!(op.columns.len(), 1);
+                    assert_eq!(op.projection_columns.len(), 1);
                 }
                 _ => unreachable!("Should be a scan operator"),
             }

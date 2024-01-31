@@ -30,7 +30,7 @@ impl KipChannelSeqNext {
 
         let ScanOperator {
             table_name,
-            columns,
+            projection_columns: columns,
             limit,
             ..
         } = op;

@@ -8,21 +8,26 @@ statement ok
 insert into t values (1,1,10,100), (2,2,20,200), (3,3,30,300), (4,4,40,400)
 
 statement ok
-delete from t where v1 = 1
+update t set v2 = 9 where v1 = 1
 
 query III rowsort
 select * from t;
 ----
+1 1 9 100
 2 2 20 200
 3 3 30 300
 4 4 40 400
 
 statement ok
-delete from t
+update t set v2 = 9
 
 query III rowsort
 select * from t
 ----
+1 1 9 100
+2 2 9 200
+3 3 9 300
+4 4 9 400
 
 statement ok
 drop table t

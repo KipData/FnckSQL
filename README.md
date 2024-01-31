@@ -134,6 +134,9 @@ implement_from_tuple!(
   - Drop
     - [x] Table
     - [ ] Index
+  - Alert
+    - [x] Add Column
+    - [x] Drop Column
   - [x] Truncate
 - DQL
   - [x] Select
@@ -149,6 +152,8 @@ implement_from_tuple!(
   - [x] Having
   - [x] Order By
   - [x] Limit
+  - [x] Show Tables
+  - [x] Explain
 - DML
   - [x] Insert
   - [x] Insert Overwrite
