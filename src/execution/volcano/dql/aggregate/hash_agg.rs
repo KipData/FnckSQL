@@ -1,24 +1,24 @@
 use crate::catalog::ColumnRef;
 use crate::execution::volcano::dql::aggregate::{create_accumulators, Accumulator};
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use ahash::HashMap;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use std::cell::RefCell;
 
 pub struct HashAggExecutor {
     agg_calls: Vec<ScalarExpression>,
     groupby_exprs: Vec<ScalarExpression>,
-    input: BoxedExecutor,
+    input: LogicalPlan,
 }
 
-impl From<(AggregateOperator, BoxedExecutor)> for HashAggExecutor {
+impl From<(AggregateOperator, LogicalPlan)> for HashAggExecutor {
     fn from(
         (
             AggregateOperator {
@@ -26,7 +26,7 @@ impl From<(AggregateOperator, BoxedExecutor)> for HashAggExecutor {
                 groupby_exprs,
             },
             input,
-        ): (AggregateOperator, BoxedExecutor),
+        ): (AggregateOperator, LogicalPlan),
     ) -> Self {
         HashAggExecutor {
             agg_calls,
@@ -36,9 +36,9 @@ impl From<(AggregateOperator, BoxedExecutor)> for HashAggExecutor {
     }
 }
 
-impl<T: Transaction> Executor<T> for HashAggExecutor {
-    fn execute<'a>(self, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute()
+impl<T: Transaction> ReadExecutor<T> for HashAggExecutor {
+    fn execute(self, transaction: &T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
@@ -131,7 +131,7 @@ impl HashAggStatus {
 
 impl HashAggExecutor {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self) {
+    pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let HashAggExecutor {
             agg_calls,
             groupby_exprs,
@@ -141,7 +141,7 @@ impl HashAggExecutor {
         let mut agg_status = HashAggStatus::new(agg_calls, groupby_exprs);
 
         #[for_await]
-        for tuple in self.input {
+        for tuple in build_read(self.input, transaction) {
             agg_status.update(tuple?)?;
         }
 
@@ -156,20 +156,20 @@ mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::execution::volcano::dql::aggregate::hash_agg::HashAggExecutor;
     use crate::execution::volcano::dql::test::build_integers;
-    use crate::execution::volcano::dql::values::Values;
-    use crate::execution::volcano::{try_collect, Executor};
+    use crate::execution::volcano::{try_collect, ReadExecutor};
     use crate::execution::ExecutorError;
     use crate::expression::agg::AggKind;
     use crate::expression::ScalarExpression;
     use crate::planner::operator::aggregate::AggregateOperator;
     use crate::planner::operator::values::ValuesOperator;
+    use crate::planner::operator::Operator;
+    use crate::planner::LogicalPlan;
     use crate::storage::kip::KipStorage;
     use crate::storage::Storage;
     use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use itertools::Itertools;
-    use std::cell::RefCell;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -177,7 +177,7 @@ mod test {
     async fn test_hash_agg() -> Result<(), ExecutorError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await.unwrap();
-        let transaction = RefCell::new(storage.transaction().await?);
+        let transaction = storage.transaction().await?;
         let desc = ColumnDesc::new(LogicalType::Integer, false, false, None);
 
         let t1_columns = vec![
@@ -211,32 +211,35 @@ mod test {
             }],
         };
 
-        let input = Values::from(ValuesOperator {
-            rows: vec![
-                vec![
-                    Arc::new(DataValue::Int32(Some(0))),
-                    Arc::new(DataValue::Int32(Some(2))),
-                    Arc::new(DataValue::Int32(Some(4))),
+        let input = LogicalPlan {
+            operator: Operator::Values(ValuesOperator {
+                rows: vec![
+                    vec![
+                        Arc::new(DataValue::Int32(Some(0))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(4))),
+                    ],
+                    vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(3))),
+                        Arc::new(DataValue::Int32(Some(5))),
+                    ],
+                    vec![
+                        Arc::new(DataValue::Int32(Some(0))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                    ],
+                    vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(3))),
+                    ],
                 ],
-                vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Int32(Some(3))),
-                    Arc::new(DataValue::Int32(Some(5))),
-                ],
-                vec![
-                    Arc::new(DataValue::Int32(Some(0))),
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Int32(Some(2))),
-                ],
-                vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Int32(Some(2))),
-                    Arc::new(DataValue::Int32(Some(3))),
-                ],
-            ],
-            columns: t1_columns,
-        })
-        .execute(&transaction);
+                columns: t1_columns,
+            }),
+            childrens: vec![],
+            physical_option: None,
+        };
 
         let tuples =
             try_collect(&mut HashAggExecutor::from((operator, input)).execute(&transaction))

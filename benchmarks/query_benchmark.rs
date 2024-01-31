@@ -133,7 +133,7 @@ fn query_on_execute(c: &mut Criterion) {
 
         c.bench_function(format!("Volcano: {}", QUERY_CASE).as_str(), |b| {
             b.to_async(&rt).iter(|| async {
-                let mut stream = volcano::build_stream(plan.clone(), &volcano_transaction);
+                let mut stream = volcano::build_read(plan.clone(), &volcano_transaction);
                 let tuples = volcano::try_collect(&mut stream).await.unwrap();
                 if tuples.len() as u64 != TABLE_ROW_NUM {
                     panic!("{}", tuples.len());

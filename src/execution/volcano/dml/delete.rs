@@ -1,28 +1,28 @@
 use crate::catalog::TableName;
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::delete::DeleteOperator;
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use std::cell::RefCell;
 
 pub struct Delete {
     table_name: TableName,
-    input: BoxedExecutor,
+    input: LogicalPlan,
 }
 
-impl From<(DeleteOperator, BoxedExecutor)> for Delete {
-    fn from((DeleteOperator { table_name, .. }, input): (DeleteOperator, BoxedExecutor)) -> Self {
+impl From<(DeleteOperator, LogicalPlan)> for Delete {
+    fn from((DeleteOperator { table_name, .. }, input): (DeleteOperator, LogicalPlan)) -> Self {
         Delete { table_name, input }
     }
 }
 
-impl<T: Transaction> Executor<T> for Delete {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
+impl<T: Transaction> WriteExecutor<T> for Delete {
+    fn execute_mut(self, transaction: &mut T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
@@ -51,8 +51,11 @@ impl Delete {
         });
 
         if let Some(index_metas) = option_index_metas {
+            let mut tuple_ids = Vec::new();
+            let mut indexes = Vec::new();
+
             #[for_await]
-            for tuple in input {
+            for tuple in build_read(input, transaction) {
                 let tuple: Tuple = tuple?;
 
                 for (i, index_meta) in index_metas.iter() {
@@ -64,13 +67,19 @@ impl Delete {
                             column_values: vec![value.clone()],
                         };
 
-                        transaction.del_index(&table_name, &index)?;
+                        indexes.push(index);
                     }
                 }
 
                 if let Some(tuple_id) = tuple.id {
-                    transaction.delete(&table_name, tuple_id)?;
+                    tuple_ids.push(tuple_id);
                 }
+            }
+            for index in indexes {
+                transaction.del_index(&table_name, &index)?;
+            }
+            for tuple_id in tuple_ids {
+                transaction.delete(&table_name, tuple_id)?;
             }
         }
     }

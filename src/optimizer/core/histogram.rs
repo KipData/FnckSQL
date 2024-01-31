@@ -83,12 +83,7 @@ impl HistogramBuilder {
             return Err(OptimizerError::TooManyBuckets);
         }
 
-        let tolerance = if self.values.len() > 10_000 {
-            (self.values.len() / 100) as f64
-        } else {
-            1.0
-        };
-        let mut sketch = CountMinSketch::new(self.values.len(), 0.95, tolerance);
+        let mut sketch = CountMinSketch::new(self.values.len(), 0.95, 1.0);
         let HistogramBuilder {
             column_id,
             data_type,

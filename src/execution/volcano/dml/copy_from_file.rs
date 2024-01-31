@@ -1,12 +1,11 @@
 use crate::binder::copy::FileFormat;
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{BoxedExecutor, WriteExecutor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 use std::fs::File;
 use std::io::BufReader;
 use tokio::sync::mpsc::Sender;
@@ -22,9 +21,9 @@ impl From<CopyFromFileOperator> for CopyFromFile {
     }
 }
 
-impl<T: Transaction> Executor<T> for CopyFromFile {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
+impl<T: Transaction> WriteExecutor<T> for CopyFromFile {
+    fn execute_mut(self, transaction: &mut T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
@@ -185,9 +184,13 @@ mod tests {
             .run("create table test_copy (a int primary key, b float, c varchar(10))")
             .await;
         let storage = db.storage;
-        let transaction = RefCell::new(storage.transaction().await?);
+        let mut transaction = storage.transaction().await?;
 
-        let tuple = executor.execute(&transaction).next().await.unwrap()?;
+        let tuple = executor
+            .execute_mut(&mut transaction)
+            .next()
+            .await
+            .unwrap()?;
         assert_eq!(
             tuple,
             TupleBuilder::build_result(

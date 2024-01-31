@@ -1,27 +1,23 @@
 use crate::catalog::TableName;
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::update::UpdateOperator;
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 use std::collections::HashMap;
 
 pub struct Update {
     table_name: TableName,
-    input: BoxedExecutor,
-    values: BoxedExecutor,
+    input: LogicalPlan,
+    values: LogicalPlan,
 }
 
-impl From<(UpdateOperator, BoxedExecutor, BoxedExecutor)> for Update {
+impl From<(UpdateOperator, LogicalPlan, LogicalPlan)> for Update {
     fn from(
-        (UpdateOperator { table_name }, input, values): (
-            UpdateOperator,
-            BoxedExecutor,
-            BoxedExecutor,
-        ),
+        (UpdateOperator { table_name }, input, values): (UpdateOperator, LogicalPlan, LogicalPlan),
     ) -> Self {
         Update {
             table_name,
@@ -31,9 +27,9 @@ impl From<(UpdateOperator, BoxedExecutor, BoxedExecutor)> for Update {
     }
 }
 
-impl<T: Transaction> Executor<T> for Update {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
+impl<T: Transaction> WriteExecutor<T> for Update {
+    fn execute_mut(self, transaction: &mut T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
@@ -48,10 +44,11 @@ impl Update {
 
         if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
             let mut value_map = HashMap::new();
+            let mut tuples = Vec::new();
 
             // only once
             #[for_await]
-            for tuple in values {
+            for tuple in build_read(values, transaction) {
                 let Tuple {
                     columns, values, ..
                 } = tuple?;
@@ -60,8 +57,13 @@ impl Update {
                 }
             }
             #[for_await]
-            for tuple in input {
-                let mut tuple: Tuple = tuple?;
+            for tuple in build_read(input, transaction) {
+                let tuple: Tuple = tuple?;
+
+                tuples.push(tuple);
+            }
+
+            for mut tuple in tuples {
                 let mut is_overwrite = true;
 
                 for (i, column) in tuple.columns.iter().enumerate() {

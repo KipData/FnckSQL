@@ -1,10 +1,9 @@
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{BoxedExecutor, WriteExecutor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 
 pub struct DropTable {
     op: DropTableOperator,
@@ -16,9 +15,9 @@ impl From<DropTableOperator> for DropTable {
     }
 }
 
-impl<T: Transaction> Executor<T> for DropTable {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
+impl<T: Transaction> WriteExecutor<T> for DropTable {
+    fn execute_mut(self, transaction: &mut T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 

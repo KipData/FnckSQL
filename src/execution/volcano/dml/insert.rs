@@ -1,23 +1,23 @@
 use crate::catalog::TableName;
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::execution::ExecutorError;
 use crate::planner::operator::insert::InsertOperator;
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct Insert {
     table_name: TableName,
-    input: BoxedExecutor,
+    input: LogicalPlan,
     is_overwrite: bool,
 }
 
-impl From<(InsertOperator, BoxedExecutor)> for Insert {
+impl From<(InsertOperator, LogicalPlan)> for Insert {
     fn from(
         (
             InsertOperator {
@@ -25,7 +25,7 @@ impl From<(InsertOperator, BoxedExecutor)> for Insert {
                 is_overwrite,
             },
             input,
-        ): (InsertOperator, BoxedExecutor),
+        ): (InsertOperator, LogicalPlan),
     ) -> Self {
         Insert {
             table_name,
@@ -35,9 +35,9 @@ impl From<(InsertOperator, BoxedExecutor)> for Insert {
     }
 }
 
-impl<T: Transaction> Executor<T> for Insert {
-    fn execute(self, transaction: &RefCell<T>) -> BoxedExecutor {
-        unsafe { self._execute(transaction.as_ptr().as_mut().unwrap()) }
+impl<T: Transaction> WriteExecutor<T> for Insert {
+    fn execute_mut(self, transaction: &mut T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
@@ -51,10 +51,11 @@ impl Insert {
         } = self;
         let mut primary_key_index = None;
         let mut unique_values = HashMap::new();
+        let mut tuples = Vec::new();
 
         if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
             #[for_await]
-            for tuple in input {
+            for tuple in build_read(input, transaction) {
                 let Tuple {
                     columns, values, ..
                 } = tuple?;
@@ -103,6 +104,9 @@ impl Insert {
                     tuple.values.push(value)
                 }
 
+                tuples.push(tuple);
+            }
+            for tuple in tuples {
                 transaction.append(&table_name, tuple, is_overwrite)?;
             }
             // Unique Index

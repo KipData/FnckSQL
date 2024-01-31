@@ -23,5 +23,5 @@ Cargo.lock
 /hello_world
 /transaction
 
-kipsql_bench
+fncksql_bench
 sqlite_bench

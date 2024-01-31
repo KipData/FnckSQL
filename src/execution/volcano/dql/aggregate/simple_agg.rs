@@ -1,42 +1,42 @@
 use crate::execution::volcano::dql::aggregate::create_accumulators;
-use crate::execution::volcano::{BoxedExecutor, Executor};
+use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
 use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use std::cell::RefCell;
 
 pub struct SimpleAggExecutor {
     agg_calls: Vec<ScalarExpression>,
-    input: BoxedExecutor,
+    input: LogicalPlan,
 }
 
-impl From<(AggregateOperator, BoxedExecutor)> for SimpleAggExecutor {
+impl From<(AggregateOperator, LogicalPlan)> for SimpleAggExecutor {
     fn from(
-        (AggregateOperator { agg_calls, .. }, input): (AggregateOperator, BoxedExecutor),
+        (AggregateOperator { agg_calls, .. }, input): (AggregateOperator, LogicalPlan),
     ) -> Self {
         SimpleAggExecutor { agg_calls, input }
     }
 }
 
-impl<T: Transaction> Executor<T> for SimpleAggExecutor {
-    fn execute(self, _transaction: &RefCell<T>) -> BoxedExecutor {
-        self._execute()
+impl<T: Transaction> ReadExecutor<T> for SimpleAggExecutor {
+    fn execute(self, transaction: &T) -> BoxedExecutor {
+        self._execute(transaction)
     }
 }
 
 impl SimpleAggExecutor {
     #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
-    pub async fn _execute(self) {
+    pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let mut accs = create_accumulators(&self.agg_calls);
         let mut columns_option = None;
 
         #[for_await]
-        for tuple in self.input {
+        for tuple in build_read(self.input, transaction) {
             let tuple = tuple?;
 
             columns_option.get_or_insert_with(|| {
