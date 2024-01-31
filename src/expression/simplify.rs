@@ -2,7 +2,7 @@ use crate::catalog::ColumnRef;
 use crate::expression::value_compute::{binary_op, unary_op};
 use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
 use crate::types::errors::TypeError;
-use crate::types::value::{DataValue, ValueRef, FALSE_VALUE, NULL_VALUE, TRUE_VALUE};
+use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
 use crate::types::{ColumnId, LogicalType};
 use ahash::RandomState;
 use itertools::Itertools;
@@ -624,17 +624,21 @@ impl ScalarExpression {
                 negated,
                 args,
             } => {
-                let (op_1, op_2, value) = if *negated {
-                    (
-                        BinaryOperator::NotEq,
-                        BinaryOperator::And,
-                        TRUE_VALUE.clone(),
-                    )
-                } else {
-                    (BinaryOperator::Eq, BinaryOperator::Or, FALSE_VALUE.clone())
-                };
+                if args.is_empty() {
+                    return Ok(());
+                }
 
-                let mut new_expr = ScalarExpression::Constant(value);
+                let (op_1, op_2) = if *negated {
+                    (BinaryOperator::NotEq, BinaryOperator::And)
+                } else {
+                    (BinaryOperator::Eq, BinaryOperator::Or)
+                };
+                let mut new_expr = ScalarExpression::Binary {
+                    op: op_1.clone(),
+                    left_expr: expr.clone(),
+                    right_expr: Box::new(args.remove(0)),
+                    ty: LogicalType::Boolean,
+                };
 
                 for arg in args.drain(..) {
                     new_expr = ScalarExpression::Binary {

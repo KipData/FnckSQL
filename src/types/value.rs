@@ -19,8 +19,6 @@ use super::LogicalType;
 
 lazy_static! {
     pub static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
-    pub static ref FALSE_VALUE: ValueRef = Arc::new(DataValue::Boolean(Some(false)));
-    pub static ref TRUE_VALUE: ValueRef = Arc::new(DataValue::Boolean(Some(true)));
     static ref UNIX_DATETIME: NaiveDateTime = NaiveDateTime::from_timestamp_opt(0, 0).unwrap();
 }
 
