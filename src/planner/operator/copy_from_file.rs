@@ -18,7 +18,13 @@ impl fmt::Display for CopyFromFileOperator {
             .iter()
             .map(|column| format!("{}", column.name()))
             .join(", ");
-        write!(f, "Copy {} -> {} [{}]", self.source.path.display(), self.table, columns)?;
+        write!(
+            f,
+            "Copy {} -> {} [{}]",
+            self.source.path.display(),
+            self.table,
+            columns
+        )?;
 
         Ok(())
     }

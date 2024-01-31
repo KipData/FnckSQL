@@ -1,9 +1,9 @@
-use std::fs::File;
-use std::io;
-use std::io::Write;
 use fnck_sql::db::Database;
 use sqllogictest::Runner;
 use sqllogictest_test::KipSQL;
+use std::fs::File;
+use std::io;
+use std::io::Write;
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -45,7 +45,10 @@ fn init_20000_row_csv() -> io::Result<()> {
         let mut file = File::create(path)?;
 
         for i in 0..20_000 {
-            let row = (0..3).map(|j| (i * 3 + j).to_string()).collect::<Vec<_>>().join("|");
+            let row = (0..3)
+                .map(|j| (i * 3 + j).to_string())
+                .collect::<Vec<_>>()
+                .join("|");
             writeln!(file, "{}", row)?;
         }
     }

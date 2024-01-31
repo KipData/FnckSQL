@@ -86,7 +86,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
                     }
                 }
                 if matches!(cost, Some(0)) {
-                   continue
+                    continue;
                 }
 
                 group_expr.append_expr(Expression {
