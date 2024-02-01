@@ -1,3 +1,4 @@
+use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
@@ -11,7 +12,6 @@ use crate::optimizer::rule::normalization::pushdown_predicates::PushPredicateInt
 use crate::optimizer::rule::normalization::pushdown_predicates::PushPredicateThroughJoin;
 use crate::optimizer::rule::normalization::simplification::ConstantCalculation;
 use crate::optimizer::rule::normalization::simplification::SimplifyFilter;
-use crate::optimizer::OptimizerError;
 
 mod column_pruning;
 mod combine_operators;
@@ -58,7 +58,7 @@ impl MatchPattern for NormalizationRuleImpl {
 }
 
 impl NormalizationRule for NormalizationRuleImpl {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         match self {
             NormalizationRuleImpl::ColumnPruning => ColumnPruning.apply(node_id, graph),
             NormalizationRuleImpl::CollapseProject => CollapseProject.apply(node_id, graph),

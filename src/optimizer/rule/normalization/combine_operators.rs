@@ -1,9 +1,9 @@
+use crate::errors::DatabaseError;
 use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::rule::normalization::is_subset_exprs;
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
 use crate::types::LogicalType;
 use lazy_static::lazy_static;
@@ -39,7 +39,7 @@ impl MatchPattern for CollapseProject {
 }
 
 impl NormalizationRule for CollapseProject {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Project(op) = graph.operator(node_id) {
             if let Some(child_id) = graph.eldest_child_at(node_id) {
                 if let Operator::Project(child_op) = graph.operator(child_id) {
@@ -66,7 +66,7 @@ impl MatchPattern for CombineFilter {
 }
 
 impl NormalizationRule for CombineFilter {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Filter(op) = graph.operator(node_id).clone() {
             if let Some(child_id) = graph.eldest_child_at(node_id) {
                 if let Operator::Filter(child_op) = graph.operator_mut(child_id) {
@@ -90,7 +90,7 @@ impl NormalizationRule for CombineFilter {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::db::DatabaseError;
+    use crate::errors::DatabaseError;
     use crate::expression::ScalarExpression::Constant;
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;

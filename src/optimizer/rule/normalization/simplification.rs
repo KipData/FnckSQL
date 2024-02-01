@@ -1,7 +1,7 @@
+use crate::errors::DatabaseError;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
 use itertools::Itertools;
@@ -28,7 +28,7 @@ lazy_static! {
 pub struct ConstantCalculation;
 
 impl ConstantCalculation {
-    fn _apply(node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn _apply(node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         let operator = graph.operator_mut(node_id);
 
         match operator {
@@ -83,7 +83,7 @@ impl MatchPattern for ConstantCalculation {
 }
 
 impl NormalizationRule for ConstantCalculation {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         Self::_apply(node_id, graph)?;
         // mark changed to skip this rule batch
         graph.version += 1;
@@ -102,7 +102,7 @@ impl MatchPattern for SimplifyFilter {
 }
 
 impl NormalizationRule for SimplifyFilter {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Filter(mut filter_op) = graph.operator(node_id).clone() {
             filter_op.predicate.simplify()?;
             filter_op.predicate.constant_calculation()?;
@@ -118,7 +118,7 @@ impl NormalizationRule for SimplifyFilter {
 mod test {
     use crate::binder::test::select_sql_run;
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
-    use crate::db::DatabaseError;
+    use crate::errors::DatabaseError;
     use crate::expression::simplify::ConstantBinary;
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;

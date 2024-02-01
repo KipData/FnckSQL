@@ -1,4 +1,5 @@
-use fnck_sql::db::{Database, DatabaseError};
+use fnck_sql::db::Database;
+use fnck_sql::errors::DatabaseError;
 
 #[tokio::main]
 async fn main() -> Result<(), DatabaseError> {

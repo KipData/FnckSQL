@@ -1,8 +1,8 @@
+use crate::errors::DatabaseError;
 use crate::optimizer::core::column_meta::{ColumnMeta, ColumnMetaLoader};
 use crate::optimizer::core::memo::{Expression, GroupExpression};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::storage::Transaction;
 use crate::types::ColumnId;
@@ -32,7 +32,7 @@ impl<T: Transaction> ImplementationRule<T> for SeqScanImplementation {
         op: &Operator,
         loader: &ColumnMetaLoader<T>,
         group_expr: &mut GroupExpression,
-    ) -> Result<(), OptimizerError> {
+    ) -> Result<(), DatabaseError> {
         if let Operator::Scan(scan_op) = op {
             let column_metas = loader.load(scan_op.table_name.clone())?;
             let mut cost = None;
@@ -67,7 +67,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
         op: &Operator,
         loader: &ColumnMetaLoader<'_, T>,
         group_expr: &mut GroupExpression,
-    ) -> Result<(), OptimizerError> {
+    ) -> Result<(), DatabaseError> {
         if let Operator::Scan(scan_op) = op {
             let column_metas = loader.load(scan_op.table_name.clone())?;
             for index_info in scan_op.index_infos.iter() {

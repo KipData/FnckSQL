@@ -1,4 +1,5 @@
-use crate::binder::{lower_case_name, split_name, BindError, Binder};
+use crate::binder::{lower_case_name, split_name, Binder};
+use crate::errors::DatabaseError;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::scan::ScanOperator;
 use crate::planner::operator::Operator;
@@ -12,7 +13,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         from: &TableWithJoins,
         selection: &Option<Expr>,
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         if let TableFactor::Table { name, alias, .. } = &from.relation {
             let name = lower_case_name(name);
             let name = split_name(&name)?;
@@ -22,7 +23,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 .context
                 .table(table_name.clone())
                 .cloned()
-                .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", name)))?;
+                .ok_or_else(|| DatabaseError::InvalidTable(format!("bind table {}", name)))?;
             let primary_key_column = table_catalog
                 .all_columns_with_id()
                 .iter()

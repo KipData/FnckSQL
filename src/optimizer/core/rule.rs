@@ -1,8 +1,8 @@
+use crate::errors::DatabaseError;
 use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::GroupExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
 use crate::storage::Transaction;
 
@@ -12,7 +12,7 @@ pub trait MatchPattern {
 }
 
 pub trait NormalizationRule: MatchPattern {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError>;
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError>;
 }
 
 pub trait ImplementationRule<T: Transaction>: MatchPattern {
@@ -21,5 +21,5 @@ pub trait ImplementationRule<T: Transaction>: MatchPattern {
         op: &Operator,
         loader: &ColumnMetaLoader<T>,
         group_expr: &mut GroupExpression,
-    ) -> Result<(), OptimizerError>;
+    ) -> Result<(), DatabaseError>;
 }

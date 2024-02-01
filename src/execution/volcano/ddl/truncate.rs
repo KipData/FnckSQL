@@ -1,5 +1,5 @@
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, WriteExecutor};
-use crate::execution::ExecutorError;
 use crate::planner::operator::truncate::TruncateOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
@@ -22,7 +22,7 @@ impl<T: Transaction> WriteExecutor<T> for Truncate {
 }
 
 impl Truncate {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let TruncateOperator { table_name } = self.op;
 

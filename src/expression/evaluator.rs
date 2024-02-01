@@ -1,7 +1,7 @@
 use crate::catalog::ColumnSummary;
+use crate::errors::DatabaseError;
 use crate::expression::value_compute::{binary_op, unary_op};
 use crate::expression::ScalarExpression;
-use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 use itertools::Itertools;
@@ -13,7 +13,7 @@ lazy_static! {
 }
 
 impl ScalarExpression {
-    pub fn eval(&self, tuple: &Tuple) -> Result<ValueRef, TypeError> {
+    pub fn eval(&self, tuple: &Tuple) -> Result<ValueRef, DatabaseError> {
         if let Some(value) = Self::eval_with_summary(tuple, self.output_column().summary()) {
             return Ok(value.clone());
         }

@@ -1,5 +1,5 @@
+use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::aggregate::Accumulator;
-use crate::execution::ExecutorError;
 use crate::types::value::{DataValue, ValueRef};
 use ahash::RandomState;
 use std::collections::HashSet;
@@ -16,7 +16,7 @@ impl CountAccumulator {
 }
 
 impl Accumulator for CountAccumulator {
-    fn update_value(&mut self, value: &ValueRef) -> Result<(), ExecutorError> {
+    fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
         if !value.is_null() {
             self.result += 1;
         }
@@ -24,7 +24,7 @@ impl Accumulator for CountAccumulator {
         Ok(())
     }
 
-    fn evaluate(&self) -> Result<ValueRef, ExecutorError> {
+    fn evaluate(&self) -> Result<ValueRef, DatabaseError> {
         Ok(Arc::new(DataValue::Int32(Some(self.result))))
     }
 }
@@ -42,7 +42,7 @@ impl DistinctCountAccumulator {
 }
 
 impl Accumulator for DistinctCountAccumulator {
-    fn update_value(&mut self, value: &ValueRef) -> Result<(), ExecutorError> {
+    fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
         if !value.is_null() {
             self.distinct_values.insert(value.clone());
         }
@@ -50,7 +50,7 @@ impl Accumulator for DistinctCountAccumulator {
         Ok(())
     }
 
-    fn evaluate(&self) -> Result<ValueRef, ExecutorError> {
+    fn evaluate(&self) -> Result<ValueRef, DatabaseError> {
         Ok(Arc::new(DataValue::Int32(Some(
             self.distinct_values.len() as i32
         ))))

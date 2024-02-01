@@ -1,7 +1,7 @@
 use crate::catalog::ColumnRef;
 use crate::catalog::{ColumnCatalog, TableMeta};
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
-use crate::execution::ExecutorError;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
@@ -17,7 +17,7 @@ impl<T: Transaction> ReadExecutor<T> for ShowTables {
 }
 
 impl ShowTables {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let metas = transaction.table_metas()?;
 

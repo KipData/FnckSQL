@@ -1,19 +1,17 @@
 use sqlparser::ast::Statement;
-use sqlparser::parser::ParserError;
 use std::path::PathBuf;
 
-use crate::binder::{BindError, Binder, BinderContext};
+use crate::binder::{Binder, BinderContext};
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_write, try_collect};
-use crate::execution::ExecutorError;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
 use crate::optimizer::rule::normalization::NormalizationRuleImpl;
-use crate::optimizer::OptimizerError;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
 use crate::storage::kip::KipStorage;
-use crate::storage::{Storage, StorageError, Transaction};
+use crate::storage::{Storage, Transaction};
 use crate::types::tuple::Tuple;
 
 #[derive(Copy, Clone)]
@@ -222,56 +220,18 @@ impl<S: Storage> DBTransaction<S> {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum DatabaseError {
-    #[error("sql statement is empty")]
-    EmptyStatement,
-    #[error("parse error: {0}")]
-    Parse(
-        #[source]
-        #[from]
-        ParserError,
-    ),
-    #[error("bind error: {0}")]
-    Bind(
-        #[source]
-        #[from]
-        BindError,
-    ),
-    #[error("Storage error: {0}")]
-    StorageError(
-        #[source]
-        #[from]
-        StorageError,
-    ),
-    #[error("volcano error: {0}")]
-    ExecutorError(
-        #[source]
-        #[from]
-        ExecutorError,
-    ),
-    #[error("Internal error: {0}")]
-    InternalError(String),
-    #[error("optimizer error: {0}")]
-    OptimizerError(
-        #[source]
-        #[from]
-        OptimizerError,
-    ),
-}
-
 #[cfg(test)]
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::{Database, DatabaseError, QueryExecute};
-    use crate::storage::{Storage, StorageError, Transaction};
+    use crate::storage::{Storage, Transaction};
     use crate::types::tuple::{create_table, Tuple};
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    async fn build_table(mut transaction: impl Transaction) -> Result<(), StorageError> {
+    async fn build_table(mut transaction: impl Transaction) -> Result<(), DatabaseError> {
         let columns = vec![
             ColumnCatalog::new(
                 "c1".to_string(),

@@ -1,7 +1,7 @@
 use crate::catalog::ColumnRef;
+use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::aggregate::{create_accumulators, Accumulator};
 use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
-use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::LogicalPlan;
@@ -63,7 +63,7 @@ impl HashAggStatus {
         }
     }
 
-    pub(crate) fn update(&mut self, tuple: Tuple) -> Result<(), ExecutorError> {
+    pub(crate) fn update(&mut self, tuple: Tuple) -> Result<(), DatabaseError> {
         // 1. build group and agg columns for hash_agg columns.
         // Tips: AggCall First
         if self.group_columns.is_empty() {
@@ -107,7 +107,7 @@ impl HashAggStatus {
         Ok(())
     }
 
-    pub(crate) fn to_tuples(&mut self) -> Result<Vec<Tuple>, ExecutorError> {
+    pub(crate) fn to_tuples(&mut self) -> Result<Vec<Tuple>, DatabaseError> {
         Ok(self
             .group_hash_accs
             .drain()
@@ -119,7 +119,7 @@ impl HashAggStatus {
                     .chain(group_keys.into_iter().map(Ok))
                     .try_collect()?;
 
-                Ok::<Tuple, ExecutorError>(Tuple {
+                Ok::<Tuple, DatabaseError>(Tuple {
                     id: None,
                     columns: self.group_columns.clone(),
                     values,
@@ -130,7 +130,7 @@ impl HashAggStatus {
 }
 
 impl HashAggExecutor {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let HashAggExecutor {
             agg_calls,
@@ -154,10 +154,10 @@ impl HashAggExecutor {
 #[cfg(test)]
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::errors::DatabaseError;
     use crate::execution::volcano::dql::aggregate::hash_agg::HashAggExecutor;
     use crate::execution::volcano::dql::test::build_integers;
     use crate::execution::volcano::{try_collect, ReadExecutor};
-    use crate::execution::ExecutorError;
     use crate::expression::agg::AggKind;
     use crate::expression::ScalarExpression;
     use crate::planner::operator::aggregate::AggregateOperator;
@@ -174,7 +174,7 @@ mod test {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_hash_agg() -> Result<(), ExecutorError> {
+    async fn test_hash_agg() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await.unwrap();
         let transaction = storage.transaction().await?;

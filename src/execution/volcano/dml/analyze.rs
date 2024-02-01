@@ -1,9 +1,8 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableMeta, TableName};
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
-use crate::execution::ExecutorError;
 use crate::optimizer::core::column_meta::ColumnMeta;
 use crate::optimizer::core::histogram::HistogramBuilder;
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -51,7 +50,7 @@ impl<T: Transaction> WriteExecutor<T> for Analyze {
 }
 
 impl Analyze {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Analyze {
             table_name,
@@ -98,7 +97,7 @@ impl Analyze {
             let path = dir_path.join(column_id.unwrap().to_string());
             let (histogram, sketch) = match builder.build(DEFAULT_NUM_OF_BUCKETS) {
                 Ok(build) => build,
-                Err(OptimizerError::TooManyBuckets) => continue,
+                Err(DatabaseError::TooManyBuckets) => continue,
                 err => err?,
             };
 

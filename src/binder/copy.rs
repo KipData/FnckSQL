@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::errors::DatabaseError;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::Operator;
@@ -57,14 +58,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
         to: bool,
         target: CopyTarget,
         options: &[CopyOption],
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         let (table_name, ..) = match source {
             CopySource::Table {
                 table_name,
                 columns,
             } => (table_name, columns),
             CopySource::Query(_) => {
-                return Err(BindError::UnsupportedCopySource(
+                return Err(DatabaseError::UnsupportedCopySource(
                     "bad copy source".to_string(),
                 ));
             }
@@ -100,7 +101,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 })
             }
         } else {
-            Err(BindError::InvalidTable(format!(
+            Err(DatabaseError::InvalidTable(format!(
                 "not found table {}",
                 table_name
             )))

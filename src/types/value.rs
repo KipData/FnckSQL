@@ -10,7 +10,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::{cmp, fmt, mem};
 
-use crate::types::errors::TypeError;
+use crate::errors::DatabaseError;
 use ordered_float::OrderedFloat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
@@ -229,7 +229,7 @@ macro_rules! varchar_cast {
                 let string_value = format!("{}", v);
                 if let Some(len) = $len {
                     if string_value.len() > *len as usize {
-                        return Err(TypeError::TooLong);
+                        return Err(DatabaseError::TooLong);
                     }
                 }
                 Ok(DataValue::Utf8(Some(string_value)))
@@ -255,7 +255,7 @@ impl DataValue {
         }
     }
 
-    pub(crate) fn check_len(&self, logic_type: &LogicalType) -> Result<(), TypeError> {
+    pub(crate) fn check_len(&self, logic_type: &LogicalType) -> Result<(), DatabaseError> {
         let is_over_len = match (logic_type, self) {
             (LogicalType::Varchar(Some(len)), DataValue::Utf8(Some(val))) => {
                 val.len() > *len as usize
@@ -263,12 +263,12 @@ impl DataValue {
             (LogicalType::Decimal(full_len, scale_len), DataValue::Decimal(Some(val))) => {
                 if let Some(len) = full_len {
                     if val.mantissa().ilog10() + 1 > *len as u32 {
-                        return Err(TypeError::TooLong);
+                        return Err(DatabaseError::TooLong);
                     }
                 }
                 if let Some(len) = scale_len {
                     if val.scale() > *len as u32 {
-                        return Err(TypeError::TooLong);
+                        return Err(DatabaseError::TooLong);
                     }
                 }
                 false
@@ -277,7 +277,7 @@ impl DataValue {
         };
 
         if is_over_len {
-            return Err(TypeError::TooLong);
+            return Err(DatabaseError::TooLong);
         }
 
         Ok(())
@@ -506,7 +506,7 @@ impl DataValue {
         }
     }
 
-    pub fn memcomparable_encode(&self, b: &mut Vec<u8>) -> Result<(), TypeError> {
+    pub fn memcomparable_encode(&self, b: &mut Vec<u8>) -> Result<(), DatabaseError> {
         match self {
             DataValue::Int8(Some(v)) => encode_u!(b, *v as u8 ^ 0x80_u8),
             DataValue::Int16(Some(v)) => encode_u!(b, *v as u16 ^ 0x8000_u16),
@@ -548,7 +548,7 @@ impl DataValue {
             DataValue::Decimal(Some(_v)) => todo!(),
             value => {
                 if !value.is_null() {
-                    return Err(TypeError::InvalidType);
+                    return Err(DatabaseError::InvalidType);
                 }
             }
         }
@@ -556,10 +556,10 @@ impl DataValue {
         Ok(())
     }
 
-    pub fn cast(self, to: &LogicalType) -> Result<DataValue, TypeError> {
+    pub fn cast(self, to: &LogicalType) -> Result<DataValue, DatabaseError> {
         match self {
             DataValue::Null => match to {
-                LogicalType::Invalid => Err(TypeError::CastFail),
+                LogicalType::Invalid => Err(DatabaseError::CastFail),
                 LogicalType::SqlNull => Ok(DataValue::Null),
                 LogicalType::Boolean => Ok(DataValue::Boolean(None)),
                 LogicalType::Tinyint => Ok(DataValue::Int8(None)),
@@ -591,7 +591,7 @@ impl DataValue {
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Float32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -601,14 +601,15 @@ impl DataValue {
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(
                     value
                         .map(|v| {
-                            let mut decimal = Decimal::from_f32(v).ok_or(TypeError::CastFail)?;
+                            let mut decimal =
+                                Decimal::from_f32(v).ok_or(DatabaseError::CastFail)?;
                             Self::decimal_round_f(option, &mut decimal);
 
-                            Ok::<Decimal, TypeError>(decimal)
+                            Ok::<Decimal, DatabaseError>(decimal)
                         })
                         .transpose()?,
                 )),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Float64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -618,14 +619,15 @@ impl DataValue {
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(
                     value
                         .map(|v| {
-                            let mut decimal = Decimal::from_f64(v).ok_or(TypeError::CastFail)?;
+                            let mut decimal =
+                                Decimal::from_f64(v).ok_or(DatabaseError::CastFail)?;
                             Self::decimal_round_f(option, &mut decimal);
 
-                            Ok::<Decimal, TypeError>(decimal)
+                            Ok::<Decimal, DatabaseError>(decimal)
                         })
                         .transpose()?,
                 )),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Int8(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -652,7 +654,7 @@ impl DataValue {
 
                     decimal
                 }))),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Int16(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -678,7 +680,7 @@ impl DataValue {
 
                     decimal
                 }))),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Int32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -703,7 +705,7 @@ impl DataValue {
 
                     decimal
                 }))),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Int64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -727,7 +729,7 @@ impl DataValue {
 
                     decimal
                 }))),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::UInt8(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -747,7 +749,7 @@ impl DataValue {
 
                     decimal
                 }))),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::UInt16(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -765,7 +767,7 @@ impl DataValue {
 
                     decimal
                 }))),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::UInt32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -781,7 +783,7 @@ impl DataValue {
 
                     decimal
                 }))),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::UInt64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -795,10 +797,10 @@ impl DataValue {
 
                     decimal
                 }))),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Utf8(value) => match to {
-                LogicalType::Invalid => Err(TypeError::CastFail),
+                LogicalType::Invalid => Err(DatabaseError::CastFail),
                 LogicalType::SqlNull => Ok(DataValue::Null),
                 LogicalType::Boolean => Ok(DataValue::Boolean(
                     value.map(|v| bool::from_str(&v)).transpose()?,
@@ -875,7 +877,7 @@ impl DataValue {
 
                     Ok(DataValue::Date64(option))
                 }
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Date64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -889,7 +891,7 @@ impl DataValue {
                     Ok(DataValue::Date32(option))
                 }
                 LogicalType::DateTime => Ok(DataValue::Date64(value)),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Decimal(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -897,7 +899,7 @@ impl DataValue {
                 LogicalType::Double => Ok(DataValue::Float64(value.and_then(|v| v.to_f64()))),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(value)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
-                _ => Err(TypeError::CastFail),
+                _ => Err(DatabaseError::CastFail),
             },
         }
     }
@@ -1071,11 +1073,11 @@ impl fmt::Debug for DataValue {
 
 #[cfg(test)]
 mod test {
-    use crate::types::errors::TypeError;
+    use crate::errors::DatabaseError;
     use crate::types::value::DataValue;
 
     #[test]
-    fn test_mem_comparable_int() -> Result<(), TypeError> {
+    fn test_mem_comparable_int() -> Result<(), DatabaseError> {
         let mut key_i8_1 = Vec::new();
         let mut key_i8_2 = Vec::new();
         let mut key_i8_3 = Vec::new();
@@ -1132,7 +1134,7 @@ mod test {
     }
 
     #[test]
-    fn test_mem_comparable_float() -> Result<(), TypeError> {
+    fn test_mem_comparable_float() -> Result<(), DatabaseError> {
         let mut key_f32_1 = Vec::new();
         let mut key_f32_2 = Vec::new();
         let mut key_f32_3 = Vec::new();

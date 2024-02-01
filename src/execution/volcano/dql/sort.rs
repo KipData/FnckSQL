@@ -1,9 +1,8 @@
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
-use crate::execution::ExecutorError;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
@@ -41,7 +40,7 @@ pub(crate) fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
 pub(crate) fn sort(
     sort_fields: &[SortField],
     tuples: Vec<Tuple>,
-) -> Result<Vec<Tuple>, ExecutorError> {
+) -> Result<Vec<Tuple>, DatabaseError> {
     let tuples_with_keys: Vec<(Tuple, Vec<u8>)> = tuples
         .into_iter()
         .map(|tuple| {
@@ -65,7 +64,7 @@ pub(crate) fn sort(
                 }
                 full_key.extend(key);
             }
-            Ok::<(Tuple, Vec<u8>), TypeError>((tuple, full_key))
+            Ok::<(Tuple, Vec<u8>), DatabaseError>((tuple, full_key))
         })
         .try_collect()?;
 
@@ -95,7 +94,7 @@ impl<T: Transaction> ReadExecutor<T> for Sort {
 }
 
 impl Sort {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let Sort {
             sort_fields,

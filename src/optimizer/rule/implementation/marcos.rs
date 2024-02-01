@@ -13,7 +13,7 @@ macro_rules! single_mapping {
                 _: &Operator,
                 _: &ColumnMetaLoader<'_, T>,
                 group_expr: &mut GroupExpression,
-            ) -> Result<(), OptimizerError> {
+            ) -> Result<(), DatabaseError> {
                 //TODO: CostModel
                 group_expr.append_expr(Expression {
                     op: $option,

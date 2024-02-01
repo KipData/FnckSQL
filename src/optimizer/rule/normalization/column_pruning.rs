@@ -1,10 +1,10 @@
 use crate::catalog::{ColumnRef, ColumnSummary};
+use crate::errors::DatabaseError;
 use crate::expression::agg::AggKind;
 use crate::expression::ScalarExpression;
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
@@ -161,7 +161,7 @@ impl MatchPattern for ColumnPruning {
 }
 
 impl NormalizationRule for ColumnPruning {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         Self::_apply(&mut HashSet::new(), true, node_id, graph);
         // mark changed to skip this rule batch
         graph.version += 1;
@@ -173,7 +173,7 @@ impl NormalizationRule for ColumnPruning {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::db::DatabaseError;
+    use crate::errors::DatabaseError;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;

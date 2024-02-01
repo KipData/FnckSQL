@@ -9,6 +9,7 @@ extern crate core;
 pub mod binder;
 pub mod catalog;
 pub mod db;
+pub mod errors;
 pub mod execution;
 pub mod expression;
 #[cfg(feature = "marcos")]

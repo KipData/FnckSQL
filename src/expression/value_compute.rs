@@ -1,5 +1,5 @@
+use crate::errors::DatabaseError;
 use crate::expression::{BinaryOperator, UnaryOperator};
-use crate::types::errors::TypeError;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use regex::Regex;
@@ -18,7 +18,7 @@ fn unpack_utf8(value: DataValue) -> Option<String> {
     }
 }
 
-pub fn unary_op(value: &DataValue, op: &UnaryOperator) -> Result<DataValue, TypeError> {
+pub fn unary_op(value: &DataValue, op: &UnaryOperator) -> Result<DataValue, DatabaseError> {
     let mut value_type = value.logical_type();
     let mut value = value.clone();
 
@@ -55,7 +55,7 @@ pub fn unary_op(value: &DataValue, op: &UnaryOperator) -> Result<DataValue, Type
             _ => unreachable!(),
         }
     } else {
-        Err(TypeError::InvalidType)
+        Err(DatabaseError::InvalidType)
     }
 }
 
@@ -180,7 +180,7 @@ pub fn binary_op(
     left: &DataValue,
     right: &DataValue,
     op: &BinaryOperator,
-) -> Result<DataValue, TypeError> {
+) -> Result<DataValue, DatabaseError> {
     if matches!(op, BinaryOperator::Like | BinaryOperator::NotLike) {
         let value_option = unpack_utf8(left.clone().cast(&LogicalType::Varchar(None))?);
         let pattern_option = unpack_utf8(right.clone().cast(&LogicalType::Varchar(None))?);
@@ -523,8 +523,8 @@ pub fn binary_op(
                 _ => todo!("unsupported operator"),
             }
         }
-        LogicalType::SqlNull => return Err(TypeError::NotNull),
-        LogicalType::Invalid => return Err(TypeError::InvalidType),
+        LogicalType::SqlNull => return Err(DatabaseError::NotNull),
+        LogicalType::Invalid => return Err(DatabaseError::InvalidType),
     };
 
     Ok(value)
@@ -532,13 +532,13 @@ pub fn binary_op(
 
 #[cfg(test)]
 mod test {
+    use crate::errors::DatabaseError;
     use crate::expression::value_compute::binary_op;
     use crate::expression::BinaryOperator;
-    use crate::types::errors::TypeError;
     use crate::types::value::DataValue;
 
     #[test]
-    fn test_binary_op_arithmetic_plus() -> Result<(), TypeError> {
+    fn test_binary_op_arithmetic_plus() -> Result<(), DatabaseError> {
         let plus_i32_1 = binary_op(
             &DataValue::Int32(None),
             &DataValue::Int32(None),
@@ -618,7 +618,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_arithmetic_minus() -> Result<(), TypeError> {
+    fn test_binary_op_arithmetic_minus() -> Result<(), DatabaseError> {
         let minus_i32_1 = binary_op(
             &DataValue::Int32(None),
             &DataValue::Int32(None),
@@ -698,7 +698,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_arithmetic_multiply() -> Result<(), TypeError> {
+    fn test_binary_op_arithmetic_multiply() -> Result<(), DatabaseError> {
         let multiply_i32_1 = binary_op(
             &DataValue::Int32(None),
             &DataValue::Int32(None),
@@ -778,7 +778,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_arithmetic_divide() -> Result<(), TypeError> {
+    fn test_binary_op_arithmetic_divide() -> Result<(), DatabaseError> {
         let divide_i32_1 = binary_op(
             &DataValue::Int32(None),
             &DataValue::Int32(None),
@@ -858,7 +858,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_cast() -> Result<(), TypeError> {
+    fn test_binary_op_cast() -> Result<(), DatabaseError> {
         let i32_cast_1 = binary_op(
             &DataValue::Int32(Some(1)),
             &DataValue::Int8(Some(1)),
@@ -902,7 +902,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_i32_compare() -> Result<(), TypeError> {
+    fn test_binary_op_i32_compare() -> Result<(), DatabaseError> {
         assert_eq!(
             binary_op(
                 &DataValue::Int32(Some(1)),
@@ -1014,7 +1014,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_i64_compare() -> Result<(), TypeError> {
+    fn test_binary_op_i64_compare() -> Result<(), DatabaseError> {
         assert_eq!(
             binary_op(
                 &DataValue::Int64(Some(1)),
@@ -1126,7 +1126,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_f64_compare() -> Result<(), TypeError> {
+    fn test_binary_op_f64_compare() -> Result<(), DatabaseError> {
         assert_eq!(
             binary_op(
                 &DataValue::Float64(Some(1.0)),
@@ -1238,7 +1238,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_f32_compare() -> Result<(), TypeError> {
+    fn test_binary_op_f32_compare() -> Result<(), DatabaseError> {
         assert_eq!(
             binary_op(
                 &DataValue::Float32(Some(1.0)),
@@ -1350,7 +1350,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_bool_compare() -> Result<(), TypeError> {
+    fn test_binary_op_bool_compare() -> Result<(), DatabaseError> {
         assert_eq!(
             binary_op(
                 &DataValue::Boolean(Some(true)),
@@ -1423,7 +1423,7 @@ mod test {
     }
 
     #[test]
-    fn test_binary_op_utf8_compare() -> Result<(), TypeError> {
+    fn test_binary_op_utf8_compare() -> Result<(), DatabaseError> {
         assert_eq!(
             binary_op(
                 &DataValue::Utf8(Some("a".to_string())),

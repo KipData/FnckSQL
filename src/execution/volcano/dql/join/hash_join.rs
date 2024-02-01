@@ -1,12 +1,11 @@
 use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::join::joins_nullable;
 use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
-use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::errors::TypeError;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 use ahash::{HashMap, HashSet, HashSetExt, RandomState};
@@ -94,7 +93,7 @@ impl HashJoinStatus {
         }
     }
 
-    pub(crate) fn left_build(&mut self, tuple: Tuple) -> Result<(), ExecutorError> {
+    pub(crate) fn left_build(&mut self, tuple: Tuple) -> Result<(), DatabaseError> {
         let HashJoinStatus {
             on_left_keys,
             hash_random_state,
@@ -120,7 +119,7 @@ impl HashJoinStatus {
         Ok(())
     }
 
-    pub(crate) fn right_probe(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, ExecutorError> {
+    pub(crate) fn right_probe(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, DatabaseError> {
         let HashJoinStatus {
             hash_random_state,
             join_columns,
@@ -285,7 +284,7 @@ impl HashJoinStatus {
         on_keys: &[ScalarExpression],
         hash_random_state: &RandomState,
         tuple: &Tuple,
-    ) -> Result<u64, TypeError> {
+    ) -> Result<u64, DatabaseError> {
         let mut values = Vec::with_capacity(on_keys.len());
 
         for expr in on_keys {
@@ -297,7 +296,7 @@ impl HashJoinStatus {
 }
 
 impl HashJoin {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let HashJoin {
             on,
@@ -337,10 +336,10 @@ impl HashJoin {
 #[cfg(test)]
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::errors::DatabaseError;
     use crate::execution::volcano::dql::join::hash_join::HashJoin;
     use crate::execution::volcano::dql::test::build_integers;
     use crate::execution::volcano::{try_collect, ReadExecutor};
-    use crate::execution::ExecutorError;
     use crate::expression::ScalarExpression;
     use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
     use crate::planner::operator::values::ValuesOperator;
@@ -467,7 +466,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_inner_join() -> Result<(), ExecutorError> {
+    async fn test_inner_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;
@@ -504,7 +503,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_left_join() -> Result<(), ExecutorError> {
+    async fn test_left_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;
@@ -545,7 +544,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_right_join() -> Result<(), ExecutorError> {
+    async fn test_right_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;
@@ -586,7 +585,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_full_join() -> Result<(), ExecutorError> {
+    async fn test_full_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;

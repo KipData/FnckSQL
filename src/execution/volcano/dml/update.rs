@@ -1,6 +1,6 @@
 use crate::catalog::TableName;
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
-use crate::execution::ExecutorError;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -34,7 +34,7 @@ impl<T: Transaction> WriteExecutor<T> for Update {
 }
 
 impl Update {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Update {
             table_name,

@@ -5,13 +5,13 @@ mod min_max;
 pub mod simple_agg;
 mod sum;
 
+use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::aggregate::avg::AvgAccumulator;
 use crate::execution::volcano::dql::aggregate::count::{
     CountAccumulator, DistinctCountAccumulator,
 };
 use crate::execution::volcano::dql::aggregate::min_max::MinMaxAccumulator;
 use crate::execution::volcano::dql::aggregate::sum::{DistinctSumAccumulator, SumAccumulator};
-use crate::execution::ExecutorError;
 use crate::expression::agg::AggKind;
 use crate::expression::ScalarExpression;
 use crate::types::value::ValueRef;
@@ -21,10 +21,10 @@ use crate::types::value::ValueRef;
 /// rows and generically accumulates values.
 pub trait Accumulator: Send + Sync {
     /// updates the accumulator's state from a vector of arrays.
-    fn update_value(&mut self, value: &ValueRef) -> Result<(), ExecutorError>;
+    fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError>;
 
     /// returns its value based on its current state.
-    fn evaluate(&self) -> Result<ValueRef, ExecutorError>;
+    fn evaluate(&self) -> Result<ValueRef, DatabaseError>;
 }
 
 fn create_accumulator(expr: &ScalarExpression) -> Box<dyn Accumulator> {

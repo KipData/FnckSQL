@@ -1,8 +1,8 @@
 use crate::catalog::ColumnCatalog;
+use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::sort::radix_sort;
 use crate::expression::simplify::ConstantBinary;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
-use crate::optimizer::OptimizerError;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::{ColumnId, LogicalType};
 use ordered_float::OrderedFloat;
@@ -48,9 +48,9 @@ struct Bucket {
 }
 
 impl HistogramBuilder {
-    pub fn new(column: &ColumnCatalog, capacity: Option<usize>) -> Result<Self, OptimizerError> {
+    pub fn new(column: &ColumnCatalog, capacity: Option<usize>) -> Result<Self, DatabaseError> {
         Ok(Self {
-            column_id: column.id().ok_or(OptimizerError::OwnerLessColumn)?,
+            column_id: column.id().ok_or(DatabaseError::OwnerLessColumn)?,
             data_type: *column.datatype(),
             null_count: 0,
             values: capacity
@@ -60,7 +60,7 @@ impl HistogramBuilder {
         })
     }
 
-    pub fn append(&mut self, value: &ValueRef) -> Result<(), OptimizerError> {
+    pub fn append(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
         if value.is_null() {
             self.null_count += 1;
         } else {
@@ -78,9 +78,9 @@ impl HistogramBuilder {
     pub fn build(
         self,
         number_of_buckets: usize,
-    ) -> Result<(Histogram, CountMinSketch<DataValue>), OptimizerError> {
+    ) -> Result<(Histogram, CountMinSketch<DataValue>), DatabaseError> {
         if number_of_buckets > self.values.len() {
-            return Err(OptimizerError::TooManyBuckets);
+            return Err(DatabaseError::TooManyBuckets);
         }
 
         let mut sketch = CountMinSketch::new(self.values.len(), 0.95, 1.0);
@@ -437,9 +437,9 @@ impl Bucket {
 #[cfg(test)]
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
+    use crate::errors::DatabaseError;
     use crate::expression::simplify::ConstantBinary;
     use crate::optimizer::core::histogram::{Bucket, HistogramBuilder};
-    use crate::optimizer::OptimizerError;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::ops::Bound;
@@ -464,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sort_tuples_on_histogram() -> Result<(), OptimizerError> {
+    fn test_sort_tuples_on_histogram() -> Result<(), DatabaseError> {
         let column = int32_column();
 
         let mut builder = HistogramBuilder::new(&column, Some(15))?;
@@ -490,7 +490,7 @@ mod tests {
         builder.append(&Arc::new(DataValue::Null))?;
         builder.append(&Arc::new(DataValue::Int32(None)))?;
 
-        // assert!(matches!(builder.build(10), Err(OptimizerError::TooManyBuckets)));
+        // assert!(matches!(builder.build(10), Err(DataBaseError::TooManyBuckets)));
 
         let (histogram, _) = builder.build(5)?;
 
@@ -532,7 +532,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rev_sort_tuples_on_histogram() -> Result<(), OptimizerError> {
+    fn test_rev_sort_tuples_on_histogram() -> Result<(), DatabaseError> {
         let column = int32_column();
 
         let mut builder = HistogramBuilder::new(&column, Some(15))?;
@@ -598,7 +598,7 @@ mod tests {
     }
 
     #[test]
-    fn test_non_average_on_histogram() -> Result<(), OptimizerError> {
+    fn test_non_average_on_histogram() -> Result<(), DatabaseError> {
         let column = int32_column();
 
         let mut builder = HistogramBuilder::new(&column, Some(15))?;
@@ -659,7 +659,7 @@ mod tests {
     }
 
     #[test]
-    fn test_collect_count() -> Result<(), OptimizerError> {
+    fn test_collect_count() -> Result<(), DatabaseError> {
         let column = int32_column();
 
         let mut builder = HistogramBuilder::new(&column, Some(15))?;

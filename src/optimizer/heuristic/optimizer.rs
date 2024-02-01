@@ -1,3 +1,4 @@
+use crate::errors::DatabaseError;
 use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::Memo;
 use crate::optimizer::core::pattern::PatternMatcher;
@@ -7,7 +8,6 @@ use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
 use crate::optimizer::rule::normalization::NormalizationRuleImpl;
-use crate::optimizer::OptimizerError;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use std::ops::Not;
@@ -45,7 +45,7 @@ impl HepOptimizer {
     pub fn find_best<T: Transaction>(
         mut self,
         loader: Option<&ColumnMetaLoader<'_, T>>,
-    ) -> Result<LogicalPlan, OptimizerError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         for ref batch in self.batches {
             let mut batch_over = false;
             let mut iteration = 1usize;
@@ -70,7 +70,7 @@ impl HepOptimizer {
         Ok(self
             .graph
             .to_plan(memo.as_ref())
-            .ok_or(OptimizerError::EmptyPlan)?)
+            .ok_or(DatabaseError::EmptyPlan)?)
     }
 
     fn apply_batch(
@@ -78,7 +78,7 @@ impl HepOptimizer {
         HepBatch {
             rules, strategy, ..
         }: &HepBatch,
-    ) -> Result<bool, OptimizerError> {
+    ) -> Result<bool, DatabaseError> {
         let before_version = graph.version;
 
         for rule in rules {
@@ -96,7 +96,7 @@ impl HepOptimizer {
         graph: &mut HepGraph,
         rule: &NormalizationRuleImpl,
         node_id: HepNodeId,
-    ) -> Result<bool, OptimizerError> {
+    ) -> Result<bool, DatabaseError> {
         let before_version = graph.version;
 
         if HepMatcher::new(rule.pattern(), node_id, graph).match_opt_expr() {

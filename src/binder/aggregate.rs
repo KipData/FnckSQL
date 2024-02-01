@@ -3,7 +3,7 @@ use itertools::Itertools;
 use sqlparser::ast::{Expr, OrderByExpr};
 use std::collections::HashSet;
 
-use crate::binder::BindError;
+use crate::errors::DatabaseError;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::{
@@ -26,7 +26,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     pub fn extract_select_aggregate(
         &mut self,
         select_items: &mut [ScalarExpression],
-    ) -> Result<(), BindError> {
+    ) -> Result<(), DatabaseError> {
         for column in select_items {
             self.visit_column_agg_expr(column)?;
         }
@@ -37,7 +37,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         select_list: &mut [ScalarExpression],
         groupby: &[Expr],
-    ) -> Result<(), BindError> {
+    ) -> Result<(), DatabaseError> {
         self.validate_groupby_illegal_column(select_list, groupby)?;
 
         for gb in groupby {
@@ -51,7 +51,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         having: &Option<Expr>,
         orderbys: &[OrderByExpr],
-    ) -> Result<(Option<ScalarExpression>, Option<Vec<SortField>>), BindError> {
+    ) -> Result<(Option<ScalarExpression>, Option<Vec<SortField>>), DatabaseError> {
         // Extract having expression.
         let return_having = if let Some(having) = having {
             let mut having = self.bind_expr(having)?;
@@ -87,7 +87,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok((return_having, return_orderby))
     }
 
-    fn visit_column_agg_expr(&mut self, expr: &mut ScalarExpression) -> Result<(), BindError> {
+    fn visit_column_agg_expr(&mut self, expr: &mut ScalarExpression) -> Result<(), DatabaseError> {
         match expr {
             ScalarExpression::AggCall { .. } => {
                 self.context.agg_calls.push(expr.clone());
@@ -125,7 +125,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         select_items: &[ScalarExpression],
         groupby: &[Expr],
-    ) -> Result<(), BindError> {
+    ) -> Result<(), DatabaseError> {
         let mut group_raw_exprs = vec![];
         for expr in groupby {
             let expr = self.bind_expr(expr)?;
@@ -159,7 +159,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             group_raw_set.remove(expr);
 
             if !group_raw_exprs.iter().contains(expr) {
-                return Err(BindError::AggMiss(format!(
+                return Err(DatabaseError::AggMiss(format!(
                     "{:?} must appear in the GROUP BY clause or be used in an aggregate function",
                     expr
                 )));
@@ -167,7 +167,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         }
 
         if !group_raw_set.is_empty() {
-            return Err(BindError::AggMiss(
+            return Err(DatabaseError::AggMiss(
                 "In the GROUP BY clause the field must be in the select clause".to_string(),
             ));
         }
@@ -202,7 +202,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     }
 
     /// Validate having or orderby clause is valid, if SQL has group by clause.
-    pub fn validate_having_orderby(&self, expr: &ScalarExpression) -> Result<(), BindError> {
+    pub fn validate_having_orderby(&self, expr: &ScalarExpression) -> Result<(), DatabaseError> {
         if self.context.group_by_exprs.is_empty() {
             return Ok(());
         }
@@ -215,7 +215,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     return Ok(());
                 }
 
-                Err(BindError::AggMiss(
+                Err(DatabaseError::AggMiss(
                     format!(
                         "column {:?} must appear in the GROUP BY clause or be used in an aggregate function",
                         expr
@@ -230,7 +230,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     return self.validate_having_orderby(expr.unpack_alias());
                 }
 
-                Err(BindError::AggMiss(
+                Err(DatabaseError::AggMiss(
                     format!(
                         "column {:?} must appear in the GROUP BY clause or be used in an aggregate function",
                         expr

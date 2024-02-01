@@ -1,5 +1,5 @@
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
-use crate::execution::ExecutorError;
 use crate::planner::operator::limit::LimitOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -30,7 +30,7 @@ impl<T: Transaction> ReadExecutor<T> for Limit {
 }
 
 impl Limit {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let Limit {
             offset,

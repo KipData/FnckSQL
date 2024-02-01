@@ -17,12 +17,12 @@ mod update;
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
 use std::collections::BTreeMap;
 
-use crate::catalog::{CatalogError, TableCatalog, TableName};
+use crate::catalog::{TableCatalog, TableName};
+use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::JoinType;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::errors::TypeError;
 
 pub enum InputRefType {
     AggCall,
@@ -67,22 +67,33 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
     }
 
-    pub fn add_alias(&mut self, alias: String, expr: ScalarExpression) -> Result<(), BindError> {
+    pub fn add_alias(
+        &mut self,
+        alias: String,
+        expr: ScalarExpression,
+    ) -> Result<(), DatabaseError> {
         let is_exist = self.aliases.insert(alias.clone(), expr).is_some();
         if is_exist {
-            return Err(BindError::InvalidColumn(format!("{} duplicated", alias)));
+            return Err(DatabaseError::InvalidColumn(format!(
+                "{} duplicated",
+                alias
+            )));
         }
 
         Ok(())
     }
 
-    pub fn add_table_alias(&mut self, alias: String, table: TableName) -> Result<(), BindError> {
+    pub fn add_table_alias(
+        &mut self,
+        alias: String,
+        table: TableName,
+    ) -> Result<(), DatabaseError> {
         let is_alias_exist = self
             .table_aliases
             .insert(alias.clone(), table.clone())
             .is_some();
         if is_alias_exist {
-            return Err(BindError::InvalidTable(format!("{} duplicated", alias)));
+            return Err(DatabaseError::InvalidTable(format!("{} duplicated", alias)));
         }
 
         Ok(())
@@ -93,13 +104,13 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         table: TableName,
         table_catalog: TableCatalog,
         join_type: Option<JoinType>,
-    ) -> Result<(), BindError> {
+    ) -> Result<(), DatabaseError> {
         let is_bound = self
             .bind_table
             .insert(table.clone(), (table_catalog.clone(), join_type))
             .is_some();
         if is_bound {
-            return Err(BindError::InvalidTable(format!("{} duplicated", table)));
+            return Err(DatabaseError::InvalidTable(format!("{} duplicated", table)));
         }
 
         Ok(())
@@ -119,7 +130,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Binder { context }
     }
 
-    pub fn bind(&mut self, stmt: &Statement) -> Result<LogicalPlan, BindError> {
+    pub fn bind(&mut self, stmt: &Statement) -> Result<LogicalPlan, DatabaseError> {
         let plan = match stmt {
             Statement::Query(query) => self.bind_query(query)?,
             Statement::AlterTable { name, operation } => self.bind_alter_table(name, operation)?,
@@ -190,7 +201,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 self.bind_explain(plan)?
             }
-            _ => return Err(BindError::UnsupportedStmt(stmt.to_string())),
+            _ => return Err(DatabaseError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
     }
@@ -207,39 +218,11 @@ fn lower_case_name(name: &ObjectName) -> ObjectName {
 }
 
 /// Split an object name into `(schema name, table name)`.
-fn split_name(name: &ObjectName) -> Result<&str, BindError> {
+fn split_name(name: &ObjectName) -> Result<&str, DatabaseError> {
     Ok(match name.0.as_slice() {
         [table] => &table.value,
-        _ => return Err(BindError::InvalidTable(name.to_string())),
+        _ => return Err(DatabaseError::InvalidTable(name.to_string())),
     })
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum BindError {
-    #[error("unsupported statement {0}")]
-    UnsupportedStmt(String),
-    #[error("invalid table {0}")]
-    InvalidTable(String),
-    #[error("invalid column {0}")]
-    InvalidColumn(String),
-    #[error("ambiguous column {0}")]
-    AmbiguousColumn(String),
-    #[error("values length not match, expect {0}, got {1}")]
-    ValuesLenMismatch(usize, usize),
-    #[error("values list must all be the same length")]
-    ValuesLenNotSame(),
-    #[error("binary operator types mismatch: {0} != {1}")]
-    BinaryOpTypeMismatch(String, String),
-    #[error("subquery error: {0}")]
-    Subquery(String),
-    #[error("agg miss: {0}")]
-    AggMiss(String),
-    #[error("catalog error: {0}")]
-    CatalogError(#[from] CatalogError),
-    #[error("type error: {0}")]
-    TypeError(#[from] TypeError),
-    #[error("copy error: {0}")]
-    UnsupportedCopySource(String),
 }
 
 pub(crate) fn is_valid_identifier(s: &str) -> bool {
@@ -252,10 +235,10 @@ pub(crate) fn is_valid_identifier(s: &str) -> bool {
 pub mod test {
     use crate::binder::{is_valid_identifier, Binder, BinderContext};
     use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::execution::ExecutorError;
+    use crate::errors::DatabaseError;
     use crate::planner::LogicalPlan;
     use crate::storage::kip::KipStorage;
-    use crate::storage::{Storage, StorageError, Transaction};
+    use crate::storage::{Storage, Transaction};
     use crate::types::LogicalType::Integer;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -263,7 +246,7 @@ pub mod test {
 
     pub(crate) async fn build_test_catalog(
         path: impl Into<PathBuf> + Send,
-    ) -> Result<KipStorage, StorageError> {
+    ) -> Result<KipStorage, DatabaseError> {
         let storage = KipStorage::new(path).await?;
         let mut transaction = storage.transaction().await?;
 
@@ -310,7 +293,7 @@ pub mod test {
         Ok(storage)
     }
 
-    pub async fn select_sql_run<S: AsRef<str>>(sql: S) -> Result<LogicalPlan, ExecutorError> {
+    pub async fn select_sql_run<S: AsRef<str>>(sql: S) -> Result<LogicalPlan, DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = build_test_catalog(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;

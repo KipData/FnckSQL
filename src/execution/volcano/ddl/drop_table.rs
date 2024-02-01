@@ -1,5 +1,5 @@
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, WriteExecutor};
-use crate::execution::ExecutorError;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
@@ -22,7 +22,7 @@ impl<T: Transaction> WriteExecutor<T> for DropTable {
 }
 
 impl DropTable {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let DropTableOperator {
             table_name,

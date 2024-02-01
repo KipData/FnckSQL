@@ -3,6 +3,7 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 pub(crate) mod marcos;
 
+use crate::errors::DatabaseError;
 use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::GroupExpression;
 use crate::optimizer::core::pattern::Pattern;
@@ -31,7 +32,6 @@ use crate::optimizer::rule::implementation::dql::scan::{
 };
 use crate::optimizer::rule::implementation::dql::sort::SortImplementation;
 use crate::optimizer::rule::implementation::dql::values::ValuesImplementation;
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::Operator;
 use crate::storage::Transaction;
 
@@ -99,7 +99,7 @@ impl<T: Transaction> ImplementationRule<T> for ImplementationRuleImpl {
         operator: &Operator,
         loader: &ColumnMetaLoader<'_, T>,
         group_expr: &mut GroupExpression,
-    ) -> Result<(), OptimizerError> {
+    ) -> Result<(), DatabaseError> {
         match self {
             ImplementationRuleImpl::GroupByAggregate => {
                 GroupByAggregateImplementation.to_expression(operator, loader, group_expr)?

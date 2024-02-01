@@ -1,5 +1,5 @@
 use crate::catalog::{ColumnCatalog, ColumnRef};
-use crate::types::errors::TypeError;
+use crate::errors::DatabaseError;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 use std::sync::Arc;
@@ -13,7 +13,7 @@ impl TupleBuilder {
         TupleBuilder { columns }
     }
 
-    pub fn build_result(header: String, message: String) -> Result<Tuple, TypeError> {
+    pub fn build_result(header: String, message: String) -> Result<Tuple, DatabaseError> {
         let columns: Vec<ColumnRef> = vec![Arc::new(ColumnCatalog::new_dummy(header))];
         let values: Vec<ValueRef> = vec![Arc::new(DataValue::Utf8(Some(message)))];
 
@@ -27,7 +27,7 @@ impl TupleBuilder {
     pub fn build_with_row<'a>(
         &self,
         row: impl IntoIterator<Item = &'a str>,
-    ) -> Result<Tuple, TypeError> {
+    ) -> Result<Tuple, DatabaseError> {
         let mut values = Vec::with_capacity(self.columns.len());
         let mut primary_key = None;
 
@@ -42,7 +42,7 @@ impl TupleBuilder {
             values.push(data_value);
         }
         if values.len() != self.columns.len() {
-            return Err(TypeError::MisMatch(
+            return Err(DatabaseError::MisMatch(
                 "types".to_string(),
                 "values".to_string(),
             ));

@@ -1,5 +1,5 @@
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
-use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::LogicalPlan;
@@ -26,7 +26,7 @@ impl<T: Transaction> ReadExecutor<T> for Filter {
 }
 
 impl Filter {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let Filter { predicate, input } = self;
 

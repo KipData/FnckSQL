@@ -1,5 +1,5 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableMeta};
-use crate::types::errors::TypeError;
+use crate::errors::DatabaseError;
 use crate::types::index::{Index, IndexId, IndexMeta};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::LogicalType;
@@ -137,14 +137,17 @@ impl TableCodec {
 
     /// Key: {TableName}{TUPLE_TAG}{BOUND_MIN_TAG}{RowID}(Sorted)
     /// Value: Tuple
-    pub fn encode_tuple(table_name: &str, tuple: &Tuple) -> Result<(Bytes, Bytes), TypeError> {
-        let tuple_id = tuple.id.clone().ok_or(TypeError::PrimaryKeyNotFound)?;
+    pub fn encode_tuple(table_name: &str, tuple: &Tuple) -> Result<(Bytes, Bytes), DatabaseError> {
+        let tuple_id = tuple.id.clone().ok_or(DatabaseError::PrimaryKeyNotFound)?;
         let key = Self::encode_tuple_key(table_name, &tuple_id)?;
 
         Ok((Bytes::from(key), Bytes::from(tuple.serialize_to())))
     }
 
-    pub fn encode_tuple_key(table_name: &str, tuple_id: &TupleId) -> Result<Vec<u8>, TypeError> {
+    pub fn encode_tuple_key(
+        table_name: &str,
+        tuple_id: &TupleId,
+    ) -> Result<Vec<u8>, DatabaseError> {
         let mut key_prefix = Self::key_prefix(CodecType::Tuple, table_name);
         key_prefix.push(BOUND_MIN_TAG);
 
@@ -160,7 +163,7 @@ impl TableCodec {
                 | LogicalType::UBigint
                 | LogicalType::Varchar(_)
         ) {
-            return Err(TypeError::InvalidType);
+            return Err(DatabaseError::InvalidType);
         }
         tuple_id.memcomparable_encode(&mut key_prefix)?;
 
@@ -176,7 +179,7 @@ impl TableCodec {
     pub fn encode_index_meta(
         table_name: &str,
         index_meta: &IndexMeta,
-    ) -> Result<(Bytes, Bytes), TypeError> {
+    ) -> Result<(Bytes, Bytes), DatabaseError> {
         let mut key_prefix = Self::key_prefix(CodecType::IndexMeta, table_name);
         key_prefix.push(BOUND_MIN_TAG);
         key_prefix.append(&mut index_meta.id.to_be_bytes().to_vec());
@@ -187,7 +190,7 @@ impl TableCodec {
         ))
     }
 
-    pub fn decode_index_meta(bytes: &[u8]) -> Result<IndexMeta, TypeError> {
+    pub fn decode_index_meta(bytes: &[u8]) -> Result<IndexMeta, DatabaseError> {
         Ok(bincode::deserialize(bytes)?)
     }
 
@@ -205,7 +208,7 @@ impl TableCodec {
         name: &str,
         index: &Index,
         tuple_ids: &[TupleId],
-    ) -> Result<(Bytes, Bytes), TypeError> {
+    ) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = TableCodec::encode_index_key(name, index)?;
 
         Ok((
@@ -214,7 +217,7 @@ impl TableCodec {
         ))
     }
 
-    pub fn encode_index_key(name: &str, index: &Index) -> Result<Vec<u8>, TypeError> {
+    pub fn encode_index_key(name: &str, index: &Index) -> Result<Vec<u8>, DatabaseError> {
         let mut key_prefix = Self::key_prefix(CodecType::Index, name);
         key_prefix.push(BOUND_MIN_TAG);
         key_prefix.append(&mut index.id.to_be_bytes().to_vec());
@@ -228,7 +231,7 @@ impl TableCodec {
         Ok(key_prefix)
     }
 
-    pub fn decode_index(bytes: &[u8]) -> Result<Vec<TupleId>, TypeError> {
+    pub fn decode_index(bytes: &[u8]) -> Result<Vec<TupleId>, DatabaseError> {
         Ok(bincode::deserialize(bytes)?)
     }
 
@@ -239,7 +242,7 @@ impl TableCodec {
     pub fn encode_column(
         table_name: &str,
         col: &ColumnCatalog,
-    ) -> Result<(Bytes, Bytes), TypeError> {
+    ) -> Result<(Bytes, Bytes), DatabaseError> {
         let bytes = bincode::serialize(col)?;
         let mut key_prefix = Self::key_prefix(CodecType::Column, table_name);
 
@@ -249,13 +252,13 @@ impl TableCodec {
         Ok((Bytes::from(key_prefix), Bytes::from(bytes)))
     }
 
-    pub fn decode_column(bytes: &[u8]) -> Result<ColumnCatalog, TypeError> {
+    pub fn decode_column(bytes: &[u8]) -> Result<ColumnCatalog, DatabaseError> {
         Ok(bincode::deserialize::<ColumnCatalog>(bytes)?)
     }
 
     /// Key: Root{BOUND_MIN_TAG}{TableName}
     /// Value: TableName
-    pub fn encode_root_table(meta: &TableMeta) -> Result<(Bytes, Bytes), TypeError> {
+    pub fn encode_root_table(meta: &TableMeta) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = Self::encode_root_table_key(&meta.table_name);
 
         Ok((Bytes::from(key), Bytes::from(bincode::serialize(meta)?)))
@@ -265,7 +268,7 @@ impl TableCodec {
         Self::key_prefix(CodecType::Root, table_name)
     }
 
-    pub fn decode_root_table(bytes: &[u8]) -> Result<TableMeta, TypeError> {
+    pub fn decode_root_table(bytes: &[u8]) -> Result<TableMeta, DatabaseError> {
         Ok(bincode::deserialize(bytes)?)
     }
 }
@@ -273,8 +276,8 @@ impl TableCodec {
 #[cfg(test)]
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog, TableMeta};
+    use crate::errors::DatabaseError;
     use crate::storage::table_codec::TableCodec;
-    use crate::types::errors::TypeError;
     use crate::types::index::{Index, IndexMeta};
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
@@ -305,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn test_table_codec_tuple() -> Result<(), TypeError> {
+    fn test_table_codec_tuple() -> Result<(), DatabaseError> {
         let table_catalog = build_table_codec();
 
         let tuple = Tuple {
@@ -342,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn test_table_codec_index_meta() -> Result<(), TypeError> {
+    fn test_table_codec_index_meta() -> Result<(), DatabaseError> {
         let index_meta = IndexMeta {
             id: 0,
             column_ids: vec![0],
@@ -358,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn test_table_codec_index() -> Result<(), TypeError> {
+    fn test_table_codec_index() -> Result<(), DatabaseError> {
         let table_catalog = build_table_codec();
 
         let index = Index {

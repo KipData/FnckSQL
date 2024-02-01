@@ -1,4 +1,5 @@
-use fnck_sql::db::{Database, DatabaseError};
+use fnck_sql::db::Database;
+use fnck_sql::errors::DatabaseError;
 use fnck_sql::implement_from_tuple;
 use fnck_sql::types::tuple::Tuple;
 use fnck_sql::types::value::DataValue;

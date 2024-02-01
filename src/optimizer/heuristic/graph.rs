@@ -207,13 +207,13 @@ impl HepGraph {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::errors::DatabaseError;
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;
     use petgraph::stable_graph::{EdgeIndex, NodeIndex};
 
     #[tokio::test]
-    async fn test_graph_for_plan() -> Result<(), ExecutorError> {
+    async fn test_graph_for_plan() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let graph = HepGraph::new(plan);
 
@@ -235,7 +235,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_graph_add_node() -> Result<(), ExecutorError> {
+    async fn test_graph_add_node() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_graph_replace_node() -> Result<(), ExecutorError> {
+    async fn test_graph_replace_node() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
@@ -275,7 +275,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_graph_remove_middle_node_by_single() -> Result<(), ExecutorError> {
+    async fn test_graph_remove_middle_node_by_single() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
@@ -294,7 +294,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_graph_remove_middle_node_with_childrens() -> Result<(), ExecutorError> {
+    async fn test_graph_remove_middle_node_with_childrens() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
@@ -306,7 +306,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_graph_swap_node() -> Result<(), ExecutorError> {
+    async fn test_graph_swap_node() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
@@ -325,7 +325,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_graph_add_root() -> Result<(), ExecutorError> {
+    async fn test_graph_add_root() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let mut graph = HepGraph::new(plan);
 
@@ -341,7 +341,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_graph_to_plan() -> Result<(), ExecutorError> {
+    async fn test_graph_to_plan() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let graph = HepGraph::new(plan.clone());
 

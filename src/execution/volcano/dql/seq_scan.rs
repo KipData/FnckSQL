@@ -1,5 +1,5 @@
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
-use crate::execution::ExecutorError;
 use crate::planner::operator::scan::ScanOperator;
 use crate::storage::{Iter, Transaction};
 use crate::types::tuple::Tuple;
@@ -22,7 +22,7 @@ impl<T: Transaction> ReadExecutor<T> for SeqScan {
 }
 
 impl SeqScan {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let ScanOperator {
             table_name,

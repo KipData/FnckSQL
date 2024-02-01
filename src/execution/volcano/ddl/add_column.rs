@@ -1,7 +1,8 @@
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::types::tuple::Tuple;
+use crate::types::tuple_builder::TupleBuilder;
 use crate::types::value::DataValue;
-use crate::{execution::ExecutorError, types::tuple_builder::TupleBuilder};
 use futures_async_stream::try_stream;
 use std::sync::Arc;
 
@@ -27,7 +28,7 @@ impl<T: Transaction> WriteExecutor<T> for AddColumn {
 }
 
 impl AddColumn {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let AddColumnOperator {
             table_name,

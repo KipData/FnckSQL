@@ -15,15 +15,14 @@ use crate::{
 
 use super::Binder;
 
-use crate::binder::BindError;
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
+use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::join::joins_nullable;
 use crate::expression::BinaryOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::errors::TypeError;
 use crate::types::LogicalType;
 use itertools::Itertools;
 use sqlparser::ast;
@@ -33,7 +32,7 @@ use sqlparser::ast::{
 };
 
 impl<'a, T: Transaction> Binder<'a, T> {
-    pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, BindError> {
+    pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, DatabaseError> {
         if let Some(_with) = &query.with {
             // TODO support with clause.
         }
@@ -58,7 +57,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         select: &Select,
         orderby: &[OrderByExpr],
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         let mut plan = self.bind_table_ref(&select.from)?;
 
         // Resolve scalar function call.
@@ -112,7 +111,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     pub(crate) fn bind_table_ref(
         &mut self,
         from: &[TableWithJoins],
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         assert!(from.len() < 2, "not support yet.");
         if from.is_empty() {
             return Ok(LogicalPlan {
@@ -145,7 +144,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         table: &TableFactor,
         joint_type: Option<JoinType>,
-    ) -> Result<(Option<TableName>, LogicalPlan), BindError> {
+    ) -> Result<(Option<TableName>, LogicalPlan), DatabaseError> {
         let plan_with_name = match table {
             TableFactor::Table { name, alias, .. } => {
                 let obj_name = name
@@ -156,7 +155,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 let table: &str = match obj_name.as_slice() {
                     [table] => &table.value,
-                    _ => return Err(BindError::InvalidTable(obj_name.iter().join(","))),
+                    _ => return Err(DatabaseError::InvalidTable(obj_name.iter().join(","))),
                 };
 
                 let (table, plan) =
@@ -198,14 +197,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
         join_type: Option<JoinType>,
         table: &str,
         alias: Option<&String>,
-    ) -> Result<(Arc<String>, LogicalPlan), BindError> {
+    ) -> Result<(Arc<String>, LogicalPlan), DatabaseError> {
         let table_name = Arc::new(table.to_string());
 
         let table_catalog = self
             .context
             .table(table_name.clone())
             .cloned()
-            .ok_or_else(|| BindError::InvalidTable(format!("bind table {}", table)))?;
+            .ok_or_else(|| DatabaseError::InvalidTable(format!("bind table {}", table)))?;
         let scan_op = ScanOperator::build(table_name.clone(), &table_catalog);
 
         self.context
@@ -228,7 +227,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     fn normalize_select_item(
         &mut self,
         items: &[SelectItem],
-    ) -> Result<Vec<ScalarExpression>, BindError> {
+    ) -> Result<Vec<ScalarExpression>, DatabaseError> {
         let mut select_items = vec![];
 
         for item in items.iter().enumerate() {
@@ -256,13 +255,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(select_items)
     }
 
-    fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>, BindError> {
+    fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>, DatabaseError> {
         let mut exprs = vec![];
         for table_name in self.context.bind_table.keys() {
             let table = self
                 .context
                 .table(table_name.clone())
-                .ok_or_else(|| BindError::InvalidTable(table_name.to_string()))?;
+                .ok_or_else(|| DatabaseError::InvalidTable(table_name.to_string()))?;
             for col in table.all_columns() {
                 exprs.push(ScalarExpression::ColumnRef(col));
             }
@@ -276,7 +275,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         left_table: TableName,
         left: LogicalPlan,
         join: &Join,
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         let Join {
             relation,
             join_operator,
@@ -297,12 +296,16 @@ impl<'a, T: Transaction> Binder<'a, T> {
             .context
             .table(left_table.clone())
             .cloned()
-            .ok_or_else(|| BindError::InvalidTable(format!("Left: {} not found", left_table)))?;
+            .ok_or_else(|| {
+                DatabaseError::InvalidTable(format!("Left: {} not found", left_table))
+            })?;
         let right_table = self
             .context
             .table(right_table.clone())
             .cloned()
-            .ok_or_else(|| BindError::InvalidTable(format!("Right: {} not found", right_table)))?;
+            .ok_or_else(|| {
+                DatabaseError::InvalidTable(format!("Right: {} not found", right_table))
+            })?;
 
         let on = match joint_condition {
             Some(constraint) => self.bind_join_constraint(&left_table, &right_table, constraint)?,
@@ -316,7 +319,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         children: LogicalPlan,
         predicate: &Expr,
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         Ok(FilterOperator::build(
             self.bind_expr(predicate)?,
             children,
@@ -328,7 +331,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         children: LogicalPlan,
         having: ScalarExpression,
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         self.validate_having_orderby(&having)?;
         Ok(FilterOperator::build(having, children, true))
     }
@@ -361,7 +364,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         children: LogicalPlan,
         limit_expr: &Option<Expr>,
         offset_expr: &Option<Offset>,
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         let mut limit = None;
         let mut offset = None;
         if let Some(expr) = limit_expr {
@@ -370,10 +373,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ScalarExpression::Constant(dv) => match dv.as_ref() {
                     DataValue::Int32(Some(v)) if *v >= 0 => limit = Some(*v as usize),
                     DataValue::Int64(Some(v)) if *v >= 0 => limit = Some(*v as usize),
-                    _ => return Err(BindError::from(TypeError::InvalidType)),
+                    _ => return Err(DatabaseError::from(DatabaseError::InvalidType)),
                 },
                 _ => {
-                    return Err(BindError::InvalidColumn(
+                    return Err(DatabaseError::InvalidColumn(
                         "invalid limit expression.".to_owned(),
                     ))
                 }
@@ -386,10 +389,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ScalarExpression::Constant(dv) => match dv.as_ref() {
                     DataValue::Int32(Some(v)) if *v > 0 => offset = Some(*v as usize),
                     DataValue::Int64(Some(v)) if *v > 0 => offset = Some(*v as usize),
-                    _ => return Err(BindError::from(TypeError::InvalidType)),
+                    _ => return Err(DatabaseError::from(DatabaseError::InvalidType)),
                 },
                 _ => {
-                    return Err(BindError::InvalidColumn(
+                    return Err(DatabaseError::InvalidColumn(
                         "invalid limit expression.".to_owned(),
                     ))
                 }
@@ -445,7 +448,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         left_table: &TableCatalog,
         right_table: &TableCatalog,
         constraint: &JoinConstraint,
-    ) -> Result<JoinCondition, BindError> {
+    ) -> Result<JoinCondition, DatabaseError> {
         match constraint {
             JoinConstraint::On(expr) => {
                 // left and right columns that match equi-join pattern
@@ -492,7 +495,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         accum_filter: &mut Vec<ScalarExpression>,
         left_schema: &TableCatalog,
         right_schema: &TableCatalog,
-    ) -> Result<(), BindError> {
+    ) -> Result<(), DatabaseError> {
         match expr {
             Expr::BinaryOp { left, op, right } => match op {
                 ast::BinaryOperator::Eq => {
@@ -557,10 +560,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::errors::DatabaseError;
 
     #[tokio::test]
-    async fn test_select_bind() -> Result<(), ExecutorError> {
+    async fn test_select_bind() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1").await?;
         println!("just_col:\n {:#?}", plan_1);
         let plan_2 = select_sql_run("select t1.c1, t1.c2 from t1").await?;

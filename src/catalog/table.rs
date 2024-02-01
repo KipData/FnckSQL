@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::catalog::{CatalogError, ColumnCatalog, ColumnRef};
+use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::errors::DatabaseError;
 use crate::types::index::{IndexMeta, IndexMetaRef};
 use crate::types::ColumnId;
 
@@ -58,9 +59,9 @@ impl TableCatalog {
     }
 
     /// Add a column to the table catalog.
-    pub(crate) fn add_column(&mut self, mut col: ColumnCatalog) -> Result<ColumnId, CatalogError> {
+    pub(crate) fn add_column(&mut self, mut col: ColumnCatalog) -> Result<ColumnId, DatabaseError> {
         if self.column_idxs.contains_key(col.name()) {
-            return Err(CatalogError::Duplicated("column", col.name().to_string()));
+            return Err(DatabaseError::Duplicated("column", col.name().to_string()));
         }
 
         let col_id = self
@@ -103,9 +104,9 @@ impl TableCatalog {
     pub(crate) fn new(
         name: TableName,
         columns: Vec<ColumnCatalog>,
-    ) -> Result<TableCatalog, CatalogError> {
+    ) -> Result<TableCatalog, DatabaseError> {
         if columns.is_empty() {
-            return Err(CatalogError::ColumnsEmpty);
+            return Err(DatabaseError::ColumnsEmpty);
         }
         let mut table_catalog = TableCatalog {
             name,
@@ -124,7 +125,7 @@ impl TableCatalog {
         name: TableName,
         columns: Vec<ColumnCatalog>,
         indexes: Vec<IndexMetaRef>,
-    ) -> Result<TableCatalog, CatalogError> {
+    ) -> Result<TableCatalog, DatabaseError> {
         let mut catalog = TableCatalog::new(name, columns)?;
         catalog.indexes = indexes;
 
