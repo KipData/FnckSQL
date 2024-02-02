@@ -1,8 +1,8 @@
+use crate::errors::DatabaseError;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::Operator;
@@ -57,7 +57,7 @@ impl MatchPattern for LimitProjectTranspose {
 }
 
 impl NormalizationRule for LimitProjectTranspose {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Some(child_id) = graph.eldest_child_at(node_id) {
             graph.swap_node(node_id, child_id);
         }
@@ -77,7 +77,7 @@ impl MatchPattern for EliminateLimits {
 }
 
 impl NormalizationRule for EliminateLimits {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Limit(op) = graph.operator(node_id) {
             if let Some(child_id) = graph.eldest_child_at(node_id) {
                 if let Operator::Limit(child_op) = graph.operator(child_id) {
@@ -126,7 +126,7 @@ impl MatchPattern for PushLimitThroughJoin {
 }
 
 impl NormalizationRule for PushLimitThroughJoin {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Limit(op) = graph.operator(node_id) {
             if let Some(child_id) = graph.eldest_child_at(node_id) {
                 let join_type = if let Operator::Join(op) = graph.operator(child_id) {
@@ -163,7 +163,7 @@ impl MatchPattern for PushLimitIntoScan {
 }
 
 impl NormalizationRule for PushLimitIntoScan {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Limit(limit_op) = graph.operator(node_id) {
             if let Some(child_index) = graph.eldest_child_at(node_id) {
                 if let Operator::Scan(scan_op) = graph.operator(child_index) {
@@ -184,7 +184,7 @@ impl NormalizationRule for PushLimitIntoScan {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::db::DatabaseError;
+    use crate::errors::DatabaseError;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;

@@ -1,6 +1,6 @@
 use crate::binder::copy::FileFormat;
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, WriteExecutor};
-use crate::execution::ExecutorError;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
@@ -28,7 +28,7 @@ impl<T: Transaction> WriteExecutor<T> for CopyFromFile {
 }
 
 impl CopyFromFile {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
         let (tx1, mut rx1) = tokio::sync::mpsc::channel(1);
@@ -53,7 +53,7 @@ impl CopyFromFile {
     /// Read records from file using blocking IO.
     ///
     /// The read data chunks will be sent through `tx`.
-    fn read_file_blocking(mut self, tx: Sender<Tuple>) -> Result<(), ExecutorError> {
+    fn read_file_blocking(mut self, tx: Sender<Tuple>) -> Result<(), DatabaseError> {
         let file = File::open(self.op.source.path)?;
         let mut buf_reader = BufReader::new(file);
         let mut reader = match self.op.source.format {
@@ -80,7 +80,7 @@ impl CopyFromFile {
             if !(record.len() == column_count
                 || record.len() == column_count + 1 && record.get(column_count) == Some(""))
             {
-                return Err(ExecutorError::LengthMismatch {
+                return Err(DatabaseError::LengthMismatch {
                     expected: column_count,
                     actual: record.len(),
                 });
@@ -88,27 +88,27 @@ impl CopyFromFile {
 
             self.size += 1;
             tx.blocking_send(tuple_builder.build_with_row(record.iter())?)
-                .map_err(|_| ExecutorError::ChannelClose)?;
+                .map_err(|_| DatabaseError::ChannelClose)?;
         }
         Ok(())
     }
 }
 
-fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), ExecutorError> {
+fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), DatabaseError> {
     let tuple = TupleBuilder::build_result(
         "COPY FROM SOURCE".to_string(),
         format!("import {} rows", size),
     )?;
 
     tx.blocking_send(tuple)
-        .map_err(|_| ExecutorError::ChannelClose)?;
+        .map_err(|_| DatabaseError::ChannelClose)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
-    use crate::db::{Database, DatabaseError};
+    use crate::db::Database;
     use futures::StreamExt;
     use std::io::Write;
     use std::sync::Arc;
@@ -116,6 +116,7 @@ mod tests {
 
     use super::*;
     use crate::binder::copy::ExtSource;
+    use crate::errors::DatabaseError;
     use crate::storage::Storage;
     use crate::types::LogicalType;
 

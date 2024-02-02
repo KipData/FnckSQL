@@ -1,10 +1,10 @@
 use crate::catalog::ColumnRef;
+use crate::errors::DatabaseError;
 use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
@@ -103,7 +103,7 @@ impl MatchPattern for PushPredicateThroughJoin {
 
 impl NormalizationRule for PushPredicateThroughJoin {
     // TODO: pushdown_predicates need to consider output columns
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         let child_id = match graph.eldest_child_at(node_id) {
             Some(child_id) => child_id,
             None => return Ok(()),
@@ -209,7 +209,7 @@ impl MatchPattern for PushPredicateIntoScan {
 }
 
 impl NormalizationRule for PushPredicateIntoScan {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), OptimizerError> {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Filter(op) = graph.operator(node_id).clone() {
             if let Some(child_id) = graph.eldest_child_at(node_id) {
                 if let Operator::Scan(child_op) = graph.operator_mut(child_id) {
@@ -240,7 +240,7 @@ impl NormalizationRule for PushPredicateIntoScan {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::db::DatabaseError;
+    use crate::errors::DatabaseError;
     use crate::expression::simplify::ConstantBinary::Scope;
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;

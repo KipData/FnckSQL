@@ -1,6 +1,6 @@
+use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::aggregate::create_accumulators;
 use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
-use crate::execution::ExecutorError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::LogicalPlan;
@@ -30,7 +30,7 @@ impl<T: Transaction> ReadExecutor<T> for SimpleAggExecutor {
 }
 
 impl SimpleAggExecutor {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let mut accs = create_accumulators(&self.agg_calls);
         let mut columns_option = None;

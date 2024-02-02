@@ -1,4 +1,3 @@
-pub mod errors;
 pub mod index;
 pub mod tuple;
 pub mod tuple_builder;
@@ -9,10 +8,9 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::any::TypeId;
 
+use crate::errors::DatabaseError;
 use sqlparser::ast::ExactNumberInfo;
 use strum_macros::AsRefStr;
-
-use crate::types::errors::TypeError;
 
 pub type ColumnId = u32;
 
@@ -160,7 +158,7 @@ impl LogicalType {
     pub fn max_logical_type(
         left: &LogicalType,
         right: &LogicalType,
-    ) -> Result<LogicalType, TypeError> {
+    ) -> Result<LogicalType, DatabaseError> {
         if left == right {
             return Ok(*left);
         }
@@ -193,16 +191,13 @@ impl LogicalType {
         ) {
             return Ok(LogicalType::DateTime);
         }
-        Err(TypeError::InternalError(format!(
-            "can not compare two types: {:?} and {:?}",
-            left, right
-        )))
+        Err(DatabaseError::Incomparable(*left, *right))
     }
 
     fn combine_numeric_types(
         left: &LogicalType,
         right: &LogicalType,
-    ) -> Result<LogicalType, TypeError> {
+    ) -> Result<LogicalType, DatabaseError> {
         if left == right {
             return Ok(*left);
         }
@@ -228,10 +223,7 @@ impl LogicalType {
             (LogicalType::Integer, _) | (_, LogicalType::UInteger) => Ok(LogicalType::Bigint),
             (LogicalType::Smallint, _) | (_, LogicalType::USmallint) => Ok(LogicalType::Integer),
             (LogicalType::Tinyint, _) | (_, LogicalType::UTinyint) => Ok(LogicalType::Smallint),
-            _ => Err(TypeError::InternalError(format!(
-                "can not combine these numeric types {:?} and {:?}",
-                left, right
-            ))),
+            _ => Err(DatabaseError::Incomparable(*left, *right)),
         }
     }
 
@@ -303,7 +295,7 @@ impl LogicalType {
 
 /// sqlparser datatype to logical type
 impl TryFrom<sqlparser::ast::DataType> for LogicalType {
-    type Error = TypeError;
+    type Error = DatabaseError;
 
     fn try_from(value: sqlparser::ast::DataType) -> Result<Self, Self::Error> {
         match value {
@@ -332,7 +324,7 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                     Ok(Self::Decimal(Some(p as u8), Some(s as u8)))
                 }
             },
-            other => Err(TypeError::NotImplementedSqlparserDataType(
+            other => Err(DatabaseError::NotImplementedSqlparserDataType(
                 other.to_string(),
             )),
         }

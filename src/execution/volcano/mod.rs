@@ -2,6 +2,7 @@ pub(crate) mod ddl;
 pub(crate) mod dml;
 pub(crate) mod dql;
 
+use crate::errors::DatabaseError;
 use crate::execution::volcano::ddl::create_table::CreateTable;
 use crate::execution::volcano::ddl::drop_column::DropColumn;
 use crate::execution::volcano::ddl::drop_table::DropTable;
@@ -24,7 +25,6 @@ use crate::execution::volcano::dql::seq_scan::SeqScan;
 use crate::execution::volcano::dql::show_table::ShowTables;
 use crate::execution::volcano::dql::sort::Sort;
 use crate::execution::volcano::dql::values::Values;
-use crate::execution::ExecutorError;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -35,7 +35,7 @@ use futures::TryStreamExt;
 
 use self::ddl::add_column::AddColumn;
 
-pub type BoxedExecutor<'a> = BoxStream<'a, Result<Tuple, ExecutorError>>;
+pub type BoxedExecutor<'a> = BoxStream<'a, Result<Tuple, DatabaseError>>;
 
 pub trait ReadExecutor<T: Transaction> {
     fn execute(self, transaction: &T) -> BoxedExecutor;
@@ -169,7 +169,7 @@ pub fn build_write<T: Transaction>(plan: LogicalPlan, transaction: &mut T) -> Bo
 
 pub async fn try_collect<'a>(
     executor: &mut BoxedExecutor<'a>,
-) -> Result<Vec<Tuple>, ExecutorError> {
+) -> Result<Vec<Tuple>, DatabaseError> {
     let mut output = Vec::new();
 
     while let Some(tuple) = executor.try_next().await? {

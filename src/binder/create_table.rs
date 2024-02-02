@@ -4,8 +4,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::{is_valid_identifier, Binder};
-use crate::binder::{lower_case_name, split_name, BindError};
+use crate::binder::{lower_case_name, split_name};
 use crate::catalog::{ColumnCatalog, ColumnDesc};
+use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
@@ -22,13 +23,15 @@ impl<'a, T: Transaction> Binder<'a, T> {
         columns: &[ColumnDef],
         constraints: &[TableConstraint],
         if_not_exists: bool,
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         let name = lower_case_name(name);
         let name = split_name(&name)?;
         let table_name = Arc::new(name.to_string());
 
         if !is_valid_identifier(&table_name) {
-            return Err(BindError::InvalidTable("illegal table naming".to_string()));
+            return Err(DatabaseError::InvalidTable(
+                "illegal table naming".to_string(),
+            ));
         }
         {
             // check duplicated column names
@@ -36,10 +39,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
             for col in columns.iter() {
                 let col_name = &col.name.value;
                 if !set.insert(col_name.clone()) {
-                    return Err(BindError::AmbiguousColumn(col_name.to_string()));
+                    return Err(DatabaseError::AmbiguousColumn(col_name.to_string()));
                 }
                 if !is_valid_identifier(col_name) {
-                    return Err(BindError::InvalidColumn(
+                    return Err(DatabaseError::InvalidColumn(
                         "illegal column naming".to_string(),
                     ));
                 }
@@ -74,7 +77,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         }
 
         if columns.iter().filter(|col| col.desc.is_primary).count() != 1 {
-            return Err(BindError::InvalidTable(
+            return Err(DatabaseError::InvalidTable(
                 "The primary key field must exist and have at least one".to_string(),
             ));
         }
@@ -91,7 +94,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(plan)
     }
 
-    pub fn bind_column(&mut self, column_def: &ColumnDef) -> Result<ColumnCatalog, BindError> {
+    pub fn bind_column(&mut self, column_def: &ColumnDef) -> Result<ColumnCatalog, DatabaseError> {
         let column_name = column_def.name.to_string();
         let mut column_desc = ColumnDesc::new(
             LogicalType::try_from(column_def.data_type.clone())?,
@@ -138,14 +141,13 @@ mod tests {
     use super::*;
     use crate::binder::BinderContext;
     use crate::catalog::ColumnDesc;
-    use crate::execution::ExecutorError;
     use crate::storage::kip::KipStorage;
     use crate::storage::Storage;
     use crate::types::LogicalType;
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_create_bind() -> Result<(), ExecutorError> {
+    async fn test_create_bind() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;

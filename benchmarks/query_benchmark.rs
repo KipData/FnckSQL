@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use fnck_sql::db::{Database, DatabaseError};
+use fnck_sql::db::Database;
+use fnck_sql::errors::DatabaseError;
 use fnck_sql::execution::volcano;
 use fnck_sql::storage::kip::KipStorage;
 use fnck_sql::storage::Storage;

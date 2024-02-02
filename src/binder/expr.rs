@@ -1,4 +1,4 @@
-use crate::binder::BindError;
+use crate::errors::DatabaseError;
 use crate::expression;
 use crate::expression::agg::AggKind;
 use itertools::Itertools;
@@ -15,7 +15,7 @@ use crate::types::value::DataValue;
 use crate::types::LogicalType;
 
 impl<'a, T: Transaction> Binder<'a, T> {
-    pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, BindError> {
+    pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, DatabaseError> {
         match expr {
             Expr::Identifier(ident) => {
                 self.bind_column_ref_from_identifiers(slice::from_ref(ident), None)
@@ -51,7 +51,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         negated: bool,
         expr: &Expr,
         pattern: &Expr,
-    ) -> Result<ScalarExpression, BindError> {
+    ) -> Result<ScalarExpression, DatabaseError> {
         let left_expr = Box::new(self.bind_expr(expr)?);
         let right_expr = Box::new(self.bind_expr(pattern)?);
         let op = if negated {
@@ -71,7 +71,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         idents: &[Ident],
         bind_table_name: Option<&String>,
-    ) -> Result<ScalarExpression, BindError> {
+    ) -> Result<ScalarExpression, DatabaseError> {
         let idents = idents
             .iter()
             .map(|ident| Ident::new(ident.value.to_lowercase()))
@@ -81,7 +81,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             [table, column] => (None, Some(&table.value), &column.value),
             [schema, table, column] => (Some(&schema.value), Some(&table.value), &column.value),
             _ => {
-                return Err(BindError::InvalidColumn(
+                return Err(DatabaseError::InvalidColumn(
                     idents
                         .iter()
                         .map(|ident| ident.value.clone())
@@ -95,11 +95,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
             let table_catalog = self
                 .context
                 .table(Arc::new(table.clone()))
-                .ok_or_else(|| BindError::InvalidTable(table.to_string()))?;
+                .ok_or_else(|| DatabaseError::InvalidTable(table.to_string()))?;
 
             let column_catalog = table_catalog
                 .get_column_by_name(column_name)
-                .ok_or_else(|| BindError::InvalidColumn(column_name.to_string()))?;
+                .ok_or_else(|| DatabaseError::InvalidColumn(column_name.to_string()))?;
             Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
         } else {
             // handle col syntax
@@ -107,7 +107,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             for (table_catalog, _) in self.context.bind_table.values() {
                 if let Some(column_catalog) = table_catalog.get_column_by_name(column_name) {
                     if got_column.is_some() {
-                        return Err(BindError::InvalidColumn(column_name.to_string()));
+                        return Err(DatabaseError::InvalidColumn(column_name.to_string()));
                     }
                     got_column = Some(column_catalog);
                 }
@@ -121,7 +121,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 }
             }
             let column_catalog =
-                got_column.ok_or_else(|| BindError::InvalidColumn(column_name.to_string()))?;
+                got_column.ok_or_else(|| DatabaseError::InvalidColumn(column_name.to_string()))?;
             Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
         }
     }
@@ -131,7 +131,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         left: &Expr,
         right: &Expr,
         op: &BinaryOperator,
-    ) -> Result<ScalarExpression, BindError> {
+    ) -> Result<ScalarExpression, DatabaseError> {
         let left_expr = Box::new(self.bind_expr(left)?);
         let right_expr = Box::new(self.bind_expr(right)?);
 
@@ -167,7 +167,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         expr: &Expr,
         op: &UnaryOperator,
-    ) -> Result<ScalarExpression, BindError> {
+    ) -> Result<ScalarExpression, DatabaseError> {
         let expr = Box::new(self.bind_expr(expr)?);
         let ty = if let UnaryOperator::Not = op {
             LogicalType::Boolean
@@ -182,7 +182,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         })
     }
 
-    fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression, BindError> {
+    fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression, DatabaseError> {
         let mut args = Vec::with_capacity(func.args.len());
 
         for arg in func.args.iter() {
@@ -233,7 +233,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
         })
     }
 
-    fn bind_is_null(&mut self, expr: &Expr, negated: bool) -> Result<ScalarExpression, BindError> {
+    fn bind_is_null(
+        &mut self,
+        expr: &Expr,
+        negated: bool,
+    ) -> Result<ScalarExpression, DatabaseError> {
         Ok(ScalarExpression::IsNull {
             negated,
             expr: Box::new(self.bind_expr(expr)?),
@@ -245,7 +249,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         expr: &Expr,
         list: &[Expr],
         negated: bool,
-    ) -> Result<ScalarExpression, BindError> {
+    ) -> Result<ScalarExpression, DatabaseError> {
         let args = list.iter().map(|expr| self.bind_expr(expr)).try_collect()?;
 
         Ok(ScalarExpression::In {
@@ -255,7 +259,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         })
     }
 
-    fn bind_cast(&mut self, expr: &Expr, ty: &DataType) -> Result<ScalarExpression, BindError> {
+    fn bind_cast(&mut self, expr: &Expr, ty: &DataType) -> Result<ScalarExpression, DatabaseError> {
         Ok(ScalarExpression::TypeCast {
             expr: Box::new(self.bind_expr(expr)?),
             ty: LogicalType::try_from(ty.clone())?,

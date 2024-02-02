@@ -1,8 +1,8 @@
 use crate::catalog::TableName;
+use crate::errors::DatabaseError;
 use crate::expression::simplify::ConstantBinary;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
 use crate::optimizer::core::histogram::Histogram;
-use crate::optimizer::OptimizerError;
 use crate::storage::Transaction;
 use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
@@ -25,7 +25,7 @@ impl<'a, T: Transaction> ColumnMetaLoader<'a, T> {
         ColumnMetaLoader { cache, tx }
     }
 
-    pub fn load(&self, table_name: TableName) -> Result<&Vec<ColumnMeta>, OptimizerError> {
+    pub fn load(&self, table_name: TableName) -> Result<&Vec<ColumnMeta>, DatabaseError> {
         let option = self.cache.get(&table_name);
 
         return if let Some(column_metas) = option {
@@ -81,7 +81,7 @@ impl ColumnMeta {
         count
     }
 
-    pub fn to_file(&self, path: impl AsRef<Path>) -> Result<(), OptimizerError> {
+    pub fn to_file(&self, path: impl AsRef<Path>) -> Result<(), DatabaseError> {
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -93,7 +93,7 @@ impl ColumnMeta {
         Ok(())
     }
 
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, OptimizerError> {
+    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, DatabaseError> {
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -110,9 +110,9 @@ impl ColumnMeta {
 #[cfg(test)]
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
+    use crate::errors::DatabaseError;
     use crate::optimizer::core::column_meta::ColumnMeta;
     use crate::optimizer::core::histogram::HistogramBuilder;
-    use crate::optimizer::OptimizerError;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;
@@ -137,7 +137,7 @@ mod tests {
     }
 
     #[test]
-    fn test_to_file_and_from_file() -> Result<(), OptimizerError> {
+    fn test_to_file_and_from_file() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let column = int32_column();
 

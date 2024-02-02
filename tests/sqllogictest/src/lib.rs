@@ -1,4 +1,5 @@
-use fnck_sql::db::{Database, DatabaseError};
+use fnck_sql::db::Database;
+use fnck_sql::errors::DatabaseError;
 use fnck_sql::storage::kip::KipStorage;
 use sqllogictest::{AsyncDB, DBOutput, DefaultColumnType};
 use std::time::Instant;

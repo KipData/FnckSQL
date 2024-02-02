@@ -1,3 +1,4 @@
+use crate::errors::DatabaseError;
 use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
@@ -5,7 +6,6 @@ use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
-use crate::optimizer::OptimizerError;
 use crate::planner::operator::PhysicalOption;
 use crate::storage::Transaction;
 use std::cmp::Ordering;
@@ -38,12 +38,12 @@ impl Memo {
         graph: &HepGraph,
         loader: &ColumnMetaLoader<'_, T>,
         implementations: &[ImplementationRuleImpl],
-    ) -> Result<Self, OptimizerError> {
+    ) -> Result<Self, DatabaseError> {
         let node_count = graph.node_count();
         let mut groups = HashMap::new();
 
         if node_count == 0 {
-            return Err(OptimizerError::EmptyPlan);
+            return Err(DatabaseError::EmptyPlan);
         }
 
         for node_id in graph.nodes_iter(HepMatchOrder::TopDown, None) {
@@ -81,7 +81,8 @@ impl Memo {
 #[cfg(test)]
 mod tests {
     use crate::binder::{Binder, BinderContext};
-    use crate::db::{Database, DatabaseError};
+    use crate::db::Database;
+    use crate::errors::DatabaseError;
     use crate::optimizer::core::memo::Memo;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::graph::HepGraph;

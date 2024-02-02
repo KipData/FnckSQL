@@ -1,6 +1,5 @@
-use crate::binder::BindError;
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
-use crate::execution::ExecutorError;
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -26,7 +25,7 @@ impl<T: Transaction> WriteExecutor<T> for DropColumn {
 }
 
 impl DropColumn {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let DropColumnOperator {
             table_name,
@@ -49,7 +48,7 @@ impl DropColumn {
                     .map(|(i, column)| (i, column.desc.is_primary))
                 {
                     if is_primary {
-                        Err(BindError::InvalidColumn(
+                        Err(DatabaseError::InvalidColumn(
                             "drop of primary key column is not allowed.".to_owned(),
                         ))?;
                     }
@@ -60,7 +59,7 @@ impl DropColumn {
                 return Ok(());
             }
             let column_i = option_column_i
-                .ok_or_else(|| BindError::InvalidColumn("not found column".to_string()))?;
+                .ok_or_else(|| DatabaseError::InvalidColumn("not found column".to_string()))?;
 
             let _ = tuple.columns.remove(column_i);
             let _ = tuple.values.remove(column_i);

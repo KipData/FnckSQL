@@ -1,4 +1,5 @@
-use crate::binder::{lower_case_name, split_name, BindError, Binder};
+use crate::binder::{lower_case_name, split_name, Binder};
+use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::Operator;
@@ -15,7 +16,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         to: &TableWithJoins,
         selection: &Option<Expr>,
         assignments: &[Assignment],
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         if let TableFactor::Table { name, .. } = &to.relation {
             let name = lower_case_name(name);
             let name = split_name(&name)?;
@@ -34,7 +35,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
             for assignment in assignments {
                 let value = match self.bind_expr(&assignment.value)? {
-                    ScalarExpression::Constant(value) => Ok::<ValueRef, BindError>(value),
+                    ScalarExpression::Constant(value) => Ok::<ValueRef, DatabaseError>(value),
                     _ => unreachable!(),
                 }?;
 

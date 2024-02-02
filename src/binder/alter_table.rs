@@ -3,7 +3,8 @@ use sqlparser::ast::{AlterTableOperation, ObjectName};
 use std::sync::Arc;
 
 use super::{is_valid_identifier, Binder};
-use crate::binder::{lower_case_name, split_name, BindError};
+use crate::binder::{lower_case_name, split_name};
+use crate::errors::DatabaseError;
 use crate::planner::operator::alter_table::add_column::AddColumnOperator;
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
 use crate::planner::operator::scan::ScanOperator;
@@ -16,7 +17,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         name: &ObjectName,
         operation: &AlterTableOperation,
-    ) -> Result<LogicalPlan, BindError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         let table_name: Arc<String> = Arc::new(split_name(&lower_case_name(name))?.to_string());
 
         if let Some(table) = self.context.table(table_name.clone()) {
@@ -30,7 +31,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     let column = self.bind_column(column_def)?;
 
                     if !is_valid_identifier(column.name()) {
-                        return Err(BindError::InvalidColumn(
+                        return Err(DatabaseError::InvalidColumn(
                             "illegal column naming".to_string(),
                         ));
                     }
@@ -83,7 +84,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
             Ok(plan)
         } else {
-            Err(BindError::InvalidTable(format!(
+            Err(DatabaseError::InvalidTable(format!(
                 "not found table {}",
                 table_name
             )))

@@ -54,14 +54,14 @@ query T
 explain select c1 from t1 where c1 in (1, 2, 3)
 ----
 Projection [c1] [Project]
-  Filter ((c1 = 3) || ((c1 = 2) || ((c1 = 1) || false))), Is Having: false [Filter]
+  Filter ((c1 = 3) || ((c1 = 2) || ((c1 = 1)))), Is Having: false [Filter]
     Scan t1 -> [c1] [SeqScan]
 
 query T
 explain select c1 from t1 where c1 not in (1, 2, 3)
 ----
 Projection [c1] [Project]
-  Filter ((c1 != 3) && ((c1 != 2) && ((c1 != 1) && true))), Is Having: false [Filter]
+  Filter ((c1 != 3) && ((c1 != 2) && ((c1 != 1)))), Is Having: false [Filter]
     Scan t1 -> [c1] [SeqScan]
 
 query T

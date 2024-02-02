@@ -1,9 +1,10 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
+use crate::errors::DatabaseError;
 use crate::expression::simplify::ConstantBinary;
 use crate::optimizer::core::column_meta::{ColumnMeta, ColumnMetaLoader};
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{
-    tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, StorageError, Transaction,
+    tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, Transaction,
 };
 use crate::types::index::{Index, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
@@ -26,7 +27,7 @@ pub struct KipStorage {
 }
 
 impl KipStorage {
-    pub async fn new(path: impl Into<PathBuf> + Send) -> Result<Self, StorageError> {
+    pub async fn new(path: impl Into<PathBuf> + Send) -> Result<Self, DatabaseError> {
         let storage =
             storage::KipStorage::open_with_config(Config::new(path).enable_level_0_memorization())
                 .await?;
@@ -42,7 +43,7 @@ impl KipStorage {
 impl Storage for KipStorage {
     type TransactionType = KipTransaction;
 
-    async fn transaction(&self) -> Result<Self::TransactionType, StorageError> {
+    async fn transaction(&self) -> Result<Self::TransactionType, DatabaseError> {
         let tx = self.inner.new_transaction(CheckType::Optimistic).await;
 
         Ok(KipTransaction {
@@ -67,10 +68,10 @@ impl Transaction for KipTransaction {
         table_name: TableName,
         bounds: Bounds,
         projections: Projections,
-    ) -> Result<Self::IterType<'_>, StorageError> {
+    ) -> Result<Self::IterType<'_>, DatabaseError> {
         let all_columns = self
             .table(table_name.clone())
-            .ok_or(StorageError::TableNotFound)?
+            .ok_or(DatabaseError::TableNotFound)?
             .all_columns();
         let (min, max) = TableCodec::tuple_bound(&table_name);
         let iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
@@ -91,10 +92,10 @@ impl Transaction for KipTransaction {
         projections: Projections,
         index_meta: IndexMetaRef,
         binaries: Vec<ConstantBinary>,
-    ) -> Result<IndexIter<'_>, StorageError> {
+    ) -> Result<IndexIter<'_>, DatabaseError> {
         let table = self
             .table(table_name.clone())
-            .ok_or(StorageError::TableNotFound)?;
+            .ok_or(DatabaseError::TableNotFound)?;
         let offset = offset_option.unwrap_or(0);
 
         Ok(IndexIter {
@@ -116,7 +117,7 @@ impl Transaction for KipTransaction {
         index: Index,
         tuple_ids: Vec<TupleId>,
         is_unique: bool,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), DatabaseError> {
         let (key, value) = TableCodec::encode_index(table_name, &index, &tuple_ids)?;
 
         if let Some(bytes) = self.tx.get(&key)? {
@@ -124,7 +125,7 @@ impl Transaction for KipTransaction {
                 let old_tuple_ids = TableCodec::decode_index(&bytes)?;
 
                 if old_tuple_ids[0] != tuple_ids[0] {
-                    return Err(StorageError::DuplicateUniqueValue);
+                    return Err(DatabaseError::DuplicateUniqueValue);
                 } else {
                     return Ok(());
                 }
@@ -138,7 +139,7 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn del_index(&mut self, table_name: &str, index: &Index) -> Result<(), StorageError> {
+    fn del_index(&mut self, table_name: &str, index: &Index) -> Result<(), DatabaseError> {
         let key = TableCodec::encode_index_key(table_name, index)?;
 
         self.tx.remove(&key)?;
@@ -151,18 +152,18 @@ impl Transaction for KipTransaction {
         table_name: &str,
         tuple: Tuple,
         is_overwrite: bool,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), DatabaseError> {
         let (key, value) = TableCodec::encode_tuple(table_name, &tuple)?;
 
         if !is_overwrite && self.tx.get(&key)?.is_some() {
-            return Err(StorageError::DuplicatePrimaryKey);
+            return Err(DatabaseError::DuplicatePrimaryKey);
         }
         self.tx.set(key, value);
 
         Ok(())
     }
 
-    fn delete(&mut self, table_name: &str, tuple_id: TupleId) -> Result<(), StorageError> {
+    fn delete(&mut self, table_name: &str, tuple_id: TupleId) -> Result<(), DatabaseError> {
         let key = TableCodec::encode_tuple_key(table_name, &tuple_id)?;
         self.tx.remove(&key)?;
 
@@ -174,10 +175,10 @@ impl Transaction for KipTransaction {
         table_name: &TableName,
         column: &ColumnCatalog,
         if_not_exists: bool,
-    ) -> Result<ColumnId, StorageError> {
+    ) -> Result<ColumnId, DatabaseError> {
         if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
             if !column.nullable && column.default_value().is_none() {
-                return Err(StorageError::NeedNullAbleOrDefault);
+                return Err(DatabaseError::NeedNullAbleOrDefault);
             }
 
             for col in catalog.all_columns() {
@@ -185,7 +186,7 @@ impl Transaction for KipTransaction {
                     return if if_not_exists {
                         Ok(col.id().unwrap())
                     } else {
-                        Err(StorageError::DuplicateColumn)
+                        Err(DatabaseError::DuplicateColumn)
                     };
                 }
             }
@@ -210,7 +211,7 @@ impl Transaction for KipTransaction {
 
             Ok(col_id)
         } else {
-            Err(StorageError::TableNotFound)
+            Err(DatabaseError::TableNotFound)
         }
     }
 
@@ -219,7 +220,7 @@ impl Transaction for KipTransaction {
         table_name: &TableName,
         column_name: &str,
         if_exists: bool,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), DatabaseError> {
         if let Some(catalog) = self.table(table_name.clone()).cloned() {
             let column = catalog.get_column_by_name(column_name).unwrap();
 
@@ -245,7 +246,7 @@ impl Transaction for KipTransaction {
 
             Ok(())
         } else {
-            Err(StorageError::TableNotFound)
+            Err(DatabaseError::TableNotFound)
         }
     }
 
@@ -254,14 +255,14 @@ impl Transaction for KipTransaction {
         table_name: TableName,
         columns: Vec<ColumnCatalog>,
         if_not_exists: bool,
-    ) -> Result<TableName, StorageError> {
+    ) -> Result<TableName, DatabaseError> {
         let (table_key, value) =
             TableCodec::encode_root_table(&TableMeta::empty(table_name.clone()))?;
         if self.tx.get(&table_key)?.is_some() {
             if if_not_exists {
                 return Ok(table_name);
             }
-            return Err(StorageError::TableExists);
+            return Err(DatabaseError::TableExists);
         }
         self.tx.set(table_key, value);
 
@@ -278,12 +279,12 @@ impl Transaction for KipTransaction {
         Ok(table_name)
     }
 
-    fn drop_table(&mut self, table_name: &str, if_exists: bool) -> Result<(), StorageError> {
+    fn drop_table(&mut self, table_name: &str, if_exists: bool) -> Result<(), DatabaseError> {
         if self.table(Arc::new(table_name.to_string())).is_none() {
             if if_exists {
                 return Ok(());
             } else {
-                return Err(StorageError::TableNotFound);
+                return Err(DatabaseError::TableNotFound);
             }
         }
         self.drop_data(table_name)?;
@@ -302,7 +303,7 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn drop_data(&mut self, table_name: &str) -> Result<(), StorageError> {
+    fn drop_data(&mut self, table_name: &str) -> Result<(), DatabaseError> {
         let (tuple_min, tuple_max) = TableCodec::tuple_bound(table_name);
         Self::_drop_data(&mut self.tx, &tuple_min, &tuple_max)?;
 
@@ -330,7 +331,7 @@ impl Transaction for KipTransaction {
         option
     }
 
-    fn table_metas(&self) -> Result<Vec<TableMeta>, StorageError> {
+    fn table_metas(&self) -> Result<Vec<TableMeta>, DatabaseError> {
         let mut metas = vec![];
         let (min, max) = TableCodec::root_table_bound();
         let mut iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
@@ -346,7 +347,7 @@ impl Transaction for KipTransaction {
         Ok(metas)
     }
 
-    fn save_table_meta(&mut self, table_meta: &TableMeta) -> Result<(), StorageError> {
+    fn save_table_meta(&mut self, table_meta: &TableMeta) -> Result<(), DatabaseError> {
         let _ = self.meta_cache.remove(&table_meta.table_name);
         let (key, value) = TableCodec::encode_root_table(table_meta)?;
         self.tx.set(key, value);
@@ -354,7 +355,7 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn column_meta_paths(&self, table_name: &str) -> Result<Vec<String>, StorageError> {
+    fn column_meta_paths(&self, table_name: &str) -> Result<Vec<String>, DatabaseError> {
         if let Some(bytes) = self
             .tx
             .get(&TableCodec::encode_root_table_key(table_name))?
@@ -374,7 +375,7 @@ impl Transaction for KipTransaction {
         ColumnMetaLoader::new(self, &self.meta_cache)
     }
 
-    async fn commit(self) -> Result<(), StorageError> {
+    async fn commit(self) -> Result<(), DatabaseError> {
         self.tx.commit().await?;
 
         Ok(())
@@ -385,7 +386,7 @@ impl KipTransaction {
     fn table_collect(
         table_name: TableName,
         tx: &mvcc::Transaction,
-    ) -> Result<(Vec<ColumnCatalog>, Vec<IndexMetaRef>), StorageError> {
+    ) -> Result<(Vec<ColumnCatalog>, Vec<IndexMetaRef>), DatabaseError> {
         let (table_min, table_max) = TableCodec::table_bound(&table_name);
         let mut column_iter = tx.iter(Bound::Included(&table_min), Bound::Included(&table_max))?;
 
@@ -406,7 +407,7 @@ impl KipTransaction {
         Ok((columns, index_metas))
     }
 
-    fn _drop_data(tx: &mut mvcc::Transaction, min: &[u8], max: &[u8]) -> Result<(), StorageError> {
+    fn _drop_data(tx: &mut mvcc::Transaction, min: &[u8], max: &[u8]) -> Result<(), DatabaseError> {
         let mut iter = tx.iter(Bound::Included(min), Bound::Included(max))?;
         let mut data_keys = vec![];
 
@@ -427,7 +428,7 @@ impl KipTransaction {
     fn create_index_meta_for_table(
         tx: &mut mvcc::Transaction,
         table: &mut TableCatalog,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), DatabaseError> {
         let table_name = table.name.clone();
 
         for col in table
@@ -464,7 +465,7 @@ pub struct KipIter<'a> {
 }
 
 impl Iter for KipIter<'_> {
-    fn next_tuple(&mut self) -> Result<Option<Tuple>, StorageError> {
+    fn next_tuple(&mut self) -> Result<Option<Tuple>, DatabaseError> {
         while self.offset > 0 {
             let _ = self.iter.try_next()?;
             self.offset -= 1;
@@ -495,11 +496,12 @@ impl Iter for KipIter<'_> {
 #[cfg(test)]
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::db::{Database, DatabaseError};
+    use crate::db::Database;
+    use crate::errors::DatabaseError;
     use crate::expression::simplify::ConstantBinary;
     use crate::expression::ScalarExpression;
     use crate::storage::kip::KipStorage;
-    use crate::storage::{IndexIter, Iter, Storage, StorageError, Transaction};
+    use crate::storage::{IndexIter, Iter, Storage, Transaction};
     use crate::types::index::IndexMeta;
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
@@ -510,7 +512,7 @@ mod test {
     use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_in_kipdb_storage_works_with_data() -> Result<(), StorageError> {
+    async fn test_in_kipdb_storage_works_with_data() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
         let mut transaction = storage.transaction().await?;

@@ -1,6 +1,6 @@
 use crate::catalog::TableName;
+use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
-use crate::execution::ExecutorError;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -27,7 +27,7 @@ impl<T: Transaction> WriteExecutor<T> for Delete {
 }
 
 impl Delete {
-    #[try_stream(boxed, ok = Tuple, error = ExecutorError)]
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Delete { table_name, input } = self;
         let option_index_metas = transaction.table(table_name.clone()).map(|table_catalog| {

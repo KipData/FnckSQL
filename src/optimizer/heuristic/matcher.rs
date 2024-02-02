@@ -58,7 +58,7 @@ impl PatternMatcher for HepMatcher<'_, '_> {
 #[cfg(test)]
 mod tests {
     use crate::binder::test::select_sql_run;
-    use crate::execution::ExecutorError;
+    use crate::errors::DatabaseError;
     use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate, PatternMatcher};
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::optimizer::heuristic::matcher::HepMatcher;
@@ -66,7 +66,7 @@ mod tests {
     use crate::planner::LogicalPlan;
 
     #[tokio::test]
-    async fn test_predicate() -> Result<(), ExecutorError> {
+    async fn test_predicate() -> Result<(), DatabaseError> {
         let plan = select_sql_run("select * from t1").await?;
         let graph = HepGraph::new(plan.clone());
 
