@@ -6,6 +6,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
+use std::sync::Arc;
 
 pub struct Projection {
     exprs: Vec<ScalarExpression>,
@@ -28,20 +29,25 @@ impl Projection {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let Projection { exprs, input } = self;
+        let mut columns = None;
 
         #[for_await]
         for tuple in build_read(input, transaction) {
             let mut tuple = tuple?;
-
-            let mut columns = Vec::with_capacity(exprs.len());
             let mut values = Vec::with_capacity(exprs.len());
+            let columns = columns.get_or_insert_with(|| {
+                let mut columns = Vec::with_capacity(exprs.len());
+
+                for expr in exprs.iter() {
+                    columns.push(expr.output_column());
+                }
+                Arc::new(columns)
+            });
 
             for expr in exprs.iter() {
                 values.push(expr.eval(&tuple)?);
-                columns.push(expr.output_column());
             }
-
-            tuple.columns = columns;
+            tuple.columns = columns.clone();
             tuple.values = values;
 
             yield tuple;

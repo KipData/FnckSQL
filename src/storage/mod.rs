@@ -1,10 +1,9 @@
 pub mod kip;
 mod table_codec;
 
-use crate::catalog::{ColumnCatalog, TableCatalog, TableMeta, TableName};
+use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::errors::DatabaseError;
 use crate::expression::simplify::ConstantBinary;
-use crate::expression::ScalarExpression;
 use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::storage::table_codec::TableCodec;
 use crate::types::index::{Index, IndexMetaRef};
@@ -16,6 +15,7 @@ use kip_db::kernel::lsm::mvcc;
 use std::collections::{Bound, VecDeque};
 use std::mem;
 use std::ops::SubAssign;
+use std::sync::Arc;
 
 pub trait Storage: Sync + Send + Clone + 'static {
     type TransactionType: Transaction;
@@ -26,7 +26,6 @@ pub trait Storage: Sync + Send + Clone + 'static {
 
 /// Optional bounds of the reader, of the form (offset, limit).
 pub(crate) type Bounds = (Option<usize>, Option<usize>);
-type Projections = Vec<ScalarExpression>;
 
 pub trait Transaction: Sync + Send + 'static {
     type IterType<'a>: Iter;
@@ -38,14 +37,14 @@ pub trait Transaction: Sync + Send + 'static {
         &self,
         table_name: TableName,
         bounds: Bounds,
-        projection: Projections,
+        columns: Vec<(usize, ColumnRef)>,
     ) -> Result<Self::IterType<'_>, DatabaseError>;
 
     fn read_by_index(
         &self,
         table_name: TableName,
         bounds: Bounds,
-        projection: Projections,
+        columns: Vec<(usize, ColumnRef)>,
         index_meta: IndexMetaRef,
         binaries: Vec<ConstantBinary>,
     ) -> Result<IndexIter<'_>, DatabaseError>;
@@ -113,7 +112,8 @@ enum IndexValue {
 pub struct IndexIter<'a> {
     offset: usize,
     limit: Option<usize>,
-    projections: Projections,
+    tuple_columns: Arc<Vec<ColumnRef>>,
+    projections: Vec<usize>,
 
     index_meta: IndexMetaRef,
     table: &'a TableCatalog,
@@ -149,14 +149,14 @@ impl IndexIter<'_> {
     fn get_tuple_by_id(&mut self, tuple_id: &TupleId) -> Result<Option<Tuple>, DatabaseError> {
         let key = TableCodec::encode_tuple_key(&self.table.name, &tuple_id)?;
 
-        self.tx
-            .get(&key)?
-            .map(|bytes| {
-                let tuple = TableCodec::decode_tuple(self.table.all_columns(), &bytes);
-
-                tuple_projection(&mut self.limit, &self.projections, tuple)
-            })
-            .transpose()
+        Ok(self.tx.get(&key)?.map(|bytes| {
+            TableCodec::decode_tuple(
+                &self.table.types(),
+                &self.projections,
+                &self.tuple_columns,
+                &bytes,
+            )
+        }))
     }
 
     fn is_empty(&self) -> bool {
@@ -181,7 +181,9 @@ impl Iter for IndexIter<'_> {
                 }
                 match value {
                     IndexValue::PrimaryKey(tuple) => {
-                        let tuple = tuple_projection(&mut self.limit, &self.projections, tuple)?;
+                        if let Some(num) = self.limit.as_mut() {
+                            num.sub_assign(1);
+                        }
 
                         return Ok(Some(tuple));
                     }
@@ -204,7 +206,12 @@ impl Iter for IndexIter<'_> {
             while let Some((_, value_option)) = iter.try_next()? {
                 if let Some(value) = value_option {
                     if self.index_meta.is_primary {
-                        let tuple = TableCodec::decode_tuple(self.table.all_columns(), &value);
+                        let tuple = TableCodec::decode_tuple(
+                            &self.table.types(),
+                            &self.projections,
+                            &self.tuple_columns,
+                            &value,
+                        );
 
                         self.index_values.push_back(IndexValue::PrimaryKey(tuple));
                     } else {
@@ -267,7 +274,12 @@ impl Iter for IndexIter<'_> {
                                 self.index_values.push_back(IndexValue::Normal(tuple_id));
                             }
                         } else if self.index_meta.is_primary {
-                            let tuple = TableCodec::decode_tuple(self.table.all_columns(), &bytes);
+                            let tuple = TableCodec::decode_tuple(
+                                &self.table.types(),
+                                &self.projections,
+                                &self.tuple_columns,
+                                &bytes,
+                            );
 
                             self.index_values.push_back(IndexValue::PrimaryKey(tuple));
                         } else {
@@ -285,29 +297,4 @@ impl Iter for IndexIter<'_> {
 
 pub trait Iter: Sync + Send {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, DatabaseError>;
-}
-
-pub(crate) fn tuple_projection(
-    limit: &mut Option<usize>,
-    projections: &Projections,
-    tuple: Tuple,
-) -> Result<Tuple, DatabaseError> {
-    let projection_len = projections.len();
-    let mut columns = Vec::with_capacity(projection_len);
-    let mut values = Vec::with_capacity(projection_len);
-
-    for expr in projections.iter() {
-        values.push(expr.eval(&tuple)?);
-        columns.push(expr.output_column());
-    }
-
-    if let Some(num) = limit {
-        num.sub_assign(1);
-    }
-
-    Ok(Tuple {
-        id: tuple.id,
-        columns,
-        values,
-    })
 }

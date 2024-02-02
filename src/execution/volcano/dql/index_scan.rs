@@ -34,7 +34,7 @@ impl IndexScan {
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let ScanOperator {
             table_name,
-            projection_columns: columns,
+            columns,
             limit,
             ..
         } = self.op;

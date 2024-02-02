@@ -5,21 +5,42 @@ use crate::types::value::{DataValue, ValueRef};
 use std::sync::Arc;
 
 pub struct TupleBuilder {
-    columns: Vec<ColumnRef>,
+    columns: Arc<Vec<ColumnRef>>,
 }
 
 impl TupleBuilder {
     pub fn new(columns: Vec<ColumnRef>) -> Self {
-        TupleBuilder { columns }
+        TupleBuilder {
+            columns: Arc::new(columns),
+        }
     }
 
     pub fn build_result(header: String, message: String) -> Result<Tuple, DatabaseError> {
-        let columns: Vec<ColumnRef> = vec![Arc::new(ColumnCatalog::new_dummy(header))];
-        let values: Vec<ValueRef> = vec![Arc::new(DataValue::Utf8(Some(message)))];
+        let columns = Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(header))]);
+        let values = vec![Arc::new(DataValue::Utf8(Some(message)))];
 
         Ok(Tuple {
             id: None,
             columns,
+            values,
+        })
+    }
+
+    pub fn build(
+        &self,
+        id: Option<ValueRef>,
+        values: Vec<ValueRef>,
+    ) -> Result<Tuple, DatabaseError> {
+        if values.len() != self.columns.len() {
+            return Err(DatabaseError::MisMatch(
+                "types".to_string(),
+                "values".to_string(),
+            ));
+        }
+
+        Ok(Tuple {
+            id,
+            columns: self.columns.clone(),
             values,
         })
     }

@@ -6,8 +6,10 @@ use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
+use crate::types::tuple_builder::TupleBuilder;
 use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -51,9 +53,11 @@ impl Insert {
         } = self;
         let mut primary_key_index = None;
         let mut unique_values = HashMap::new();
-        let mut tuples = Vec::new();
+        let mut tuple_values = Vec::new();
 
         if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
+            let all_columns = table_catalog.all_columns_with_id();
+
             #[for_await]
             for tuple in build_read(input, transaction) {
                 let Tuple {
@@ -74,14 +78,10 @@ impl Insert {
                         .map(|col| col.id().unwrap())
                         .unwrap()
                 });
-                let all_columns = table_catalog.all_columns_with_id();
                 let tuple_id = tuple_map.get(primary_col_id).cloned().unwrap();
-                let mut tuple = Tuple {
-                    id: Some(tuple_id.clone()),
-                    columns: Vec::with_capacity(all_columns.len()),
-                    values: Vec::with_capacity(all_columns.len()),
-                };
-                for (col_id, col) in all_columns {
+                let mut values = Vec::with_capacity(all_columns.len());
+
+                for (col_id, col) in &all_columns {
                     let value = tuple_map
                         .remove(col_id)
                         .or_else(|| col.default_value())
@@ -96,14 +96,19 @@ impl Insert {
                     if value.is_null() && !col.nullable {
                         return Err(DatabaseError::NotNull);
                     }
-
-                    tuple.columns.push(col.clone());
-                    tuple.values.push(value)
+                    values.push(value)
                 }
-
-                tuples.push(tuple);
+                tuple_values.push((tuple_id, values));
             }
-            for tuple in tuples {
+            let tuple_columns = all_columns
+                .into_iter()
+                .map(|(_, column)| column.clone())
+                .collect_vec();
+            let tuple_builder = TupleBuilder::new(tuple_columns);
+
+            for (tuple_id, values) in tuple_values {
+                let tuple = tuple_builder.build(Some(tuple_id), values)?;
+
                 transaction.append(&table_name, tuple, is_overwrite)?;
             }
             // Unique Index

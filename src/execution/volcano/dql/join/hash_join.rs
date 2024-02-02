@@ -140,6 +140,7 @@ impl HashJoinStatus {
             Self::columns_filling(&tuple, join_columns, *right_force_nullable);
             let _ = mem::replace(right_init_flag, true);
         }
+        let join_columns = Arc::new(join_columns.clone());
 
         let mut join_tuples = if let Some(tuples) = build_map.get(&hash) {
             let _ = used_set.insert(hash);
@@ -234,6 +235,8 @@ impl HashJoinStatus {
 
         matches!(ty, JoinType::Left | JoinType::Full)
             .then(|| {
+                let mut buf = None;
+
                 build_map
                     .drain()
                     .filter(|(hash, _)| !used_set.contains(hash))
@@ -245,16 +248,24 @@ impl HashJoinStatus {
                         } in tuples.iter_mut()
                         {
                             let _ = mem::replace(id, None);
-                            let (mut right_values, mut right_columns): (
-                                Vec<ValueRef>,
-                                Vec<ColumnRef>,
-                            ) = join_columns[columns.len()..]
-                                .iter()
-                                .map(|col| (Arc::new(DataValue::none(col.datatype())), col.clone()))
-                                .unzip();
+                            let (right_values, full_columns) = buf.get_or_insert_with(|| {
+                                let (right_values, mut right_columns): (
+                                    Vec<ValueRef>,
+                                    Vec<ColumnRef>,
+                                ) = join_columns[columns.len()..]
+                                    .iter()
+                                    .map(|col| {
+                                        (Arc::new(DataValue::none(col.datatype())), col.clone())
+                                    })
+                                    .unzip();
+                                let mut full_columns = Vec::clone(columns);
+                                full_columns.append(&mut right_columns);
 
-                            values.append(&mut right_values);
-                            columns.append(&mut right_columns);
+                                (right_values, Arc::new(full_columns))
+                            });
+
+                            values.append(&mut right_values.clone());
+                            *columns = full_columns.clone();
                         }
                         tuples
                     })

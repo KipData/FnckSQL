@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -5,7 +6,7 @@ use std::sync::Arc;
 use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::errors::DatabaseError;
 use crate::types::index::{IndexMeta, IndexMetaRef};
-use crate::types::ColumnId;
+use crate::types::{ColumnId, LogicalType};
 
 pub type TableName = Arc<String>;
 
@@ -56,6 +57,22 @@ impl TableCatalog {
 
     pub(crate) fn all_columns(&self) -> Vec<ColumnRef> {
         self.columns.values().map(Arc::clone).collect()
+    }
+
+    pub(crate) fn primary_key(&self) -> Result<(usize, &ColumnRef), DatabaseError> {
+        self.columns
+            .iter()
+            .map(|(_, column)| column)
+            .enumerate()
+            .find(|(_, column)| column.desc.is_primary)
+            .ok_or(DatabaseError::PrimaryKeyNotFound)
+    }
+
+    pub(crate) fn types(&self) -> Vec<LogicalType> {
+        self.columns
+            .iter()
+            .map(|(_, column)| *column.datatype())
+            .collect_vec()
     }
 
     /// Add a column to the table catalog.

@@ -3,12 +3,11 @@ use crate::errors::DatabaseError;
 use crate::expression::simplify::ConstantBinary;
 use crate::optimizer::core::column_meta::{ColumnMeta, ColumnMetaLoader};
 use crate::storage::table_codec::TableCodec;
-use crate::storage::{
-    tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, Transaction,
-};
+use crate::storage::{Bounds, IndexIter, Iter, Storage, Transaction};
 use crate::types::index::{Index, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
-use crate::types::ColumnId;
+use crate::types::{ColumnId, LogicalType};
+use itertools::Itertools;
 use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
 use kip_db::kernel::lsm::mvcc::{CheckType, TransactionIter};
 use kip_db::kernel::lsm::storage::Config;
@@ -17,6 +16,7 @@ use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use kip_db::KernelError;
 use std::collections::hash_map::RandomState;
 use std::collections::{Bound, VecDeque};
+use std::ops::SubAssign;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -67,20 +67,35 @@ impl Transaction for KipTransaction {
         &self,
         table_name: TableName,
         bounds: Bounds,
-        projections: Projections,
+        mut columns: Vec<(usize, ColumnRef)>,
     ) -> Result<Self::IterType<'_>, DatabaseError> {
-        let all_columns = self
+        assert!(columns.is_sorted_by_key(|(i, _)| i));
+        assert!(columns.iter().map(|(i, _)| i).all_unique());
+
+        let table = self
             .table(table_name.clone())
-            .ok_or(DatabaseError::TableNotFound)?
-            .all_columns();
+            .ok_or(DatabaseError::TableNotFound)?;
+        let table_types = table.types();
+        if columns.is_empty() {
+            let (i, column) = table.primary_key()?;
+            columns.push((i, column.clone()));
+        }
+        let mut tuple_columns = Vec::with_capacity(columns.len());
+        let mut projections = Vec::with_capacity(columns.len());
+        for (projection, column) in columns {
+            tuple_columns.push(column);
+            projections.push(projection);
+        }
+
         let (min, max) = TableCodec::tuple_bound(&table_name);
         let iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
 
         Ok(KipIter {
             offset: bounds.0.unwrap_or(0),
             limit: bounds.1,
+            table_types,
+            tuple_columns: Arc::new(tuple_columns),
             projections,
-            all_columns,
             iter,
         })
     }
@@ -89,25 +104,36 @@ impl Transaction for KipTransaction {
         &self,
         table_name: TableName,
         (offset_option, limit_option): Bounds,
-        projections: Projections,
+        columns: Vec<(usize, ColumnRef)>,
         index_meta: IndexMetaRef,
         binaries: Vec<ConstantBinary>,
     ) -> Result<IndexIter<'_>, DatabaseError> {
+        assert!(columns.is_sorted_by_key(|(i, _)| i));
+        assert!(columns.iter().map(|(i, _)| i).all_unique());
+
         let table = self
             .table(table_name.clone())
             .ok_or(DatabaseError::TableNotFound)?;
         let offset = offset_option.unwrap_or(0);
 
+        let mut tuple_columns = Vec::with_capacity(columns.len());
+        let mut projections = Vec::with_capacity(columns.len());
+        for (projection, column) in columns {
+            tuple_columns.push(column);
+            projections.push(projection);
+        }
+
         Ok(IndexIter {
             offset,
             limit: limit_option,
-            projections,
+            tuple_columns: Arc::new(tuple_columns),
             index_meta,
             table,
             index_values: VecDeque::new(),
             binaries: VecDeque::from(binaries),
             tx: &self.tx,
             scope_iter: None,
+            projections,
         })
     }
 
@@ -459,8 +485,9 @@ impl KipTransaction {
 pub struct KipIter<'a> {
     offset: usize,
     limit: Option<usize>,
-    projections: Projections,
-    all_columns: Vec<ColumnRef>,
+    table_types: Vec<LogicalType>,
+    tuple_columns: Arc<Vec<ColumnRef>>,
+    projections: Vec<usize>,
     iter: TransactionIter<'a>,
 }
 
@@ -479,11 +506,16 @@ impl Iter for KipIter<'_> {
 
         while let Some(item) = self.iter.try_next()? {
             if let (_, Some(value)) = item {
-                let tuple = tuple_projection(
-                    &mut self.limit,
+                let tuple = TableCodec::decode_tuple(
+                    &self.table_types,
                     &self.projections,
-                    TableCodec::decode_tuple(self.all_columns.clone(), &value),
-                )?;
+                    &self.tuple_columns,
+                    &value,
+                );
+
+                if let Some(num) = self.limit.as_mut() {
+                    num.sub_assign(1);
+                }
 
                 return Ok(Some(tuple));
             }
@@ -499,7 +531,6 @@ mod test {
     use crate::db::Database;
     use crate::errors::DatabaseError;
     use crate::expression::simplify::ConstantBinary;
-    use crate::expression::ScalarExpression;
     use crate::storage::kip::KipStorage;
     use crate::storage::{IndexIter, Iter, Storage, Transaction};
     use crate::types::index::IndexMeta;
@@ -516,7 +547,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
         let mut transaction = storage.transaction().await?;
-        let columns = vec![
+        let columns = Arc::new(vec![
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
@@ -529,7 +560,7 @@ mod test {
                 ColumnDesc::new(LogicalType::Boolean, false, false, None),
                 None,
             )),
-        ];
+        ]);
 
         let source_columns = columns
             .iter()
@@ -572,7 +603,7 @@ mod test {
         let mut iter = transaction.read(
             Arc::new("test".to_string()),
             (Some(1), Some(1)),
-            vec![ScalarExpression::ColumnRef(columns[0].clone())],
+            vec![(0, columns[0].clone())],
         )?;
 
         let option_1 = iter.next_tuple()?;
@@ -602,11 +633,7 @@ mod test {
             .table(Arc::new("t1".to_string()))
             .unwrap()
             .clone();
-        let projections = table
-            .all_columns()
-            .into_iter()
-            .map(|col| ScalarExpression::ColumnRef(col))
-            .collect_vec();
+        let columns = Arc::new(table.all_columns().into_iter().collect_vec());
         let tuple_ids = vec![
             Arc::new(DataValue::Int32(Some(0))),
             Arc::new(DataValue::Int32(Some(2))),
@@ -616,7 +643,7 @@ mod test {
         let mut iter = IndexIter {
             offset: 0,
             limit: None,
-            projections,
+            tuple_columns: columns,
             index_meta: Arc::new(IndexMeta {
                 id: 0,
                 column_ids: vec![0],
@@ -635,6 +662,7 @@ mod test {
             index_values: VecDeque::new(),
             tx: &transaction.tx,
             scope_iter: None,
+            projections: vec![0],
         };
         let mut result = Vec::new();
 
@@ -663,16 +691,12 @@ mod test {
             .table(Arc::new("t1".to_string()))
             .unwrap()
             .clone();
-        let projections = table
-            .all_columns()
-            .into_iter()
-            .map(|col| ScalarExpression::ColumnRef(col))
-            .collect_vec();
+        let columns = table.all_columns().into_iter().enumerate().collect_vec();
         let mut iter = transaction
             .read_by_index(
                 Arc::new("t1".to_string()),
                 (Some(0), Some(1)),
-                projections,
+                columns,
                 table.indexes[0].clone(),
                 vec![ConstantBinary::Scope {
                     min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),

@@ -11,6 +11,8 @@ use crate::types::value::ValueRef;
 use ahash::HashMap;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
+use std::mem;
+use std::sync::Arc;
 
 pub struct HashAggExecutor {
     agg_calls: Vec<ScalarExpression>,
@@ -108,6 +110,8 @@ impl HashAggStatus {
     }
 
     pub(crate) fn to_tuples(&mut self) -> Result<Vec<Tuple>, DatabaseError> {
+        let group_columns = Arc::new(mem::replace(&mut self.group_columns, vec![]));
+
         Ok(self
             .group_hash_accs
             .drain()
@@ -121,7 +125,7 @@ impl HashAggStatus {
 
                 Ok::<Tuple, DatabaseError>(Tuple {
                     id: None,
-                    columns: self.group_columns.clone(),
+                    columns: group_columns.clone(),
                     values,
                 })
             })

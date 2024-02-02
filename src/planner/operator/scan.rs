@@ -1,5 +1,4 @@
-use crate::catalog::{TableCatalog, TableName};
-use crate::expression::ScalarExpression;
+use crate::catalog::{ColumnRef, TableCatalog, TableName};
 use crate::planner::LogicalPlan;
 use crate::storage::Bounds;
 use crate::types::index::IndexInfo;
@@ -14,7 +13,7 @@ use super::Operator;
 pub struct ScanOperator {
     pub table_name: TableName,
     pub primary_key: ColumnId,
-    pub projection_columns: Vec<ScalarExpression>,
+    pub columns: Vec<(usize, ColumnRef)>,
     // Support push down limit.
     pub limit: Bounds,
 
@@ -29,12 +28,13 @@ impl ScanOperator {
         let columns = table_catalog
             .all_columns()
             .into_iter()
-            .map(|column| {
+            .enumerate()
+            .map(|(i, column)| {
                 if column.desc.is_primary {
                     primary_key_option = column.id();
                 }
 
-                ScalarExpression::ColumnRef(column)
+                (i, column)
             })
             .collect_vec();
         let index_infos = table_catalog
@@ -51,8 +51,7 @@ impl ScanOperator {
                 index_infos,
                 table_name,
                 primary_key: primary_key_option.unwrap(),
-                projection_columns: columns,
-
+                columns,
                 limit: (None, None),
             }),
             childrens: vec![],
@@ -64,9 +63,9 @@ impl ScanOperator {
 impl fmt::Display for ScanOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let projection_columns = self
-            .projection_columns
+            .columns
             .iter()
-            .map(|column| format!("{}", column))
+            .map(|(_, column)| format!("{}", column.name()))
             .join(", ");
         let (offset, limit) = self.limit;
 

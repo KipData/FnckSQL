@@ -4,6 +4,7 @@ use crate::planner::operator::values::ValuesOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
+use std::sync::Arc;
 
 pub struct Values {
     op: ValuesOperator,
@@ -25,6 +26,7 @@ impl Values {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute(self) {
         let ValuesOperator { columns, rows } = self.op;
+        let columns = Arc::new(columns);
 
         for values in rows {
             yield Tuple {
