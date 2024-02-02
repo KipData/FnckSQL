@@ -130,9 +130,10 @@ impl Operator {
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Scan(op) => op
-                .projection_columns
+                .columns
                 .iter()
-                .flat_map(|expr| expr.referenced_columns(only_column_ref))
+                .map(|(_, column)| column)
+                .cloned()
                 .collect_vec(),
             Operator::Sort(op) => op
                 .sort_fields

@@ -4,11 +4,11 @@ use crate::expression::simplify::ConstantBinary;
 use crate::optimizer::core::column_meta::{ColumnMeta, ColumnMetaLoader};
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{
-    tuple_projection, Bounds, IndexIter, Iter, Projections, Storage, Transaction,
+    Bounds, IndexIter, Iter, Storage, Transaction,
 };
 use crate::types::index::{Index, IndexMetaRef};
 use crate::types::tuple::{Tuple, TupleId};
-use crate::types::ColumnId;
+use crate::types::{ColumnId, LogicalType};
 use kip_db::kernel::lsm::iterator::Iter as KipDBIter;
 use kip_db::kernel::lsm::mvcc::{CheckType, TransactionIter};
 use kip_db::kernel::lsm::storage::Config;
@@ -17,8 +17,10 @@ use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use kip_db::KernelError;
 use std::collections::hash_map::RandomState;
 use std::collections::{Bound, VecDeque};
+use std::ops::SubAssign;
 use std::path::PathBuf;
 use std::sync::Arc;
+use itertools::Itertools;
 
 #[derive(Clone)]
 pub struct KipStorage {
@@ -67,20 +69,26 @@ impl Transaction for KipTransaction {
         &self,
         table_name: TableName,
         bounds: Bounds,
-        projections: Projections,
+        mut columns: Vec<(usize, ColumnRef)>,
     ) -> Result<Self::IterType<'_>, DatabaseError> {
-        let all_columns = self
-            .table(table_name.clone())
-            .ok_or(DatabaseError::TableNotFound)?
-            .all_columns();
+        assert!(columns.is_sorted_by_key(|(i, _)| i));
+        assert!(columns.iter().map(|(i, _)| i).all_unique());
+
+        let table = self.table(table_name.clone()).ok_or(DatabaseError::TableNotFound)?;
+        let table_types = table.types();
+        if columns.is_empty() {
+            let (i, column) = table.primary_key()?;
+            columns.push((i, column.clone()));
+        }
+
         let (min, max) = TableCodec::tuple_bound(&table_name);
         let iter = self.tx.iter(Bound::Included(&min), Bound::Included(&max))?;
 
         Ok(KipIter {
             offset: bounds.0.unwrap_or(0),
             limit: bounds.1,
-            projections,
-            all_columns,
+            table_types,
+            columns,
             iter,
         })
     }
@@ -89,10 +97,13 @@ impl Transaction for KipTransaction {
         &self,
         table_name: TableName,
         (offset_option, limit_option): Bounds,
-        projections: Projections,
+        columns: Vec<(usize, ColumnRef)>,
         index_meta: IndexMetaRef,
         binaries: Vec<ConstantBinary>,
     ) -> Result<IndexIter<'_>, DatabaseError> {
+        assert!(columns.is_sorted_by_key(|(i, _)| i));
+        assert!(columns.iter().map(|(i, _)| i).all_unique());
+
         let table = self
             .table(table_name.clone())
             .ok_or(DatabaseError::TableNotFound)?;
@@ -101,7 +112,7 @@ impl Transaction for KipTransaction {
         Ok(IndexIter {
             offset,
             limit: limit_option,
-            projections,
+            columns,
             index_meta,
             table,
             index_values: VecDeque::new(),
@@ -459,8 +470,8 @@ impl KipTransaction {
 pub struct KipIter<'a> {
     offset: usize,
     limit: Option<usize>,
-    projections: Projections,
-    all_columns: Vec<ColumnRef>,
+    table_types: Vec<LogicalType>,
+    columns: Vec<(usize, ColumnRef)>,
     iter: TransactionIter<'a>,
 }
 
@@ -479,11 +490,11 @@ impl Iter for KipIter<'_> {
 
         while let Some(item) = self.iter.try_next()? {
             if let (_, Some(value)) = item {
-                let tuple = tuple_projection(
-                    &mut self.limit,
-                    &self.projections,
-                    TableCodec::decode_tuple(self.all_columns.clone(), &value),
-                )?;
+                let tuple = TableCodec::decode_tuple(&self.table_types, &self.columns, &value);
+
+                if let Some(num) = self.limit.as_mut() {
+                    num.sub_assign(1);
+                }
 
                 return Ok(Some(tuple));
             }
@@ -499,7 +510,6 @@ mod test {
     use crate::db::Database;
     use crate::errors::DatabaseError;
     use crate::expression::simplify::ConstantBinary;
-    use crate::expression::ScalarExpression;
     use crate::storage::kip::KipStorage;
     use crate::storage::{IndexIter, Iter, Storage, Transaction};
     use crate::types::index::IndexMeta;
@@ -572,7 +582,7 @@ mod test {
         let mut iter = transaction.read(
             Arc::new("test".to_string()),
             (Some(1), Some(1)),
-            vec![ScalarExpression::ColumnRef(columns[0].clone())],
+            vec![(0, columns[0].clone())],
         )?;
 
         let option_1 = iter.next_tuple()?;
@@ -602,10 +612,10 @@ mod test {
             .table(Arc::new("t1".to_string()))
             .unwrap()
             .clone();
-        let projections = table
+        let columns = table
             .all_columns()
             .into_iter()
-            .map(|col| ScalarExpression::ColumnRef(col))
+            .enumerate()
             .collect_vec();
         let tuple_ids = vec![
             Arc::new(DataValue::Int32(Some(0))),
@@ -616,7 +626,7 @@ mod test {
         let mut iter = IndexIter {
             offset: 0,
             limit: None,
-            projections,
+            columns,
             index_meta: Arc::new(IndexMeta {
                 id: 0,
                 column_ids: vec![0],
@@ -663,16 +673,16 @@ mod test {
             .table(Arc::new("t1".to_string()))
             .unwrap()
             .clone();
-        let projections = table
+        let columns = table
             .all_columns()
             .into_iter()
-            .map(|col| ScalarExpression::ColumnRef(col))
+            .enumerate()
             .collect_vec();
         let mut iter = transaction
             .read_by_index(
                 Arc::new("t1".to_string()),
                 (Some(0), Some(1)),
-                projections,
+                columns,
                 table.indexes[0].clone(),
                 vec![ConstantBinary::Scope {
                     min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),

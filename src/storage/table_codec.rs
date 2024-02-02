@@ -170,8 +170,8 @@ impl TableCodec {
         Ok(key_prefix)
     }
 
-    pub fn decode_tuple(columns: Vec<ColumnRef>, bytes: &[u8]) -> Tuple {
-        Tuple::deserialize_from(columns, bytes)
+    pub fn decode_tuple(table_types: &[LogicalType], columns: &[(usize, ColumnRef)], bytes: &[u8]) -> Tuple {
+        Tuple::deserialize_from(table_types, columns, bytes)
     }
 
     /// Key: {TableName}{INDEX_META_TAG}{BOUND_MIN_TAG}{IndexID}
@@ -320,9 +320,13 @@ mod tests {
             ],
         };
         let (_, bytes) = TableCodec::encode_tuple(&table_catalog.name, &tuple)?;
+        let columns = table_catalog.all_columns()
+            .into_iter()
+            .enumerate()
+            .collect_vec();
 
         assert_eq!(
-            TableCodec::decode_tuple(table_catalog.all_columns(), &bytes),
+            TableCodec::decode_tuple(&table_catalog.types(), &columns, &bytes),
             tuple
         );
 

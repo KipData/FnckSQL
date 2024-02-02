@@ -56,11 +56,6 @@ impl ConstantCalculation {
                     expr.constant_calculation()?;
                 }
             }
-            Operator::Scan(op) => {
-                for expr in &mut op.projection_columns {
-                    expr.constant_calculation()?;
-                }
-            }
             Operator::Sort(op) => {
                 for field in &mut op.sort_fields {
                     field.expr.constant_calculation()?;

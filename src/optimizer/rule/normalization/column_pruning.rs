@@ -91,7 +91,7 @@ impl ColumnPruning {
             }
             Operator::Scan(op) => {
                 if !all_referenced {
-                    Self::clear_exprs(column_references, &mut op.projection_columns);
+                    op.columns.retain(|(_, column)| column_references.contains(column.summary()));
                 }
             }
             Operator::Limit(_) | Operator::Join(_) | Operator::Filter(_) => {
@@ -216,7 +216,7 @@ mod tests {
         for grandson_plan in &best_plan.childrens[0].childrens {
             match &grandson_plan.operator {
                 Operator::Scan(op) => {
-                    assert_eq!(op.projection_columns.len(), 1);
+                    assert_eq!(op.columns.len(), 1);
                 }
                 _ => unreachable!("Should be a scan operator"),
             }
