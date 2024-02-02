@@ -6,6 +6,7 @@ use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
+use std::sync::Arc;
 
 pub struct DropColumn {
     op: DropColumnOperator,
@@ -32,14 +33,14 @@ impl DropColumn {
             column_name,
             if_exists,
         } = &self.op;
-        let mut option_column_i = None;
+        let mut tuple_columns = None;
         let mut tuples = Vec::new();
 
         #[for_await]
         for tuple in build_read(self.input, transaction) {
             let mut tuple: Tuple = tuple?;
 
-            if option_column_i.is_none() {
+            if tuple_columns.is_none() {
                 if let Some((column_index, is_primary)) = tuple
                     .columns
                     .iter()
@@ -52,16 +53,20 @@ impl DropColumn {
                             "drop of primary key column is not allowed.".to_owned(),
                         ))?;
                     }
-                    option_column_i = Some(column_index);
+                    let mut columns = Vec::clone(&tuple.columns);
+                    let _ = columns.remove(column_index);
+
+                    tuple_columns = Some((column_index, Arc::new(columns)));
                 }
             }
-            if option_column_i.is_none() && *if_exists {
+            if tuple_columns.is_none() && *if_exists {
                 return Ok(());
             }
-            let column_i = option_column_i
+            let (column_i, columns) = tuple_columns
+                .clone()
                 .ok_or_else(|| DatabaseError::InvalidColumn("not found column".to_string()))?;
 
-            let _ = tuple.columns.remove(column_i);
+            tuple.columns = columns;
             let _ = tuple.values.remove(column_i);
 
             tuples.push(tuple);

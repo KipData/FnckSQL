@@ -36,13 +36,19 @@ impl AddColumn {
             if_not_exists,
         } = &self.op;
         let mut unique_values = column.desc().is_unique.then(|| Vec::new());
+        let mut tuple_columns = None;
         let mut tuples = Vec::new();
 
         #[for_await]
         for tuple in build_read(self.input, transaction) {
             let mut tuple: Tuple = tuple?;
 
-            tuple.columns.push(Arc::new(column.clone()));
+            let tuples_columns = tuple_columns.get_or_insert_with(|| {
+                let mut columns = Vec::clone(&tuple.columns);
+
+                columns.push(Arc::new(column.clone()));
+                Arc::new(columns)
+            });
             if let Some(value) = column.default_value() {
                 if let Some(unique_values) = &mut unique_values {
                     unique_values.push((tuple.id.clone().unwrap(), value.clone()));
@@ -51,6 +57,7 @@ impl AddColumn {
             } else {
                 tuple.values.push(Arc::new(DataValue::Null));
             }
+            tuple.columns = tuples_columns.clone();
             tuples.push(tuple);
         }
         for tuple in tuples {

@@ -1,7 +1,7 @@
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use itertools::Itertools;
 
 use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::errors::DatabaseError;
@@ -60,7 +60,12 @@ impl TableCatalog {
     }
 
     pub(crate) fn primary_key(&self) -> Result<(usize, &ColumnRef), DatabaseError> {
-        self.columns.iter().map(|(_, column)| column).enumerate().find(|(_, column)| column.desc.is_primary).ok_or(DatabaseError::PrimaryKeyNotFound)
+        self.columns
+            .iter()
+            .map(|(_, column)| column)
+            .enumerate()
+            .find(|(_, column)| column.desc.is_primary)
+            .ok_or(DatabaseError::PrimaryKeyNotFound)
     }
 
     pub(crate) fn types(&self) -> Vec<LogicalType> {

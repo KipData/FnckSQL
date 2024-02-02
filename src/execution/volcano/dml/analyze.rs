@@ -118,7 +118,7 @@ impl Analyze {
 
         yield Tuple {
             id: None,
-            columns,
+            columns: Arc::new(columns),
             values,
         };
     }

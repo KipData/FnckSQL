@@ -1,32 +1,39 @@
 use crate::catalog::ColumnRef;
 use crate::types::value::{DataValue, ValueRef};
+use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
 use integer_encoding::FixedInt;
 use itertools::Itertools;
 use std::sync::Arc;
-use crate::types::LogicalType;
 
 const BITS_MAX_INDEX: usize = 8;
 
 pub type TupleId = ValueRef;
+pub type Schema = Vec<ColumnRef>;
+pub type SchemaRef = Arc<Schema>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
     pub id: Option<TupleId>,
-    pub columns: Vec<ColumnRef>,
+    pub columns: SchemaRef,
     pub values: Vec<ValueRef>,
 }
 
 impl Tuple {
-    pub fn deserialize_from(table_types: &[LogicalType], columns: &[(usize, ColumnRef)], bytes: &[u8]) -> Self {
-        assert!(!columns.is_empty());
+    pub fn deserialize_from(
+        table_types: &[LogicalType],
+        projections: &[usize],
+        tuple_columns: &Arc<Vec<ColumnRef>>,
+        bytes: &[u8],
+    ) -> Self {
+        assert!(!tuple_columns.is_empty());
+        assert_eq!(projections.len(), tuple_columns.len());
 
         fn is_none(bits: u8, i: usize) -> bool {
             bits & (1 << (7 - i)) > 0
         }
 
-        let values_len = columns.len();
-        let mut tuple_columns = Vec::with_capacity(values_len);
+        let values_len = tuple_columns.len();
         let mut tuple_values = Vec::with_capacity(values_len);
         let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
         let mut id_option = None;
@@ -35,52 +42,71 @@ impl Tuple {
         let mut pos = bits_len;
 
         for (i, logic_type) in table_types.into_iter().enumerate() {
-            if projection_i >= columns.len() {
-                break
+            if projection_i >= tuple_columns.len() {
+                break;
             }
-            let (column_i, column) = &columns[projection_i];
             if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
-                if column_i == &i {
+                if projections[projection_i] == i {
                     tuple_values.push(Arc::new(DataValue::none(logic_type)));
-                    tuple_columns.push(column.clone());
-                    projection_i += 1;
+                    Self::values_push(
+                        tuple_columns,
+                        &mut tuple_values,
+                        &mut id_option,
+                        &mut projection_i,
+                    );
                 }
             } else if let Some(len) = logic_type.raw_len() {
                 /// fixed length (e.g.: int)
-                if column_i == &i {
+                if projections[projection_i] == i {
                     tuple_values.push(Arc::new(DataValue::from_raw(
                         &bytes[pos..pos + len],
                         logic_type,
                     )));
-                    tuple_columns.push(column.clone());
-                    projection_i += 1;
+                    Self::values_push(
+                        tuple_columns,
+                        &mut tuple_values,
+                        &mut id_option,
+                        &mut projection_i,
+                    );
                 }
                 pos += len;
             } else {
                 /// variable length (e.g.: varchar)
                 let len = u32::decode_fixed(&bytes[pos..pos + 4]) as usize;
                 pos += 4;
-                if column_i == &i {
+                if projections[projection_i] == i {
                     tuple_values.push(Arc::new(DataValue::from_raw(
                         &bytes[pos..pos + len],
                         logic_type,
                     )));
-                    tuple_columns.push(column.clone());
-                    projection_i += 1;
+                    Self::values_push(
+                        tuple_columns,
+                        &mut tuple_values,
+                        &mut id_option,
+                        &mut projection_i,
+                    );
                 }
                 pos += len;
-            }
-
-            if column.desc.is_primary {
-                id_option = Some(tuple_values[i].clone());
             }
         }
 
         Tuple {
             id: id_option,
-            columns: tuple_columns,
+            columns: tuple_columns.clone(),
             values: tuple_values,
         }
+    }
+
+    fn values_push(
+        tuple_columns: &Arc<Vec<ColumnRef>>,
+        tuple_values: &[ValueRef],
+        id_option: &mut Option<Arc<DataValue>>,
+        projection_i: &mut usize,
+    ) {
+        if tuple_columns[*projection_i].desc.is_primary {
+            let _ = id_option.replace(tuple_values[*projection_i].clone());
+        }
+        *projection_i += 1;
     }
 
     /// e.g.: bits(u8)..|data_0(len for utf8_1)|utf8_0|data_1|
@@ -119,7 +145,7 @@ pub fn create_table(tuples: &[Tuple]) -> Table {
     }
 
     let mut header = Vec::new();
-    for col in &tuples[0].columns {
+    for col in tuples[0].columns.iter() {
         header.push(Cell::new(col.name().to_string()));
     }
     table.set_header(header);
@@ -143,13 +169,13 @@ mod tests {
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
+    use itertools::Itertools;
     use rust_decimal::Decimal;
     use std::sync::Arc;
-    use itertools::Itertools;
 
     #[test]
     fn test_tuple_serialize_to_and_deserialize_from() {
-        let columns = vec![
+        let columns = Arc::new(vec![
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
@@ -228,7 +254,7 @@ mod tests {
                 ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None),
                 None,
             )),
-        ];
+        ]);
 
         let tuples = vec![
             Tuple {
@@ -274,13 +300,20 @@ mod tests {
             .iter()
             .map(|column| *column.datatype())
             .collect_vec();
-        let columns = columns
-            .into_iter()
-            .enumerate()
-            .collect_vec();
+        let columns = Arc::new(columns);
 
-        let tuple_0 = Tuple::deserialize_from(&types, &columns, &tuples[0].serialize_to());
-        let tuple_1 = Tuple::deserialize_from(&types, &columns, &tuples[1].serialize_to());
+        let tuple_0 = Tuple::deserialize_from(
+            &types,
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            &columns,
+            &tuples[0].serialize_to(),
+        );
+        let tuple_1 = Tuple::deserialize_from(
+            &types,
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            &columns,
+            &tuples[1].serialize_to(),
+        );
 
         assert_eq!(tuples[0], tuple_0);
         assert_eq!(tuples[1], tuple_1);

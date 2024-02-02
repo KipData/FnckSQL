@@ -62,7 +62,7 @@ mod test {
     use std::sync::Arc;
 
     fn build_tuple() -> Tuple {
-        let columns = vec![
+        let columns = Arc::new(vec![
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
@@ -75,7 +75,7 @@ mod test {
                 ColumnDesc::new(LogicalType::Varchar(None), false, false, None),
                 None,
             )),
-        ];
+        ]);
         let values = vec![
             Arc::new(DataValue::Int32(Some(9))),
             Arc::new(DataValue::Utf8(Some("LOL".to_string()))),

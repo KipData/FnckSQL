@@ -1,10 +1,9 @@
-use crate::catalog::ColumnRef;
 use crate::catalog::{ColumnCatalog, TableMeta};
 use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
 use std::sync::Arc;
 
@@ -26,11 +25,11 @@ impl ShowTables {
             colum_meta_paths: histogram_paths,
         } in metas
         {
-            let columns: Vec<ColumnRef> = vec![
+            let columns = Arc::new(vec![
                 Arc::new(ColumnCatalog::new_dummy("TABLE".to_string())),
                 Arc::new(ColumnCatalog::new_dummy("COLUMN_METAS_LEN".to_string())),
-            ];
-            let values: Vec<ValueRef> = vec![
+            ]);
+            let values = vec![
                 Arc::new(DataValue::Utf8(Some(table_name.to_string()))),
                 Arc::new(DataValue::UInt32(Some(histogram_paths.len() as u32))),
             ];

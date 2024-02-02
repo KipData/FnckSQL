@@ -15,6 +15,7 @@ use kip_db::kernel::lsm::mvcc;
 use std::collections::{Bound, VecDeque};
 use std::mem;
 use std::ops::SubAssign;
+use std::sync::Arc;
 
 pub trait Storage: Sync + Send + Clone + 'static {
     type TransactionType: Transaction;
@@ -111,7 +112,8 @@ enum IndexValue {
 pub struct IndexIter<'a> {
     offset: usize,
     limit: Option<usize>,
-    columns: Vec<(usize, ColumnRef)>,
+    tuple_columns: Arc<Vec<ColumnRef>>,
+    projections: Vec<usize>,
 
     index_meta: IndexMetaRef,
     table: &'a TableCatalog,
@@ -147,9 +149,14 @@ impl IndexIter<'_> {
     fn get_tuple_by_id(&mut self, tuple_id: &TupleId) -> Result<Option<Tuple>, DatabaseError> {
         let key = TableCodec::encode_tuple_key(&self.table.name, &tuple_id)?;
 
-        Ok(self.tx
-            .get(&key)?
-            .map(|bytes| TableCodec::decode_tuple(&self.table.types(), &self.columns, &bytes)))
+        Ok(self.tx.get(&key)?.map(|bytes| {
+            TableCodec::decode_tuple(
+                &self.table.types(),
+                &self.projections,
+                &self.tuple_columns,
+                &bytes,
+            )
+        }))
     }
 
     fn is_empty(&self) -> bool {
@@ -179,7 +186,7 @@ impl Iter for IndexIter<'_> {
                         }
 
                         return Ok(Some(tuple));
-                    },
+                    }
                     IndexValue::Normal(tuple_id) => {
                         if let Some(tuple) = self.get_tuple_by_id(&tuple_id)? {
                             return Ok(Some(tuple));
@@ -199,7 +206,12 @@ impl Iter for IndexIter<'_> {
             while let Some((_, value_option)) = iter.try_next()? {
                 if let Some(value) = value_option {
                     if self.index_meta.is_primary {
-                        let tuple = TableCodec::decode_tuple(&self.table.types(), &self.columns, &value);
+                        let tuple = TableCodec::decode_tuple(
+                            &self.table.types(),
+                            &self.projections,
+                            &self.tuple_columns,
+                            &value,
+                        );
 
                         self.index_values.push_back(IndexValue::PrimaryKey(tuple));
                     } else {
@@ -262,7 +274,12 @@ impl Iter for IndexIter<'_> {
                                 self.index_values.push_back(IndexValue::Normal(tuple_id));
                             }
                         } else if self.index_meta.is_primary {
-                            let tuple = TableCodec::decode_tuple(&self.table.types(), &self.columns, &bytes);
+                            let tuple = TableCodec::decode_tuple(
+                                &self.table.types(),
+                                &self.projections,
+                                &self.tuple_columns,
+                                &bytes,
+                            );
 
                             self.index_values.push_back(IndexValue::PrimaryKey(tuple));
                         } else {

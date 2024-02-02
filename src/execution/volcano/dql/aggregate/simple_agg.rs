@@ -9,6 +9,7 @@ use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
+use std::sync::Arc;
 
 pub struct SimpleAggExecutor {
     agg_calls: Vec<ScalarExpression>,
@@ -65,7 +66,7 @@ impl SimpleAggExecutor {
 
             yield Tuple {
                 id: None,
-                columns,
+                columns: Arc::new(columns),
                 values,
             };
         }

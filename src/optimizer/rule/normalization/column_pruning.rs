@@ -91,7 +91,8 @@ impl ColumnPruning {
             }
             Operator::Scan(op) => {
                 if !all_referenced {
-                    op.columns.retain(|(_, column)| column_references.contains(column.summary()));
+                    op.columns
+                        .retain(|(_, column)| column_references.contains(column.summary()));
                 }
             }
             Operator::Limit(_) | Operator::Join(_) | Operator::Filter(_) => {
