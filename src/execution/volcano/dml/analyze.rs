@@ -95,11 +95,7 @@ impl Analyze {
 
         for (column_id, builder) in builders {
             let path = dir_path.join(column_id.unwrap().to_string());
-            let (histogram, sketch) = match builder.build(DEFAULT_NUM_OF_BUCKETS) {
-                Ok(build) => build,
-                Err(DatabaseError::TooManyBuckets) => continue,
-                err => err?,
-            };
+            let (histogram, sketch) = builder.build(DEFAULT_NUM_OF_BUCKETS)?;
 
             ColumnMeta::new(histogram, sketch).to_file(&path)?;
 
