@@ -39,38 +39,19 @@ FnckSQL individual developers independently implemented LSM KV-based SQL DBMS ou
 Welcome to our WebSite, Power By FnckSQL: **http://www.kipdata.site/**
 
 ### Quick Started
+Tips: Install rust toolchain first.
+
 Clone the repository
 ``` shell
 git clone https://github.com/KipData/FnckSQL.git
 ```
-
-Install rust toolchain first.
-```
-cargo run
-```
-Example
-```sql
-create table blog (id int primary key, title varchar unique);
-
-insert into blog (id, title) values (0, 'FnckSQL'), (1, 'KipDB');
-
-update blog set title = 'KipData' where id = 2;
-
-select * from blog order by title desc nulls first
-
-select count(distinct id) from blog;
-
-delete from blog where title like 'Kip%';
-
-truncate table blog;
-
-drop table blog;
-```
+![start](./static/images/start.gif)
+then use `psql` to enter sql
+![pg](./static/images/pg.gif)
 Using FnckSQL in code
 ```rust
 let fnck_sql = Database::with_kipdb("./data").await?;
-
-let tupes = db.run("select * from t1").await?;
+let tupes = fnck_sql.run("select * from t1").await?;
 ```
 Storage Support:
 - KipDB

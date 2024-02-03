@@ -201,7 +201,8 @@ async fn main() {
 
     let args = Args::parse();
     info!("{} \nVersion: {}\n", BANNER, env!("CARGO_PKG_VERSION"));
-    info!(":) Welcome to the FnckSQL🖕\n");
+    info!(":) Welcome to the FnckSQL🖕");
+    info!("Listen on port {}", args.port);
     info!("Tips🔞: ");
     info!(
         "1. all data is in the \'{}\' folder in the directory where the application is run",
