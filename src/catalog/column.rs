@@ -68,7 +68,7 @@ impl ColumnCatalog {
         &self.summary.name
     }
 
-    pub(crate) fn datatype(&self) -> &LogicalType {
+    pub fn datatype(&self) -> &LogicalType {
         &self.desc.column_datatype
     }
 

@@ -108,8 +108,8 @@ pub enum DatabaseError {
     EmptyPlan,
     #[error("this column must belong to a table")]
     OwnerLessColumn,
-    #[error("there are more buckets than elements")]
-    TooManyBuckets,
+    #[error("there are more buckets: {0} than elements: {1}")]
+    TooManyBuckets(usize, usize),
     #[error("csv error: {0}")]
     Csv(
         #[from]

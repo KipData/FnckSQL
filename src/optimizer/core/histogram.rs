@@ -80,7 +80,10 @@ impl HistogramBuilder {
         number_of_buckets: usize,
     ) -> Result<(Histogram, CountMinSketch<DataValue>), DatabaseError> {
         if number_of_buckets > self.values.len() {
-            return Err(DatabaseError::TooManyBuckets);
+            return Err(DatabaseError::TooManyBuckets(
+                number_of_buckets,
+                self.values.len(),
+            ));
         }
 
         let mut sketch = CountMinSketch::new(self.values.len(), 0.95, 1.0);

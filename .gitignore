@@ -23,6 +23,7 @@ Cargo.lock
 /hello_world
 /transaction
 
+fncksql_data
 fncksql_bench
 sqlite_bench
 

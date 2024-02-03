@@ -490,7 +490,7 @@ mod test {
 
         println!("full join:");
         let tuples_full_join = fnck_sql
-            .run_on_query("select * from t1 full join t2 on a = c", query_execute)
+            .run_on_query("select * from t1 full join t2 on b = c", query_execute)
             .await?;
         println!("{}", create_table(&tuples_full_join));
         results.push(tuples_full_join);
