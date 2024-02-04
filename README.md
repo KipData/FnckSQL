@@ -109,6 +109,9 @@ implement_from_tuple!(
   - UBigint
   - Varchar
 - DDL
+  - Begin (Server only)
+  - Commit (Server only)
+  - Rollback (Server only)
   - Create
     - [x] Table
     - [ ] Index

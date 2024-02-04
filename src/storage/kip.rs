@@ -150,11 +150,11 @@ impl Transaction for KipTransaction {
             if is_unique {
                 let old_tuple_ids = TableCodec::decode_index(&bytes)?;
 
-                if old_tuple_ids[0] != tuple_ids[0] {
-                    return Err(DatabaseError::DuplicateUniqueValue);
+                return if old_tuple_ids[0] != tuple_ids[0] {
+                    Err(DatabaseError::DuplicateUniqueValue)
                 } else {
-                    return Ok(());
-                }
+                    Ok(())
+                };
             } else {
                 todo!("联合索引")
             }

@@ -163,4 +163,9 @@ pub enum DatabaseError {
     UnsupportedCopySource(String),
     #[error("can not compare two types: {0} and {1}")]
     Incomparable(LogicalType, LogicalType),
+
+    #[error("transaction already exists")]
+    TransactionAlreadyExists,
+    #[error("no transaction begin")]
+    NoTransactionBegin,
 }

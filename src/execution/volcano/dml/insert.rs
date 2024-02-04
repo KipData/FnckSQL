@@ -106,11 +106,6 @@ impl Insert {
                 .collect_vec();
             let tuple_builder = TupleBuilder::new(tuple_columns);
 
-            for (tuple_id, values) in tuple_values {
-                let tuple = tuple_builder.build(Some(tuple_id), values)?;
-
-                transaction.append(&table_name, tuple, is_overwrite)?;
-            }
             // Unique Index
             for (col_id, values) in unique_values {
                 if let Some(index_meta) = table_catalog.get_unique_index(&col_id.unwrap()) {
@@ -123,6 +118,11 @@ impl Insert {
                         transaction.add_index(&table_name, index, vec![tuple_id], true)?;
                     }
                 }
+            }
+            for (tuple_id, values) in tuple_values {
+                let tuple = tuple_builder.build(Some(tuple_id), values)?;
+
+                transaction.append(&table_name, tuple, is_overwrite)?;
             }
         }
     }
