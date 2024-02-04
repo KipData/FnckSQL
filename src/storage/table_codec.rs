@@ -319,14 +319,14 @@ mod tests {
 
         let tuple = Tuple {
             id: Some(Arc::new(DataValue::Int32(Some(0)))),
-            columns: Arc::new(table_catalog.all_columns()),
+            columns: Arc::new(table_catalog.clone_columns()),
             values: vec![
                 Arc::new(DataValue::Int32(Some(0))),
                 Arc::new(DataValue::Decimal(Some(Decimal::new(1, 0)))),
             ],
         };
         let (_, bytes) = TableCodec::encode_tuple(&table_catalog.name, &tuple)?;
-        let columns = Arc::new(table_catalog.all_columns().into_iter().collect_vec());
+        let columns = Arc::new(table_catalog.clone_columns().into_iter().collect_vec());
 
         assert_eq!(
             TableCodec::decode_tuple(&table_catalog.types(), &[0, 1], &columns, &bytes),
@@ -386,7 +386,7 @@ mod tests {
     #[test]
     fn test_table_codec_column() {
         let table_catalog = build_table_codec();
-        let col = table_catalog.all_columns()[0].clone();
+        let col = table_catalog.clone_columns()[0].clone();
 
         let (_, bytes) = TableCodec::encode_column(&table_catalog.name, &col).unwrap();
         let decode_col = TableCodec::decode_column(&bytes).unwrap();

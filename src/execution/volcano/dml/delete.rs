@@ -32,10 +32,9 @@ impl Delete {
         let Delete { table_name, input } = self;
         let option_index_metas = transaction.table(table_name.clone()).map(|table_catalog| {
             table_catalog
-                .all_columns()
-                .into_iter()
+                .columns_with_id()
                 .enumerate()
-                .filter_map(|(i, col)| {
+                .filter_map(|(i, (_, col))| {
                     col.desc
                         .is_unique
                         .then(|| {

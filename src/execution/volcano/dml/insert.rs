@@ -9,7 +9,6 @@ use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -54,10 +53,9 @@ impl Insert {
         let mut primary_key_index = None;
         let mut unique_values = HashMap::new();
         let mut tuple_values = Vec::new();
+        let mut tuple_columns = Vec::new();
 
         if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
-            let all_columns = table_catalog.all_columns_with_id();
-
             #[for_await]
             for tuple in build_read(input, transaction) {
                 let Tuple {
@@ -79,9 +77,12 @@ impl Insert {
                         .unwrap()
                 });
                 let tuple_id = tuple_map.get(primary_col_id).cloned().unwrap();
-                let mut values = Vec::with_capacity(all_columns.len());
+                let mut values = Vec::with_capacity(table_catalog.columns_len());
 
-                for (col_id, col) in &all_columns {
+                for (col_id, col) in table_catalog.columns_with_id() {
+                    if table_catalog.columns_len() > tuple_columns.len() {
+                        tuple_columns.push(col.clone());
+                    }
                     let value = tuple_map
                         .remove(col_id)
                         .or_else(|| col.default_value())
@@ -100,17 +101,8 @@ impl Insert {
                 }
                 tuple_values.push((tuple_id, values));
             }
-            let tuple_columns = all_columns
-                .into_iter()
-                .map(|(_, column)| column.clone())
-                .collect_vec();
             let tuple_builder = TupleBuilder::new(tuple_columns);
 
-            for (tuple_id, values) in tuple_values {
-                let tuple = tuple_builder.build(Some(tuple_id), values)?;
-
-                transaction.append(&table_name, tuple, is_overwrite)?;
-            }
             // Unique Index
             for (col_id, values) in unique_values {
                 if let Some(index_meta) = table_catalog.get_unique_index(&col_id.unwrap()) {
@@ -123,6 +115,11 @@ impl Insert {
                         transaction.add_index(&table_name, index, vec![tuple_id], true)?;
                     }
                 }
+            }
+            for (tuple_id, values) in tuple_values {
+                let tuple = tuple_builder.build(Some(tuple_id), values)?;
+
+                transaction.append(&table_name, tuple, is_overwrite)?;
             }
         }
     }

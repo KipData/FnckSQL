@@ -150,11 +150,11 @@ impl Transaction for KipTransaction {
             if is_unique {
                 let old_tuple_ids = TableCodec::decode_index(&bytes)?;
 
-                if old_tuple_ids[0] != tuple_ids[0] {
-                    return Err(DatabaseError::DuplicateUniqueValue);
+                return if old_tuple_ids[0] != tuple_ids[0] {
+                    Err(DatabaseError::DuplicateUniqueValue)
                 } else {
-                    return Ok(());
-                }
+                    Ok(())
+                };
             } else {
                 todo!("联合索引")
             }
@@ -202,25 +202,24 @@ impl Transaction for KipTransaction {
         column: &ColumnCatalog,
         if_not_exists: bool,
     ) -> Result<ColumnId, DatabaseError> {
-        if let Some(mut catalog) = self.table(table_name.clone()).cloned() {
+        if let Some(mut table) = self.table(table_name.clone()).cloned() {
             if !column.nullable && column.default_value().is_none() {
                 return Err(DatabaseError::NeedNullAbleOrDefault);
             }
 
-            for col in catalog.all_columns() {
+            for (col_id, col) in table.columns_with_id() {
                 if col.name() == column.name() {
                     return if if_not_exists {
-                        Ok(col.id().unwrap())
+                        Ok(*col_id)
                     } else {
                         Err(DatabaseError::DuplicateColumn)
                     };
                 }
             }
-
-            let col_id = catalog.add_column(column.clone())?;
+            let col_id = table.add_column(column.clone())?;
 
             if column.desc.is_unique {
-                let meta_ref = catalog.add_index_meta(
+                let meta_ref = table.add_index_meta(
                     format!("uk_{}", column.name()),
                     vec![col_id],
                     true,
@@ -230,7 +229,7 @@ impl Transaction for KipTransaction {
                 self.tx.set(key, value);
             }
 
-            let column = catalog.get_column_by_id(&col_id).unwrap();
+            let column = table.get_column_by_id(&col_id).unwrap();
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
             self.table_cache.remove(table_name);
@@ -456,27 +455,25 @@ impl KipTransaction {
         table: &mut TableCatalog,
     ) -> Result<(), DatabaseError> {
         let table_name = table.name.clone();
+        let index_column = table
+            .columns_with_id()
+            .filter(|(_, col)| col.desc.is_index())
+            .map(|(col_id, column)| (*col_id, column.clone()))
+            .collect_vec();
 
-        for col in table
-            .all_columns()
-            .into_iter()
-            .filter(|col| col.desc.is_index())
-        {
+        for (col_id, col) in index_column {
             let is_primary = col.desc.is_primary;
             // FIXME: composite indexes may exist on future
             let prefix = if is_primary { "pk" } else { "uk" };
 
-            if let Some(col_id) = col.id() {
-                let meta_ref = table.add_index_meta(
-                    format!("{}_{}", prefix, col.name()),
-                    vec![col_id],
-                    col.desc.is_unique,
-                    is_primary,
-                );
-                let (key, value) = TableCodec::encode_index_meta(&table_name, meta_ref)?;
-
-                tx.set(key, value);
-            }
+            let meta_ref = table.add_index_meta(
+                format!("{}_{}", prefix, col.name()),
+                vec![col_id],
+                col.desc.is_unique,
+                is_primary,
+            );
+            let (key, value) = TableCodec::encode_index_meta(&table_name, meta_ref)?;
+            tx.set(key, value);
         }
         Ok(())
     }
@@ -633,7 +630,7 @@ mod test {
             .table(Arc::new("t1".to_string()))
             .unwrap()
             .clone();
-        let columns = Arc::new(table.all_columns().into_iter().collect_vec());
+        let columns = Arc::new(table.clone_columns().into_iter().collect_vec());
         let tuple_ids = vec![
             Arc::new(DataValue::Int32(Some(0))),
             Arc::new(DataValue::Int32(Some(2))),
@@ -691,7 +688,7 @@ mod test {
             .table(Arc::new("t1".to_string()))
             .unwrap()
             .clone();
-        let columns = table.all_columns().into_iter().enumerate().collect_vec();
+        let columns = table.clone_columns().into_iter().enumerate().collect_vec();
         let mut iter = transaction
             .read_by_index(
                 Arc::new("t1".to_string()),

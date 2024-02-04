@@ -5,6 +5,7 @@ pub mod copy_from_file;
 pub mod copy_to_file;
 pub mod create_table;
 pub mod delete;
+pub mod describe;
 pub mod drop_table;
 pub mod filter;
 pub mod insert;
@@ -24,6 +25,7 @@ use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::delete::DeleteOperator;
+use crate::planner::operator::describe::DescribeOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
@@ -55,6 +57,7 @@ pub enum Operator {
     Values(ValuesOperator),
     Show,
     Explain,
+    Describe(DescribeOperator),
     // DML
     Insert(InsertOperator),
     Update(UpdateOperator),
@@ -163,6 +166,7 @@ impl fmt::Display for Operator {
             Operator::Values(op) => write!(f, "{}", op),
             Operator::Show => write!(f, "Show Tables"),
             Operator::Explain => unreachable!(),
+            Operator::Describe(op) => write!(f, "{}", op),
             Operator::Insert(op) => write!(f, "{}", op),
             Operator::Update(op) => write!(f, "{}", op),
             Operator::Delete(op) => write!(f, "{}", op),

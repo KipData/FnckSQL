@@ -109,6 +109,9 @@ implement_from_tuple!(
   - UBigint
   - Varchar
 - DDL
+  - Begin (Server only)
+  - Commit (Server only)
+  - Rollback (Server only)
   - Create
     - [x] Table
     - [ ] Index
@@ -135,6 +138,7 @@ implement_from_tuple!(
   - [x] Limit
   - [x] Show Tables
   - [x] Explain
+  - [x] Describe
 - DML
   - [x] Insert
   - [x] Insert Overwrite

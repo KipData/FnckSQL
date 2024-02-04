@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use clap::Parser;
-use fnck_sql::db::Database;
+use fnck_sql::db::{DBTransaction, Database};
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::storage::kip::KipStorage;
 use fnck_sql::types::tuple::Tuple;
@@ -12,7 +12,7 @@ use pgwire::api::auth::StartupHandler;
 use pgwire::api::query::{
     ExtendedQueryHandler, PlaceholderExtendedQueryHandler, SimpleQueryHandler,
 };
-use pgwire::api::results::{DataRowEncoder, FieldFormat, FieldInfo, QueryResponse, Response};
+use pgwire::api::results::{DataRowEncoder, FieldFormat, FieldInfo, QueryResponse, Response, Tag};
 use pgwire::api::MakeHandler;
 use pgwire::api::{ClientInfo, StatelessMakeHandler, Type};
 use pgwire::error::{ErrorInfo, PgWireError, PgWireResult};
@@ -22,6 +22,7 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 
 pub(crate) const BANNER: &str = "
 ███████╗███╗   ██╗ ██████╗██╗  ██╗    ███████╗ ██████╗ ██╗
@@ -60,6 +61,22 @@ pub struct FnckSQLBackend {
     inner: Arc<Database<KipStorage>>,
 }
 
+pub struct SessionBackend {
+    inner: Arc<Database<KipStorage>>,
+    tx: Mutex<Option<DBTransaction<KipStorage>>>,
+}
+
+impl MakeHandler for FnckSQLBackend {
+    type Handler = Arc<SessionBackend>;
+
+    fn make(&self) -> Self::Handler {
+        Arc::new(SessionBackend {
+            inner: Arc::clone(&self.inner),
+            tx: Mutex::new(None),
+        })
+    }
+}
+
 impl FnckSQLBackend {
     pub async fn new(path: impl Into<PathBuf> + Send) -> Result<FnckSQLBackend, DatabaseError> {
         let database = Database::with_kipdb(path).await?;
@@ -71,7 +88,7 @@ impl FnckSQLBackend {
 }
 
 #[async_trait]
-impl SimpleQueryHandler for FnckSQLBackend {
+impl SimpleQueryHandler for SessionBackend {
     async fn do_query<'a, 'b: 'a, C>(
         &'b self,
         _client: &mut C,
@@ -80,14 +97,65 @@ impl SimpleQueryHandler for FnckSQLBackend {
     where
         C: ClientInfo + Unpin + Send + Sync,
     {
-        let tuples = self
-            .inner
-            .run(query)
-            .await
-            .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
-        let resp = encode_tuples(tuples)?;
+        match query.to_uppercase().as_str() {
+            "BEGIN;" | "BEGIN" => {
+                let mut guard = self.tx.lock().await;
 
-        Ok(vec![Response::Query(resp)])
+                if guard.is_some() {
+                    return Err(PgWireError::ApiError(Box::new(
+                        DatabaseError::TransactionAlreadyExists,
+                    )));
+                }
+                let transaction = self
+                    .inner
+                    .new_transaction()
+                    .await
+                    .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
+                guard.replace(transaction);
+
+                Ok(vec![Response::Execution(Tag::new("OK").into())])
+            }
+            "COMMIT;" | "COMMIT" => {
+                let mut guard = self.tx.lock().await;
+
+                if let Some(transaction) = guard.take() {
+                    transaction
+                        .commit()
+                        .await
+                        .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
+
+                    Ok(vec![Response::Execution(Tag::new("OK").into())])
+                } else {
+                    Err(PgWireError::ApiError(Box::new(
+                        DatabaseError::NoTransactionBegin,
+                    )))
+                }
+            }
+            "ROLLBACK;" | "ROLLBACK" => {
+                let mut guard = self.tx.lock().await;
+
+                if guard.is_none() {
+                    return Err(PgWireError::ApiError(Box::new(
+                        DatabaseError::NoTransactionBegin,
+                    )));
+                }
+                drop(guard.take());
+
+                Ok(vec![Response::Execution(Tag::new("OK").into())])
+            }
+            _ => {
+                let mut guard = self.tx.lock().await;
+
+                let tuples = if let Some(transaction) = guard.as_mut() {
+                    transaction.run(query).await
+                } else {
+                    self.inner.run(query).await
+                }
+                .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
+
+                Ok(vec![Response::Query(encode_tuples(tuples)?)])
+            }
+        }
     }
 }
 
@@ -209,8 +277,8 @@ async fn main() {
         args.path
     );
 
-    let database = FnckSQLBackend::new(args.path).await.unwrap();
-    let processor = Arc::new(StatelessMakeHandler::new(Arc::new(database)));
+    let backend = FnckSQLBackend::new(args.path).await.unwrap();
+    let processor = Arc::new(backend);
     // We have not implemented extended query in this server, use placeholder instead
     let placeholder = Arc::new(StatelessMakeHandler::new(Arc::new(
         PlaceholderExtendedQueryHandler,
@@ -221,7 +289,7 @@ async fn main() {
 
     tokio::select! {
         res = server_run(processor, placeholder, authenticator, listener) => {
-                if let Err(err) = res {
+            if let Err(err) = res {
                 error!("[Listener][Failed To Accept]: {}", err);
             }
         }
