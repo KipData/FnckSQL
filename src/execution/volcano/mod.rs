@@ -14,6 +14,7 @@ use crate::execution::volcano::dml::insert::Insert;
 use crate::execution::volcano::dml::update::Update;
 use crate::execution::volcano::dql::aggregate::hash_agg::HashAggExecutor;
 use crate::execution::volcano::dql::aggregate::simple_agg::SimpleAggExecutor;
+use crate::execution::volcano::dql::describe::Describe;
 use crate::execution::volcano::dql::dummy::Dummy;
 use crate::execution::volcano::dql::explain::Explain;
 use crate::execution::volcano::dql::filter::Filter;
@@ -107,6 +108,7 @@ pub fn build_read<T: Transaction>(plan: LogicalPlan, transaction: &T) -> BoxedEx
 
             Explain::from(input).execute(transaction)
         }
+        Operator::Describe(op) => Describe::from(op).execute(transaction),
         _ => unreachable!(),
     }
 }

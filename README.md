@@ -138,6 +138,7 @@ implement_from_tuple!(
   - [x] Limit
   - [x] Show Tables
   - [x] Explain
+  - [x] Describe
 - DML
   - [x] Insert
   - [x] Insert Overwrite

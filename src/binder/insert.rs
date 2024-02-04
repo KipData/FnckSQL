@@ -30,7 +30,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             let values_len = expr_rows[0].len();
 
             if idents.is_empty() {
-                columns = table.all_columns();
+                columns = table.clone_columns();
                 if values_len > columns.len() {
                     return Err(DatabaseError::ValuesLenMismatch(columns.len(), values_len));
                 }

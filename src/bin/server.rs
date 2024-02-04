@@ -98,7 +98,7 @@ impl SimpleQueryHandler for SessionBackend {
         C: ClientInfo + Unpin + Send + Sync,
     {
         match query.to_uppercase().as_str() {
-            "BEGIN;" => {
+            "BEGIN;" | "BEGIN" => {
                 let mut guard = self.tx.lock().await;
 
                 if guard.is_some() {
@@ -115,7 +115,7 @@ impl SimpleQueryHandler for SessionBackend {
 
                 Ok(vec![Response::Execution(Tag::new("OK").into())])
             }
-            "COMMIT;" => {
+            "COMMIT;" | "COMMIT" => {
                 let mut guard = self.tx.lock().await;
 
                 if let Some(transaction) = guard.take() {
@@ -131,7 +131,7 @@ impl SimpleQueryHandler for SessionBackend {
                     )))
                 }
             }
-            "ROLLBACK;" => {
+            "ROLLBACK;" | "ROLLBACK" => {
                 let mut guard = self.tx.lock().await;
 
                 if guard.is_none() {

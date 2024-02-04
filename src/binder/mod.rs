@@ -4,6 +4,7 @@ mod analyze;
 pub mod copy;
 mod create_table;
 mod delete;
+mod describe;
 mod distinct;
 mod drop_table;
 mod explain;
@@ -201,6 +202,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 self.bind_explain(plan)?
             }
+            Statement::ExplainTable {
+                describe_alias: true,
+                table_name,
+            } => self.bind_describe(table_name)?,
             _ => return Err(DatabaseError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)

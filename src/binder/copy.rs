@@ -72,7 +72,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         };
 
         if let Some(table) = self.context.table(Arc::new(table_name.to_string())) {
-            let cols = table.all_columns();
+            let columns = table.clone_columns();
             let ext_source = ExtSource {
                 path: match target {
                     CopyTarget::File { filename } => filename.into(),
@@ -93,7 +93,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 Ok(LogicalPlan {
                     operator: Operator::CopyFromFile(CopyFromFileOperator {
                         source: ext_source,
-                        columns: cols,
+                        columns,
                         table: table_name.to_string(),
                     }),
                     childrens: vec![],

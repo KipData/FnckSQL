@@ -25,8 +25,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 .cloned()
                 .ok_or_else(|| DatabaseError::InvalidTable(format!("bind table {}", name)))?;
             let primary_key_column = table_catalog
-                .all_columns_with_id()
-                .iter()
+                .columns_with_id()
                 .find(|(_, column)| column.desc.is_primary)
                 .map(|(_, column)| Arc::clone(column))
                 .unwrap();

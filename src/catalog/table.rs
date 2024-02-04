@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use std::collections::btree_map::Iter;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -51,12 +52,16 @@ impl TableCatalog {
         self.column_idxs.contains_key(name)
     }
 
-    pub(crate) fn all_columns_with_id(&self) -> Vec<(&ColumnId, &ColumnRef)> {
-        self.columns.iter().collect()
+    pub(crate) fn clone_columns(&self) -> Vec<ColumnRef> {
+        self.columns.values().map(Arc::clone).collect()
     }
 
-    pub(crate) fn all_columns(&self) -> Vec<ColumnRef> {
-        self.columns.values().map(Arc::clone).collect()
+    pub(crate) fn columns_with_id(&self) -> Iter<'_, ColumnId, ColumnRef> {
+        self.columns.iter()
+    }
+
+    pub(crate) fn columns_len(&self) -> usize {
+        self.columns.len()
     }
 
     pub(crate) fn primary_key(&self) -> Result<(usize, &ColumnRef), DatabaseError> {
@@ -104,18 +109,16 @@ impl TableCatalog {
         is_unique: bool,
         is_primary: bool,
     ) -> &IndexMeta {
-        let index_id = self.indexes.len();
-
+        let index_id = self.indexes.last().map(|index| index.id + 1).unwrap_or(0);
         let index = IndexMeta {
-            id: index_id as u32,
+            id: index_id,
             column_ids,
             name,
             is_unique,
             is_primary,
         };
         self.indexes.push(Arc::new(index));
-
-        &self.indexes[index_id]
+        self.indexes.last().unwrap()
     }
 
     pub(crate) fn new(

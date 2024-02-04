@@ -21,9 +21,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
             .cloned()
             .ok_or_else(|| DatabaseError::InvalidTable(format!("bind table {}", name)))?;
         let columns = table_catalog
-            .all_columns()
-            .into_iter()
-            .filter_map(|column| column.desc.is_index().then_some(column))
+            .columns_with_id()
+            .filter_map(|(_, column)| column.desc.is_index().then_some(column.clone()))
             .collect_vec();
 
         let scan_op = ScanOperator::build(table_name.clone(), &table_catalog);

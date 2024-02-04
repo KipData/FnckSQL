@@ -26,15 +26,14 @@ impl ScanOperator {
         let mut primary_key_option = None;
         // Fill all Columns in TableCatalog by default
         let columns = table_catalog
-            .all_columns()
-            .into_iter()
+            .columns_with_id()
             .enumerate()
-            .map(|(i, column)| {
+            .map(|(i, (_, column))| {
                 if column.desc.is_primary {
                     primary_key_option = column.id();
                 }
 
-                (i, column)
+                (i, column.clone())
             })
             .collect_vec();
         let index_infos = table_catalog

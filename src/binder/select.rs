@@ -262,8 +262,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 .context
                 .table(table_name.clone())
                 .ok_or_else(|| DatabaseError::InvalidTable(table_name.to_string()))?;
-            for col in table.all_columns() {
-                exprs.push(ScalarExpression::ColumnRef(col));
+            for (_, col) in table.columns_with_id() {
+                exprs.push(ScalarExpression::ColumnRef(col.clone()));
             }
         }
 
