@@ -289,7 +289,7 @@ async fn main() {
 
     tokio::select! {
         res = server_run(processor, placeholder, authenticator, listener) => {
-                if let Err(err) = res {
+            if let Err(err) = res {
                 error!("[Listener][Failed To Accept]: {}", err);
             }
         }
