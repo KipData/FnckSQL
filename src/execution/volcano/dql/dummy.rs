@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::storage::Transaction;
@@ -14,5 +15,11 @@ impl<T: Transaction> ReadExecutor<T> for Dummy {
 
 impl Dummy {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
-    pub async fn _execute(self) {}
+    pub async fn _execute(self) {
+        yield Tuple {
+            id: None,
+            columns: Arc::new(vec![]),
+            values: vec![],
+        }
+    }
 }

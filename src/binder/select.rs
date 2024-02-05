@@ -200,15 +200,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
     ) -> Result<(Arc<String>, LogicalPlan), DatabaseError> {
         let table_name = Arc::new(table.to_string());
 
-        let table_catalog = self
-            .context
-            .table(table_name.clone())
-            .cloned()
-            .ok_or_else(|| DatabaseError::InvalidTable(format!("bind table {}", table)))?;
+        let table_catalog = self.context.table_and_bind(table_name.clone(), join_type)?;
         let scan_op = ScanOperator::build(table_name.clone(), &table_catalog);
-
-        self.context
-            .add_bind_table(table_name.clone(), table_catalog, join_type)?;
 
         if let Some(alias) = alias {
             self.context
@@ -247,8 +240,30 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 SelectItem::Wildcard(_) => {
                     select_items.extend_from_slice(self.bind_all_column_refs()?.as_slice());
                 }
+                SelectItem::QualifiedWildcard(table_name, _) => {
+                    let idents = &table_name.0;
+                    let table_name = match idents.as_slice() {
+                        [table] => Arc::new(table.value.to_lowercase()),
+                        [_, table] => Arc::new(table.value.to_lowercase()),
+                        _ => {
+                            return Err(DatabaseError::InvalidTable(
+                                idents
+                                    .iter()
+                                    .map(|ident| ident.value.clone())
+                                    .join(".")
+                                    .to_string(),
+                            ))
+                        }
+                    };
 
-                _ => todo!("bind select list"),
+                    let table = self
+                        .context
+                        .table(table_name.clone())
+                        .ok_or(DatabaseError::TableNotFound)?;
+                    for (_, col) in table.columns_with_id() {
+                        select_items.push(ScalarExpression::ColumnRef(col.clone()));
+                    }
+                }
             };
         }
 
@@ -261,7 +276,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             let table = self
                 .context
                 .table(table_name.clone())
-                .ok_or_else(|| DatabaseError::InvalidTable(table_name.to_string()))?;
+                .ok_or(DatabaseError::TableNotFound)?;
             for (_, col) in table.columns_with_id() {
                 exprs.push(ScalarExpression::ColumnRef(col.clone()));
             }
@@ -296,16 +311,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
             .context
             .table(left_table.clone())
             .cloned()
-            .ok_or_else(|| {
-                DatabaseError::InvalidTable(format!("Left: {} not found", left_table))
-            })?;
+            .ok_or(DatabaseError::TableNotFound)?;
         let right_table = self
             .context
             .table(right_table.clone())
             .cloned()
-            .ok_or_else(|| {
-                DatabaseError::InvalidTable(format!("Right: {} not found", right_table))
-            })?;
+            .ok_or(DatabaseError::TableNotFound)?;
 
         let on = match joint_condition {
             Some(constraint) => self.bind_join_constraint(&left_table, &right_table, constraint)?,

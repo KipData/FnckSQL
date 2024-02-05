@@ -1,0 +1,121 @@
+# E011-06: Implicit casting among the numeric data types
+
+query B
+SELECT 3 < 1.2
+----
+false
+
+query B
+SELECT 3 < 5
+----
+true
+
+query B
+SELECT 3 <= 1.2
+----
+false
+
+query B
+SELECT 3 <= 5
+----
+true
+
+query B
+SELECT 3 <> 1.2
+----
+true
+
+query B
+SELECT 3 <> 5
+----
+true
+
+query B
+SELECT 3 = 1.2
+----
+false
+
+query B
+SELECT 3 = 5
+----
+false
+
+query B
+SELECT 3 > 1.2
+----
+true
+
+query B
+SELECT 3 > 5
+----
+false
+
+query B
+SELECT 3 >= 1.2
+----
+true
+
+query B
+SELECT 3 >= 5
+----
+false
+
+query B
+SELECT 3.7 < 1.2
+----
+false
+
+query B
+SELECT 3.7 < 5
+----
+true
+
+query B
+SELECT 3.7 <= 1.2
+----
+false
+
+query B
+SELECT 3.7 <= 5
+----
+true
+
+query B
+SELECT 3.7 <> 1.2
+----
+true
+
+query B
+SELECT 3.7 <> 5
+----
+true
+
+query B
+SELECT 3.7 = 1.2
+----
+false
+
+query B
+SELECT 3.7 = 5
+----
+false
+
+query B
+SELECT 3.7 > 1.2
+----
+true
+
+query B
+SELECT 3.7 > 5
+----
+false
+
+query B
+SELECT 3.7 >= 1.2
+----
+true
+
+query B
+SELECT 3.7 >= 5
+----
+false

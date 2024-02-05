@@ -152,6 +152,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             | BinaryOperator::And
             | BinaryOperator::Or
             | BinaryOperator::Xor => LogicalType::Boolean,
+            BinaryOperator::StringConcat => LogicalType::Varchar(None),
             _ => todo!(),
         };
 

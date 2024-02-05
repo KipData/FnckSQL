@@ -317,7 +317,7 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
             sqlparser::ast::DataType::UnsignedBigInt(_) => Ok(LogicalType::UBigint),
             sqlparser::ast::DataType::Boolean => Ok(LogicalType::Boolean),
             sqlparser::ast::DataType::Datetime(_) => Ok(LogicalType::DateTime),
-            sqlparser::ast::DataType::Decimal(info) => match info {
+            sqlparser::ast::DataType::Decimal(info) | sqlparser::ast::DataType::Dec(info) => match info {
                 ExactNumberInfo::None => Ok(Self::Decimal(None, None)),
                 ExactNumberInfo::Precision(p) => Ok(Self::Decimal(Some(p as u8), None)),
                 ExactNumberInfo::PrecisionAndScale(p, s) => {

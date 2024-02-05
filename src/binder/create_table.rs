@@ -95,7 +95,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     }
 
     pub fn bind_column(&mut self, column_def: &ColumnDef) -> Result<ColumnCatalog, DatabaseError> {
-        let column_name = column_def.name.to_string();
+        let column_name = column_def.name.value.to_lowercase();
         let mut column_desc = ColumnDesc::new(
             LogicalType::try_from(column_def.data_type.clone())?,
             false,

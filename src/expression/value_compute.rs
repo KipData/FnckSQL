@@ -520,6 +520,14 @@ pub fn binary_op(
 
                     DataValue::Boolean(value)
                 }
+                BinaryOperator::StringConcat => {
+                    let value = match (left_value, right_value) {
+                        (Some(v1), Some(v2)) => Some(v1 + &v2),
+                        _ => None,
+                    };
+
+                    DataValue::Utf8(value)
+                }
                 _ => todo!("unsupported operator"),
             }
         }

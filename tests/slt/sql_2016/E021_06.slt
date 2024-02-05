@@ -1,0 +1,28 @@
+# E021-06: SUBSTRING function
+
+# TODO: SUBSTRING()
+
+# query T
+# SELECT SUBSTRING ( 'foo' FROM 1 )
+# ----
+# 'foo'
+
+# query T
+# SELECT SUBSTRING ( 'foo' FROM 1 FOR 2 )
+# ----
+# 'fo'
+
+# query I
+# SELECT SUBSTRING ( 'foo' FROM 1 FOR 2 USING CHARACTERS )
+
+
+# query I
+# SELECT SUBSTRING ( 'foo' FROM 1 FOR 2 USING OCTETS )
+
+
+# query I
+# SELECT SUBSTRING ( 'foo' FROM 1 USING CHARACTERS )
+
+
+# query I
+# SELECT SUBSTRING ( 'foo' FROM 1 USING OCTETS )
