@@ -1,0 +1,7 @@
+# E061-14: Search condition
+
+statement ok
+CREATE TABLE TABLE_E061_14_01_01 ( ID INT PRIMARY KEY, A INT );
+
+query I
+SELECT A FROM TABLE_E061_14_01_01 WHERE A = 1

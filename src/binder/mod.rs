@@ -33,7 +33,7 @@ pub enum InputRefType {
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
     transaction: &'a T,
-    pub(crate) bind_table: BTreeMap<TableName, (TableCatalog, Option<JoinType>)>,
+    pub(crate) bind_table: BTreeMap<TableName, (&'a TableCatalog, Option<JoinType>)>,
     aliases: BTreeMap<String, ScalarExpression>,
     table_aliases: BTreeMap<String, TableName>,
     group_by_exprs: Vec<ScalarExpression>,
@@ -58,6 +58,32 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         } else {
             self.transaction.table(table_name)
         }
+    }
+
+    pub fn table_and_bind(
+        &mut self,
+        table_name: TableName,
+        join_type: Option<JoinType>,
+    ) -> Result<&TableCatalog, DatabaseError> {
+        let table = if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
+            self.transaction.table(real_name.clone())
+        } else {
+            self.transaction.table(table_name.clone())
+        }
+        .ok_or(DatabaseError::TableNotFound)?;
+
+        let is_bound = self
+            .bind_table
+            .insert(table_name.clone(), (table, join_type))
+            .is_some();
+        if is_bound {
+            return Err(DatabaseError::InvalidTable(format!(
+                "{} duplicated",
+                table_name
+            )));
+        }
+
+        Ok(table)
     }
 
     // Tips: The order of this index is based on Aggregate being bound first.
@@ -95,23 +121,6 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             .is_some();
         if is_alias_exist {
             return Err(DatabaseError::InvalidTable(format!("{} duplicated", alias)));
-        }
-
-        Ok(())
-    }
-
-    pub fn add_bind_table(
-        &mut self,
-        table: TableName,
-        table_catalog: TableCatalog,
-        join_type: Option<JoinType>,
-    ) -> Result<(), DatabaseError> {
-        let is_bound = self
-            .bind_table
-            .insert(table.clone(), (table_catalog.clone(), join_type))
-            .is_some();
-        if is_bound {
-            return Err(DatabaseError::InvalidTable(format!("{} duplicated", table)));
         }
 
         Ok(())

@@ -1,0 +1,13 @@
+# F051-07: LOCALTIME
+
+# TODO: CURRENT_TIME
+
+# query B
+# SELECT CURRENT_TIME = CURRENT_TIME
+# ----
+# true
+
+# query B
+# SELECT CURRENT_TIME ( 0 ) = CURRENT_TIME
+# ----
+# false

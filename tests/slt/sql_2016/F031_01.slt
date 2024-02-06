@@ -1,0 +1,7 @@
+# F031-01: CREATE TABLE statement to create persistent base tables
+
+statement ok
+CREATE TABLE TABLE_F031_01_01_01 ( ID INT PRIMARY KEY, A INTEGER )
+
+statement ok
+CREATE TABLE TABLE_F031_01_01_02 ( ID INT PRIMARY KEY, A INTEGER , B INTEGER )

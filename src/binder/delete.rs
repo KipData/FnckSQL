@@ -19,20 +19,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
             let name = split_name(&name)?;
             let table_name = Arc::new(name.to_string());
 
-            let table_catalog = self
-                .context
-                .table(table_name.clone())
-                .cloned()
-                .ok_or_else(|| DatabaseError::InvalidTable(format!("bind table {}", name)))?;
+            let table_catalog = self.context.table_and_bind(table_name.clone(), None)?;
             let primary_key_column = table_catalog
                 .columns_with_id()
                 .find(|(_, column)| column.desc.is_primary)
                 .map(|(_, column)| Arc::clone(column))
                 .unwrap();
             let mut plan = ScanOperator::build(table_name.clone(), &table_catalog);
-
-            self.context
-                .add_bind_table(table_name.clone(), table_catalog, None)?;
 
             if let Some(alias) = alias {
                 self.context

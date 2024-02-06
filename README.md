@@ -163,6 +163,9 @@ implement_from_tuple!(
   - Date
   - DateTime
 
+## Roadmap
+- SQL 2016
+
 ## License
 
 FnckSQL uses the [Apache 2.0 license][1] to strike a balance between

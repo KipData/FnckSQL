@@ -1,0 +1,12 @@
+# T631: IN predicate with one list element
+
+statement ok
+CREATE TABLE TABLE_T631_01_01 ( ID INT PRIMARY KEY, A INTEGER );
+
+statement ok
+INSERT INTO TABLE_T631_01_01 ( ID, A ) VALUES ( 0, 1 );
+
+query I
+SELECT A FROM TABLE_T631_01_01 WHERE A IN ( 1 )
+----
+1

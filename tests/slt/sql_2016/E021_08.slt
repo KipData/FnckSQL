@@ -1,0 +1,13 @@
+# E021-08: UPPER and LOWER functions
+
+# TODO: LOWER()/UPPER()
+
+# query T
+# SELECT LOWER ( 'foo' )
+# ----
+# 'foo'
+
+# query T
+# SELECT UPPER ( 'foo' )
+# ----
+# 'FOO'

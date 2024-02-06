@@ -1,0 +1,31 @@
+# E021-12: Character comparison
+
+query B
+SELECT 'foo' < 'bar'
+----
+false
+
+query B
+SELECT 'foo' <= 'bar'
+----
+false
+
+query B
+SELECT 'foo' <> 'bar'
+----
+true
+
+query B
+SELECT 'foo' = 'bar'
+----
+false
+
+query B
+SELECT 'foo' > 'bar'
+----
+true
+
+query B
+SELECT 'foo' >= 'bar'
+----
+true

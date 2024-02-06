@@ -1,0 +1,15 @@
+# E152-01: SET TRANSACTION statement: ISOLATION LEVEL SERIALIZABLE clause
+
+# TODO: Support multiple transaction levels
+
+# statement ok
+# START TRANSACTION;
+
+# statement ok
+# SET LOCAL TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+# statement ok
+# START TRANSACTION;
+
+# statement ok
+# SET TRANSACTION ISOLATION LEVEL SERIALIZABLE

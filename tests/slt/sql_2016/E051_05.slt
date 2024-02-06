@@ -1,0 +1,7 @@
+# E051-05: Select list items can be renamed
+
+statement ok
+CREATE TABLE TABLE_E051_05_01_01 ( ID INT PRIMARY KEY, A INT );
+
+query I
+SELECT A AS RENAMED FROM TABLE_E051_05_01_01
