@@ -318,13 +318,15 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
             sqlparser::ast::DataType::Boolean => Ok(LogicalType::Boolean),
             sqlparser::ast::DataType::Date => Ok(LogicalType::Date),
             sqlparser::ast::DataType::Datetime(_) => Ok(LogicalType::DateTime),
-            sqlparser::ast::DataType::Decimal(info) | sqlparser::ast::DataType::Dec(info) => match info {
-                ExactNumberInfo::None => Ok(Self::Decimal(None, None)),
-                ExactNumberInfo::Precision(p) => Ok(Self::Decimal(Some(p as u8), None)),
-                ExactNumberInfo::PrecisionAndScale(p, s) => {
-                    Ok(Self::Decimal(Some(p as u8), Some(s as u8)))
+            sqlparser::ast::DataType::Decimal(info) | sqlparser::ast::DataType::Dec(info) => {
+                match info {
+                    ExactNumberInfo::None => Ok(Self::Decimal(None, None)),
+                    ExactNumberInfo::Precision(p) => Ok(Self::Decimal(Some(p as u8), None)),
+                    ExactNumberInfo::PrecisionAndScale(p, s) => {
+                        Ok(Self::Decimal(Some(p as u8), Some(s as u8)))
+                    }
                 }
-            },
+            }
             other => Err(DatabaseError::NotImplementedSqlparserDataType(
                 other.to_string(),
             )),

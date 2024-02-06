@@ -45,7 +45,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let value = DataValue::Utf8(Some(value.to_string())).cast(&logical_type)?;
 
                 Ok(ScalarExpression::Constant(Arc::new(value)))
-            },
+            }
             _ => {
                 todo!()
             }
@@ -220,7 +220,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     args,
                     ty,
                 }
-            },
+            }
             "min" => {
                 let ty = args[0].return_type();
 
@@ -230,7 +230,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     args,
                     ty,
                 }
-            },
+            }
             "max" => {
                 let ty = args[0].return_type();
 
@@ -240,7 +240,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     args,
                     ty,
                 }
-            },
+            }
             "avg" => {
                 let ty = args[0].return_type();
 
@@ -250,7 +250,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     args,
                     ty,
                 }
-            },
+            }
             _ => todo!(),
         })
     }

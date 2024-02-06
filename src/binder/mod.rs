@@ -60,19 +60,27 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
     }
 
-    pub fn table_and_bind(&mut self, table_name: TableName, join_type: Option<JoinType>) -> Result<&TableCatalog, DatabaseError> {
+    pub fn table_and_bind(
+        &mut self,
+        table_name: TableName,
+        join_type: Option<JoinType>,
+    ) -> Result<&TableCatalog, DatabaseError> {
         let table = if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
             self.transaction.table(real_name.clone())
         } else {
             self.transaction.table(table_name.clone())
-        }.ok_or(DatabaseError::TableNotFound)?;
+        }
+        .ok_or(DatabaseError::TableNotFound)?;
 
         let is_bound = self
             .bind_table
             .insert(table_name.clone(), (table, join_type))
             .is_some();
         if is_bound {
-            return Err(DatabaseError::InvalidTable(format!("{} duplicated", table_name)));
+            return Err(DatabaseError::InvalidTable(format!(
+                "{} duplicated",
+                table_name
+            )));
         }
 
         Ok(table)
