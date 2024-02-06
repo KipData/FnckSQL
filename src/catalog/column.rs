@@ -50,7 +50,7 @@ impl ColumnCatalog {
                 name: column_name,
                 table_name: None,
             },
-            nullable: false,
+            nullable: true,
             desc: ColumnDesc::new(LogicalType::Varchar(None), false, false, None),
             ref_expr: None,
         }

@@ -17,7 +17,7 @@ select sum(v1) as a from t
 query IR
 select sum(v1), sum(v3) from t
 ----
-10 15.499999761581421
+10 15.5
 
 # query IR
 # select sum(v1+v2),sum(v1+v3) from t

@@ -14,7 +14,7 @@ statement ok
 alter table t1 add column if not exists v3 int default 0
 
 statement error
-alter table t1 add column v4 int
+alter table t1 add column v4 int not null
 
 query IIII rowsort
 select * from t1

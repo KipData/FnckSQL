@@ -1,9 +1,15 @@
 # E151-02: ROLLBACK statement
 
-statement ok
-START TRANSACTION;
-ROLLBACK
+# TIPS: Already supported on the server side
 
-statement ok
-START TRANSACTION;
-ROLLBACK WORK
+# statement ok
+# START TRANSACTION;
+
+# statement ok
+# ROLLBACK
+
+# statement ok
+# START TRANSACTION;
+
+# statement ok
+# ROLLBACK WORK

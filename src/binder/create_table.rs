@@ -59,7 +59,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     is_primary,
                     ..
                 } => {
-                    for column_name in column_names {
+                    for column_name in column_names.iter().map(|ident| ident.value.to_lowercase()) {
                         if let Some(column) = columns
                             .iter_mut()
                             .find(|column| column.name() == column_name.to_string())
@@ -102,13 +102,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
             false,
             None,
         );
-        let mut nullable = false;
+        let mut nullable = true;
 
         // TODO: 这里可以对更多字段可设置内容进行补充
         for option_def in &column_def.options {
             match &option_def.option {
                 ColumnOption::Null => nullable = true,
-                ColumnOption::NotNull => (),
+                ColumnOption::NotNull => nullable = false,
                 ColumnOption::Unique { is_primary } => {
                     if *is_primary {
                         column_desc.is_primary = true;

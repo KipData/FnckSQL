@@ -997,9 +997,9 @@ impl From<&sqlparser::ast::Value> for DataValue {
                     v.into()
                 } else if let Ok(v) = n.parse::<i64>() {
                     v.into()
-                } else if let Ok(v) = n.parse::<f32>() {
-                    v.into()
                 } else if let Ok(v) = n.parse::<f64>() {
+                    v.into()
+                } else if let Ok(v) = n.parse::<f32>() {
                     v.into()
                 } else {
                     panic!("unsupported number {:?}", n)
@@ -1015,20 +1015,37 @@ impl From<&sqlparser::ast::Value> for DataValue {
 }
 
 macro_rules! format_option {
-    ($F:expr, $EXPR:expr) => {{
+    ($F:expr, $EXPR:expr) => {
         match $EXPR {
             Some(e) => write!($F, "{}", e),
             None => write!($F, "null"),
         }
-    }};
+    };
+}
+macro_rules! format_float_option {
+    ($F:expr, $EXPR:expr) => {
+        match $EXPR {
+            Some(e) => {
+                let formatted_string = format!("{:?}", e);
+                let formatted_result = if let Some(i) = formatted_string.find('.') {
+                    format!("{:.1$}", e, formatted_string.len() - i - 1)
+                } else {
+                    format!("{:.1}", e)
+                };
+
+                write!($F, "{}", formatted_result)
+            }
+            None => write!($F, "null"),
+        }
+    };
 }
 
 impl fmt::Display for DataValue {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             DataValue::Boolean(e) => format_option!(f, e)?,
-            DataValue::Float32(e) => format_option!(f, e)?,
-            DataValue::Float64(e) => format_option!(f, e)?,
+            DataValue::Float32(e) => format_float_option!(f, e)?,
+            DataValue::Float64(e) => format_float_option!(f, e)?,
             DataValue::Int8(e) => format_option!(f, e)?,
             DataValue::Int16(e) => format_option!(f, e)?,
             DataValue::Int32(e) => format_option!(f, e)?,

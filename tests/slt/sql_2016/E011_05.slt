@@ -33,7 +33,7 @@ false
 query B
 SELECT 3.7 < 5.2
 ----
-false
+true
 
 query B
 SELECT 3.7 <= 5.2
@@ -43,7 +43,7 @@ true
 query B
 SELECT 3.7 <> 5.2
 ----
-false
+true
 
 query B
 SELECT 3.7 = 5.2

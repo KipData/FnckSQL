@@ -4,5 +4,9 @@
 
 # statement ok
 # CREATE TABLE TABLE_E021_10_01_01 ( A CHARACTER ( 10 ) , B CHARACTER VARYING ( 15 ) );
+
+# statement ok
 # INSERT INTO TABLE_E021_10_01_01 ( A, B ) VALUES ( 'foo' , 'bar' );
+
+# query B
 # SELECT A = B FROM TABLE_E021_10_01_01

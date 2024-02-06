@@ -23,7 +23,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             Expr::CompoundIdentifier(idents) => self.bind_column_ref_from_identifiers(idents, None),
             Expr::BinaryOp { left, right, op } => self.bind_binary_op_internal(left, right, op),
             Expr::Value(v) => Ok(ScalarExpression::Constant(Arc::new(v.into()))),
-            Expr::Function(func) => self.bind_agg_call(func),
+            Expr::Function(func) => self.bind_function(func),
             Expr::Nested(expr) => self.bind_expr(expr),
             Expr::UnaryOp { expr, op } => self.bind_unary_op_internal(expr, op),
             Expr::Like {
@@ -40,6 +40,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 negated,
             } => self.bind_is_in(expr, list, *negated),
             Expr::Cast { expr, data_type } => self.bind_cast(expr, data_type),
+            Expr::TypedString { data_type, value } => {
+                let logical_type = LogicalType::try_from(data_type.clone())?;
+                let value = DataValue::Utf8(Some(value.to_string())).cast(&logical_type)?;
+
+                Ok(ScalarExpression::Constant(Arc::new(value)))
+            },
             _ => {
                 todo!()
             }
@@ -183,7 +189,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         })
     }
 
-    fn bind_agg_call(&mut self, func: &Function) -> Result<ScalarExpression, DatabaseError> {
+    fn bind_function(&mut self, func: &Function) -> Result<ScalarExpression, DatabaseError> {
         let mut args = Vec::with_capacity(func.args.len());
 
         for arg in func.args.iter() {
@@ -197,7 +203,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 _ => todo!(),
             }
         }
-        let ty = args[0].return_type();
 
         Ok(match func.name.to_string().to_lowercase().as_str() {
             "count" => ScalarExpression::AggCall {
@@ -206,29 +211,45 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 args,
                 ty: LogicalType::Integer,
             },
-            "sum" => ScalarExpression::AggCall {
-                distinct: func.distinct,
-                kind: AggKind::Sum,
-                args,
-                ty,
+            "sum" => {
+                let ty = args[0].return_type();
+
+                ScalarExpression::AggCall {
+                    distinct: func.distinct,
+                    kind: AggKind::Sum,
+                    args,
+                    ty,
+                }
             },
-            "min" => ScalarExpression::AggCall {
-                distinct: func.distinct,
-                kind: AggKind::Min,
-                args,
-                ty,
+            "min" => {
+                let ty = args[0].return_type();
+
+                ScalarExpression::AggCall {
+                    distinct: func.distinct,
+                    kind: AggKind::Min,
+                    args,
+                    ty,
+                }
             },
-            "max" => ScalarExpression::AggCall {
-                distinct: func.distinct,
-                kind: AggKind::Max,
-                args,
-                ty,
+            "max" => {
+                let ty = args[0].return_type();
+
+                ScalarExpression::AggCall {
+                    distinct: func.distinct,
+                    kind: AggKind::Max,
+                    args,
+                    ty,
+                }
             },
-            "avg" => ScalarExpression::AggCall {
-                distinct: func.distinct,
-                kind: AggKind::Avg,
-                args,
-                ty,
+            "avg" => {
+                let ty = args[0].return_type();
+
+                ScalarExpression::AggCall {
+                    distinct: func.distinct,
+                    kind: AggKind::Avg,
+                    args,
+                    ty,
+                }
             },
             _ => todo!(),
         })

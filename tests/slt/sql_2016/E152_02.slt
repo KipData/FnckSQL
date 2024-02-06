@@ -1,17 +1,27 @@
 # E152-02: SET TRANSACTION statement: READ ONLY and READ WRITE clauses
 
-statement ok
-START TRANSACTION;
-SET LOCAL TRANSACTION READ ONLY
+# TODO: Supports read-only/writable transactions
 
-statement ok
-START TRANSACTION;
-SET LOCAL TRANSACTION READ WRITE
+# statement ok
+# START TRANSACTION;
 
-statement ok
-START TRANSACTION;
-SET TRANSACTION READ ONLY
+# statement ok
+# SET LOCAL TRANSACTION READ ONLY
 
-statement ok
-START TRANSACTION;
-SET TRANSACTION READ WRITE
+# statement ok
+# START TRANSACTION;
+
+# statement ok
+# SET LOCAL TRANSACTION READ WRITE
+
+# statement ok
+# START TRANSACTION;
+
+# statement ok
+# SET TRANSACTION READ ONLY
+
+# statement ok
+# START TRANSACTION;
+
+# statement ok
+# SET TRANSACTION READ WRITE

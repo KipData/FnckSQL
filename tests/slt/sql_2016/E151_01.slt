@@ -1,9 +1,15 @@
 # E151-01: COMMIT statement
 
-statement ok
-START TRANSACTION;
-COMMIT
+# TIPS: Already supported on the server side
 
-statement ok
-START TRANSACTION;
-COMMIT WORK
+# statement ok
+# START TRANSACTION;
+
+# statement ok
+# COMMIT
+
+# statement ok
+# START TRANSACTION;
+
+# statement ok
+# COMMIT WORK

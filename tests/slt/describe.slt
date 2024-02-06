@@ -5,8 +5,8 @@ query TTTTI
 describe t9;
 ----
 c1 INTEGER false PRIMARY null
-c2 INTEGER false EMPTY 0
-c3 VARCHAR false UNIQUE null
+c2 INTEGER true EMPTY 0
+c3 VARCHAR true UNIQUE null
 
 statement ok
 drop table t9;

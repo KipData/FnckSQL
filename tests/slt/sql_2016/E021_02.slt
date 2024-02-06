@@ -8,12 +8,10 @@
 
 # statement ok
 # CREATE TABLE TABLE_E021_02_01_02 ( A CHAR VARING ( 8 CHARACTERS ) )
-#
 
 
 # statement ok
 # CREATE TABLE TABLE_E021_02_01_03 ( A CHAR VARING ( 8 OCTETS ) )
-#
 
 
 # statement ok

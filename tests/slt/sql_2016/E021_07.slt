@@ -3,4 +3,4 @@
 query T
 SELECT 'foo' || 'bar'
 ----
-'foobar'
+foobar
