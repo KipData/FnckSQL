@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{
@@ -13,7 +14,7 @@ use crate::{
     types::value::DataValue,
 };
 
-use super::Binder;
+use super::{lower_case_name, lower_ident, Binder};
 
 use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
 use crate::errors::DatabaseError;
@@ -103,7 +104,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             plan = self.bind_sort(plan, orderby);
         }
 
-        plan = self.bind_project(plan, select_list);
+        plan = self.bind_project(plan, select_list)?;
 
         Ok(plan)
     }
@@ -147,19 +148,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
     ) -> Result<(Option<TableName>, LogicalPlan), DatabaseError> {
         let plan_with_name = match table {
             TableFactor::Table { name, alias, .. } => {
-                let obj_name = name
-                    .0
-                    .iter()
-                    .map(|ident| Ident::new(ident.value.to_lowercase()))
-                    .collect_vec();
-
-                let table: &str = match obj_name.as_slice() {
-                    [table] => &table.value,
-                    _ => return Err(DatabaseError::InvalidTable(obj_name.iter().join(","))),
-                };
+                let table_name = lower_case_name(name)?;
 
                 let (table, plan) =
-                    self._bind_single_table_ref(joint_type, table, Self::trans_alias(alias))?;
+                    self._bind_single_table_ref(joint_type, &table_name, alias.as_ref())?;
                 (Some(table), plan)
             }
             TableFactor::Derived {
@@ -168,16 +160,19 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let plan = self.bind_query(subquery)?;
                 let mut tables = plan.referenced_table();
 
-                if let Some(alias) = Self::trans_alias(alias) {
-                    let alias = Arc::new(alias.clone());
+                if let Some(TableAlias {
+                    name,
+                    columns: alias_column,
+                }) = alias
+                {
+                    let table_alias = Arc::new(name.value.to_lowercase());
 
                     if tables.len() > 1 {
                         todo!("Implement virtual tables for multiple table aliases");
                     }
-                    self.context
-                        .add_table_alias(alias.to_string(), tables.remove(0))?;
+                    self.register_alias(alias_column, table_alias.to_string(), tables.remove(0))?;
 
-                    (Some(alias), plan)
+                    (Some(table_alias), plan)
                 } else {
                     ((tables.len() > 1).then(|| tables.pop()).flatten(), plan)
                 }
@@ -188,24 +183,49 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(plan_with_name)
     }
 
-    pub(crate) fn trans_alias(alias: &Option<TableAlias>) -> Option<&String> {
-        alias.as_ref().map(|alias| &alias.name.value)
+    fn register_alias(
+        &mut self,
+        alias_column: &[Ident],
+        table_alias: String,
+        table_name: TableName,
+    ) -> Result<(), DatabaseError> {
+        if !alias_column.is_empty() {
+            let aliases = alias_column.into_iter().map(lower_ident).collect_vec();
+            let table = self
+                .context
+                .table(table_name.clone())
+                .ok_or(DatabaseError::TableNotFound)?;
+
+            if aliases.len() != table.columns_len() {
+                return Err(DatabaseError::MisMatch(
+                    "Alias".to_string(),
+                    "Columns".to_string(),
+                ));
+            }
+            let columns = table.clone_columns();
+            for (alias, column) in aliases.into_iter().zip(columns.into_iter()) {
+                self.context
+                    .add_alias(alias, ScalarExpression::ColumnRef(column));
+            }
+        }
+        self.context.add_table_alias(table_alias, table_name);
+
+        Ok(())
     }
 
     pub(crate) fn _bind_single_table_ref(
         &mut self,
         join_type: Option<JoinType>,
         table: &str,
-        alias: Option<&String>,
+        alias: Option<&TableAlias>,
     ) -> Result<(Arc<String>, LogicalPlan), DatabaseError> {
         let table_name = Arc::new(table.to_string());
 
         let table_catalog = self.context.table_and_bind(table_name.clone(), join_type)?;
         let scan_op = ScanOperator::build(table_name.clone(), &table_catalog);
 
-        if let Some(alias) = alias {
-            self.context
-                .add_table_alias(alias.to_string(), table_name.clone())?;
+        if let Some(TableAlias { name, columns }) = alias {
+            self.register_alias(columns, name.value.to_lowercase(), table_name.clone())?;
         }
 
         Ok((table_name, scan_op))
@@ -230,7 +250,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     let expr = self.bind_expr(expr)?;
                     let alias_name = alias.to_string();
 
-                    self.context.add_alias(alias_name.clone(), expr.clone())?;
+                    self.context.add_alias(alias_name.clone(), expr.clone());
 
                     select_items.push(ScalarExpression::Alias {
                         expr: Box::new(expr),
@@ -238,31 +258,15 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     });
                 }
                 SelectItem::Wildcard(_) => {
-                    select_items.extend_from_slice(self.bind_all_column_refs()?.as_slice());
+                    for table_name in self.context.bind_table.keys() {
+                        self.bind_table_column_refs(&mut select_items, table_name.clone())?;
+                    }
                 }
                 SelectItem::QualifiedWildcard(table_name, _) => {
-                    let idents = &table_name.0;
-                    let table_name = match idents.as_slice() {
-                        [table] => Arc::new(table.value.to_lowercase()),
-                        [_, table] => Arc::new(table.value.to_lowercase()),
-                        _ => {
-                            return Err(DatabaseError::InvalidTable(
-                                idents
-                                    .iter()
-                                    .map(|ident| ident.value.clone())
-                                    .join(".")
-                                    .to_string(),
-                            ))
-                        }
-                    };
-
-                    let table = self
-                        .context
-                        .table(table_name.clone())
-                        .ok_or(DatabaseError::TableNotFound)?;
-                    for (_, col) in table.columns_with_id() {
-                        select_items.push(ScalarExpression::ColumnRef(col.clone()));
-                    }
+                    self.bind_table_column_refs(
+                        &mut select_items,
+                        Arc::new(lower_case_name(table_name)?),
+                    )?;
                 }
             };
         }
@@ -270,19 +274,39 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(select_items)
     }
 
-    fn bind_all_column_refs(&mut self) -> Result<Vec<ScalarExpression>, DatabaseError> {
-        let mut exprs = vec![];
-        for table_name in self.context.bind_table.keys() {
-            let table = self
-                .context
-                .table(table_name.clone())
-                .ok_or(DatabaseError::TableNotFound)?;
-            for (_, col) in table.columns_with_id() {
-                exprs.push(ScalarExpression::ColumnRef(col.clone()));
-            }
-        }
+    fn bind_table_column_refs(
+        &self,
+        exprs: &mut Vec<ScalarExpression>,
+        table_name: TableName,
+    ) -> Result<(), DatabaseError> {
+        let table = self
+            .context
+            .table(table_name.clone())
+            .ok_or(DatabaseError::TableNotFound)?;
+        let alias_map: HashMap<&ScalarExpression, &String> = self
+            .context
+            .expr_aliases
+            .iter()
+            .filter(|(_, expr)| {
+                if let ScalarExpression::ColumnRef(col) = expr {
+                    return Some(&table_name) == col.table_name();
+                }
+                false
+            })
+            .map(|(alias, expr)| (expr, alias))
+            .collect();
+        for (_, col) in table.columns_with_id() {
+            let mut expr = ScalarExpression::ColumnRef(col.clone());
 
-        Ok(exprs)
+            if let Some(alias_expr) = alias_map.get(&expr) {
+                expr = ScalarExpression::Alias {
+                    expr: Box::new(expr),
+                    alias: alias_expr.to_string(),
+                }
+            }
+            exprs.push(expr);
+        }
+        Ok(())
     }
 
     fn bind_join(
@@ -351,12 +375,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         children: LogicalPlan,
         select_list: Vec<ScalarExpression>,
-    ) -> LogicalPlan {
-        LogicalPlan {
+    ) -> Result<LogicalPlan, DatabaseError> {
+        Ok(LogicalPlan {
             operator: Operator::Project(ProjectOperator { exprs: select_list }),
             childrens: vec![children],
             physical_option: None,
-        }
+        })
     }
 
     fn bind_sort(&mut self, children: LogicalPlan, sort_fields: Vec<SortField>) -> LogicalPlan {

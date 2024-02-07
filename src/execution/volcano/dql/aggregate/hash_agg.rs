@@ -185,24 +185,9 @@ mod test {
         let desc = ColumnDesc::new(LogicalType::Integer, false, false, None);
 
         let t1_columns = vec![
-            Arc::new(ColumnCatalog::new(
-                "c1".to_string(),
-                true,
-                desc.clone(),
-                None,
-            )),
-            Arc::new(ColumnCatalog::new(
-                "c2".to_string(),
-                true,
-                desc.clone(),
-                None,
-            )),
-            Arc::new(ColumnCatalog::new(
-                "c3".to_string(),
-                true,
-                desc.clone(),
-                None,
-            )),
+            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
+            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
         ];
 
         let operator = AggregateOperator {

@@ -1,4 +1,4 @@
-use crate::binder::{lower_case_name, split_name, Binder};
+use crate::binder::{lower_case_name, Binder};
 use crate::errors::DatabaseError;
 use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::planner::operator::scan::ScanOperator;
@@ -11,9 +11,7 @@ use std::sync::Arc;
 
 impl<'a, T: Transaction> Binder<'a, T> {
     pub(crate) fn bind_analyze(&mut self, name: &ObjectName) -> Result<LogicalPlan, DatabaseError> {
-        let name = lower_case_name(name);
-        let name = split_name(&name)?;
-        let table_name = Arc::new(name.to_string());
+        let table_name = Arc::new(lower_case_name(name)?);
 
         let table_catalog = self.context.table_and_bind(table_name.clone(), None)?;
         let columns = table_catalog

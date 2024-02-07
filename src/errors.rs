@@ -141,13 +141,13 @@ pub enum DatabaseError {
     Duplicated(&'static str, String),
     #[error("columns empty")]
     ColumnsEmpty,
-    #[error("unsupported statement {0}")]
+    #[error("unsupported statement: {0}")]
     UnsupportedStmt(String),
-    #[error("invalid table {0}")]
+    #[error("invalid table: {0}")]
     InvalidTable(String),
-    #[error("invalid column {0}")]
+    #[error("invalid column: {0}")]
     InvalidColumn(String),
-    #[error("ambiguous column {0}")]
+    #[error("ambiguous column: {0}")]
     AmbiguousColumn(String),
     #[error("values length not match, expect {0}, got {1}")]
     ValuesLenMismatch(usize, usize),

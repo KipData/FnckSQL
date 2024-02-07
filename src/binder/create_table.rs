@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::{is_valid_identifier, Binder};
-use crate::binder::{lower_case_name, split_name};
+use crate::binder::lower_case_name;
 use crate::catalog::{ColumnCatalog, ColumnDesc};
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
@@ -24,9 +24,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         constraints: &[TableConstraint],
         if_not_exists: bool,
     ) -> Result<LogicalPlan, DatabaseError> {
-        let name = lower_case_name(name);
-        let name = split_name(&name)?;
-        let table_name = Arc::new(name.to_string());
+        let table_name = Arc::new(lower_case_name(name)?);
 
         if !is_valid_identifier(&table_name) {
             return Err(DatabaseError::InvalidTable(
@@ -132,7 +130,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
         }
 
-        Ok(ColumnCatalog::new(column_name, nullable, column_desc, None))
+        Ok(ColumnCatalog::new(column_name, nullable, column_desc))
     }
 }
 

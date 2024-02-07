@@ -1,4 +1,4 @@
-use crate::binder::{lower_case_name, split_name, Binder};
+use crate::binder::{lower_case_name, Binder};
 use crate::errors::DatabaseError;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::Operator;
@@ -13,9 +13,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         name: &ObjectName,
         if_exists: &bool,
     ) -> Result<LogicalPlan, DatabaseError> {
-        let name = lower_case_name(name);
-        let name = split_name(&name)?;
-        let table_name = Arc::new(name.to_string());
+        let table_name = Arc::new(lower_case_name(name)?);
 
         let plan = LogicalPlan {
             operator: Operator::DropTable(DropTableOperator {

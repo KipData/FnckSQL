@@ -1,4 +1,4 @@
-use crate::binder::{lower_case_name, split_name, Binder};
+use crate::binder::{lower_case_name, Binder};
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::update::UpdateOperator;
@@ -18,17 +18,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
         assignments: &[Assignment],
     ) -> Result<LogicalPlan, DatabaseError> {
         if let TableFactor::Table { name, .. } = &to.relation {
-            let name = lower_case_name(name);
-            let name = split_name(&name)?;
-            let table_name = Arc::new(name.to_string());
+            let table_name = Arc::new(lower_case_name(name)?);
 
             let mut plan = self.bind_table_ref(slice::from_ref(to))?;
 
             if let Some(predicate) = selection {
                 plan = self.bind_where(plan, predicate)?;
             }
-
-            let bind_table_name = Some(table_name.to_string());
 
             let mut columns = Vec::with_capacity(assignments.len());
             let mut row = Vec::with_capacity(assignments.len());
@@ -42,7 +38,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 for ident in &assignment.id {
                     match self.bind_column_ref_from_identifiers(
                         slice::from_ref(ident),
-                        bind_table_name.as_ref(),
+                        Some(table_name.to_string()),
                     )? {
                         ScalarExpression::ColumnRef(catalog) => {
                             value.check_len(catalog.datatype())?;

@@ -1,5 +1,4 @@
 use crate::catalog::TableName;
-use crate::expression::ScalarExpression;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::sync::Arc;
@@ -14,7 +13,6 @@ pub struct ColumnCatalog {
     pub summary: ColumnSummary,
     pub nullable: bool,
     pub desc: ColumnDesc,
-    pub ref_expr: Option<ScalarExpression>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
@@ -29,7 +27,6 @@ impl ColumnCatalog {
         column_name: String,
         nullable: bool,
         column_desc: ColumnDesc,
-        ref_expr: Option<ScalarExpression>,
     ) -> ColumnCatalog {
         ColumnCatalog {
             summary: ColumnSummary {
@@ -39,7 +36,6 @@ impl ColumnCatalog {
             },
             nullable,
             desc: column_desc,
-            ref_expr,
         }
     }
 
@@ -52,7 +48,6 @@ impl ColumnCatalog {
             },
             nullable: true,
             desc: ColumnDesc::new(LogicalType::Varchar(None), false, false, None),
-            ref_expr: None,
         }
     }
 
@@ -66,6 +61,10 @@ impl ColumnCatalog {
 
     pub fn name(&self) -> &str {
         &self.summary.name
+    }
+
+    pub fn table_name(&self) -> Option<&TableName> {
+        self.summary.table_name.as_ref()
     }
 
     pub fn datatype(&self) -> &LogicalType {

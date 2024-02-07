@@ -262,7 +262,6 @@ mod test {
                     is_unique: false,
                     default: None,
                 },
-                ref_expr: None,
             };
             let c2_col = ColumnCatalog {
                 summary: ColumnSummary {
@@ -277,7 +276,6 @@ mod test {
                     is_unique: true,
                     default: None,
                 },
-                ref_expr: None,
             };
 
             // -(c1 + 1) > c2 => c1 < -c2 - 1

@@ -1,4 +1,4 @@
-use crate::binder::{lower_case_name, split_name, Binder};
+use crate::binder::{lower_case_name, Binder};
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
 use crate::expression::value_compute::unary_op;
@@ -16,14 +16,12 @@ use std::sync::Arc;
 impl<'a, T: Transaction> Binder<'a, T> {
     pub(crate) fn bind_insert(
         &mut self,
-        name: ObjectName,
+        name: &ObjectName,
         idents: &[Ident],
         expr_rows: &Vec<Vec<Expr>>,
         is_overwrite: bool,
     ) -> Result<LogicalPlan, DatabaseError> {
-        let name = lower_case_name(&name);
-        let name = split_name(&name)?;
-        let table_name = Arc::new(name.to_string());
+        let table_name = Arc::new(lower_case_name(name)?);
 
         if let Some(table) = self.context.table(table_name.clone()) {
             let mut columns = Vec::new();
@@ -35,11 +33,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     return Err(DatabaseError::ValuesLenMismatch(columns.len(), values_len));
                 }
             } else {
-                let bind_table_name = Some(table_name.to_string());
                 for ident in idents {
                     match self.bind_column_ref_from_identifiers(
                         slice::from_ref(ident),
-                        bind_table_name.as_ref(),
+                        Some(table_name.to_string()),
                     )? {
                         ScalarExpression::ColumnRef(catalog) => columns.push(catalog),
                         _ => unreachable!(),

@@ -8,11 +8,22 @@ use sqlparser::ast::{
 use std::slice;
 use std::sync::Arc;
 
-use super::Binder;
+use super::{lower_ident, Binder};
 use crate::expression::ScalarExpression;
 use crate::storage::Transaction;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
+
+macro_rules! try_alias {
+    ($context:expr, $column_name:expr) => {
+        if let Some(expr) = $context.expr_aliases.get(&$column_name) {
+            return Ok(ScalarExpression::Alias {
+                expr: Box::new(expr.clone()),
+                alias: $column_name,
+            });
+        }
+    };
+}
 
 impl<'a, T: Transaction> Binder<'a, T> {
     pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, DatabaseError> {
@@ -76,16 +87,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
     pub fn bind_column_ref_from_identifiers(
         &mut self,
         idents: &[Ident],
-        bind_table_name: Option<&String>,
+        bind_table_name: Option<String>,
     ) -> Result<ScalarExpression, DatabaseError> {
-        let idents = idents
-            .iter()
-            .map(|ident| Ident::new(ident.value.to_lowercase()))
-            .collect_vec();
-        let (_schema_name, table_name, column_name) = match idents.as_slice() {
-            [column] => (None, None, &column.value),
-            [table, column] => (None, Some(&table.value), &column.value),
-            [schema, table, column] => (Some(&schema.value), Some(&table.value), &column.value),
+        let (table_name, column_name) = match idents {
+            [column] => (None, lower_ident(column)),
+            [table, column] => (Some(lower_ident(table)), lower_ident(column)),
             _ => {
                 return Err(DatabaseError::InvalidColumn(
                     idents
@@ -96,38 +102,31 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ))
             }
         };
-
         if let Some(table) = table_name.or(bind_table_name) {
+            try_alias!(self.context, column_name);
             let table_catalog = self
                 .context
                 .table(Arc::new(table.clone()))
-                .ok_or_else(|| DatabaseError::InvalidTable(table.to_string()))?;
+                .ok_or_else(|| DatabaseError::TableNotFound)?;
 
             let column_catalog = table_catalog
-                .get_column_by_name(column_name)
-                .ok_or_else(|| DatabaseError::InvalidColumn(column_name.to_string()))?;
+                .get_column_by_name(&column_name)
+                .ok_or_else(|| DatabaseError::NotFound("column", column_name))?;
             Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
         } else {
+            try_alias!(self.context, column_name);
             // handle col syntax
             let mut got_column = None;
             for (table_catalog, _) in self.context.bind_table.values() {
-                if let Some(column_catalog) = table_catalog.get_column_by_name(column_name) {
-                    if got_column.is_some() {
-                        return Err(DatabaseError::InvalidColumn(column_name.to_string()));
-                    }
+                if let Some(column_catalog) = table_catalog.get_column_by_name(&column_name) {
                     got_column = Some(column_catalog);
                 }
-            }
-            if got_column.is_none() {
-                if let Some(expr) = self.context.aliases.get(column_name) {
-                    return Ok(ScalarExpression::Alias {
-                        expr: Box::new(expr.clone()),
-                        alias: column_name.clone(),
-                    });
+                if got_column.is_some() {
+                    break;
                 }
             }
             let column_catalog =
-                got_column.ok_or_else(|| DatabaseError::InvalidColumn(column_name.to_string()))?;
+                got_column.ok_or_else(|| DatabaseError::NotFound("column", column_name))?;
             Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
         }
     }
