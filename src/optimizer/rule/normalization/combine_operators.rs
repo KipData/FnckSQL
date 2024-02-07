@@ -7,6 +7,7 @@ use crate::optimizer::rule::normalization::is_subset_exprs;
 use crate::planner::operator::Operator;
 use crate::types::LogicalType;
 use lazy_static::lazy_static;
+use std::collections::HashSet;
 
 lazy_static! {
     static ref COLLAPSE_PROJECT_RULE: Pattern = {
@@ -23,6 +24,21 @@ lazy_static! {
             predicate: |op| matches!(op, Operator::Filter(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
                 predicate: |op| matches!(op, Operator::Filter(_)),
+                children: PatternChildrenPredicate::None,
+            }]),
+        }
+    };
+    static ref COLLAPSE_GROUP_BY_AGG: Pattern = {
+        Pattern {
+            predicate: |op| match op {
+                Operator::Aggregate(agg_op) => !agg_op.groupby_exprs.is_empty(),
+                _ => false,
+            },
+            children: PatternChildrenPredicate::Predicate(vec![Pattern {
+                predicate: |op| match op {
+                    Operator::Aggregate(agg_op) => !agg_op.groupby_exprs.is_empty(),
+                    _ => false,
+                },
                 children: PatternChildrenPredicate::None,
             }]),
         }
@@ -78,6 +94,47 @@ impl NormalizationRule for CombineFilter {
                     };
                     child_op.having = op.having || child_op.having;
 
+                    graph.remove_node(node_id, false);
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub struct CollapseGroupByAgg;
+
+impl MatchPattern for CollapseGroupByAgg {
+    fn pattern(&self) -> &Pattern {
+        &COLLAPSE_GROUP_BY_AGG
+    }
+}
+
+impl NormalizationRule for CollapseGroupByAgg {
+    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
+        if let Operator::Aggregate(op) = graph.operator(node_id).clone() {
+            // if it is an aggregation operator containing agg_call
+            if !op.agg_calls.is_empty() {
+                return Ok(());
+            }
+
+            if let Some(Operator::Aggregate(child_op)) = graph
+                .eldest_child_at(node_id)
+                .and_then(|child_id| Some(graph.operator_mut(child_id)))
+            {
+                if op.groupby_exprs.len() != child_op.groupby_exprs.len() {
+                    return Ok(());
+                }
+                let mut expr_set = HashSet::new();
+
+                for expr in op.groupby_exprs.iter() {
+                    expr_set.insert(expr);
+                }
+                for expr in child_op.groupby_exprs.iter() {
+                    expr_set.remove(expr);
+                }
+                if expr_set.len() == 0 {
                     graph.remove_node(node_id, false);
                 }
             }
@@ -180,5 +237,27 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_collapse_group_by_agg() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select distinct c1, c2 from t1 group by c1, c2").await?;
+
+        let optimizer = HepOptimizer::new(plan.clone()).batch(
+            "test_collapse_group_by_agg".to_string(),
+            HepBatchStrategy::once_topdown(),
+            vec![NormalizationRuleImpl::CollapseGroupByAgg],
+        );
+
+        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
+
+        if let Operator::Aggregate(_) = &best_plan.childrens[0].operator {
+            if let Operator::Aggregate(_) = &best_plan.childrens[0].childrens[0].operator {
+                unreachable!("Should not be a agg operator")
+            } else {
+                return Ok(());
+            }
+        }
+        unreachable!("Should be a agg operator")
     }
 }

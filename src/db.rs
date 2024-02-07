@@ -158,6 +158,7 @@ impl<S: Storage> Database<S> {
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     NormalizationRuleImpl::CollapseProject,
+                    NormalizationRuleImpl::CollapseGroupByAgg,
                     NormalizationRuleImpl::CombineFilter,
                 ],
             )

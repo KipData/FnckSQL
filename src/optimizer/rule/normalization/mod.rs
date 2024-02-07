@@ -4,7 +4,9 @@ use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::rule::normalization::column_pruning::ColumnPruning;
-use crate::optimizer::rule::normalization::combine_operators::{CollapseProject, CombineFilter};
+use crate::optimizer::rule::normalization::combine_operators::{
+    CollapseGroupByAgg, CollapseProject, CombineFilter,
+};
 use crate::optimizer::rule::normalization::pushdown_limit::{
     EliminateLimits, LimitProjectTranspose, PushLimitIntoScan, PushLimitThroughJoin,
 };
@@ -24,6 +26,7 @@ pub enum NormalizationRuleImpl {
     ColumnPruning,
     // Combine operators
     CollapseProject,
+    CollapseGroupByAgg,
     CombineFilter,
     // PushDown limit
     LimitProjectTranspose,
@@ -44,6 +47,7 @@ impl MatchPattern for NormalizationRuleImpl {
         match self {
             NormalizationRuleImpl::ColumnPruning => ColumnPruning.pattern(),
             NormalizationRuleImpl::CollapseProject => CollapseProject.pattern(),
+            NormalizationRuleImpl::CollapseGroupByAgg => CollapseGroupByAgg.pattern(),
             NormalizationRuleImpl::CombineFilter => CombineFilter.pattern(),
             NormalizationRuleImpl::LimitProjectTranspose => LimitProjectTranspose.pattern(),
             NormalizationRuleImpl::EliminateLimits => EliminateLimits.pattern(),
@@ -62,6 +66,7 @@ impl NormalizationRule for NormalizationRuleImpl {
         match self {
             NormalizationRuleImpl::ColumnPruning => ColumnPruning.apply(node_id, graph),
             NormalizationRuleImpl::CollapseProject => CollapseProject.apply(node_id, graph),
+            NormalizationRuleImpl::CollapseGroupByAgg => CollapseGroupByAgg.apply(node_id, graph),
             NormalizationRuleImpl::CombineFilter => CombineFilter.apply(node_id, graph),
             NormalizationRuleImpl::LimitProjectTranspose => {
                 LimitProjectTranspose.apply(node_id, graph)
