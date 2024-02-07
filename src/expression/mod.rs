@@ -197,31 +197,38 @@ impl ScalarExpression {
         }
     }
 
-    pub fn output_column(&self) -> ColumnRef {
+    pub fn output_name(&self) -> String {
         match self {
-            ScalarExpression::ColumnRef(col) => col.clone(),
-            ScalarExpression::Constant(value) => Arc::new(ColumnCatalog::new(
-                format!("{}", value),
-                true,
-                ColumnDesc::new(value.logical_type(), false, false, None),
-                Some(self.clone()),
-            )),
-            ScalarExpression::Alias { expr, alias } => Arc::new(ColumnCatalog::new(
-                alias.to_string(),
-                true,
-                ColumnDesc::new(expr.return_type(), false, false, None),
-                Some(self.clone()),
-            )),
+            ScalarExpression::Constant(value) => format!("{}", value),
+            ScalarExpression::ColumnRef(col) => col.name().to_string(),
+            ScalarExpression::Alias { alias, .. } => alias.to_string(),
+            ScalarExpression::TypeCast { expr, ty } => {
+                format!("CAST({} as {})", expr.output_name(), ty)
+            }
+            ScalarExpression::IsNull { expr, negated } => {
+                let suffix = if *negated { "is not null" } else { "is null" };
+
+                format!("{} {}", expr.output_name(), suffix)
+            }
+            ScalarExpression::Unary { expr, op, .. } => format!("{}{}", op, expr.output_name()),
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                op,
+                ..
+            } => format!(
+                "({} {} {})",
+                left_expr.output_name(),
+                op,
+                right_expr.output_name(),
+            ),
             ScalarExpression::AggCall {
-                kind,
                 args,
-                ty,
+                kind,
                 distinct,
+                ..
             } => {
-                let args_str = args
-                    .iter()
-                    .map(|expr| expr.output_column().name().to_string())
-                    .join(", ");
+                let args_str = args.iter().map(|expr| expr.output_name()).join(", ");
                 let op = |allow_distinct, distinct| {
                     if allow_distinct && distinct {
                         "DISTINCT "
@@ -229,85 +236,40 @@ impl ScalarExpression {
                         ""
                     }
                 };
-                let column_name = format!(
+                format!(
                     "{:?}({}{})",
                     kind,
                     op(kind.allow_distinct(), *distinct),
                     args_str
-                );
-
-                Arc::new(ColumnCatalog::new(
-                    column_name,
-                    true,
-                    ColumnDesc::new(*ty, false, false, None),
-                    Some(self.clone()),
-                ))
-            }
-            ScalarExpression::Binary {
-                left_expr,
-                right_expr,
-                op,
-                ty,
-            } => {
-                let column_name = format!(
-                    "({} {} {})",
-                    left_expr.output_column().name(),
-                    op,
-                    right_expr.output_column().name(),
-                );
-
-                Arc::new(ColumnCatalog::new(
-                    column_name,
-                    true,
-                    ColumnDesc::new(*ty, false, false, None),
-                    Some(self.clone()),
-                ))
-            }
-            ScalarExpression::Unary { expr, op, ty } => {
-                let column_name = format!("{}{}", op, expr.output_column().name());
-                Arc::new(ColumnCatalog::new(
-                    column_name,
-                    true,
-                    ColumnDesc::new(*ty, false, false, None),
-                    Some(self.clone()),
-                ))
-            }
-            ScalarExpression::IsNull { negated, expr } => {
-                let suffix = if *negated { "is not null" } else { "is null" };
-                Arc::new(ColumnCatalog::new(
-                    format!("{} {}", expr.output_column().name(), suffix),
-                    true,
-                    ColumnDesc::new(LogicalType::Boolean, false, false, None),
-                    Some(self.clone()),
-                ))
+                )
             }
             ScalarExpression::In {
+                args,
                 negated,
                 expr,
-                args,
             } => {
                 let args_string = args
                     .iter()
                     .map(|arg| arg.output_column().name().to_string())
                     .join(", ");
                 let op_string = if *negated { "not in" } else { "in" };
-                Arc::new(ColumnCatalog::new(
-                    format!(
-                        "{} {} ({})",
-                        expr.output_column().name(),
-                        op_string,
-                        args_string
-                    ),
-                    true,
-                    ColumnDesc::new(LogicalType::Boolean, false, false, None),
-                    Some(self.clone()),
-                ))
+                format!(
+                    "{} {} ({})",
+                    expr.output_column().name(),
+                    op_string,
+                    args_string
+                )
             }
-            ScalarExpression::TypeCast { expr, ty } => Arc::new(ColumnCatalog::new(
-                format!("CAST({} as {})", expr.output_column().name(), ty),
+        }
+    }
+
+    pub fn output_column(&self) -> ColumnRef {
+        match self {
+            ScalarExpression::ColumnRef(col) => col.clone(),
+            _ => Arc::new(ColumnCatalog::new(
+                self.output_name(),
                 true,
-                ColumnDesc::new(*ty, false, false, None),
-                Some(self.clone()),
+                ColumnDesc::new(self.return_type(), false, false, None),
             )),
         }
     }

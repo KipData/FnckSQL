@@ -16,7 +16,7 @@ mod truncate;
 mod update;
 
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use crate::catalog::{TableCatalog, TableName};
 use crate::errors::DatabaseError;
@@ -33,9 +33,11 @@ pub enum InputRefType {
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
     transaction: &'a T,
-    pub(crate) bind_table: BTreeMap<TableName, (&'a TableCatalog, Option<JoinType>)>,
-    aliases: BTreeMap<String, ScalarExpression>,
-    table_aliases: BTreeMap<String, TableName>,
+    pub(crate) bind_table: HashMap<TableName, (&'a TableCatalog, Option<JoinType>)>,
+    // alias
+    expr_aliases: HashMap<String, ScalarExpression>,
+    table_aliases: HashMap<String, TableName>,
+    // agg
     group_by_exprs: Vec<ScalarExpression>,
     pub(crate) agg_calls: Vec<ScalarExpression>,
 }
@@ -45,7 +47,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         BinderContext {
             transaction,
             bind_table: Default::default(),
-            aliases: Default::default(),
+            expr_aliases: Default::default(),
             table_aliases: Default::default(),
             group_by_exprs: vec![],
             agg_calls: Default::default(),
@@ -94,36 +96,12 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
     }
 
-    pub fn add_alias(
-        &mut self,
-        alias: String,
-        expr: ScalarExpression,
-    ) -> Result<(), DatabaseError> {
-        let is_exist = self.aliases.insert(alias.clone(), expr).is_some();
-        if is_exist {
-            return Err(DatabaseError::InvalidColumn(format!(
-                "{} duplicated",
-                alias
-            )));
-        }
-
-        Ok(())
+    pub fn add_alias(&mut self, alias: String, expr: ScalarExpression) {
+        self.expr_aliases.insert(alias, expr);
     }
 
-    pub fn add_table_alias(
-        &mut self,
-        alias: String,
-        table: TableName,
-    ) -> Result<(), DatabaseError> {
-        let is_alias_exist = self
-            .table_aliases
-            .insert(alias.clone(), table.clone())
-            .is_some();
-        if is_alias_exist {
-            return Err(DatabaseError::InvalidTable(format!("{} duplicated", alias)));
-        }
-
-        Ok(())
+    pub fn add_table_alias(&mut self, alias: String, table: TableName) {
+        self.table_aliases.insert(alias.clone(), table.clone());
     }
 
     pub fn has_agg_call(&self, expr: &ScalarExpression) -> bool {
@@ -168,7 +146,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ..
             } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
-                    self.bind_insert(table_name.to_owned(), columns, &values.rows, *overwrite)?
+                    self.bind_insert(table_name, columns, &values.rows, *overwrite)?
                 } else {
                     todo!()
                 }
@@ -221,22 +199,16 @@ impl<'a, T: Transaction> Binder<'a, T> {
     }
 }
 
-/// Convert an object name into lower case
-fn lower_case_name(name: &ObjectName) -> ObjectName {
-    ObjectName(
-        name.0
-            .iter()
-            .map(|ident| Ident::new(ident.value.to_lowercase()))
-            .collect(),
-    )
+fn lower_ident(ident: &Ident) -> String {
+    ident.value.to_lowercase()
 }
 
-/// Split an object name into `(schema name, table name)`.
-fn split_name(name: &ObjectName) -> Result<&str, DatabaseError> {
-    Ok(match name.0.as_slice() {
-        [table] => &table.value,
-        _ => return Err(DatabaseError::InvalidTable(name.to_string())),
-    })
+/// Convert an object name into lower case
+fn lower_case_name(name: &ObjectName) -> Result<String, DatabaseError> {
+    if name.0.len() == 1 {
+        return Ok(lower_ident(&name.0[0]));
+    }
+    Err(DatabaseError::InvalidTable(name.to_string()))
 }
 
 pub(crate) fn is_valid_identifier(s: &str) -> bool {
@@ -271,13 +243,11 @@ pub mod test {
                     "c1".to_string(),
                     false,
                     ColumnDesc::new(Integer, true, false, None),
-                    None,
                 ),
                 ColumnCatalog::new(
                     "c2".to_string(),
                     false,
                     ColumnDesc::new(Integer, false, true, None),
-                    None,
                 ),
             ],
             false,
@@ -290,13 +260,11 @@ pub mod test {
                     "c3".to_string(),
                     false,
                     ColumnDesc::new(Integer, true, false, None),
-                    None,
                 ),
                 ColumnCatalog::new(
                     "c4".to_string(),
                     false,
                     ColumnDesc::new(Integer, false, false, None),
-                    None,
                 ),
             ],
             false,

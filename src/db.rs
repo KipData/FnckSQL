@@ -237,13 +237,11 @@ mod test {
                 "c1".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false, None),
-                None,
             ),
             ColumnCatalog::new(
                 "c2".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Boolean, false, false, None),
-                None,
             ),
         ];
         let _ = transaction.create_table(Arc::new("t1".to_string()), columns, false)?;

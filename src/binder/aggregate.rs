@@ -160,7 +160,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
             if !group_raw_exprs.iter().contains(expr) {
                 return Err(DatabaseError::AggMiss(format!(
-                    "{:?} must appear in the GROUP BY clause or be used in an aggregate function",
+                    "`{}` must appear in the GROUP BY clause or be used in an aggregate function",
                     expr
                 )));
             }

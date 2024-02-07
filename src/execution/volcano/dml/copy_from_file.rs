@@ -136,7 +136,6 @@ mod tests {
                 },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Integer, true, false, None),
-                ref_expr: None,
             }),
             Arc::new(ColumnCatalog {
                 summary: ColumnSummary {
@@ -146,7 +145,6 @@ mod tests {
                 },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Float, false, false, None),
-                ref_expr: None,
             }),
             Arc::new(ColumnCatalog {
                 summary: ColumnSummary {
@@ -156,7 +154,6 @@ mod tests {
                 },
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false, None),
-                ref_expr: None,
             }),
         ];
 

@@ -462,7 +462,6 @@ mod tests {
                 is_unique: false,
                 default: None,
             },
-            ref_expr: None,
         }
     }
 

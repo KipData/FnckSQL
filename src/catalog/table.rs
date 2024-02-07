@@ -178,13 +178,11 @@ mod tests {
             "a".into(),
             false,
             ColumnDesc::new(LogicalType::Integer, false, false, None),
-            None,
         );
         let col1 = ColumnCatalog::new(
             "b".into(),
             false,
             ColumnDesc::new(LogicalType::Boolean, false, false, None),
-            None,
         );
         let col_catalogs = vec![col0, col1];
         let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs).unwrap();

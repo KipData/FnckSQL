@@ -1,4 +1,4 @@
-use crate::binder::{lower_case_name, split_name, Binder};
+use crate::binder::{lower_case_name, Binder};
 use crate::errors::DatabaseError;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::scan::ScanOperator;
@@ -15,9 +15,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         selection: &Option<Expr>,
     ) -> Result<LogicalPlan, DatabaseError> {
         if let TableFactor::Table { name, alias, .. } = &from.relation {
-            let name = lower_case_name(name);
-            let name = split_name(&name)?;
-            let table_name = Arc::new(name.to_string());
+            let table_name = Arc::new(lower_case_name(name)?);
 
             let table_catalog = self.context.table_and_bind(table_name.clone(), None)?;
             let primary_key_column = table_catalog
@@ -29,7 +27,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
             if let Some(alias) = alias {
                 self.context
-                    .add_table_alias(alias.to_string(), table_name.clone())?;
+                    .add_table_alias(alias.to_string(), table_name.clone());
             }
 
             if let Some(predicate) = selection {

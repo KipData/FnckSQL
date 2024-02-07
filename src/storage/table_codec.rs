@@ -301,13 +301,11 @@ mod tests {
                 "c1".into(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false, None),
-                None,
             ),
             ColumnCatalog::new(
                 "c2".into(),
                 false,
                 ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None),
-                None,
             ),
         ];
         TableCatalog::new(Arc::new("t1".to_string()), columns).unwrap()
@@ -407,7 +405,6 @@ mod tests {
                     is_unique: false,
                     default: None,
                 },
-                None,
             );
 
             col.summary.id = Some(col_id as u32);
@@ -496,7 +493,6 @@ mod tests {
             "".to_string(),
             false,
             ColumnDesc::new(LogicalType::Boolean, false, false, None),
-            None,
         );
         let table_catalog = TableCatalog::new(Arc::new("T0".to_string()), vec![column]).unwrap();
 

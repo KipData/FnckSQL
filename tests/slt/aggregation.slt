@@ -19,10 +19,10 @@ select sum(v1), sum(v3) from t
 ----
 10 15.5
 
-# query IR
-# select sum(v1+v2),sum(v1+v3) from t
-# ----
-# 24 25.5
+query IR
+select sum(v1+v2),sum(v1+v3) from t
+----
+24 25.5
 
 # SimpleMinTest
 
@@ -54,10 +54,10 @@ select count(v1) from t
 
 # SimpleAvgTest
 
-# query R
-# select avg(v2) from t
-# ----
-# 3.5
+query R
+select avg(v2) from t
+----
+3.5
 
 # SumGroupTest
 
