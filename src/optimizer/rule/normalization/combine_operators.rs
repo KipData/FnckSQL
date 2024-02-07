@@ -116,7 +116,7 @@ impl NormalizationRule for CollapseGroupByAgg {
         if let Operator::Aggregate(op) = graph.operator(node_id).clone() {
             // if it is an aggregation operator containing agg_call
             if !op.agg_calls.is_empty() {
-                return Ok(())
+                return Ok(());
             }
 
             if let Some(Operator::Aggregate(child_op)) = graph
