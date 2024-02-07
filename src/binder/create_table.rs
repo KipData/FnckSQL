@@ -60,7 +60,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     for column_name in column_names.iter().map(|ident| ident.value.to_lowercase()) {
                         if let Some(column) = columns
                             .iter_mut()
-                            .find(|column| column.name() == column_name.to_string())
+                            .find(|column| column.name() == column_name)
                         {
                             if *is_primary {
                                 column.desc.is_primary = true;

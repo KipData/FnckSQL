@@ -23,7 +23,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 .find(|(_, column)| column.desc.is_primary)
                 .map(|(_, column)| Arc::clone(column))
                 .unwrap();
-            let mut plan = ScanOperator::build(table_name.clone(), &table_catalog);
+            let mut plan = ScanOperator::build(table_name.clone(), table_catalog);
 
             if let Some(alias) = alias {
                 self.context

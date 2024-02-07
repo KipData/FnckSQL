@@ -190,7 +190,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         table_name: TableName,
     ) -> Result<(), DatabaseError> {
         if !alias_column.is_empty() {
-            let aliases = alias_column.into_iter().map(lower_ident).collect_vec();
+            let aliases = alias_column.iter().map(lower_ident).collect_vec();
             let table = self
                 .context
                 .table(table_name.clone())
@@ -222,7 +222,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let table_name = Arc::new(table.to_string());
 
         let table_catalog = self.context.table_and_bind(table_name.clone(), join_type)?;
-        let scan_op = ScanOperator::build(table_name.clone(), &table_catalog);
+        let scan_op = ScanOperator::build(table_name.clone(), table_catalog);
 
         if let Some(TableAlias { name, columns }) = alias {
             self.register_alias(columns, name.value.to_lowercase(), table_name.clone())?;
