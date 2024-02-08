@@ -28,8 +28,7 @@ pub(crate) fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
 
             tuples = temp_buckets
                 .iter_mut()
-                .map(|group| mem::replace(group, vec![]))
-                .flatten()
+                .flat_map(mem::take)
                 .collect_vec();
         }
         return tuples.into_iter().map(|(tuple, _)| tuple).collect_vec();

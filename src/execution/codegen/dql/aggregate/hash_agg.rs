@@ -44,7 +44,7 @@ impl UserData for HashAggStatus {
             Ok(())
         });
         methods.add_method_mut("to_tuples", |_, agg_status, ()| {
-            Ok(agg_status.to_tuples().unwrap())
+            Ok(agg_status.as_tuples().unwrap())
         });
     }
 }

@@ -98,7 +98,7 @@ impl<K: Hash> CountMinSketch<K> {
                 self.counters[k_i][offset]
             })
             .min()
-            .unwrap() as usize
+            .unwrap()
     }
 
     #[allow(dead_code)]

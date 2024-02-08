@@ -53,7 +53,7 @@ impl TableCatalog {
     }
 
     pub(crate) fn clone_columns(&self) -> Vec<ColumnRef> {
-        self.columns.values().map(Arc::clone).collect()
+        self.columns.values().cloned().collect()
     }
 
     pub(crate) fn columns_with_id(&self) -> Iter<'_, ColumnId, ColumnRef> {
@@ -66,8 +66,7 @@ impl TableCatalog {
 
     pub(crate) fn primary_key(&self) -> Result<(usize, &ColumnRef), DatabaseError> {
         self.columns
-            .iter()
-            .map(|(_, column)| column)
+            .values()
             .enumerate()
             .find(|(_, column)| column.desc.is_primary)
             .ok_or(DatabaseError::PrimaryKeyNotFound)
@@ -75,8 +74,8 @@ impl TableCatalog {
 
     pub(crate) fn types(&self) -> Vec<LogicalType> {
         self.columns
-            .iter()
-            .map(|(_, column)| *column.datatype())
+            .values()
+            .map(|column| *column.datatype())
             .collect_vec()
     }
 

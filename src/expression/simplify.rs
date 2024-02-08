@@ -198,7 +198,7 @@ impl ConstantBinary {
 
     // Tips: It only makes sense if the condition is and aggregation
     fn and_scope_aggregation(
-        binaries: &Vec<ConstantBinary>,
+        binaries: &[ConstantBinary],
     ) -> Result<Vec<ConstantBinary>, DatabaseError> {
         if binaries.is_empty() {
             return Ok(vec![]);
@@ -254,7 +254,7 @@ impl ConstantBinary {
             .next()
             .map(ConstantBinary::Eq);
 
-        return if let Some(eq) = eq_option {
+        if let Some(eq) = eq_option {
             Ok(vec![eq])
         } else if !matches!(
             (&scope_min, &scope_max),
@@ -268,7 +268,7 @@ impl ConstantBinary {
             Ok(vec![scope_binary])
         } else {
             Ok(vec![])
-        };
+        }
     }
 
     // Tips: It only makes sense if the condition is or aggregation
@@ -346,8 +346,7 @@ impl ConstantBinary {
                     Self::bound_compared(min_a, min_b, true).unwrap()
                 });
 
-                for i in 0..scopes.len() {
-                    let (min, max) = scopes[i];
+                for (min, max) in scopes {
                     if merge_scopes.is_empty() {
                         merge_scopes.push((min.clone(), max.clone()));
                         continue;
@@ -379,7 +378,7 @@ impl ConstantBinary {
             .collect_vec()
     }
 
-    fn join_write(f: &mut Formatter, binaries: &Vec<ConstantBinary>, op: &str) -> fmt::Result {
+    fn join_write(f: &mut Formatter, binaries: &[ConstantBinary], op: &str) -> fmt::Result {
         let binaries = binaries.iter().map(|binary| format!("{}", binary)).join(op);
         write!(f, " {} ", binaries)?;
 
@@ -634,7 +633,7 @@ impl ScalarExpression {
                     (BinaryOperator::Eq, BinaryOperator::Or)
                 };
                 let mut new_expr = ScalarExpression::Binary {
-                    op: op_1.clone(),
+                    op: op_1,
                     left_expr: expr.clone(),
                     right_expr: Box::new(args.remove(0)),
                     ty: LogicalType::Boolean,
@@ -642,9 +641,9 @@ impl ScalarExpression {
 
                 for arg in args.drain(..) {
                     new_expr = ScalarExpression::Binary {
-                        op: op_2.clone(),
+                        op: op_2,
                         left_expr: Box::new(ScalarExpression::Binary {
-                            op: op_1.clone(),
+                            op: op_1,
                             left_expr: expr.clone(),
                             right_expr: Box::new(arg),
                             ty: LogicalType::Boolean,

@@ -41,7 +41,7 @@ impl Tuple {
         let mut projection_i = 0;
         let mut pos = bits_len;
 
-        for (i, logic_type) in table_types.into_iter().enumerate() {
+        for (i, logic_type) in table_types.iter().enumerate() {
             if projection_i >= tuple_columns.len() {
                 break;
             }
@@ -50,7 +50,7 @@ impl Tuple {
                     tuple_values.push(Arc::new(DataValue::none(logic_type)));
                     Self::values_push(
                         tuple_columns,
-                        &mut tuple_values,
+                        &tuple_values,
                         &mut id_option,
                         &mut projection_i,
                     );
@@ -64,7 +64,7 @@ impl Tuple {
                     )));
                     Self::values_push(
                         tuple_columns,
-                        &mut tuple_values,
+                        &tuple_values,
                         &mut id_option,
                         &mut projection_i,
                     );
@@ -81,7 +81,7 @@ impl Tuple {
                     )));
                     Self::values_push(
                         tuple_columns,
-                        &mut tuple_values,
+                        &tuple_values,
                         &mut id_option,
                         &mut projection_i,
                     );

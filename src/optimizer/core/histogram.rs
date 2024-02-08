@@ -55,7 +55,7 @@ impl HistogramBuilder {
             null_count: 0,
             values: capacity
                 .map(Vec::with_capacity)
-                .unwrap_or_else(|| Vec::new()),
+                .unwrap_or_default(),
             value_index: 0,
         })
     }
@@ -231,7 +231,7 @@ impl Histogram {
 
         while bucket_i < self.buckets.len() && binary_i < binaries.len() {
             self._collect_count(
-                &binaries,
+                binaries,
                 &mut binary_i,
                 &mut bucket_i,
                 &mut bucket_idxs,
@@ -259,9 +259,9 @@ impl Histogram {
         let float_value = |value: &DataValue, prefix_len: usize| {
             match value.logical_type() {
                 LogicalType::Varchar(_) => match value {
-                    DataValue::Utf8(value) => value.as_ref().and_then(|string| {
+                    DataValue::Utf8(value) => value.as_ref().map(|string| {
                         if prefix_len > string.len() {
-                            return Some(0.0);
+                            return 0.0;
                         }
 
                         let mut val = 0u64;
@@ -278,7 +278,7 @@ impl Histogram {
                             }
                         }
 
-                        Some(val as f64)
+                        val as f64
                     }),
                     _ => unreachable!(),
                 },

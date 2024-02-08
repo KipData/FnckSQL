@@ -121,7 +121,7 @@ impl NormalizationRule for CollapseGroupByAgg {
 
             if let Some(Operator::Aggregate(child_op)) = graph
                 .eldest_child_at(node_id)
-                .and_then(|child_id| Some(graph.operator_mut(child_id)))
+                .map(|child_id| graph.operator_mut(child_id))
             {
                 if op.groupby_exprs.len() != child_op.groupby_exprs.len() {
                     return Ok(());
@@ -134,7 +134,7 @@ impl NormalizationRule for CollapseGroupByAgg {
                 for expr in child_op.groupby_exprs.iter() {
                     expr_set.remove(expr);
                 }
-                if expr_set.len() == 0 {
+                if expr_set.is_empty() {
                     graph.remove_node(node_id, false);
                 }
             }

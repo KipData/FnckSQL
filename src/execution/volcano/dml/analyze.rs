@@ -125,7 +125,7 @@ impl fmt::Display for AnalyzeOperator {
         let columns = self
             .columns
             .iter()
-            .map(|column| format!("{}", column.name()))
+            .map(|column| column.name().to_string())
             .join(", ");
 
         write!(f, "Analyze {} -> [{}]", self.table_name, columns)?;

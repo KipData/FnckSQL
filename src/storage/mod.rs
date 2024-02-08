@@ -147,7 +147,7 @@ impl IndexIter<'_> {
     }
 
     fn get_tuple_by_id(&mut self, tuple_id: &TupleId) -> Result<Option<Tuple>, DatabaseError> {
-        let key = TableCodec::encode_tuple_key(&self.table.name, &tuple_id)?;
+        let key = TableCodec::encode_tuple_key(&self.table.name, tuple_id)?;
 
         Ok(self.tx.get(&key)?.map(|bytes| {
             TableCodec::decode_tuple(
@@ -174,27 +174,23 @@ impl Iter for IndexIter<'_> {
             return Ok(None);
         }
         // 2. try get tuple on index_values and until it empty
-        loop {
-            if let Some(value) = self.index_values.pop_front() {
-                if Self::offset_move(&mut self.offset) {
-                    continue;
-                }
-                match value {
-                    IndexValue::PrimaryKey(tuple) => {
-                        if let Some(num) = self.limit.as_mut() {
-                            num.sub_assign(1);
-                        }
+        while let Some(value) = self.index_values.pop_front() {
+            if Self::offset_move(&mut self.offset) {
+                continue;
+            }
+            match value {
+                IndexValue::PrimaryKey(tuple) => {
+                    if let Some(num) = self.limit.as_mut() {
+                        num.sub_assign(1);
+                    }
 
+                    return Ok(Some(tuple));
+                }
+                IndexValue::Normal(tuple_id) => {
+                    if let Some(tuple) = self.get_tuple_by_id(&tuple_id)? {
                         return Ok(Some(tuple));
                     }
-                    IndexValue::Normal(tuple_id) => {
-                        if let Some(tuple) = self.get_tuple_by_id(&tuple_id)? {
-                            return Ok(Some(tuple));
-                        }
-                    }
                 }
-            } else {
-                break;
             }
         }
         assert!(self.index_values.is_empty());

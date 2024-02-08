@@ -211,7 +211,7 @@ impl<S: Storage> DBTransaction<S> {
         let (plan, _) = Database::<S>::build_plan::<T, S::TransactionType>(sql, &self.inner)?;
         let mut stream = build_write(plan, &mut self.inner);
 
-        Ok(try_collect(&mut stream).await?)
+        try_collect(&mut stream).await
     }
 
     pub async fn commit(self) -> Result<(), DatabaseError> {

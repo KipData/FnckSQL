@@ -64,7 +64,7 @@ impl fmt::Display for ScanOperator {
         let projection_columns = self
             .columns
             .iter()
-            .map(|(_, column)| format!("{}", column.name()))
+            .map(|(_, column)| column.name().to_string())
             .join(", ");
         let (offset, limit) = self.limit;
 

@@ -67,10 +67,10 @@ impl HepOptimizer {
             })
             .transpose()?;
 
-        Ok(self
+        self
             .graph
-            .to_plan(memo.as_ref())
-            .ok_or(DatabaseError::EmptyPlan)?)
+            .into_plan(memo.as_ref())
+            .ok_or(DatabaseError::EmptyPlan)
     }
 
     fn apply_batch(
