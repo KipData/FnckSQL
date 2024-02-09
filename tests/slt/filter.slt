@@ -112,6 +112,66 @@ select * from t1 where id not in (1, 2)
 0 KipSQL
 3 Cool!
 
+query II
+select * from t1 where id in (1, null)
+----
+
+query II
+select * from t1 where null in (1, 2)
+----
+
+query II
+select * from t1 where null in (1, null)
+----
+
+query II
+select * from t1 where id not in (1, null)
+----
+
+query II
+select * from t1 where null not in (1, 2)
+----
+
+query II
+select * from t1 where null not in (1, null)
+----
+
+query II
+select * from t1 where id between 1 and 2
+----
+1 KipDB
+2 KipBlog
+
+query II
+select * from t1 where id not between 1 and 2
+----
+0 KipSQL
+3 Cool!
+
+query II
+select * from t1 where id between 1 and null
+----
+
+query II
+select * from t1 where null between 1 and 2
+----
+
+query II
+select * from t1 where null between 1 and null
+----
+
+query II
+select * from t1 where id not between 1 and null
+----
+
+query II
+select * from t1 where null not between 1 and 2
+----
+
+query II
+select * from t1 where null not between 1 and null
+----
+
 statement ok
 drop table t
 

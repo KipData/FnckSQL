@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use crate::catalog::ColumnSummary;
 use crate::errors::DatabaseError;
 use crate::expression::value_compute::{binary_op, unary_op};
@@ -68,9 +69,17 @@ impl ScalarExpression {
                 negated,
             } => {
                 let value = expr.eval(tuple)?;
+                if value.is_null() {
+                    return Ok(Arc::new(DataValue::Boolean(None)));
+                }
                 let mut is_in = false;
                 for arg in args {
-                    if arg.eval(tuple)? == value {
+                    let arg_value = arg.eval(tuple)?;
+
+                    if arg_value.is_null() {
+                        return Ok(Arc::new(DataValue::Boolean(None)));
+                    }
+                    if arg_value == value {
                         is_in = true;
                         break;
                     }
@@ -91,6 +100,22 @@ impl ScalarExpression {
                     .clone();
 
                 Ok(value)
+            }
+            ScalarExpression::Between { expr, left_expr, right_expr, negated } => {
+                let value = expr.eval(tuple)?;
+                let left = left_expr.eval(tuple)?;
+                let right = right_expr.eval(tuple)?;
+
+                let mut is_between = match (value.partial_cmp(&left).map(Ordering::is_ge), value.partial_cmp(&right).map(Ordering::is_le)) {
+                    (Some(true), Some(true)) => true,
+                    (None, _) | (_, None) => return Ok(Arc::new(DataValue::Boolean(None))),
+                    _ => false,
+
+                };
+                if *negated {
+                    is_between = !is_between;
+                }
+                Ok(Arc::new(DataValue::Boolean(Some(is_between))))
             }
         }
     }

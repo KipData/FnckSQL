@@ -58,6 +58,12 @@ pub enum ScalarExpression {
         expr: Box<ScalarExpression>,
         args: Vec<ScalarExpression>,
     },
+    Between {
+        negated: bool,
+        expr: Box<ScalarExpression>,
+        left_expr: Box<ScalarExpression>,
+        right_expr: Box<ScalarExpression>,
+    }
 }
 
 impl ScalarExpression {
@@ -99,9 +105,12 @@ impl ScalarExpression {
                 ..
             } => left_expr.nullable() && right_expr.nullable(),
             ScalarExpression::In { expr, args, .. } => {
-                args.iter().all(ScalarExpression::nullable) && expr.nullable()
+                expr.nullable() && args.iter().all(ScalarExpression::nullable)
             }
             ScalarExpression::AggCall { args, .. } => args.iter().all(ScalarExpression::nullable),
+            ScalarExpression::Between { expr, left_expr, right_expr, .. } => {
+                expr.nullable() && left_expr.nullable() && right_expr.nullable()
+            }
         }
     }
 
@@ -121,7 +130,7 @@ impl ScalarExpression {
             Self::AggCall {
                 ty: return_type, ..
             } => *return_type,
-            Self::IsNull { .. } | Self::In { .. } => LogicalType::Boolean,
+            Self::IsNull { .. } | Self::In { .. } | ScalarExpression::Between { .. } => LogicalType::Boolean,
             Self::Alias { expr, .. } => expr.return_type(),
         }
     }
@@ -194,6 +203,9 @@ impl ScalarExpression {
             ScalarExpression::In { expr, args, .. } => {
                 expr.has_agg_call() || args.iter().any(|arg| arg.has_agg_call())
             }
+            ScalarExpression::Between { expr, left_expr, right_expr, .. } => {
+                expr.has_agg_call() || left_expr.has_agg_call() || right_expr.has_agg_call()
+            }
         }
     }
 
@@ -250,14 +262,24 @@ impl ScalarExpression {
             } => {
                 let args_string = args
                     .iter()
-                    .map(|arg| arg.output_column().name().to_string())
+                    .map(|arg| arg.output_name())
                     .join(", ");
                 let op_string = if *negated { "not in" } else { "in" };
                 format!(
                     "{} {} ({})",
-                    expr.output_column().name(),
+                    expr.output_name(),
                     op_string,
                     args_string
+                )
+            }
+            ScalarExpression::Between { expr, left_expr, right_expr, negated } => {
+                let op_string = if *negated { "not between" } else { "between" };
+                format!(
+                    "{} {} [{}, {}]",
+                    expr.output_name(),
+                    op_string,
+                    left_expr.output_name(),
+                    right_expr.output_name()
                 )
             }
         }
@@ -320,7 +342,7 @@ pub enum BinaryOperator {
 
 impl fmt::Display for ScalarExpression {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self.output_column().name())
+        write!(f, "{}", self.output_name())
     }
 }
 

@@ -57,6 +57,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 Ok(ScalarExpression::Constant(Arc::new(value)))
             }
+            Expr::Between { expr, negated, low, high } => {
+                Ok(ScalarExpression::Between {
+                    negated: *negated,
+                    expr: Box::new(self.bind_expr(expr)?),
+                    left_expr: Box::new(self.bind_expr(low)?),
+                    right_expr: Box::new(self.bind_expr(high)?),
+                })
+            }
             _ => {
                 todo!()
             }
