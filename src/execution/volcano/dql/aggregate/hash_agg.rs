@@ -109,11 +109,10 @@ impl HashAggStatus {
         Ok(())
     }
 
-    pub(crate) fn to_tuples(&mut self) -> Result<Vec<Tuple>, DatabaseError> {
-        let group_columns = Arc::new(mem::replace(&mut self.group_columns, vec![]));
+    pub(crate) fn as_tuples(&mut self) -> Result<Vec<Tuple>, DatabaseError> {
+        let group_columns = Arc::new(mem::take(&mut self.group_columns));
 
-        Ok(self
-            .group_hash_accs
+        self.group_hash_accs
             .drain()
             .map(|(group_keys, accs)| {
                 // Tips: Accumulator First
@@ -129,7 +128,7 @@ impl HashAggStatus {
                     values,
                 })
             })
-            .try_collect()?)
+            .try_collect()
     }
 }
 
@@ -149,7 +148,7 @@ impl HashAggExecutor {
             agg_status.update(tuple?)?;
         }
 
-        for tuple in agg_status.to_tuples()? {
+        for tuple in agg_status.as_tuples()? {
             yield tuple;
         }
     }

@@ -103,7 +103,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
 }
 
 fn find_column_meta<'a>(
-    column_metas: &'a Vec<ColumnMeta>,
+    column_metas: &'a [ColumnMeta],
     column_id: &ColumnId,
 ) -> Option<&'a ColumnMeta> {
     assert!(column_metas.is_sorted_by_key(ColumnMeta::column_id));

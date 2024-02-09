@@ -15,7 +15,7 @@ impl fmt::Display for ValuesOperator {
         let columns = self
             .columns
             .iter()
-            .map(|column| format!("{}", column.name()))
+            .map(|column| column.name().to_string())
             .join(", ");
 
         write!(f, "Values [{}], RowsLen: {}", columns, self.rows.len())?;

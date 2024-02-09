@@ -113,7 +113,7 @@ impl SimpleQueryHandler for SessionBackend {
                     .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
                 guard.replace(transaction);
 
-                Ok(vec![Response::Execution(Tag::new("OK").into())])
+                Ok(vec![Response::Execution(Tag::new("OK"))])
             }
             "COMMIT;" | "COMMIT" | "COMMIT WORK;" | "COMMIT WORK" => {
                 let mut guard = self.tx.lock().await;
@@ -124,7 +124,7 @@ impl SimpleQueryHandler for SessionBackend {
                         .await
                         .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
 
-                    Ok(vec![Response::Execution(Tag::new("OK").into())])
+                    Ok(vec![Response::Execution(Tag::new("OK"))])
                 } else {
                     Err(PgWireError::ApiError(Box::new(
                         DatabaseError::NoTransactionBegin,
@@ -141,7 +141,7 @@ impl SimpleQueryHandler for SessionBackend {
                 }
                 drop(guard.take());
 
-                Ok(vec![Response::Execution(Tag::new("OK").into())])
+                Ok(vec![Response::Execution(Tag::new("OK"))])
             }
             _ => {
                 let mut guard = self.tx.lock().await;
@@ -210,10 +210,7 @@ fn encode_tuples<'a>(tuples: Vec<Tuple>) -> PgWireResult<QueryResponse<'a>> {
         results.push(encoder.finish());
     }
 
-    Ok(QueryResponse::new(
-        schema,
-        stream::iter(results.into_iter()),
-    ))
+    Ok(QueryResponse::new(schema, stream::iter(results)))
 }
 
 fn into_pg_type(data_type: &LogicalType) -> PgWireResult<Type> {

@@ -198,7 +198,7 @@ impl ConstantBinary {
 
     // Tips: It only makes sense if the condition is and aggregation
     fn and_scope_aggregation(
-        binaries: &Vec<ConstantBinary>,
+        binaries: &[ConstantBinary],
     ) -> Result<Vec<ConstantBinary>, DatabaseError> {
         if binaries.is_empty() {
             return Ok(vec![]);
@@ -254,7 +254,7 @@ impl ConstantBinary {
             .next()
             .map(ConstantBinary::Eq);
 
-        return if let Some(eq) = eq_option {
+        if let Some(eq) = eq_option {
             Ok(vec![eq])
         } else if !matches!(
             (&scope_min, &scope_max),
@@ -268,7 +268,7 @@ impl ConstantBinary {
             Ok(vec![scope_binary])
         } else {
             Ok(vec![])
-        };
+        }
     }
 
     // Tips: It only makes sense if the condition is or aggregation
@@ -346,8 +346,7 @@ impl ConstantBinary {
                     Self::bound_compared(min_a, min_b, true).unwrap()
                 });
 
-                for i in 0..scopes.len() {
-                    let (min, max) = scopes[i];
+                for (min, max) in scopes {
                     if merge_scopes.is_empty() {
                         merge_scopes.push((min.clone(), max.clone()));
                         continue;
@@ -379,7 +378,7 @@ impl ConstantBinary {
             .collect_vec()
     }
 
-    fn join_write(f: &mut Formatter, binaries: &Vec<ConstantBinary>, op: &str) -> fmt::Result {
+    fn join_write(f: &mut Formatter, binaries: &[ConstantBinary], op: &str) -> fmt::Result {
         let binaries = binaries.iter().map(|binary| format!("{}", binary)).join(op);
         write!(f, " {} ", binaries)?;
 
@@ -634,7 +633,7 @@ impl ScalarExpression {
                     (BinaryOperator::Eq, BinaryOperator::Or)
                 };
                 let mut new_expr = ScalarExpression::Binary {
-                    op: op_1.clone(),
+                    op: op_1,
                     left_expr: expr.clone(),
                     right_expr: Box::new(args.remove(0)),
                     ty: LogicalType::Boolean,
@@ -642,9 +641,9 @@ impl ScalarExpression {
 
                 for arg in args.drain(..) {
                     new_expr = ScalarExpression::Binary {
-                        op: op_2.clone(),
+                        op: op_2,
                         left_expr: Box::new(ScalarExpression::Binary {
-                            op: op_1.clone(),
+                            op: op_1,
                             left_expr: expr.clone(),
                             right_expr: Box::new(arg),
                             ty: LogicalType::Boolean,
@@ -653,6 +652,40 @@ impl ScalarExpression {
                         ty: LogicalType::Boolean,
                     }
                 }
+
+                let _ = mem::replace(self, new_expr);
+            }
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                negated,
+            } => {
+                let (op, left_op, right_op) = if *negated {
+                    (BinaryOperator::Or, BinaryOperator::Lt, BinaryOperator::Gt)
+                } else {
+                    (
+                        BinaryOperator::And,
+                        BinaryOperator::GtEq,
+                        BinaryOperator::LtEq,
+                    )
+                };
+                let new_expr = ScalarExpression::Binary {
+                    op,
+                    left_expr: Box::new(ScalarExpression::Binary {
+                        op: left_op,
+                        left_expr: expr.clone(),
+                        right_expr: left_expr.clone(),
+                        ty: LogicalType::Boolean,
+                    }),
+                    right_expr: Box::new(ScalarExpression::Binary {
+                        op: right_op,
+                        left_expr: expr.clone(),
+                        right_expr: right_expr.clone(),
+                        ty: LogicalType::Boolean,
+                    }),
+                    ty: LogicalType::Boolean,
+                };
 
                 let _ = mem::replace(self, new_expr);
             }
@@ -883,7 +916,8 @@ impl ScalarExpression {
             ScalarExpression::Alias { expr, .. }
             | ScalarExpression::TypeCast { expr, .. }
             | ScalarExpression::Unary { expr, .. }
-            | ScalarExpression::In { expr, .. } => expr.convert_binary(col_id),
+            | ScalarExpression::In { expr, .. }
+            | ScalarExpression::Between { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::IsNull { expr, negated, .. } => match expr.as_ref() {
                 ScalarExpression::ColumnRef(column) => {
                     Ok(column.id().is_some_and(|id| col_id == &id).then(|| {
@@ -901,7 +935,8 @@ impl ScalarExpression {
                 | ScalarExpression::Unary { .. }
                 | ScalarExpression::Binary { .. }
                 | ScalarExpression::AggCall { .. }
-                | ScalarExpression::In { .. } => expr.convert_binary(col_id),
+                | ScalarExpression::In { .. }
+                | ScalarExpression::Between { .. } => expr.convert_binary(col_id),
             },
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)

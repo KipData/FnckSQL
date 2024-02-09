@@ -110,6 +110,16 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     self.visit_column_agg_expr(arg)?;
                 }
             }
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                self.visit_column_agg_expr(expr)?;
+                self.visit_column_agg_expr(left_expr)?;
+                self.visit_column_agg_expr(right_expr)?;
+            }
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {}
         }
 
@@ -257,7 +267,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 self.validate_having_orderby(right_expr)?;
                 Ok(())
             }
-
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                self.validate_having_orderby(expr)?;
+                self.validate_having_orderby(left_expr)?;
+                self.validate_having_orderby(right_expr)?;
+                Ok(())
+            }
             ScalarExpression::Constant(_) => Ok(()),
         }
     }

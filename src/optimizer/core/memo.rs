@@ -146,7 +146,7 @@ mod tests {
         ];
 
         let memo = Memo::new(&graph, &transaction.meta_loader(), &rules)?;
-        let best_plan = graph.to_plan(Some(&memo));
+        let best_plan = graph.into_plan(Some(&memo));
         let exprs = &memo.groups.get(&NodeIndex::new(3)).unwrap();
 
         assert_eq!(exprs.exprs.len(), 2);

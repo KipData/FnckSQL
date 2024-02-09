@@ -531,7 +531,7 @@ pub fn binary_op(
                 _ => todo!("unsupported operator"),
             }
         }
-        LogicalType::SqlNull => return Err(DatabaseError::NotNull),
+        LogicalType::SqlNull => return Ok(DataValue::Null),
         LogicalType::Invalid => return Err(DatabaseError::InvalidType),
     };
 

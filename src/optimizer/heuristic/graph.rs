@@ -182,7 +182,7 @@ impl HepGraph {
             .map(|edge| edge.target())
     }
 
-    pub fn to_plan(mut self, memo: Option<&Memo>) -> Option<LogicalPlan> {
+    pub fn into_plan(mut self, memo: Option<&Memo>) -> Option<LogicalPlan> {
         self.build_childrens(self.root_index, memo)
     }
 
@@ -345,7 +345,7 @@ mod tests {
         let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
         let graph = HepGraph::new(plan.clone());
 
-        let plan_for_graph = graph.to_plan(None).unwrap();
+        let plan_for_graph = graph.into_plan(None).unwrap();
 
         assert_eq!(plan, plan_for_graph);
 

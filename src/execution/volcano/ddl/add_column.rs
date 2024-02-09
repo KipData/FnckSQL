@@ -35,7 +35,7 @@ impl AddColumn {
             column,
             if_not_exists,
         } = &self.op;
-        let mut unique_values = column.desc().is_unique.then(|| Vec::new());
+        let mut unique_values = column.desc().is_unique.then(Vec::new);
         let mut tuple_columns = None;
         let mut tuples = Vec::new();
 
@@ -78,7 +78,7 @@ impl AddColumn {
                     id: unique_meta.id,
                     column_values: vec![value],
                 };
-                transaction.add_index(&table_name, index, vec![tuple_id], true)?;
+                transaction.add_index(table_name, index, vec![tuple_id], true)?;
             }
         }
 

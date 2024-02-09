@@ -111,10 +111,7 @@ impl HashJoinStatus {
             let _ = mem::replace(left_init_flag, true);
         }
 
-        build_map
-            .entry(hash)
-            .or_insert_with(|| Vec::new())
-            .push(tuple);
+        build_map.entry(hash).or_insert_with(Vec::new).push(tuple);
 
         Ok(())
     }
@@ -134,7 +131,7 @@ impl HashJoinStatus {
         } = self;
 
         let right_cols_len = tuple.columns.len();
-        let hash = Self::hash_row(&on_right_keys, &hash_random_state, &tuple)?;
+        let hash = Self::hash_row(on_right_keys, hash_random_state, &tuple)?;
 
         if !*right_init_flag {
             Self::columns_filling(&tuple, join_columns, *right_force_nullable);
@@ -240,14 +237,14 @@ impl HashJoinStatus {
                 build_map
                     .drain()
                     .filter(|(hash, _)| !used_set.contains(hash))
-                    .map(|(_, mut tuples)| {
+                    .flat_map(|(_, mut tuples)| {
                         for Tuple {
                             values,
                             columns,
                             id,
                         } in tuples.iter_mut()
                         {
-                            let _ = mem::replace(id, None);
+                            let _ = id.take();
                             let (right_values, full_columns) = buf.get_or_insert_with(|| {
                                 let (right_values, mut right_columns): (
                                     Vec<ValueRef>,
@@ -269,10 +266,9 @@ impl HashJoinStatus {
                         }
                         tuples
                     })
-                    .flatten()
                     .collect_vec()
             })
-            .unwrap_or_else(|| vec![])
+            .unwrap_or_else(Vec::new)
     }
 
     fn columns_filling(tuple: &Tuple, join_columns: &mut Vec<ColumnRef>, force_nullable: bool) {

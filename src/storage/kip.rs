@@ -230,7 +230,7 @@ impl Transaction for KipTransaction {
             }
 
             let column = table.get_column_by_id(&col_id).unwrap();
-            let (key, value) = TableCodec::encode_column(&table_name, column)?;
+            let (key, value) = TableCodec::encode_column(table_name, column)?;
             self.tx.set(key, value);
             self.table_cache.remove(table_name);
 
@@ -256,7 +256,7 @@ impl Transaction for KipTransaction {
                 let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id);
                 Self::_drop_data(&mut self.tx, &index_min, &index_max)?;
             }
-            let (key, _) = TableCodec::encode_column(&table_name, column)?;
+            let (key, _) = TableCodec::encode_column(table_name, column)?;
 
             match self.tx.remove(&key) {
                 Ok(_) => (),

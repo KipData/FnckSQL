@@ -28,7 +28,7 @@ impl<'a, T: Transaction> ColumnMetaLoader<'a, T> {
     pub fn load(&self, table_name: TableName) -> Result<&Vec<ColumnMeta>, DatabaseError> {
         let option = self.cache.get(&table_name);
 
-        return if let Some(column_metas) = option {
+        if let Some(column_metas) = option {
             Ok(column_metas)
         } else {
             let paths = self.tx.column_meta_paths(&table_name)?;
@@ -39,7 +39,7 @@ impl<'a, T: Transaction> ColumnMetaLoader<'a, T> {
             }
 
             Ok(self.cache.get_or_insert(table_name, |_| Ok(column_metas))?)
-        };
+        }
     }
 }
 
@@ -87,7 +87,7 @@ impl ColumnMeta {
             .write(true)
             .read(true)
             .open(path)?;
-        let _ = file.write_all(&bincode::serialize(self)?)?;
+        file.write_all(&bincode::serialize(self)?)?;
         file.flush()?;
 
         Ok(())
