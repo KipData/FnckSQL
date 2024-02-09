@@ -68,6 +68,27 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 left_expr: Box::new(self.bind_expr(low)?),
                 right_expr: Box::new(self.bind_expr(high)?),
             }),
+            Expr::Substring {
+                expr,
+                substring_for,
+                substring_from,
+            } => {
+                let mut for_expr = None;
+                let mut from_expr = None;
+
+                if let Some(expr) = substring_for {
+                    for_expr = Some(Box::new(self.bind_expr(expr)?))
+                }
+                if let Some(expr) = substring_from {
+                    from_expr = Some(Box::new(self.bind_expr(expr)?))
+                }
+
+                Ok(ScalarExpression::SubString {
+                    expr: Box::new(self.bind_expr(expr)?),
+                    for_expr,
+                    from_expr,
+                })
+            }
             _ => {
                 todo!()
             }

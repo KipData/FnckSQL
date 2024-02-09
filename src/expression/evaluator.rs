@@ -4,6 +4,7 @@ use crate::expression::value_compute::{binary_op, unary_op};
 use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
+use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::cmp::Ordering;
@@ -11,6 +12,19 @@ use std::sync::Arc;
 
 lazy_static! {
     static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
+}
+
+macro_rules! eval_to_num {
+    ($num_expr:expr, $tuple:expr) => {
+        if let Some(num_i32) = DataValue::clone($num_expr.eval($tuple)?.as_ref())
+            .cast(&LogicalType::Integer)?
+            .i32()
+        {
+            num_i32 as usize
+        } else {
+            return Ok(Arc::new(DataValue::Utf8(None)));
+        }
+    };
 }
 
 impl ScalarExpression {
@@ -123,6 +137,27 @@ impl ScalarExpression {
                     is_between = !is_between;
                 }
                 Ok(Arc::new(DataValue::Boolean(Some(is_between))))
+            }
+            ScalarExpression::SubString {
+                expr,
+                for_expr,
+                from_expr,
+            } => {
+                if let Some(mut string) = DataValue::clone(expr.eval(tuple)?.as_ref())
+                    .cast(&LogicalType::Varchar(None))?
+                    .utf8()
+                {
+                    if let Some(from_expr) = from_expr {
+                        string = string.split_off(eval_to_num!(from_expr, tuple).saturating_sub(1));
+                    }
+                    if let Some(for_expr) = for_expr {
+                        let _ = string.split_off(eval_to_num!(for_expr, tuple));
+                    }
+
+                    Ok(Arc::new(DataValue::Utf8(Some(string))))
+                } else {
+                    Ok(Arc::new(DataValue::Utf8(None)))
+                }
             }
         }
     }

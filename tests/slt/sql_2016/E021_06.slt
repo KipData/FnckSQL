@@ -1,28 +1,27 @@
 # E021-06: SUBSTRING function
 
-# TODO: SUBSTRING()
+query T
+SELECT SUBSTRING ( 'foo' FROM 1 )
+----
+foo
 
-# query T
-# SELECT SUBSTRING ( 'foo' FROM 1 )
-# ----
-# 'foo'
+query T
+SELECT SUBSTRING ( 'foo' FROM 1 FOR 2 )
+----
+fo
 
-# query T
-# SELECT SUBSTRING ( 'foo' FROM 1 FOR 2 )
-# ----
-# 'fo'
-
+# sqlparser-rs unsupported
 # query I
 # SELECT SUBSTRING ( 'foo' FROM 1 FOR 2 USING CHARACTERS )
 
-
+# sqlparser-rs unsupported
 # query I
 # SELECT SUBSTRING ( 'foo' FROM 1 FOR 2 USING OCTETS )
 
-
+# sqlparser-rs unsupported
 # query I
 # SELECT SUBSTRING ( 'foo' FROM 1 USING CHARACTERS )
 
-
+# sqlparser-rs unsupported
 # query I
 # SELECT SUBSTRING ( 'foo' FROM 1 USING OCTETS )
