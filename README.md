@@ -51,7 +51,7 @@ then use `psql` to enter sql
 Using FnckSQL in code
 ```rust
 let fnck_sql = Database::with_kipdb("./data").await?;
-let tupes = fnck_sql.run("select * from t1").await?;
+let tuples = fnck_sql.run("select * from t1").await?;
 ```
 Storage Support:
 - KipDB
