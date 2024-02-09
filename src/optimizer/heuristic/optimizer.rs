@@ -67,8 +67,7 @@ impl HepOptimizer {
             })
             .transpose()?;
 
-        self
-            .graph
+        self.graph
             .into_plan(memo.as_ref())
             .ok_or(DatabaseError::EmptyPlan)
     }

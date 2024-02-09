@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use crate::catalog::ColumnSummary;
 use crate::errors::DatabaseError;
 use crate::expression::value_compute::{binary_op, unary_op};
@@ -7,6 +6,7 @@ use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 lazy_static! {
@@ -101,16 +101,23 @@ impl ScalarExpression {
 
                 Ok(value)
             }
-            ScalarExpression::Between { expr, left_expr, right_expr, negated } => {
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                negated,
+            } => {
                 let value = expr.eval(tuple)?;
                 let left = left_expr.eval(tuple)?;
                 let right = right_expr.eval(tuple)?;
 
-                let mut is_between = match (value.partial_cmp(&left).map(Ordering::is_ge), value.partial_cmp(&right).map(Ordering::is_le)) {
+                let mut is_between = match (
+                    value.partial_cmp(&left).map(Ordering::is_ge),
+                    value.partial_cmp(&right).map(Ordering::is_le),
+                ) {
                     (Some(true), Some(true)) => true,
                     (None, _) | (_, None) => return Ok(Arc::new(DataValue::Boolean(None))),
                     _ => false,
-
                 };
                 if *negated {
                     is_between = !is_between;

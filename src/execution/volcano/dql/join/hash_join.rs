@@ -111,10 +111,7 @@ impl HashJoinStatus {
             let _ = mem::replace(left_init_flag, true);
         }
 
-        build_map
-            .entry(hash)
-            .or_insert_with(Vec::new)
-            .push(tuple);
+        build_map.entry(hash).or_insert_with(Vec::new).push(tuple);
 
         Ok(())
     }

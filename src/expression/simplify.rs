@@ -655,11 +655,20 @@ impl ScalarExpression {
 
                 let _ = mem::replace(self, new_expr);
             }
-            ScalarExpression::Between { expr, left_expr, right_expr, negated } => {
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                negated,
+            } => {
                 let (op, left_op, right_op) = if *negated {
                     (BinaryOperator::Or, BinaryOperator::Lt, BinaryOperator::Gt)
                 } else {
-                    (BinaryOperator::And, BinaryOperator::GtEq, BinaryOperator::LtEq)
+                    (
+                        BinaryOperator::And,
+                        BinaryOperator::GtEq,
+                        BinaryOperator::LtEq,
+                    )
                 };
                 let new_expr = ScalarExpression::Binary {
                     op,
@@ -908,7 +917,7 @@ impl ScalarExpression {
             | ScalarExpression::TypeCast { expr, .. }
             | ScalarExpression::Unary { expr, .. }
             | ScalarExpression::In { expr, .. }
-            | ScalarExpression::Between { expr , ..} => expr.convert_binary(col_id),
+            | ScalarExpression::Between { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::IsNull { expr, negated, .. } => match expr.as_ref() {
                 ScalarExpression::ColumnRef(column) => {
                     Ok(column.id().is_some_and(|id| col_id == &id).then(|| {
@@ -927,7 +936,7 @@ impl ScalarExpression {
                 | ScalarExpression::Binary { .. }
                 | ScalarExpression::AggCall { .. }
                 | ScalarExpression::In { .. }
-                |ScalarExpression::Between { .. } => expr.convert_binary(col_id),
+                | ScalarExpression::Between { .. } => expr.convert_binary(col_id),
             },
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)

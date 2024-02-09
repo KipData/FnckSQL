@@ -210,10 +210,7 @@ fn encode_tuples<'a>(tuples: Vec<Tuple>) -> PgWireResult<QueryResponse<'a>> {
         results.push(encoder.finish());
     }
 
-    Ok(QueryResponse::new(
-        schema,
-        stream::iter(results),
-    ))
+    Ok(QueryResponse::new(schema, stream::iter(results)))
 }
 
 fn into_pg_type(data_type: &LogicalType) -> PgWireResult<Type> {

@@ -53,9 +53,7 @@ impl HistogramBuilder {
             column_id: column.id().ok_or(DatabaseError::OwnerLessColumn)?,
             data_type: *column.datatype(),
             null_count: 0,
-            values: capacity
-                .map(Vec::with_capacity)
-                .unwrap_or_default(),
+            values: capacity.map(Vec::with_capacity).unwrap_or_default(),
             value_index: 0,
         })
     }

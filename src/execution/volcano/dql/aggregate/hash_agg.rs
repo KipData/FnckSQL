@@ -112,8 +112,7 @@ impl HashAggStatus {
     pub(crate) fn as_tuples(&mut self) -> Result<Vec<Tuple>, DatabaseError> {
         let group_columns = Arc::new(mem::take(&mut self.group_columns));
 
-        self
-            .group_hash_accs
+        self.group_hash_accs
             .drain()
             .map(|(group_keys, accs)| {
                 // Tips: Accumulator First
