@@ -71,104 +71,136 @@ statement ok
 create table t1(id int primary key, v1 varchar)
 
 statement ok
-insert into t1 values (0, 'KipSQL'), (1, 'KipDB'), (2, 'KipBlog'), (3, 'Cool!');
+insert into t1 values (0, 'KipSQL'), (1, 'KipDB'), (2, 'KipBlog'), (3, 'Cool!'), (4, 'F%ck')
 
-query II
+query IT
 select * from t1 where v1 like 'Kip%'
 ----
 0 KipSQL
 1 KipDB
 2 KipBlog
 
-query II
+query IT
 select * from t1 where v1 not like 'Kip%'
 ----
 3 Cool!
+4 F%ck
 
-query II
+query IT
+select * from t1 where v1 like 'F@%ck' escape '@'
+----
+4 F%ck
+
+query IT
 select * from t1 where v1 like 'KipD_'
 ----
 1 KipDB
 
-query II
+query IT
 select * from t1 where v1 like 'KipS_L'
 ----
 0 KipSQL
 
-query II
+query IT
 select * from t1 where v1 like 'K%L'
 ----
 0 KipSQL
 
-query II
+query IT
+select * from t1 where v1 like null
+----
+
+query IT
+select * from t1 where null like 'K%L'
+----
+
+query IT
+select * from t1 where null like null
+----
+
+query IT
+select * from t1 where v1 not like null
+----
+
+query IT
+select * from t1 where null not like 'K%L'
+----
+
+query IT
+select * from t1 where null not like null
+----
+
+query IT
 select * from t1 where id in (1, 2)
 ----
 1 KipDB
 2 KipBlog
 
-query II
+query IT
 select * from t1 where id not in (1, 2)
 ----
 0 KipSQL
 3 Cool!
+4 F%ck
 
-query II
+query IT
 select * from t1 where id in (1, null)
 ----
 
-query II
+query IT
 select * from t1 where null in (1, 2)
 ----
 
-query II
+query IT
 select * from t1 where null in (1, null)
 ----
 
-query II
+query IT
 select * from t1 where id not in (1, null)
 ----
 
-query II
+query IT
 select * from t1 where null not in (1, 2)
 ----
 
-query II
+query IT
 select * from t1 where null not in (1, null)
 ----
 
-query II
+query IT
 select * from t1 where id between 1 and 2
 ----
 1 KipDB
 2 KipBlog
 
-query II
+query IT
 select * from t1 where id not between 1 and 2
 ----
 0 KipSQL
 3 Cool!
+4 F%ck
 
-query II
+query IT
 select * from t1 where id between 1 and null
 ----
 
-query II
+query IT
 select * from t1 where null between 1 and 2
 ----
 
-query II
+query IT
 select * from t1 where null between 1 and null
 ----
 
-query II
+query IT
 select * from t1 where id not between 1 and null
 ----
 
-query II
+query IT
 select * from t1 where null not between 1 and 2
 ----
 
-query II
+query IT
 select * from t1 where null not between 1 and null
 ----
 

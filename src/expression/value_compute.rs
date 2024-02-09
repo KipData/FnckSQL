@@ -181,18 +181,32 @@ pub fn binary_op(
     right: &DataValue,
     op: &BinaryOperator,
 ) -> Result<DataValue, DatabaseError> {
-    if matches!(op, BinaryOperator::Like | BinaryOperator::NotLike) {
+    if let BinaryOperator::Like(escape_char) | BinaryOperator::NotLike(escape_char) = op {
         let value_option = unpack_utf8(left.clone().cast(&LogicalType::Varchar(None))?);
         let pattern_option = unpack_utf8(right.clone().cast(&LogicalType::Varchar(None))?);
 
         let mut is_match = if let (Some(value), Some(pattern)) = (value_option, pattern_option) {
-            let regex_pattern = pattern.replace('%', ".*").replace('_', ".");
+            let mut regex_pattern = String::new();
+            let mut chars = pattern.chars().peekable();
+            while let Some(c) = chars.next() {
+                if matches!(escape_char.map(|escape_c| escape_c == c), Some(true)) {
+                    if let Some(next_char) = chars.next() {
+                        regex_pattern.push(next_char);
+                    }
+                } else if c == '%' {
+                    regex_pattern.push_str(".*");
+                } else if c == '_' {
+                    regex_pattern.push('.');
+                } else {
+                    regex_pattern.push(c);
+                }
+            }
 
             Regex::new(&regex_pattern).unwrap().is_match(&value)
         } else {
-            unreachable!("The left and right values calculated by Like cannot be Null values.")
+            return Ok(DataValue::Boolean(None));
         };
-        if op == &BinaryOperator::NotLike {
+        if matches!(op, BinaryOperator::NotLike(_)) {
             is_match = !is_match;
         }
         return Ok(DataValue::Boolean(Some(is_match)));

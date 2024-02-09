@@ -351,8 +351,8 @@ pub enum BinaryOperator {
     Spaceship,
     Eq,
     NotEq,
-    Like,
-    NotLike,
+    Like(Option<char>),
+    NotLike(Option<char>),
 
     And,
     Or,
@@ -367,6 +367,13 @@ impl fmt::Display for ScalarExpression {
 
 impl fmt::Display for BinaryOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let like_op = |f: &mut Formatter, escape_char: &Option<char>| {
+            if let Some(escape_char) = escape_char {
+                write!(f, "(escape: {})", escape_char)?;
+            }
+            Ok(())
+        };
+
         match self {
             BinaryOperator::Plus => write!(f, "+"),
             BinaryOperator::Minus => write!(f, "-"),
@@ -384,8 +391,14 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::And => write!(f, "&&"),
             BinaryOperator::Or => write!(f, "||"),
             BinaryOperator::Xor => write!(f, "^"),
-            BinaryOperator::Like => write!(f, "like"),
-            BinaryOperator::NotLike => write!(f, "not like"),
+            BinaryOperator::Like(escape_char) => {
+                write!(f, "like")?;
+                like_op(f, escape_char)
+            }
+            BinaryOperator::NotLike(escape_char) => {
+                write!(f, "not like")?;
+                like_op(f, escape_char)
+            }
         }
     }
 }
