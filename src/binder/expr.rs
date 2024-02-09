@@ -41,8 +41,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 negated,
                 expr,
                 pattern,
-                ..
-            } => self.bind_like(*negated, expr, pattern),
+                escape_char,
+            } => self.bind_like(*negated, expr, pattern, escape_char),
             Expr::IsNull(expr) => self.bind_is_null(expr, false),
             Expr::IsNotNull(expr) => self.bind_is_null(expr, true),
             Expr::InList {
@@ -100,13 +100,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
         negated: bool,
         expr: &Expr,
         pattern: &Expr,
+        escape_char: &Option<char>,
     ) -> Result<ScalarExpression, DatabaseError> {
         let left_expr = Box::new(self.bind_expr(expr)?);
         let right_expr = Box::new(self.bind_expr(pattern)?);
         let op = if negated {
-            expression::BinaryOperator::NotLike
+            expression::BinaryOperator::NotLike(*escape_char)
         } else {
-            expression::BinaryOperator::Like
+            expression::BinaryOperator::Like(*escape_char)
         };
         Ok(ScalarExpression::Binary {
             op,
