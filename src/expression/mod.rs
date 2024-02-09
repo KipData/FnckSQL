@@ -64,6 +64,11 @@ pub enum ScalarExpression {
         left_expr: Box<ScalarExpression>,
         right_expr: Box<ScalarExpression>,
     },
+    SubString {
+        expr: Box<ScalarExpression>,
+        for_expr: Option<Box<ScalarExpression>>,
+        from_expr: Option<Box<ScalarExpression>>,
+    },
 }
 
 impl ScalarExpression {
@@ -91,32 +96,6 @@ impl ScalarExpression {
         }
     }
 
-    pub fn nullable(&self) -> bool {
-        match self {
-            ScalarExpression::Constant(_) => false,
-            ScalarExpression::ColumnRef(col) => col.nullable,
-            ScalarExpression::Alias { expr, .. } => expr.nullable(),
-            ScalarExpression::TypeCast { expr, .. } => expr.nullable(),
-            ScalarExpression::IsNull { expr, .. } => expr.nullable(),
-            ScalarExpression::Unary { expr, .. } => expr.nullable(),
-            ScalarExpression::Binary {
-                left_expr,
-                right_expr,
-                ..
-            } => left_expr.nullable() && right_expr.nullable(),
-            ScalarExpression::In { expr, args, .. } => {
-                expr.nullable() && args.iter().all(ScalarExpression::nullable)
-            }
-            ScalarExpression::AggCall { args, .. } => args.iter().all(ScalarExpression::nullable),
-            ScalarExpression::Between {
-                expr,
-                left_expr,
-                right_expr,
-                ..
-            } => expr.nullable() && left_expr.nullable() && right_expr.nullable(),
-        }
-    }
-
     pub fn return_type(&self) -> LogicalType {
         match self {
             Self::Constant(v) => v.logical_type(),
@@ -136,6 +115,7 @@ impl ScalarExpression {
             Self::IsNull { .. } | Self::In { .. } | ScalarExpression::Between { .. } => {
                 LogicalType::Boolean
             }
+            Self::SubString { .. } => LogicalType::Varchar(None),
             Self::Alias { expr, .. } => expr.return_type(),
         }
     }
@@ -214,6 +194,21 @@ impl ScalarExpression {
                 right_expr,
                 ..
             } => expr.has_agg_call() || left_expr.has_agg_call() || right_expr.has_agg_call(),
+            ScalarExpression::SubString {
+                expr,
+                for_expr,
+                from_expr,
+            } => {
+                expr.has_agg_call()
+                    || matches!(
+                        for_expr.as_ref().map(|expr| expr.has_agg_call()),
+                        Some(true)
+                    )
+                    || matches!(
+                        from_expr.as_ref().map(|expr| expr.has_agg_call()),
+                        Some(true)
+                    )
+            }
         }
     }
 
@@ -285,6 +280,25 @@ impl ScalarExpression {
                     op_string,
                     left_expr.output_name(),
                     right_expr.output_name()
+                )
+            }
+            ScalarExpression::SubString {
+                expr,
+                for_expr,
+                from_expr,
+            } => {
+                let op = |tag: &str, num_expr: &Option<Box<ScalarExpression>>| {
+                    num_expr
+                        .as_ref()
+                        .map(|expr| format!(", {}: {}", tag, expr.output_name()))
+                        .unwrap_or_default()
+                };
+
+                format!(
+                    "substring({}{}{})",
+                    expr.output_name(),
+                    op("from", from_expr),
+                    op("for", for_expr),
                 )
             }
         }

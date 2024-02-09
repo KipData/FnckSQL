@@ -120,6 +120,19 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 self.visit_column_agg_expr(left_expr)?;
                 self.visit_column_agg_expr(right_expr)?;
             }
+            ScalarExpression::SubString {
+                expr,
+                for_expr,
+                from_expr,
+            } => {
+                self.visit_column_agg_expr(expr)?;
+                if let Some(expr) = for_expr {
+                    self.visit_column_agg_expr(expr)?;
+                }
+                if let Some(expr) = from_expr {
+                    self.visit_column_agg_expr(expr)?;
+                }
+            }
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {}
         }
 
@@ -276,6 +289,20 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 self.validate_having_orderby(expr)?;
                 self.validate_having_orderby(left_expr)?;
                 self.validate_having_orderby(right_expr)?;
+                Ok(())
+            }
+            ScalarExpression::SubString {
+                expr,
+                for_expr,
+                from_expr,
+            } => {
+                self.validate_having_orderby(expr)?;
+                if let Some(expr) = for_expr {
+                    self.validate_having_orderby(expr)?;
+                }
+                if let Some(expr) = from_expr {
+                    self.validate_having_orderby(expr)?;
+                }
                 Ok(())
             }
             ScalarExpression::Constant(_) => Ok(()),

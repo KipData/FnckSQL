@@ -1,0 +1,26 @@
+query T
+select substring('pineapple' from 5 for 10 )
+----
+app
+
+query T
+select substring('pineapple' for 4 )
+----
+pine
+
+query T
+select substring('pineapple' from 5 )
+----
+apple
+
+query T
+select substring('pineapple' from 1 for null )
+----
+
+query T
+select substring('pineapple' from null for 4 )
+----
+
+query T
+select substring(null from 1 for 4 )
+----

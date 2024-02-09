@@ -917,7 +917,8 @@ impl ScalarExpression {
             | ScalarExpression::TypeCast { expr, .. }
             | ScalarExpression::Unary { expr, .. }
             | ScalarExpression::In { expr, .. }
-            | ScalarExpression::Between { expr, .. } => expr.convert_binary(col_id),
+            | ScalarExpression::Between { expr, .. }
+            | ScalarExpression::SubString { expr, .. } => expr.convert_binary(col_id),
             ScalarExpression::IsNull { expr, negated, .. } => match expr.as_ref() {
                 ScalarExpression::ColumnRef(column) => {
                     Ok(column.id().is_some_and(|id| col_id == &id).then(|| {
@@ -936,7 +937,8 @@ impl ScalarExpression {
                 | ScalarExpression::Binary { .. }
                 | ScalarExpression::AggCall { .. }
                 | ScalarExpression::In { .. }
-                | ScalarExpression::Between { .. } => expr.convert_binary(col_id),
+                | ScalarExpression::Between { .. }
+                | ScalarExpression::SubString { .. } => expr.convert_binary(col_id),
             },
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)
