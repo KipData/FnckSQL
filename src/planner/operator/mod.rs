@@ -144,7 +144,7 @@ impl Operator {
                 .map(|field| &field.expr)
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
-            Operator::Values(op) => op.columns.clone(),
+            Operator::Values(op) => Vec::clone(&op.schema_ref),
             Operator::Analyze(op) => op.columns.clone(),
             Operator::Delete(op) => vec![op.primary_key_column.clone()],
             _ => vec![],

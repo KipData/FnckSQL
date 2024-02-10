@@ -46,7 +46,7 @@ impl UserData for Tuple {
                     columns.push(expr.output_column());
                 }
 
-                tuple.columns = columns;
+                tuple.schema_ref = columns;
                 tuple.values = values;
 
                 Ok(())

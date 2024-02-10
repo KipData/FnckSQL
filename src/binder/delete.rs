@@ -19,9 +19,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
             let table_catalog = self.context.table_and_bind(table_name.clone(), None)?;
             let primary_key_column = table_catalog
-                .columns_with_id()
-                .find(|(_, column)| column.desc.is_primary)
-                .map(|(_, column)| Arc::clone(column))
+                .columns()
+                .find(|column| column.desc.is_primary)
+                .cloned()
                 .unwrap();
             let mut plan = ScanOperator::build(table_name.clone(), table_catalog);
 
@@ -34,14 +34,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 plan = self.bind_where(plan, predicate)?;
             }
 
-            Ok(LogicalPlan {
-                operator: Operator::Delete(DeleteOperator {
+            Ok(LogicalPlan::new(
+                Operator::Delete(DeleteOperator {
                     table_name,
                     primary_key_column,
                 }),
-                childrens: vec![plan],
-                physical_option: None,
-            })
+                vec![plan],
+            ))
         } else {
             unreachable!("only table")
         }

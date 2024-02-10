@@ -39,17 +39,16 @@ impl JoinOperator {
         on: JoinCondition,
         join_type: JoinType,
     ) -> LogicalPlan {
-        LogicalPlan {
-            operator: Operator::Join(JoinOperator { on, join_type }),
-            childrens: vec![left, right],
-            physical_option: None,
-        }
+        LogicalPlan::new(
+            Operator::Join(JoinOperator { on, join_type }),
+            vec![left, right],
+        )
     }
 }
 
 impl fmt::Display for JoinOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{} Join On {}", self.join_type, self.on)?;
+        write!(f, "{} Join{}", self.join_type, self.on)?;
 
         Ok(())
     }
@@ -59,18 +58,20 @@ impl fmt::Display for JoinCondition {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             JoinCondition::On { on, filter } => {
-                let on = on
-                    .iter()
-                    .map(|(v1, v2)| format!("{} = {}", v1, v2))
-                    .join(" AND ");
+                if !on.is_empty() {
+                    let on = on
+                        .iter()
+                        .map(|(v1, v2)| format!("{} = {}", v1, v2))
+                        .join(" AND ");
 
-                write!(f, "{}", on)?;
+                    write!(f, " On {}", on)?;
+                }
                 if let Some(filter) = filter {
-                    write!(f, "Where {}", filter)?;
+                    write!(f, " Where {}", filter)?;
                 }
             }
             JoinCondition::None => {
-                write!(f, "Nothing")?;
+                write!(f, " Nothing")?;
             }
         }
 

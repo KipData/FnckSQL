@@ -70,8 +70,8 @@ impl CopyFromFile {
                 .from_reader(&mut buf_reader),
         };
 
-        let column_count = self.op.columns.len();
-        let tuple_builder = TupleBuilder::new(self.op.columns.clone());
+        let column_count = self.op.schema_ref.len();
+        let tuple_builder = TupleBuilder::new(&self.op.schema_ref);
 
         for record in reader.records() {
             // read records and push raw str rows into data chunk builder
@@ -168,8 +168,7 @@ mod tests {
                     header: false,
                 },
             },
-
-            columns,
+            schema_ref: Arc::new(columns),
         };
         let executor = CopyFromFile {
             op: op.clone(),

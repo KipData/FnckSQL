@@ -14,10 +14,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
     ) -> Result<LogicalPlan, DatabaseError> {
         let table_name = Arc::new(lower_case_name(name)?);
 
-        Ok(LogicalPlan {
-            operator: Operator::Describe(DescribeOperator { table_name }),
-            childrens: vec![],
-            physical_option: None,
-        })
+        Ok(LogicalPlan::new(
+            Operator::Describe(DescribeOperator { table_name }),
+            vec![],
+        ))
     }
 }

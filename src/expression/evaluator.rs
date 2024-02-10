@@ -44,7 +44,7 @@ impl ScalarExpression {
             }
             ScalarExpression::Alias { expr, alias } => {
                 if let Some(value) = tuple
-                    .columns
+                    .schema_ref
                     .iter()
                     .find_position(|tul_col| tul_col.name() == alias)
                     .map(|(i, _)| &tuple.values[i])
@@ -159,12 +159,13 @@ impl ScalarExpression {
                     Ok(Arc::new(DataValue::Utf8(None)))
                 }
             }
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 
     fn eval_with_summary<'a>(tuple: &'a Tuple, summary: &ColumnSummary) -> Option<&'a ValueRef> {
         tuple
-            .columns
+            .schema_ref
             .iter()
             .find_position(|tul_col| tul_col.summary() == summary)
             .map(|(i, _)| &tuple.values[i])

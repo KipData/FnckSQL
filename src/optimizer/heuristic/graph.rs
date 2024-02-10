@@ -200,6 +200,7 @@ impl HepGraph {
             operator,
             childrens,
             physical_option,
+            _out_columns: None,
         })
     }
 }

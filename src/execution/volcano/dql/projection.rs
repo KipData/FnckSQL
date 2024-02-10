@@ -29,13 +29,13 @@ impl Projection {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let Projection { exprs, input } = self;
-        let mut columns = None;
+        let mut schema_ref = None;
 
         #[for_await]
         for tuple in build_read(input, transaction) {
             let mut tuple = tuple?;
             let mut values = Vec::with_capacity(exprs.len());
-            let columns = columns.get_or_insert_with(|| {
+            let schema_ref = schema_ref.get_or_insert_with(|| {
                 let mut columns = Vec::with_capacity(exprs.len());
 
                 for expr in exprs.iter() {
@@ -47,7 +47,7 @@ impl Projection {
             for expr in exprs.iter() {
                 values.push(expr.eval(&tuple)?);
             }
-            tuple.columns = columns.clone();
+            tuple.schema_ref = schema_ref.clone();
             tuple.values = values;
 
             yield tuple;

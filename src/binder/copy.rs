@@ -72,7 +72,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         };
 
         if let Some(table) = self.context.table(Arc::new(table_name.to_string())) {
-            let columns = table.clone_columns();
+            let schema_ref = table.schema_ref().clone();
             let ext_source = ExtSource {
                 path: match target {
                     CopyTarget::File { filename } => filename.into(),
@@ -83,22 +83,20 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
             if to {
                 // COPY <source_table> TO <dest_file>
-                Ok(LogicalPlan {
-                    operator: Operator::CopyToFile(CopyToFileOperator { source: ext_source }),
-                    childrens: vec![],
-                    physical_option: None,
-                })
+                Ok(LogicalPlan::new(
+                    Operator::CopyToFile(CopyToFileOperator { source: ext_source }),
+                    vec![],
+                ))
             } else {
                 // COPY <dest_table> FROM <source_file>
-                Ok(LogicalPlan {
-                    operator: Operator::CopyFromFile(CopyFromFileOperator {
+                Ok(LogicalPlan::new(
+                    Operator::CopyFromFile(CopyFromFileOperator {
                         source: ext_source,
-                        columns,
+                        schema_ref,
                         table: table_name.to_string(),
                     }),
-                    childrens: vec![],
-                    physical_option: None,
-                })
+                    vec![],
+                ))
             }
         } else {
             Err(DatabaseError::InvalidTable(format!(

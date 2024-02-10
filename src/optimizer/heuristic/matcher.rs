@@ -103,16 +103,20 @@ mod tests {
                         operator: Operator::Dummy,
                         childrens: vec![],
                         physical_option: None,
+                        _out_columns: None,
                     }],
                     physical_option: None,
+                    _out_columns: None,
                 },
                 LogicalPlan {
                     operator: Operator::Dummy,
                     childrens: vec![],
                     physical_option: None,
+                    _out_columns: None,
                 },
             ],
             physical_option: None,
+            _out_columns: None,
         };
         let graph = HepGraph::new(all_dummy_plan.clone());
 

@@ -16,14 +16,13 @@ impl AggregateOperator {
         agg_calls: Vec<ScalarExpression>,
         groupby_exprs: Vec<ScalarExpression>,
     ) -> LogicalPlan {
-        LogicalPlan {
-            operator: Operator::Aggregate(Self {
+        LogicalPlan::new(
+            Operator::Aggregate(Self {
                 groupby_exprs,
                 agg_calls,
             }),
-            childrens: vec![children],
-            physical_option: None,
-        }
+            vec![children],
+        )
     }
 }
 

@@ -50,7 +50,9 @@ impl Update {
             #[for_await]
             for tuple in build_read(values, transaction) {
                 let Tuple {
-                    columns, values, ..
+                    schema_ref: columns,
+                    values,
+                    ..
                 } = tuple?;
                 for i in 0..columns.len() {
                     value_map.insert(columns[i].id(), values[i].clone());
@@ -66,7 +68,7 @@ impl Update {
             for mut tuple in tuples {
                 let mut is_overwrite = true;
 
-                for (i, column) in tuple.columns.iter().enumerate() {
+                for (i, column) in tuple.schema_ref.iter().enumerate() {
                     if let Some(value) = value_map.get(&column.id()) {
                         if column.desc.is_primary {
                             let old_key = tuple.id.replace(value.clone()).unwrap();

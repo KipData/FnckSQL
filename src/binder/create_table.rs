@@ -80,15 +80,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
             ));
         }
 
-        let plan = LogicalPlan {
-            operator: Operator::CreateTable(CreateTableOperator {
+        let plan = LogicalPlan::new(
+            Operator::CreateTable(CreateTableOperator {
                 table_name,
                 columns,
                 if_not_exists,
             }),
-            childrens: vec![],
-            physical_option: None,
-        };
+            vec![],
+        );
         Ok(plan)
     }
 

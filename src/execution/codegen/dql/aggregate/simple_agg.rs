@@ -85,7 +85,7 @@ impl UserData for AggAccumulators {
 
             Ok(Tuple {
                 id: None,
-                columns,
+                schema_ref: columns,
                 values,
             })
         });

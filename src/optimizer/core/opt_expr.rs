@@ -40,10 +40,6 @@ impl OptExpr {
             .iter()
             .map(|c| c.to_plan_ref())
             .collect::<Vec<_>>();
-        LogicalPlan {
-            operator: self.root.clone(),
-            childrens,
-            physical_option: None,
-        }
+        LogicalPlan::new(self.root.clone(), childrens)
     }
 }

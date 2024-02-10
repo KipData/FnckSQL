@@ -42,7 +42,7 @@ impl DropColumn {
 
             if tuple_columns.is_none() {
                 if let Some((column_index, is_primary)) = tuple
-                    .columns
+                    .schema_ref
                     .iter()
                     .enumerate()
                     .find(|(_, column)| column.name() == column_name)
@@ -53,7 +53,7 @@ impl DropColumn {
                             "drop of primary key column is not allowed.".to_owned(),
                         ))?;
                     }
-                    let mut columns = Vec::clone(&tuple.columns);
+                    let mut columns = Vec::clone(&tuple.schema_ref);
                     let _ = columns.remove(column_index);
 
                     tuple_columns = Some((column_index, Arc::new(columns)));
@@ -66,7 +66,7 @@ impl DropColumn {
                 .clone()
                 .ok_or_else(|| DatabaseError::InvalidColumn("not found column".to_string()))?;
 
-            tuple.columns = columns;
+            tuple.schema_ref = columns;
             let _ = tuple.values.remove(column_i);
 
             tuples.push(tuple);

@@ -18,7 +18,7 @@ impl Dummy {
     pub async fn _execute(self) {
         yield Tuple {
             id: None,
-            columns: Arc::new(vec![]),
+            schema_ref: Arc::new(vec![]),
             values: vec![],
         }
     }

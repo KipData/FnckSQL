@@ -66,7 +66,7 @@ impl SimpleAggExecutor {
 
             yield Tuple {
                 id: None,
-                columns: Arc::new(columns),
+                schema_ref: Arc::new(columns),
                 values,
             };
         }

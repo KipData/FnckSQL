@@ -167,7 +167,7 @@ fn encode_tuples<'a>(tuples: Vec<Tuple>) -> PgWireResult<QueryResponse<'a>> {
     let mut results = Vec::with_capacity(tuples.len());
     let schema = Arc::new(
         tuples[0]
-            .columns
+            .schema_ref
             .iter()
             .map(|column| {
                 let pg_type = into_pg_type(column.datatype())?;

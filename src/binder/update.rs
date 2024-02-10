@@ -50,13 +50,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 }
             }
 
-            let values_plan = self.bind_values(vec![row], columns);
+            let values_plan = self.bind_values(vec![row], Arc::new(columns));
 
-            Ok(LogicalPlan {
-                operator: Operator::Update(UpdateOperator { table_name }),
-                childrens: vec![plan, values_plan],
-                physical_option: None,
-            })
+            Ok(LogicalPlan::new(
+                Operator::Update(UpdateOperator { table_name }),
+                vec![plan, values_plan],
+            ))
         } else {
             unreachable!("only table")
         }

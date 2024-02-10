@@ -89,6 +89,21 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     from_expr,
                 })
             }
+            Expr::Subquery(query) => {
+                let mut sub_query = self.bind_query(query)?;
+                let sub_query_schema = sub_query.out_schmea();
+
+                if sub_query_schema.len() > 1 {
+                    return Err(DatabaseError::MisMatch(
+                        "expects only one expression to be returned".to_string(),
+                        "the expression returned by the subquery".to_string(),
+                    ));
+                }
+                let expr = ScalarExpression::ColumnRef(sub_query_schema[0].clone());
+                self.context.sub_query(sub_query);
+
+                Ok(expr)
+            }
             _ => {
                 todo!()
             }

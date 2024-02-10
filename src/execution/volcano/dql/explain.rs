@@ -27,12 +27,12 @@ impl<T: Transaction> ReadExecutor<T> for Explain {
 impl Explain {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute(self) {
-        let columns = Arc::new(vec![Arc::new(ColumnCatalog::new_dummy("PLAN".to_string()))]);
+        let schema_ref = Arc::new(vec![Arc::new(ColumnCatalog::new_dummy("PLAN".to_string()))]);
         let values = vec![Arc::new(DataValue::Utf8(Some(self.plan.explain(0))))];
 
         yield Tuple {
             id: None,
-            columns,
+            schema_ref,
             values,
         };
     }

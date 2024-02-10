@@ -14,9 +14,9 @@ use crate::{
     types::value::DataValue,
 };
 
-use super::{lower_case_name, lower_ident, Binder};
+use super::{lower_case_name, lower_ident, Binder, QueryBindStep};
 
-use crate::catalog::{ColumnCatalog, TableCatalog, TableName};
+use crate::catalog::{ColumnCatalog, TableName};
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::join::joins_nullable;
 use crate::expression::BinaryOperator;
@@ -24,9 +24,9 @@ use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
+use crate::types::tuple::Schema;
 use crate::types::LogicalType;
 use itertools::Itertools;
-use sqlparser::ast;
 use sqlparser::ast::{
     Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
     SelectItem, SetExpr, TableAlias, TableFactor, TableWithJoins,
@@ -66,12 +66,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         let mut select_list = self.normalize_select_item(&select.projection)?;
 
-        self.extract_select_join(&mut select_list);
-
         if let Some(predicate) = &select.selection {
             plan = self.bind_where(plan, predicate)?;
         }
-
+        self.extract_select_join(&mut select_list);
         self.extract_select_aggregate(&mut select_list)?;
 
         if !select.group_by.is_empty() {
@@ -113,13 +111,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         from: &[TableWithJoins],
     ) -> Result<LogicalPlan, DatabaseError> {
+        self.context.step(QueryBindStep::From);
+
         assert!(from.len() < 2, "not support yet.");
         if from.is_empty() {
-            return Ok(LogicalPlan {
-                operator: Operator::Dummy,
-                childrens: vec![],
-                physical_option: None,
-            });
+            return Ok(LogicalPlan::new(Operator::Dummy, vec![]));
         }
 
         let TableWithJoins { relation, joins } = &from[0];
@@ -190,20 +186,24 @@ impl<'a, T: Transaction> Binder<'a, T> {
         table_name: TableName,
     ) -> Result<(), DatabaseError> {
         if !alias_column.is_empty() {
-            let aliases = alias_column.iter().map(lower_ident).collect_vec();
             let table = self
                 .context
                 .table(table_name.clone())
                 .ok_or(DatabaseError::TableNotFound)?;
 
-            if aliases.len() != table.columns_len() {
+            if alias_column.len() != table.columns_len() {
                 return Err(DatabaseError::MisMatch(
                     "Alias".to_string(),
                     "Columns".to_string(),
                 ));
             }
-            let columns = table.clone_columns();
-            for (alias, column) in aliases.into_iter().zip(columns.into_iter()) {
+            let aliases_with_columns = alias_column
+                .iter()
+                .map(lower_ident)
+                .zip(table.columns().cloned())
+                .collect_vec();
+
+            for (alias, column) in aliases_with_columns {
                 self.context
                     .add_alias(alias, ScalarExpression::ColumnRef(column));
             }
@@ -295,8 +295,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
             })
             .map(|(alias, expr)| (expr, alias))
             .collect();
-        for (_, col) in table.columns_with_id() {
-            let mut expr = ScalarExpression::ColumnRef(col.clone());
+        for column in table.columns() {
+            let mut expr = ScalarExpression::ColumnRef(column.clone());
 
             if let Some(alias_expr) = alias_map.get(&expr) {
                 expr = ScalarExpression::Alias {
@@ -333,12 +333,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         let left_table = self
             .context
-            .table(left_table.clone())
+            .table(left_table)
+            .map(|table| table.schema_ref())
             .cloned()
             .ok_or(DatabaseError::TableNotFound)?;
         let right_table = self
             .context
-            .table(right_table.clone())
+            .table(right_table)
+            .map(|table| table.schema_ref())
             .cloned()
             .ok_or(DatabaseError::TableNotFound)?;
 
@@ -352,14 +354,51 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     pub(crate) fn bind_where(
         &mut self,
-        children: LogicalPlan,
+        mut children: LogicalPlan,
         predicate: &Expr,
     ) -> Result<LogicalPlan, DatabaseError> {
-        Ok(FilterOperator::build(
-            self.bind_expr(predicate)?,
-            children,
-            false,
-        ))
+        self.context.step(QueryBindStep::Where);
+
+        let predicate = self.bind_expr(predicate)?;
+        println!("{}", predicate);
+
+        if let Some(sub_queries) = self.context.sub_query_for_now() {
+            for mut sub_query in sub_queries {
+                let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = vec![];
+                let mut filter = vec![];
+
+                Self::extract_join_keys(
+                    predicate.clone(),
+                    &mut on_keys,
+                    &mut filter,
+                    children.out_schmea(),
+                    sub_query.out_schmea(),
+                )?;
+
+                // combine multiple filter exprs into one BinaryExpr
+                let join_filter =
+                    filter
+                        .into_iter()
+                        .reduce(|acc, expr| ScalarExpression::Binary {
+                            op: BinaryOperator::And,
+                            left_expr: Box::new(acc),
+                            right_expr: Box::new(expr),
+                            ty: LogicalType::Boolean,
+                        });
+
+                children = LJoinOperator::build(
+                    children,
+                    sub_query,
+                    JoinCondition::On {
+                        on: on_keys,
+                        filter: join_filter,
+                    },
+                    JoinType::Inner,
+                );
+            }
+            return Ok(children);
+        }
+        Ok(FilterOperator::build(predicate, children, false))
     }
 
     fn bind_having(
@@ -367,6 +406,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
         children: LogicalPlan,
         having: ScalarExpression,
     ) -> Result<LogicalPlan, DatabaseError> {
+        self.context.step(QueryBindStep::Having);
+
         self.validate_having_orderby(&having)?;
         Ok(FilterOperator::build(having, children, true))
     }
@@ -376,22 +417,24 @@ impl<'a, T: Transaction> Binder<'a, T> {
         children: LogicalPlan,
         select_list: Vec<ScalarExpression>,
     ) -> Result<LogicalPlan, DatabaseError> {
-        Ok(LogicalPlan {
-            operator: Operator::Project(ProjectOperator { exprs: select_list }),
-            childrens: vec![children],
-            physical_option: None,
-        })
+        self.context.step(QueryBindStep::Project);
+
+        Ok(LogicalPlan::new(
+            Operator::Project(ProjectOperator { exprs: select_list }),
+            vec![children],
+        ))
     }
 
     fn bind_sort(&mut self, children: LogicalPlan, sort_fields: Vec<SortField>) -> LogicalPlan {
-        LogicalPlan {
-            operator: Operator::Sort(SortOperator {
+        self.context.step(QueryBindStep::Sort);
+
+        LogicalPlan::new(
+            Operator::Sort(SortOperator {
                 sort_fields,
                 limit: None,
             }),
-            childrens: vec![children],
-            physical_option: None,
-        }
+            vec![children],
+        )
     }
 
     fn bind_limit(
@@ -400,6 +443,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
         limit_expr: &Option<Expr>,
         offset_expr: &Option<Offset>,
     ) -> Result<LogicalPlan, DatabaseError> {
+        self.context.step(QueryBindStep::Limit);
+
         let mut limit = None;
         let mut offset = None;
         if let Some(expr) = limit_expr {
@@ -480,8 +525,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     fn bind_join_constraint(
         &mut self,
-        left_table: &TableCatalog,
-        right_table: &TableCatalog,
+        left_schema: &Schema,
+        right_schema: &Schema,
         constraint: &JoinConstraint,
     ) -> Result<JoinCondition, DatabaseError> {
         match constraint {
@@ -490,8 +535,15 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = vec![];
                 // expression that didn't match equi-join pattern
                 let mut filter = vec![];
+                let expr = self.bind_expr(expr)?;
 
-                self.extract_join_keys(expr, &mut on_keys, &mut filter, left_table, right_table)?;
+                Self::extract_join_keys(
+                    expr,
+                    &mut on_keys,
+                    &mut filter,
+                    left_schema,
+                    right_schema,
+                )?;
 
                 // combine multiple filter exprs into one BinaryExpr
                 let join_filter = filter
@@ -524,70 +576,89 @@ impl<'a, T: Transaction> Binder<'a, T> {
     /// foo = bar AND baz > 1 => accum=[(foo, bar)] accum_filter=[baz > 1]
     /// ```
     fn extract_join_keys(
-        &mut self,
-        expr: &Expr,
+        expr: ScalarExpression,
         accum: &mut Vec<(ScalarExpression, ScalarExpression)>,
         accum_filter: &mut Vec<ScalarExpression>,
-        left_schema: &TableCatalog,
-        right_schema: &TableCatalog,
+        left_schema: &Schema,
+        right_schema: &Schema,
     ) -> Result<(), DatabaseError> {
         match expr {
-            Expr::BinaryOp { left, op, right } => match op {
-                ast::BinaryOperator::Eq => {
-                    let left = self.bind_expr(left)?;
-                    let right = self.bind_expr(right)?;
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                op,
+                ty,
+            } => match op {
+                BinaryOperator::Eq => {
+                    let fn_contains = |schema: &Schema, name: &str| {
+                        schema.iter().any(|column| column.name() == name)
+                    };
 
-                    match (&left, &right) {
+                    match (left_expr.as_ref(), right_expr.as_ref()) {
                         // example: foo = bar
                         (ScalarExpression::ColumnRef(l), ScalarExpression::ColumnRef(r)) => {
                             // reorder left and right joins keys to pattern: (left, right)
-                            if left_schema.contains_column(l.name())
-                                && right_schema.contains_column(r.name())
+                            if fn_contains(left_schema, l.name())
+                                && fn_contains(right_schema, r.name())
                             {
-                                accum.push((left, right));
-                            } else if left_schema.contains_column(r.name())
-                                && right_schema.contains_column(l.name())
+                                accum.push((*left_expr, *right_expr));
+                            } else if fn_contains(left_schema, r.name())
+                                && fn_contains(right_schema, l.name())
                             {
-                                accum.push((right, left));
+                                accum.push((*right_expr, *left_expr));
                             } else {
-                                accum_filter.push(self.bind_expr(expr)?);
+                                accum_filter.push(ScalarExpression::Binary {
+                                    left_expr,
+                                    right_expr,
+                                    op,
+                                    ty,
+                                });
                             }
                         }
                         // example: baz = 1
                         _other => {
-                            accum_filter.push(self.bind_expr(expr)?);
+                            accum_filter.push(ScalarExpression::Binary {
+                                left_expr,
+                                right_expr,
+                                op,
+                                ty,
+                            });
                         }
                     }
                 }
-                ast::BinaryOperator::And => {
+                BinaryOperator::And => {
                     // example: foo = bar AND baz > 1
-                    if let Expr::BinaryOp { left, op: _, right } = expr {
-                        self.extract_join_keys(
-                            left,
-                            accum,
-                            accum_filter,
-                            left_schema,
-                            right_schema,
-                        )?;
-                        self.extract_join_keys(
-                            right,
-                            accum,
-                            accum_filter,
-                            left_schema,
-                            right_schema,
-                        )?;
-                    }
+                    Self::extract_join_keys(
+                        *left_expr,
+                        accum,
+                        accum_filter,
+                        left_schema,
+                        right_schema,
+                    )?;
+                    Self::extract_join_keys(
+                        *right_expr,
+                        accum,
+                        accum_filter,
+                        left_schema,
+                        right_schema,
+                    )?;
                 }
-                _other => {
+                _ => {
                     // example: baz > 1
-                    accum_filter.push(self.bind_expr(expr)?);
+                    accum_filter.push(ScalarExpression::Binary {
+                        left_expr,
+                        right_expr,
+                        op,
+                        ty,
+                    });
                 }
             },
-            _other => {
+            _ => {
                 // example: baz in (xxx), something else will convert to filter logic
-                accum_filter.push(self.bind_expr(expr)?);
+                accum_filter.push(expr);
             }
         }
+
         Ok(())
     }
 }

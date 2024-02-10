@@ -1,18 +1,16 @@
-use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::catalog::ColumnCatalog;
 use crate::errors::DatabaseError;
-use crate::types::tuple::Tuple;
+use crate::types::tuple::{SchemaRef, Tuple};
 use crate::types::value::{DataValue, ValueRef};
 use std::sync::Arc;
 
-pub struct TupleBuilder {
-    columns: Arc<Vec<ColumnRef>>,
+pub struct TupleBuilder<'a> {
+    schema_ref: &'a SchemaRef,
 }
 
-impl TupleBuilder {
-    pub fn new(columns: Vec<ColumnRef>) -> Self {
-        TupleBuilder {
-            columns: Arc::new(columns),
-        }
+impl<'a> TupleBuilder<'a> {
+    pub fn new(schema_ref: &'a SchemaRef) -> Self {
+        TupleBuilder { schema_ref }
     }
 
     pub fn build_result(header: String, message: String) -> Result<Tuple, DatabaseError> {
@@ -21,7 +19,7 @@ impl TupleBuilder {
 
         Ok(Tuple {
             id: None,
-            columns,
+            schema_ref: columns,
             values,
         })
     }
@@ -31,7 +29,7 @@ impl TupleBuilder {
         id: Option<ValueRef>,
         values: Vec<ValueRef>,
     ) -> Result<Tuple, DatabaseError> {
-        if values.len() != self.columns.len() {
+        if values.len() != self.schema_ref.len() {
             return Err(DatabaseError::MisMatch(
                 "types".to_string(),
                 "values".to_string(),
@@ -40,29 +38,29 @@ impl TupleBuilder {
 
         Ok(Tuple {
             id,
-            columns: self.columns.clone(),
+            schema_ref: self.schema_ref.clone(),
             values,
         })
     }
 
-    pub fn build_with_row<'a>(
+    pub fn build_with_row<'b>(
         &self,
-        row: impl IntoIterator<Item = &'a str>,
+        row: impl IntoIterator<Item = &'b str>,
     ) -> Result<Tuple, DatabaseError> {
-        let mut values = Vec::with_capacity(self.columns.len());
+        let mut values = Vec::with_capacity(self.schema_ref.len());
         let mut primary_key = None;
 
         for (i, value) in row.into_iter().enumerate() {
             let data_value = Arc::new(
-                DataValue::Utf8(Some(value.to_string())).cast(self.columns[i].datatype())?,
+                DataValue::Utf8(Some(value.to_string())).cast(self.schema_ref[i].datatype())?,
             );
 
-            if primary_key.is_none() && self.columns[i].desc.is_primary {
+            if primary_key.is_none() && self.schema_ref[i].desc.is_primary {
                 primary_key = Some(data_value.clone());
             }
             values.push(data_value);
         }
-        if values.len() != self.columns.len() {
+        if values.len() != self.schema_ref.len() {
             return Err(DatabaseError::MisMatch(
                 "types".to_string(),
                 "values".to_string(),
@@ -71,7 +69,7 @@ impl TupleBuilder {
 
         Ok(Tuple {
             id: primary_key,
-            columns: self.columns.clone(),
+            schema_ref: self.schema_ref.clone(),
             values,
         })
     }

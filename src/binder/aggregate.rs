@@ -11,7 +11,7 @@ use crate::{
     planner::operator::{aggregate::AggregateOperator, sort::SortField},
 };
 
-use super::Binder;
+use super::{Binder, QueryBindStep};
 
 impl<'a, T: Transaction> Binder<'a, T> {
     pub fn bind_aggregate(
@@ -20,6 +20,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
         agg_calls: Vec<ScalarExpression>,
         groupby_exprs: Vec<ScalarExpression>,
     ) -> LogicalPlan {
+        self.context.step(QueryBindStep::Agg);
+
         AggregateOperator::build(children, agg_calls, groupby_exprs)
     }
 
@@ -133,7 +135,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     self.visit_column_agg_expr(expr)?;
                 }
             }
-            ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => {}
+            ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => (),
+            ScalarExpression::Empty => unreachable!(),
         }
 
         Ok(())
@@ -306,6 +309,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 Ok(())
             }
             ScalarExpression::Constant(_) => Ok(()),
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 }

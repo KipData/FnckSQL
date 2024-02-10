@@ -126,7 +126,7 @@ impl Transaction for KipTransaction {
         Ok(IndexIter {
             offset,
             limit: limit_option,
-            tuple_columns: Arc::new(tuple_columns),
+            tuple_schema_ref: Arc::new(tuple_columns),
             index_meta,
             table,
             index_values: VecDeque::new(),
@@ -207,10 +207,10 @@ impl Transaction for KipTransaction {
                 return Err(DatabaseError::NeedNullAbleOrDefault);
             }
 
-            for (col_id, col) in table.columns_with_id() {
+            for col in table.columns() {
                 if col.name() == column.name() {
                     return if if_not_exists {
-                        Ok(*col_id)
+                        Ok(col.id().unwrap())
                     } else {
                         Err(DatabaseError::DuplicateColumn)
                     };
@@ -295,7 +295,7 @@ impl Transaction for KipTransaction {
 
         Self::create_index_meta_for_table(&mut self.tx, &mut table_catalog)?;
 
-        for column in table_catalog.columns.values() {
+        for column in table_catalog.columns() {
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.tx.set(key, value);
         }
@@ -456,9 +456,9 @@ impl KipTransaction {
     ) -> Result<(), DatabaseError> {
         let table_name = table.name.clone();
         let index_column = table
-            .columns_with_id()
-            .filter(|(_, col)| col.desc.is_index())
-            .map(|(col_id, column)| (*col_id, column.clone()))
+            .columns()
+            .filter(|column| column.desc.is_index())
+            .map(|column| (column.id().unwrap(), column.clone()))
             .collect_vec();
 
         for (col_id, col) in index_column {
@@ -574,7 +574,7 @@ mod test {
             &"test".to_string(),
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(1)))),
-                columns: columns.clone(),
+                schema_ref: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(1))),
                     Arc::new(DataValue::Boolean(Some(true))),
@@ -586,7 +586,7 @@ mod test {
             &"test".to_string(),
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(2)))),
-                columns: columns.clone(),
+                schema_ref: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(2))),
                     Arc::new(DataValue::Boolean(Some(false))),
@@ -628,7 +628,6 @@ mod test {
             .table(Arc::new("t1".to_string()))
             .unwrap()
             .clone();
-        let columns = Arc::new(table.clone_columns().into_iter().collect_vec());
         let tuple_ids = vec![
             Arc::new(DataValue::Int32(Some(0))),
             Arc::new(DataValue::Int32(Some(2))),
@@ -638,7 +637,7 @@ mod test {
         let mut iter = IndexIter {
             offset: 0,
             limit: None,
-            tuple_columns: columns,
+            tuple_schema_ref: table.schema_ref().clone(),
             index_meta: Arc::new(IndexMeta {
                 id: 0,
                 column_ids: vec![0],
@@ -686,7 +685,7 @@ mod test {
             .table(Arc::new("t1".to_string()))
             .unwrap()
             .clone();
-        let columns = table.clone_columns().into_iter().enumerate().collect_vec();
+        let columns = table.columns().cloned().enumerate().collect_vec();
         let mut iter = transaction
             .read_by_index(
                 Arc::new("t1".to_string()),

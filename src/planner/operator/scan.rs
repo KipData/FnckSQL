@@ -26,9 +26,9 @@ impl ScanOperator {
         let mut primary_key_option = None;
         // Fill all Columns in TableCatalog by default
         let columns = table_catalog
-            .columns_with_id()
+            .columns()
             .enumerate()
-            .map(|(i, (_, column))| {
+            .map(|(i, column)| {
                 if column.desc.is_primary {
                     primary_key_option = column.id();
                 }
@@ -45,17 +45,16 @@ impl ScanOperator {
             })
             .collect_vec();
 
-        LogicalPlan {
-            operator: Operator::Scan(ScanOperator {
+        LogicalPlan::new(
+            Operator::Scan(ScanOperator {
                 index_infos,
                 table_name,
                 primary_key: primary_key_option.unwrap(),
                 columns,
                 limit: (None, None),
             }),
-            childrens: vec![],
-            physical_option: None,
-        }
+            vec![],
+        )
     }
 }
 

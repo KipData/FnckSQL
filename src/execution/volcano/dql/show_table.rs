@@ -25,7 +25,7 @@ impl ShowTables {
             colum_meta_paths: histogram_paths,
         } in metas
         {
-            let columns = Arc::new(vec![
+            let schema_ref = Arc::new(vec![
                 Arc::new(ColumnCatalog::new_dummy("TABLE".to_string())),
                 Arc::new(ColumnCatalog::new_dummy("COLUMN_METAS_LEN".to_string())),
             ]);
@@ -36,7 +36,7 @@ impl ShowTables {
 
             yield Tuple {
                 id: None,
-                columns,
+                schema_ref,
                 values,
             };
         }

@@ -1,8 +1,8 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use std::fmt;
 
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
 
@@ -69,6 +69,8 @@ pub enum ScalarExpression {
         for_expr: Option<Box<ScalarExpression>>,
         from_expr: Option<Box<ScalarExpression>>,
     },
+    // Temporary expression used for expression substitution
+    Empty,
 }
 
 impl ScalarExpression {
@@ -117,6 +119,7 @@ impl ScalarExpression {
             }
             Self::SubString { .. } => LogicalType::Varchar(None),
             Self::Alias { expr, .. } => expr.return_type(),
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 
@@ -209,6 +212,7 @@ impl ScalarExpression {
                         Some(true)
                     )
             }
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 
@@ -301,6 +305,7 @@ impl ScalarExpression {
                     op("for", for_expr),
                 )
             }
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 
