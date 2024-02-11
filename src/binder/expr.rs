@@ -94,7 +94,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let mut sub_query = self.bind_query(query)?;
                 let sub_query_schema = sub_query.output_schema();
 
-                if sub_query_schema.len() > 1 {
+                if sub_query_schema.len() != 1 {
                     return Err(DatabaseError::MisMatch(
                         "expects only one expression to be returned".to_string(),
                         "the expression returned by the subquery".to_string(),
