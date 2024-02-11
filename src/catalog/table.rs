@@ -120,6 +120,7 @@ impl TableCatalog {
         let index = IndexMeta {
             id: index_id,
             column_ids,
+            table_name: self.name.clone(),
             name,
             is_unique,
             is_primary,

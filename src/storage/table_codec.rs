@@ -353,6 +353,7 @@ mod tests {
         let index_meta = IndexMeta {
             id: 0,
             column_ids: vec![0],
+            table_name: Arc::new("T1".to_string()),
             name: "index_1".to_string(),
             is_unique: false,
             is_primary: false,
@@ -447,6 +448,7 @@ mod tests {
             let index_meta = IndexMeta {
                 id: index_id as u32,
                 column_ids: vec![],
+                table_name: Arc::new(table_name.to_string()),
                 name: "".to_string(),
                 is_unique: false,
                 is_primary: false,

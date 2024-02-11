@@ -157,7 +157,7 @@ mod test {
             unreachable!();
         }
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-            let column_binary = filter_op.predicate.convert_binary(&0).unwrap();
+            let column_binary = filter_op.predicate.convert_binary("t1", &0).unwrap();
             let final_binary = ConstantBinary::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2)))),
@@ -207,10 +207,10 @@ mod test {
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 println!(
                     "{expr}: {:#?}",
-                    filter_op.predicate.convert_binary(&0).unwrap()
+                    filter_op.predicate.convert_binary("t1", &0).unwrap()
                 );
 
-                Ok(filter_op.predicate.convert_binary(&0).unwrap())
+                Ok(filter_op.predicate.convert_binary("t1", &0).unwrap())
             } else {
                 Ok(None)
             }
@@ -341,7 +341,7 @@ mod test {
         let op_3 = op(plan_3, "-c1 > 1 and c2 + 1 > 1")?.unwrap();
         let op_4 = op(plan_4, "c1 + 1 > 1 and -c2 > 1")?.unwrap();
 
-        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(
             cb_1_c1,
@@ -351,7 +351,7 @@ mod test {
             })
         );
 
-        let cb_1_c2 = op_1.predicate.convert_binary(&1).unwrap();
+        let cb_1_c2 = op_1.predicate.convert_binary("t1", &1).unwrap();
         println!("op_1 => c2: {:#?}", cb_1_c2);
         assert_eq!(
             cb_1_c2,
@@ -361,7 +361,7 @@ mod test {
             })
         );
 
-        let cb_2_c1 = op_2.predicate.convert_binary(&0).unwrap();
+        let cb_2_c1 = op_2.predicate.convert_binary("t1", &0).unwrap();
         println!("op_2 => c1: {:#?}", cb_2_c1);
         assert_eq!(
             cb_2_c1,
@@ -371,7 +371,7 @@ mod test {
             })
         );
 
-        let cb_2_c2 = op_2.predicate.convert_binary(&1).unwrap();
+        let cb_2_c2 = op_2.predicate.convert_binary("t1", &1).unwrap();
         println!("op_2 => c2: {:#?}", cb_2_c2);
         assert_eq!(
             cb_1_c1,
@@ -381,7 +381,7 @@ mod test {
             })
         );
 
-        let cb_3_c1 = op_3.predicate.convert_binary(&0).unwrap();
+        let cb_3_c1 = op_3.predicate.convert_binary("t1", &0).unwrap();
         println!("op_3 => c1: {:#?}", cb_3_c1);
         assert_eq!(
             cb_3_c1,
@@ -391,7 +391,7 @@ mod test {
             })
         );
 
-        let cb_3_c2 = op_3.predicate.convert_binary(&1).unwrap();
+        let cb_3_c2 = op_3.predicate.convert_binary("t1", &1).unwrap();
         println!("op_3 => c2: {:#?}", cb_3_c2);
         assert_eq!(
             cb_3_c2,
@@ -401,7 +401,7 @@ mod test {
             })
         );
 
-        let cb_4_c1 = op_4.predicate.convert_binary(&0).unwrap();
+        let cb_4_c1 = op_4.predicate.convert_binary("t1", &0).unwrap();
         println!("op_4 => c1: {:#?}", cb_4_c1);
         assert_eq!(
             cb_4_c1,
@@ -411,7 +411,7 @@ mod test {
             })
         );
 
-        let cb_4_c2 = op_4.predicate.convert_binary(&1).unwrap();
+        let cb_4_c2 = op_4.predicate.convert_binary("t1", &1).unwrap();
         println!("op_4 => c2: {:#?}", cb_4_c2);
         assert_eq!(
             cb_4_c2,
@@ -448,7 +448,7 @@ mod test {
 
         let op_1 = op(plan_1, "c1 > c2 or c1 > 1")?.unwrap();
 
-        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(cb_1_c1, None);
 
@@ -479,7 +479,7 @@ mod test {
 
         let op_1 = op(plan_1, "c1 = 4 and c2 > c1 or c1 > 1")?.unwrap();
 
-        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(
             cb_1_c1,
@@ -518,7 +518,7 @@ mod test {
 
         let op_1 = op(plan_1, "c1 is null")?.unwrap();
 
-        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(cb_1_c1, Some(ConstantBinary::Eq(Arc::new(DataValue::Null))));
 
@@ -548,7 +548,7 @@ mod test {
 
         let op_1 = op(plan_1, "c1 is not null")?.unwrap();
 
-        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(
             cb_1_c1,
@@ -581,7 +581,7 @@ mod test {
 
         let op_1 = op(plan_1, "c1 in (1, 2, 3)")?.unwrap();
 
-        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(
             cb_1_c1,
@@ -618,7 +618,7 @@ mod test {
 
         let op_1 = op(plan_1, "c1 not in (1, 2, 3)")?.unwrap();
 
-        let cb_1_c1 = op_1.predicate.convert_binary(&0).unwrap();
+        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(
             cb_1_c1,

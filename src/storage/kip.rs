@@ -624,10 +624,8 @@ mod test {
             .await?;
         let transaction = fnck_sql.storage.transaction().await?;
 
-        let table = transaction
-            .table(Arc::new("t1".to_string()))
-            .unwrap()
-            .clone();
+        let table_name = Arc::new("t1".to_string());
+        let table = transaction.table(table_name.clone()).unwrap().clone();
         let tuple_ids = vec![
             Arc::new(DataValue::Int32(Some(0))),
             Arc::new(DataValue::Int32(Some(2))),
@@ -641,6 +639,7 @@ mod test {
             index_meta: Arc::new(IndexMeta {
                 id: 0,
                 column_ids: vec![0],
+                table_name,
                 name: "pk_a".to_string(),
                 is_unique: false,
                 is_primary: true,

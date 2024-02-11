@@ -409,19 +409,56 @@ struct ReplaceUnary {
 }
 
 impl ScalarExpression {
-    pub fn exist_column(&self, col_id: &ColumnId) -> bool {
+    pub fn exist_column(&self, table_name: &str, col_id: &ColumnId) -> bool {
         match self {
-            ScalarExpression::ColumnRef(col) => col.id() == Some(*col_id),
-            ScalarExpression::Alias { expr, .. } => expr.exist_column(col_id),
-            ScalarExpression::TypeCast { expr, .. } => expr.exist_column(col_id),
-            ScalarExpression::IsNull { expr, .. } => expr.exist_column(col_id),
-            ScalarExpression::Unary { expr, .. } => expr.exist_column(col_id),
+            ScalarExpression::ColumnRef(col) => Self::_is_belong(table_name, col) && col.id() == Some(*col_id),
+            ScalarExpression::Alias { expr, .. } => expr.exist_column(table_name, col_id),
+            ScalarExpression::TypeCast { expr, .. } => expr.exist_column(table_name, col_id),
+            ScalarExpression::IsNull { expr, .. } => expr.exist_column(table_name, col_id),
+            ScalarExpression::Unary { expr, .. } => expr.exist_column(table_name, col_id),
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
                 ..
-            } => left_expr.exist_column(col_id) || right_expr.exist_column(col_id),
-            _ => false,
+            } => {
+                left_expr.exist_column(table_name, col_id)
+                    || right_expr.exist_column(table_name, col_id)
+            }
+            ScalarExpression::AggCall { args, .. } => args
+                .iter()
+                .any(|expr| expr.exist_column(table_name, col_id)),
+            ScalarExpression::In { expr, args, .. } => {
+                expr.exist_column(table_name, col_id)
+                    || args
+                        .iter()
+                        .any(|expr| expr.exist_column(table_name, col_id))
+            }
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                expr.exist_column(table_name, col_id)
+                    || left_expr.exist_column(table_name, col_id)
+                    || right_expr.exist_column(table_name, col_id)
+            }
+            ScalarExpression::SubString {
+                expr,
+                for_expr,
+                from_expr,
+            } => {
+                expr.exist_column(table_name, col_id)
+                    || for_expr
+                        .as_ref()
+                        .map(|expr| expr.exist_column(table_name, col_id))
+                        == Some(true)
+                    || from_expr
+                        .as_ref()
+                        .map(|expr| expr.exist_column(table_name, col_id))
+                        == Some(true)
+            }
+            ScalarExpression::Constant(_) | ScalarExpression::Empty => false,
         }
     }
 
@@ -832,7 +869,8 @@ impl ScalarExpression {
     /// - `ConstantBinary::Or`: Rearrange and sort the range of each OR data
     pub fn convert_binary(
         &self,
-        col_id: &ColumnId,
+        table_name: &str,
+        id: &ColumnId,
     ) -> Result<Option<ConstantBinary>, DatabaseError> {
         match self {
             ScalarExpression::Binary {
@@ -842,8 +880,8 @@ impl ScalarExpression {
                 ..
             } => {
                 match (
-                    left_expr.convert_binary(col_id)?,
-                    right_expr.convert_binary(col_id)?,
+                    left_expr.convert_binary(table_name, id)?,
+                    right_expr.convert_binary(table_name, id)?,
                 ) {
                     (Some(left_binary), Some(right_binary)) => match (left_binary, right_binary) {
                         (ConstantBinary::And(mut left), ConstantBinary::And(mut right)) => match op
@@ -902,18 +940,22 @@ impl ScalarExpression {
                         if let (Some(col), Some(val)) =
                             (left_expr.unpack_col(false), right_expr.unpack_val())
                         {
-                            return Ok(Self::new_binary(col_id, *op, col, val, false));
+                            return Ok(Self::new_binary(table_name, id, *op, col, val, false));
                         }
                         if let (Some(val), Some(col)) =
                             (left_expr.unpack_val(), right_expr.unpack_col(false))
                         {
-                            return Ok(Self::new_binary(col_id, *op, col, val, true));
+                            return Ok(Self::new_binary(table_name, id, *op, col, val, true));
                         }
 
                         Ok(None)
                     }
-                    (Some(binary), None) => Ok(Self::check_or(col_id, right_expr, op, binary)),
-                    (None, Some(binary)) => Ok(Self::check_or(col_id, left_expr, op, binary)),
+                    (Some(binary), None) => {
+                        Ok(Self::check_or(table_name, id, right_expr, op, binary))
+                    }
+                    (None, Some(binary)) => {
+                        Ok(Self::check_or(table_name, id, left_expr, op, binary))
+                    }
                 }
             }
             ScalarExpression::Alias { expr, .. }
@@ -921,16 +963,20 @@ impl ScalarExpression {
             | ScalarExpression::Unary { expr, .. }
             | ScalarExpression::In { expr, .. }
             | ScalarExpression::Between { expr, .. }
-            | ScalarExpression::SubString { expr, .. } => expr.convert_binary(col_id),
+            | ScalarExpression::SubString { expr, .. } => expr.convert_binary(table_name, id),
             ScalarExpression::IsNull { expr, negated, .. } => match expr.as_ref() {
                 ScalarExpression::ColumnRef(column) => {
-                    Ok(column.id().is_some_and(|id| col_id == &id).then(|| {
-                        if *negated {
-                            ConstantBinary::NotEq(NULL_VALUE.clone())
-                        } else {
-                            ConstantBinary::Eq(NULL_VALUE.clone())
+                    if let (Some(col_id), Some(col_table)) = (column.id(), column.table_name()) {
+                        if id == &col_id && col_table.as_str() == table_name {
+                            return Ok(Some(if *negated {
+                                ConstantBinary::NotEq(NULL_VALUE.clone())
+                            } else {
+                                ConstantBinary::Eq(NULL_VALUE.clone())
+                            }));
                         }
-                    }))
+                    }
+
+                    Ok(None)
                 }
                 ScalarExpression::Constant(_)
                 | ScalarExpression::Alias { .. }
@@ -941,7 +987,7 @@ impl ScalarExpression {
                 | ScalarExpression::AggCall { .. }
                 | ScalarExpression::In { .. }
                 | ScalarExpression::Between { .. }
-                | ScalarExpression::SubString { .. } => expr.convert_binary(col_id),
+                | ScalarExpression::SubString { .. } => expr.convert_binary(table_name, id),
                 ScalarExpression::Empty => unreachable!(),
             },
             ScalarExpression::Constant(_)
@@ -954,12 +1000,13 @@ impl ScalarExpression {
     /// check if: c1 > c2 or c1 > 1
     /// this case it makes no sense to just extract c1 > 1
     fn check_or(
+        table_name: &str,
         col_id: &ColumnId,
         right_expr: &ScalarExpression,
         op: &BinaryOperator,
         binary: ConstantBinary,
     ) -> Option<ConstantBinary> {
-        if matches!(op, BinaryOperator::Or) && right_expr.exist_column(col_id) {
+        if matches!(op, BinaryOperator::Or) && right_expr.exist_column(table_name, col_id) {
             return None;
         }
 
@@ -967,13 +1014,14 @@ impl ScalarExpression {
     }
 
     fn new_binary(
+        table_name: &str,
         col_id: &ColumnId,
         mut op: BinaryOperator,
         col: ColumnRef,
         val: ValueRef,
         is_flip: bool,
     ) -> Option<ConstantBinary> {
-        if col.id() != Some(*col_id) {
+        if !Self::_is_belong(table_name, &col) || col.id() != Some(*col_id) {
             return None;
         }
 
@@ -1008,6 +1056,13 @@ impl ScalarExpression {
             BinaryOperator::NotEq => Some(ConstantBinary::NotEq(val.clone())),
             _ => None,
         }
+    }
+
+    fn _is_belong(table_name: &str, col: &ColumnRef) -> bool {
+        matches!(
+            col.table_name().map(|name| table_name == name.as_str()),
+            Some(true)
+        )
     }
 }
 
@@ -1056,7 +1111,7 @@ mod test {
             summary: ColumnSummary {
                 id: Some(0),
                 name: "c1".to_string(),
-                table_name: None,
+                table_name: Some(Arc::new("t1".to_string())),
             },
             nullable: false,
             desc: ColumnDesc {
@@ -1074,7 +1129,7 @@ mod test {
             right_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
             ty: LogicalType::Boolean,
         }
-        .convert_binary(&0)?
+        .convert_binary("t1", &0)?
         .unwrap();
 
         assert_eq!(binary_eq, ConstantBinary::Eq(val_1.clone()));
@@ -1085,7 +1140,7 @@ mod test {
             right_expr: Box::new(ScalarExpression::ColumnRef(col_1.clone())),
             ty: LogicalType::Boolean,
         }
-        .convert_binary(&0)?
+        .convert_binary("t1", &0)?
         .unwrap();
 
         assert_eq!(binary_not_eq, ConstantBinary::NotEq(val_1.clone()));
@@ -1096,7 +1151,7 @@ mod test {
             right_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             ty: LogicalType::Boolean,
         }
-        .convert_binary(&0)?
+        .convert_binary("t1", &0)?
         .unwrap();
 
         assert_eq!(
@@ -1113,7 +1168,7 @@ mod test {
             right_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             ty: LogicalType::Boolean,
         }
-        .convert_binary(&0)?
+        .convert_binary("t1", &0)?
         .unwrap();
 
         assert_eq!(
@@ -1130,7 +1185,7 @@ mod test {
             right_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             ty: LogicalType::Boolean,
         }
-        .convert_binary(&0)?
+        .convert_binary("t1", &0)?
         .unwrap();
 
         assert_eq!(
@@ -1147,7 +1202,7 @@ mod test {
             right_expr: Box::new(ScalarExpression::Constant(val_1.clone())),
             ty: LogicalType::Boolean,
         }
-        .convert_binary(&0)?
+        .convert_binary("t1", &0)?
         .unwrap();
 
         assert_eq!(
