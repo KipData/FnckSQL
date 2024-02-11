@@ -1,7 +1,7 @@
 use crate::catalog::ColumnSummary;
 use crate::errors::DatabaseError;
 use crate::expression::value_compute::{binary_op, unary_op};
-use crate::expression::ScalarExpression;
+use crate::expression::{AliasType, ScalarExpression};
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
@@ -46,7 +46,14 @@ impl ScalarExpression {
                 if let Some(value) = tuple
                     .schema_ref
                     .iter()
-                    .find_position(|tul_col| tul_col.name() == alias)
+                    .find_position(|tul_col| match alias {
+                        AliasType::Name(alias) => {
+                            tul_col.table_name().is_none() && tul_col.name() == alias
+                        }
+                        AliasType::Expr(alias_expr) => {
+                            alias_expr.output_column().summary == tul_col.summary
+                        }
+                    })
                     .map(|(i, _)| &tuple.values[i])
                 {
                     return Ok(value.clone());

@@ -16,10 +16,10 @@ use crate::{
 
 use super::{lower_case_name, lower_ident, Binder, QueryBindStep};
 
-use crate::catalog::{ColumnCatalog, TableName};
+use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::join::joins_nullable;
-use crate::expression::BinaryOperator;
+use crate::expression::{AliasType, BinaryOperator};
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::LogicalPlan;
@@ -254,7 +254,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                     select_items.push(ScalarExpression::Alias {
                         expr: Box::new(expr),
-                        alias: alias_name,
+                        alias: AliasType::Name(alias_name),
                     });
                 }
                 SelectItem::Wildcard(_) => {
@@ -301,7 +301,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             if let Some(alias_expr) = alias_map.get(&expr) {
                 expr = ScalarExpression::Alias {
                     expr: Box::new(expr),
-                    alias: alias_expr.to_string(),
+                    alias: AliasType::Name(alias_expr.to_string()),
                 }
             }
             exprs.push(expr);
@@ -360,9 +360,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
         self.context.step(QueryBindStep::Where);
 
         let predicate = self.bind_expr(predicate)?;
-        println!("{}", predicate);
 
-        if let Some(sub_queries) = self.context.sub_query_for_now() {
+        if let Some(sub_queries) = self.context.sub_queries_at_now() {
             for mut sub_query in sub_queries {
                 let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = vec![];
                 let mut filter = vec![];
@@ -371,20 +370,19 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     predicate.clone(),
                     &mut on_keys,
                     &mut filter,
-                    children.out_schmea(),
-                    sub_query.out_schmea(),
+                    children.output_schema(),
+                    sub_query.output_schema(),
                 )?;
 
                 // combine multiple filter exprs into one BinaryExpr
-                let join_filter =
-                    filter
-                        .into_iter()
-                        .reduce(|acc, expr| ScalarExpression::Binary {
-                            op: BinaryOperator::And,
-                            left_expr: Box::new(acc),
-                            right_expr: Box::new(expr),
-                            ty: LogicalType::Boolean,
-                        });
+                let join_filter = filter
+                    .into_iter()
+                    .reduce(|acc, expr| ScalarExpression::Binary {
+                        op: BinaryOperator::And,
+                        left_expr: Box::new(acc),
+                        right_expr: Box::new(expr),
+                        ty: LogicalType::Boolean,
+                    });
 
                 children = LJoinOperator::build(
                     children,
@@ -582,41 +580,97 @@ impl<'a, T: Transaction> Binder<'a, T> {
         left_schema: &Schema,
         right_schema: &Schema,
     ) -> Result<(), DatabaseError> {
+        let fn_contains = |schema: &Schema, summary: &ColumnSummary| {
+            schema.iter().any(|column| summary == &column.summary)
+        };
+        let fn_or_contains =
+            |left_schema: &Schema, right_schema: &Schema, summary: &ColumnSummary| {
+                fn_contains(left_schema, summary) || fn_contains(right_schema, summary)
+            };
+
         match expr {
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
                 op,
                 ty,
-            } => match op {
-                BinaryOperator::Eq => {
-                    let fn_contains = |schema: &Schema, name: &str| {
-                        schema.iter().any(|column| column.name() == name)
-                    };
-
-                    match (left_expr.as_ref(), right_expr.as_ref()) {
-                        // example: foo = bar
-                        (ScalarExpression::ColumnRef(l), ScalarExpression::ColumnRef(r)) => {
-                            // reorder left and right joins keys to pattern: (left, right)
-                            if fn_contains(left_schema, l.name())
-                                && fn_contains(right_schema, r.name())
-                            {
-                                accum.push((*left_expr, *right_expr));
-                            } else if fn_contains(left_schema, r.name())
-                                && fn_contains(right_schema, l.name())
-                            {
-                                accum.push((*right_expr, *left_expr));
-                            } else {
-                                accum_filter.push(ScalarExpression::Binary {
-                                    left_expr,
-                                    right_expr,
-                                    op,
-                                    ty,
-                                });
+            } => {
+                match op {
+                    BinaryOperator::Eq => {
+                        match (left_expr.as_ref(), right_expr.as_ref()) {
+                            // example: foo = bar
+                            (ScalarExpression::ColumnRef(l), ScalarExpression::ColumnRef(r)) => {
+                                // reorder left and right joins keys to pattern: (left, right)
+                                if fn_contains(left_schema, l.summary())
+                                    && fn_contains(right_schema, r.summary())
+                                {
+                                    accum.push((*left_expr, *right_expr));
+                                } else if fn_contains(left_schema, r.summary())
+                                    && fn_contains(right_schema, l.summary())
+                                {
+                                    accum.push((*right_expr, *left_expr));
+                                } else if fn_or_contains(left_schema, right_schema, l.summary())
+                                    || fn_or_contains(left_schema, right_schema, r.summary())
+                                {
+                                    accum_filter.push(ScalarExpression::Binary {
+                                        left_expr,
+                                        right_expr,
+                                        op,
+                                        ty,
+                                    });
+                                }
+                            }
+                            (ScalarExpression::ColumnRef(column), _)
+                            | (_, ScalarExpression::ColumnRef(column)) => {
+                                if fn_or_contains(left_schema, right_schema, column.summary()) {
+                                    accum_filter.push(ScalarExpression::Binary {
+                                        left_expr,
+                                        right_expr,
+                                        op,
+                                        ty,
+                                    });
+                                }
+                            }
+                            _other => {
+                                // example: baz > 1
+                                if left_expr.referenced_columns(true).iter().all(|column| {
+                                    fn_or_contains(left_schema, right_schema, column.summary())
+                                }) && right_expr.referenced_columns(true).iter().all(|column| {
+                                    fn_or_contains(left_schema, right_schema, column.summary())
+                                }) {
+                                    accum_filter.push(ScalarExpression::Binary {
+                                        left_expr,
+                                        right_expr,
+                                        op,
+                                        ty,
+                                    });
+                                }
                             }
                         }
-                        // example: baz = 1
-                        _other => {
+                    }
+                    BinaryOperator::And => {
+                        // example: foo = bar AND baz > 1
+                        Self::extract_join_keys(
+                            *left_expr,
+                            accum,
+                            accum_filter,
+                            left_schema,
+                            right_schema,
+                        )?;
+                        Self::extract_join_keys(
+                            *right_expr,
+                            accum,
+                            accum_filter,
+                            left_schema,
+                            right_schema,
+                        )?;
+                    }
+                    _ => {
+                        if left_expr.referenced_columns(true).iter().all(|column| {
+                            fn_or_contains(left_schema, right_schema, column.summary())
+                        }) && right_expr.referenced_columns(true).iter().all(|column| {
+                            fn_or_contains(left_schema, right_schema, column.summary())
+                        }) {
                             accum_filter.push(ScalarExpression::Binary {
                                 left_expr,
                                 right_expr,
@@ -626,36 +680,16 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         }
                     }
                 }
-                BinaryOperator::And => {
-                    // example: foo = bar AND baz > 1
-                    Self::extract_join_keys(
-                        *left_expr,
-                        accum,
-                        accum_filter,
-                        left_schema,
-                        right_schema,
-                    )?;
-                    Self::extract_join_keys(
-                        *right_expr,
-                        accum,
-                        accum_filter,
-                        left_schema,
-                        right_schema,
-                    )?;
-                }
-                _ => {
-                    // example: baz > 1
-                    accum_filter.push(ScalarExpression::Binary {
-                        left_expr,
-                        right_expr,
-                        op,
-                        ty,
-                    });
-                }
-            },
+            }
             _ => {
-                // example: baz in (xxx), something else will convert to filter logic
-                accum_filter.push(expr);
+                if expr
+                    .referenced_columns(true)
+                    .iter()
+                    .all(|column| fn_or_contains(left_schema, right_schema, column.summary()))
+                {
+                    // example: baz > 1
+                    accum_filter.push(expr);
+                }
             }
         }
 

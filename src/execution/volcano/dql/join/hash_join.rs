@@ -407,7 +407,7 @@ mod test {
             }),
             childrens: vec![],
             physical_option: None,
-            _out_columns: None,
+            _output_schema_ref: None,
         };
 
         let values_t2 = LogicalPlan {
@@ -438,7 +438,7 @@ mod test {
             }),
             childrens: vec![],
             physical_option: None,
-            _out_columns: None,
+            _output_schema_ref: None,
         };
 
         (on_keys, values_t1, values_t2)

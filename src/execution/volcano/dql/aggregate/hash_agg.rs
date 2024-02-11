@@ -227,7 +227,7 @@ mod test {
             }),
             childrens: vec![],
             physical_option: None,
-            _out_columns: None,
+            _output_schema_ref: None,
         };
 
         let tuples =

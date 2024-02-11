@@ -1,3 +1,4 @@
+use crate::catalog::ColumnCatalog;
 use crate::errors::DatabaseError;
 use crate::expression;
 use crate::expression::agg::AggKind;
@@ -9,7 +10,7 @@ use std::slice;
 use std::sync::Arc;
 
 use super::{lower_ident, Binder};
-use crate::expression::ScalarExpression;
+use crate::expression::{AliasType, ScalarExpression};
 use crate::storage::Transaction;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
@@ -19,7 +20,7 @@ macro_rules! try_alias {
         if let Some(expr) = $context.expr_aliases.get(&$column_name) {
             return Ok(ScalarExpression::Alias {
                 expr: Box::new(expr.clone()),
-                alias: $column_name,
+                alias: AliasType::Name($column_name),
             });
         }
     };
@@ -91,7 +92,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
             Expr::Subquery(query) => {
                 let mut sub_query = self.bind_query(query)?;
-                let sub_query_schema = sub_query.out_schmea();
+                let sub_query_schema = sub_query.output_schema();
 
                 if sub_query_schema.len() > 1 {
                     return Err(DatabaseError::MisMatch(
@@ -99,10 +100,18 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         "the expression returned by the subquery".to_string(),
                     ));
                 }
-                let expr = ScalarExpression::ColumnRef(sub_query_schema[0].clone());
+                let column = sub_query_schema[0].clone();
+                let mut alias_column = ColumnCatalog::clone(&column);
+                alias_column.set_table_name(self.context.temp_table());
+
                 self.context.sub_query(sub_query);
 
-                Ok(expr)
+                Ok(ScalarExpression::Alias {
+                    expr: Box::new(ScalarExpression::ColumnRef(column)),
+                    alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
+                        alias_column,
+                    )))),
+                })
             }
             _ => {
                 todo!()

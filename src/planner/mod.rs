@@ -8,11 +8,11 @@ use std::sync::Arc;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct LogicalPlan {
-    pub operator: Operator,
-    pub childrens: Vec<LogicalPlan>,
-    pub physical_option: Option<PhysicalOption>,
+    pub(crate) operator: Operator,
+    pub(crate) childrens: Vec<LogicalPlan>,
+    pub(crate) physical_option: Option<PhysicalOption>,
 
-    pub _out_columns: Option<SchemaRef>,
+    pub(crate) _output_schema_ref: Option<SchemaRef>,
 }
 
 impl LogicalPlan {
@@ -21,7 +21,7 @@ impl LogicalPlan {
             operator,
             childrens,
             physical_option: None,
-            _out_columns: None,
+            _output_schema_ref: None,
         }
     }
 
@@ -44,11 +44,11 @@ impl LogicalPlan {
         tables
     }
 
-    pub fn out_schmea(&mut self) -> &SchemaRef {
-        self._out_columns
+    pub fn output_schema(&mut self) -> &SchemaRef {
+        self._output_schema_ref
             .get_or_insert_with(|| match &self.operator {
                 Operator::Filter(_) | Operator::Sort(_) | Operator::Limit(_) => {
-                    self.childrens[0].out_schmea().clone()
+                    self.childrens[0].output_schema().clone()
                 }
                 Operator::Aggregate(op) => {
                     let out_columns = op
@@ -63,7 +63,7 @@ impl LogicalPlan {
                     let out_columns = self
                         .childrens
                         .iter_mut()
-                        .flat_map(|children| Vec::clone(children.out_schmea()))
+                        .flat_map(|children| Vec::clone(children.output_schema()))
                         .collect_vec();
                     Arc::new(out_columns)
                 }

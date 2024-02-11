@@ -67,6 +67,10 @@ impl ColumnCatalog {
         self.summary.table_name.as_ref()
     }
 
+    pub fn set_table_name(&mut self, table_name: TableName) {
+        self.summary.table_name = Some(table_name);
+    }
+
     pub fn datatype(&self) -> &LogicalType {
         &self.desc.column_datatype
     }

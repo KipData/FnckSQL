@@ -118,7 +118,7 @@ pub fn build_write<T: Transaction>(plan: LogicalPlan, transaction: &mut T) -> Bo
         operator,
         mut childrens,
         physical_option,
-        _out_columns,
+        _output_schema_ref: _out_schema_ref,
     } = plan;
 
     match operator {
@@ -164,7 +164,7 @@ pub fn build_write<T: Transaction>(plan: LogicalPlan, transaction: &mut T) -> Bo
                 operator,
                 childrens,
                 physical_option,
-                _out_columns,
+                _output_schema_ref: _out_schema_ref,
             },
             transaction,
         ),

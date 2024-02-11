@@ -26,10 +26,7 @@ lazy_static! {
 pub struct ColumnPruning;
 
 impl ColumnPruning {
-    fn clear_exprs(
-        column_references: &mut HashSet<ColumnSummary>,
-        exprs: &mut Vec<ScalarExpression>,
-    ) {
+    fn clear_exprs(column_references: HashSet<&ColumnSummary>, exprs: &mut Vec<ScalarExpression>) {
         exprs.retain(|expr| {
             if column_references.contains(expr.output_column().summary()) {
                 return true;
@@ -41,7 +38,7 @@ impl ColumnPruning {
     }
 
     fn _apply(
-        column_references: &mut HashSet<ColumnSummary>,
+        column_references: HashSet<&ColumnSummary>,
         all_referenced: bool,
         node_id: HepNodeId,
         graph: &mut HepGraph,
@@ -85,7 +82,7 @@ impl ColumnPruning {
                     // Todo: Order Project
                     // https://github.com/duckdb/duckdb/blob/main/src/optimizer/remove_unused_columns.cpp#L174
                 }
-                for child_id in graph.children_at(node_id).collect_vec() {
+                if let Some(child_id) = graph.eldest_child_at(node_id) {
                     Self::_apply(column_references, true, child_id, graph);
                 }
             }
@@ -96,11 +93,16 @@ impl ColumnPruning {
                 }
             }
             Operator::Limit(_) | Operator::Join(_) | Operator::Filter(_) => {
-                for column in operator.referenced_columns(false) {
-                    column_references.insert(column.summary().clone());
+                let temp_columns = operator.referenced_columns(false);
+                // why?
+                let mut column_references = column_references;
+                for column in temp_columns.iter() {
+                    column_references.insert(column.summary());
                 }
                 for child_id in graph.children_at(node_id).collect_vec() {
-                    Self::_apply(column_references, all_referenced, child_id, graph);
+                    let copy_references = column_references.clone();
+
+                    Self::_apply(copy_references, all_referenced, child_id, graph);
                 }
             }
             // Last Operator
@@ -145,13 +147,12 @@ impl ColumnPruning {
         graph: &mut HepGraph,
     ) {
         for child_id in graph.children_at(node_id).collect_vec() {
-            let mut new_references: HashSet<ColumnSummary> = referenced_columns
+            let new_references: HashSet<&ColumnSummary> = referenced_columns
                 .iter()
                 .map(|column| column.summary())
-                .cloned()
                 .collect();
 
-            Self::_apply(&mut new_references, all_referenced, child_id, graph);
+            Self::_apply(new_references, all_referenced, child_id, graph);
         }
     }
 }
@@ -164,7 +165,7 @@ impl MatchPattern for ColumnPruning {
 
 impl NormalizationRule for ColumnPruning {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
-        Self::_apply(&mut HashSet::new(), true, node_id, graph);
+        Self::_apply(HashSet::new(), true, node_id, graph);
         // mark changed to skip this rule batch
         graph.version += 1;
 

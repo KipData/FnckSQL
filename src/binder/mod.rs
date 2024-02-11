@@ -17,6 +17,7 @@ mod update;
 
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::catalog::{TableCatalog, TableName};
 use crate::errors::DatabaseError;
@@ -57,6 +58,8 @@ pub struct BinderContext<'a, T: Transaction> {
 
     bind_step: QueryBindStep,
     sub_queries: HashMap<QueryBindStep, Vec<LogicalPlan>>,
+
+    temp_table_id: usize,
 }
 
 impl<'a, T: Transaction> BinderContext<'a, T> {
@@ -70,7 +73,13 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             agg_calls: Default::default(),
             bind_step: QueryBindStep::From,
             sub_queries: Default::default(),
+            temp_table_id: 0,
         }
+    }
+
+    pub fn temp_table(&mut self) -> TableName {
+        self.temp_table_id += 1;
+        Arc::new(format!("_temp_table_{}_", self.temp_table_id))
     }
 
     pub fn step(&mut self, bind_step: QueryBindStep) {
@@ -84,7 +93,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             .push(sub_query)
     }
 
-    pub fn sub_query_for_now(&mut self) -> Option<Vec<LogicalPlan>> {
+    pub fn sub_queries_at_now(&mut self) -> Option<Vec<LogicalPlan>> {
         self.sub_queries.remove(&self.bind_step)
     }
 
