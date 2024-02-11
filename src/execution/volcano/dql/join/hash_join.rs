@@ -130,7 +130,7 @@ impl HashJoinStatus {
             ..
         } = self;
 
-        let right_cols_len = tuple.columns.len();
+        let right_cols_len = tuple.schema_ref.len();
         let hash = Self::hash_row(on_right_keys, hash_random_state, &tuple)?;
 
         if !*right_init_flag {
@@ -153,7 +153,7 @@ impl HashJoinStatus {
 
                     Tuple {
                         id: None,
-                        columns: join_columns.clone(),
+                        schema_ref: join_columns.clone(),
                         values: full_values,
                     }
                 })
@@ -168,7 +168,7 @@ impl HashJoinStatus {
 
             vec![Tuple {
                 id: None,
-                columns: join_columns.clone(),
+                schema_ref: join_columns.clone(),
                 values,
             }]
         } else {
@@ -185,13 +185,13 @@ impl HashJoinStatus {
             for mut tuple in join_tuples {
                 if let DataValue::Boolean(option) = expr.eval(&tuple)?.as_ref() {
                     if let Some(false) | None = option {
-                        let full_cols_len = tuple.columns.len();
+                        let full_cols_len = tuple.schema_ref.len();
                         let left_cols_len = full_cols_len - right_cols_len;
 
                         match ty {
                             JoinType::Left => {
                                 for i in left_cols_len..full_cols_len {
-                                    let value_type = tuple.columns[i].datatype();
+                                    let value_type = tuple.schema_ref[i].datatype();
 
                                     tuple.values[i] = Arc::new(DataValue::none(value_type))
                                 }
@@ -199,7 +199,7 @@ impl HashJoinStatus {
                             }
                             JoinType::Right => {
                                 for i in 0..left_cols_len {
-                                    let value_type = tuple.columns[i].datatype();
+                                    let value_type = tuple.schema_ref[i].datatype();
 
                                     tuple.values[i] = Arc::new(DataValue::none(value_type))
                                 }
@@ -240,7 +240,7 @@ impl HashJoinStatus {
                     .flat_map(|(_, mut tuples)| {
                         for Tuple {
                             values,
-                            columns,
+                            schema_ref: columns,
                             id,
                         } in tuples.iter_mut()
                         {
@@ -273,7 +273,7 @@ impl HashJoinStatus {
 
     fn columns_filling(tuple: &Tuple, join_columns: &mut Vec<ColumnRef>, force_nullable: bool) {
         let mut new_columns = tuple
-            .columns
+            .schema_ref
             .iter()
             .cloned()
             .map(|col| {
@@ -403,10 +403,11 @@ mod test {
                         Arc::new(DataValue::Int32(Some(7))),
                     ],
                 ],
-                columns: t1_columns,
+                schema_ref: Arc::new(t1_columns),
             }),
             childrens: vec![],
             physical_option: None,
+            _output_schema_ref: None,
         };
 
         let values_t2 = LogicalPlan {
@@ -433,10 +434,11 @@ mod test {
                         Arc::new(DataValue::Int32(Some(1))),
                     ],
                 ],
-                columns: t2_columns,
+                schema_ref: Arc::new(t2_columns),
             }),
             childrens: vec![],
             physical_option: None,
+            _output_schema_ref: None,
         };
 
         (on_keys, values_t1, values_t2)

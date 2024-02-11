@@ -28,7 +28,7 @@ macro_rules! implement_from_tuple {
             fn from(tuple: Tuple) -> Self {
                 fn try_get<T: 'static>(tuple: &Tuple, field_name: &str) -> Option<DataValue> {
                     let ty = LogicalType::type_trans::<T>()?;
-                    let (idx, _) = tuple.columns
+                    let (idx, _) = tuple.schema_ref
                         .iter()
                         .enumerate()
                         .find(|(_, col)| col.name() == field_name)?;
@@ -81,7 +81,7 @@ mod test {
 
         Tuple {
             id: None,
-            columns,
+            schema_ref: columns,
             values,
         }
     }

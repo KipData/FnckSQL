@@ -24,7 +24,7 @@ impl AsyncDB for KipSQL {
             return Ok(DBOutput::StatementComplete(0));
         }
 
-        let types = vec![DefaultColumnType::Any; tuples[0].columns.len()];
+        let types = vec![DefaultColumnType::Any; tuples[0].schema_ref.len()];
         let rows = tuples
             .into_iter()
             .map(|tuple| {

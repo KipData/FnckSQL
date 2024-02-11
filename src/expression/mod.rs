@@ -16,6 +16,12 @@ mod evaluator;
 pub mod simplify;
 pub mod value_compute;
 
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+pub enum AliasType {
+    Name(String),
+    Expr(Box<ScalarExpression>),
+}
+
 /// ScalarExpression represnet all scalar expression in SQL.
 /// SELECT a+1, b FROM t1.
 /// a+1 -> ScalarExpression::Unary(a + 1)
@@ -26,7 +32,7 @@ pub enum ScalarExpression {
     ColumnRef(ColumnRef),
     Alias {
         expr: Box<ScalarExpression>,
-        alias: String,
+        alias: AliasType,
     },
     TypeCast {
         expr: Box<ScalarExpression>,
@@ -69,6 +75,8 @@ pub enum ScalarExpression {
         for_expr: Option<Box<ScalarExpression>>,
         from_expr: Option<Box<ScalarExpression>>,
     },
+    // Temporary expression used for expression substitution
+    Empty,
 }
 
 impl ScalarExpression {
@@ -117,6 +125,7 @@ impl ScalarExpression {
             }
             Self::SubString { .. } => LogicalType::Varchar(None),
             Self::Alias { expr, .. } => expr.return_type(),
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 
@@ -161,7 +170,30 @@ impl ScalarExpression {
                         columns_collect(arg, vec, only_column_ref)
                     }
                 }
-                _ => (),
+                ScalarExpression::Between {
+                    expr,
+                    left_expr,
+                    right_expr,
+                    ..
+                } => {
+                    columns_collect(expr, vec, only_column_ref);
+                    columns_collect(left_expr, vec, only_column_ref);
+                    columns_collect(right_expr, vec, only_column_ref);
+                }
+                ScalarExpression::SubString {
+                    expr,
+                    for_expr,
+                    from_expr,
+                } => {
+                    columns_collect(expr, vec, only_column_ref);
+                    if let Some(for_expr) = for_expr {
+                        columns_collect(for_expr, vec, only_column_ref);
+                    }
+                    if let Some(from_expr) = from_expr {
+                        columns_collect(from_expr, vec, only_column_ref);
+                    }
+                }
+                ScalarExpression::Constant(_) | ScalarExpression::Empty => (),
             }
         }
         let mut exprs = Vec::new();
@@ -209,14 +241,25 @@ impl ScalarExpression {
                         Some(true)
                     )
             }
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 
     pub fn output_name(&self) -> String {
         match self {
             ScalarExpression::Constant(value) => format!("{}", value),
-            ScalarExpression::ColumnRef(col) => col.name().to_string(),
-            ScalarExpression::Alias { alias, .. } => alias.to_string(),
+            ScalarExpression::ColumnRef(col) => {
+                if let Some(table_name) = col.table_name() {
+                    return format!("{}.{}", table_name, col.name());
+                }
+                col.name().to_string()
+            }
+            ScalarExpression::Alias { alias, expr } => match alias {
+                AliasType::Name(alias) => alias.to_string(),
+                AliasType::Expr(alias_expr) => {
+                    format!("({}) as ({})", expr, alias_expr.output_name())
+                }
+            },
             ScalarExpression::TypeCast { expr, ty } => {
                 format!("CAST({} as {})", expr.output_name(), ty)
             }
@@ -301,12 +344,17 @@ impl ScalarExpression {
                     op("for", for_expr),
                 )
             }
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 
     pub fn output_column(&self) -> ColumnRef {
         match self {
             ScalarExpression::ColumnRef(col) => col.clone(),
+            ScalarExpression::Alias {
+                alias: AliasType::Expr(expr),
+                ..
+            } => expr.output_column(),
             _ => Arc::new(ColumnCatalog::new(
                 self.output_name(),
                 true,

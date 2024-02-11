@@ -112,7 +112,7 @@ enum IndexValue {
 pub struct IndexIter<'a> {
     offset: usize,
     limit: Option<usize>,
-    tuple_columns: Arc<Vec<ColumnRef>>,
+    tuple_schema_ref: Arc<Vec<ColumnRef>>,
     projections: Vec<usize>,
 
     index_meta: IndexMetaRef,
@@ -153,7 +153,7 @@ impl IndexIter<'_> {
             TableCodec::decode_tuple(
                 &self.table.types(),
                 &self.projections,
-                &self.tuple_columns,
+                &self.tuple_schema_ref,
                 &bytes,
             )
         }))
@@ -205,7 +205,7 @@ impl Iter for IndexIter<'_> {
                         let tuple = TableCodec::decode_tuple(
                             &self.table.types(),
                             &self.projections,
-                            &self.tuple_columns,
+                            &self.tuple_schema_ref,
                             &value,
                         );
 
@@ -273,7 +273,7 @@ impl Iter for IndexIter<'_> {
                             let tuple = TableCodec::decode_tuple(
                                 &self.table.types(),
                                 &self.projections,
-                                &self.tuple_columns,
+                                &self.tuple_schema_ref,
                                 &bytes,
                             );
 

@@ -124,7 +124,7 @@ impl HashAggStatus {
 
                 Ok::<Tuple, DatabaseError>(Tuple {
                     id: None,
-                    columns: group_columns.clone(),
+                    schema_ref: group_columns.clone(),
                     values,
                 })
             })
@@ -223,10 +223,11 @@ mod test {
                         Arc::new(DataValue::Int32(Some(3))),
                     ],
                 ],
-                columns: t1_columns,
+                schema_ref: Arc::new(t1_columns),
             }),
             childrens: vec![],
             physical_option: None,
+            _output_schema_ref: None,
         };
 
         let tuples =

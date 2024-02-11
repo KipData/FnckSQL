@@ -1,12 +1,13 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::collections::btree_map::Iter;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::{slice, vec};
 
 use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::errors::DatabaseError;
 use crate::types::index::{IndexMeta, IndexMetaRef};
+use crate::types::tuple::SchemaRef;
 use crate::types::{ColumnId, LogicalType};
 
 pub type TableName = Arc<String>;
@@ -15,9 +16,11 @@ pub type TableName = Arc<String>;
 pub struct TableCatalog {
     pub(crate) name: TableName,
     /// Mapping from column names to column ids
-    column_idxs: BTreeMap<String, ColumnId>,
-    pub(crate) columns: BTreeMap<ColumnId, ColumnRef>,
+    column_idxs: BTreeMap<String, (ColumnId, usize)>,
+    columns: BTreeMap<ColumnId, usize>,
     pub(crate) indexes: Vec<IndexMetaRef>,
+
+    schema_ref: SchemaRef,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -35,29 +38,30 @@ impl TableCatalog {
 
     #[allow(dead_code)]
     pub(crate) fn get_column_by_id(&self, id: &ColumnId) -> Option<&ColumnRef> {
-        self.columns.get(id)
+        self.columns.get(id).map(|i| &self.schema_ref[*i])
     }
 
     #[allow(dead_code)]
     pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnId> {
-        self.column_idxs.get(name).cloned()
+        self.column_idxs.get(name).map(|(id, _)| id).cloned()
     }
 
     pub(crate) fn get_column_by_name(&self, name: &str) -> Option<&ColumnRef> {
-        let id = self.column_idxs.get(name)?;
-        self.columns.get(id)
+        self.column_idxs
+            .get(name)
+            .map(|(_, i)| &self.schema_ref[*i])
     }
 
     pub(crate) fn contains_column(&self, name: &str) -> bool {
         self.column_idxs.contains_key(name)
     }
 
-    pub(crate) fn clone_columns(&self) -> Vec<ColumnRef> {
-        self.columns.values().cloned().collect()
+    pub(crate) fn columns(&self) -> slice::Iter<'_, ColumnRef> {
+        self.schema_ref.iter()
     }
 
-    pub(crate) fn columns_with_id(&self) -> Iter<'_, ColumnId, ColumnRef> {
-        self.columns.iter()
+    pub(crate) fn schema_ref(&self) -> &SchemaRef {
+        &self.schema_ref
     }
 
     pub(crate) fn columns_len(&self) -> usize {
@@ -65,16 +69,15 @@ impl TableCatalog {
     }
 
     pub(crate) fn primary_key(&self) -> Result<(usize, &ColumnRef), DatabaseError> {
-        self.columns
-            .values()
+        self.schema_ref
+            .iter()
             .enumerate()
             .find(|(_, column)| column.desc.is_primary)
             .ok_or(DatabaseError::PrimaryKeyNotFound)
     }
 
     pub(crate) fn types(&self) -> Vec<LogicalType> {
-        self.columns
-            .values()
+        self.columns()
             .map(|column| *column.datatype())
             .collect_vec()
     }
@@ -95,8 +98,13 @@ impl TableCatalog {
         col.summary.table_name = Some(self.name.clone());
         col.summary.id = Some(col_id);
 
-        self.column_idxs.insert(col.name().to_string(), col_id);
-        self.columns.insert(col_id, Arc::new(col));
+        self.column_idxs
+            .insert(col.name().to_string(), (col_id, self.schema_ref.len()));
+        self.columns.insert(col_id, self.schema_ref.len());
+
+        let mut schema = Vec::clone(&self.schema_ref);
+        schema.push(Arc::new(col));
+        self.schema_ref = Arc::new(schema);
 
         Ok(col_id)
     }
@@ -132,6 +140,7 @@ impl TableCatalog {
             column_idxs: BTreeMap::new(),
             columns: BTreeMap::new(),
             indexes: vec![],
+            schema_ref: Arc::new(vec![]),
         };
         for col_catalog in columns.into_iter() {
             let _ = table_catalog.add_column(col_catalog)?;

@@ -15,19 +15,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         let table_catalog = self.context.table_and_bind(table_name.clone(), None)?;
         let columns = table_catalog
-            .columns_with_id()
-            .filter_map(|(_, column)| column.desc.is_index().then_some(column.clone()))
+            .columns()
+            .filter_map(|column| column.desc.is_index().then_some(column.clone()))
             .collect_vec();
 
         let scan_op = ScanOperator::build(table_name.clone(), table_catalog);
-        let plan = LogicalPlan {
-            operator: Operator::Analyze(AnalyzeOperator {
+        Ok(LogicalPlan::new(
+            Operator::Analyze(AnalyzeOperator {
                 table_name,
                 columns,
             }),
-            childrens: vec![scan_op],
-            physical_option: None,
-        };
-        Ok(plan)
+            vec![scan_op],
+        ))
     }
 }

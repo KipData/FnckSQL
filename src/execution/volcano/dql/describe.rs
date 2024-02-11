@@ -57,7 +57,7 @@ impl Describe {
             }
         };
 
-        for (_, column) in table.columns_with_id() {
+        for column in table.columns() {
             let values = vec![
                 Arc::new(DataValue::Utf8(Some(column.name().to_string()))),
                 Arc::new(DataValue::Utf8(Some(column.datatype().to_string()))),
@@ -69,7 +69,7 @@ impl Describe {
             ];
             yield Tuple {
                 id: None,
-                columns: columns.clone(),
+                schema_ref: columns.clone(),
                 values,
             };
         }

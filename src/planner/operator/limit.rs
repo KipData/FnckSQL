@@ -16,11 +16,10 @@ impl LimitOperator {
         limit: Option<usize>,
         children: LogicalPlan,
     ) -> LogicalPlan {
-        LogicalPlan {
-            operator: Operator::Limit(LimitOperator { offset, limit }),
-            childrens: vec![children],
-            physical_option: None,
-        }
+        LogicalPlan::new(
+            Operator::Limit(LimitOperator { offset, limit }),
+            vec![children],
+        )
     }
 }
 

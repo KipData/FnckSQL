@@ -1,4 +1,4 @@
-use crate::binder::Binder;
+use crate::binder::{Binder, QueryBindStep};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::LogicalPlan;
@@ -10,6 +10,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
         children: LogicalPlan,
         select_list: Vec<ScalarExpression>,
     ) -> LogicalPlan {
+        self.context.step(QueryBindStep::Distinct);
+
         AggregateOperator::build(children, vec![], select_list)
     }
 }

@@ -1,7 +1,7 @@
 use crate::catalog::ColumnSummary;
 use crate::errors::DatabaseError;
 use crate::expression::value_compute::{binary_op, unary_op};
-use crate::expression::ScalarExpression;
+use crate::expression::{AliasType, ScalarExpression};
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
@@ -44,9 +44,16 @@ impl ScalarExpression {
             }
             ScalarExpression::Alias { expr, alias } => {
                 if let Some(value) = tuple
-                    .columns
+                    .schema_ref
                     .iter()
-                    .find_position(|tul_col| tul_col.name() == alias)
+                    .find_position(|tul_col| match alias {
+                        AliasType::Name(alias) => {
+                            tul_col.table_name().is_none() && tul_col.name() == alias
+                        }
+                        AliasType::Expr(alias_expr) => {
+                            alias_expr.output_column().summary == tul_col.summary
+                        }
+                    })
                     .map(|(i, _)| &tuple.values[i])
                 {
                     return Ok(value.clone());
@@ -159,12 +166,13 @@ impl ScalarExpression {
                     Ok(Arc::new(DataValue::Utf8(None)))
                 }
             }
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 
     fn eval_with_summary<'a>(tuple: &'a Tuple, summary: &ColumnSummary) -> Option<&'a ValueRef> {
         tuple
-            .columns
+            .schema_ref
             .iter()
             .find_position(|tul_col| tul_col.summary() == summary)
             .map(|(i, _)| &tuple.values[i])

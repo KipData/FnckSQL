@@ -14,11 +14,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
     ) -> Result<LogicalPlan, DatabaseError> {
         let table_name = Arc::new(lower_case_name(name)?);
 
-        let plan = LogicalPlan {
-            operator: Operator::Truncate(TruncateOperator { table_name }),
-            childrens: vec![],
-            physical_option: None,
-        };
-        Ok(plan)
+        Ok(LogicalPlan::new(
+            Operator::Truncate(TruncateOperator { table_name }),
+            vec![],
+        ))
     }
 }

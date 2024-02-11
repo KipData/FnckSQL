@@ -544,7 +544,7 @@ impl ScalarExpression {
                         (Some(col), None) => {
                             replaces.push(Replace::Binary(ReplaceBinary {
                                 column_expr: ScalarExpression::ColumnRef(col),
-                                val_expr: right_expr.as_ref().clone(),
+                                val_expr: mem::replace(right_expr, ScalarExpression::Empty),
                                 op: *op,
                                 ty: *ty,
                                 is_column_left: true,
@@ -553,7 +553,7 @@ impl ScalarExpression {
                         (None, Some(col)) => {
                             replaces.push(Replace::Binary(ReplaceBinary {
                                 column_expr: ScalarExpression::ColumnRef(col),
-                                val_expr: left_expr.as_ref().clone(),
+                                val_expr: mem::replace(left_expr, ScalarExpression::Empty),
                                 op: *op,
                                 ty: *ty,
                                 is_column_left: false,
@@ -568,7 +568,7 @@ impl ScalarExpression {
                                 (Some(col), None) => {
                                     replaces.push(Replace::Binary(ReplaceBinary {
                                         column_expr: ScalarExpression::ColumnRef(col),
-                                        val_expr: right_expr.as_ref().clone(),
+                                        val_expr: mem::replace(right_expr, ScalarExpression::Empty),
                                         op: *op,
                                         ty: *ty,
                                         is_column_left: true,
@@ -577,7 +577,7 @@ impl ScalarExpression {
                                 (None, Some(col)) => {
                                     replaces.push(Replace::Binary(ReplaceBinary {
                                         column_expr: ScalarExpression::ColumnRef(col),
-                                        val_expr: left_expr.as_ref().clone(),
+                                        val_expr: mem::replace(left_expr, ScalarExpression::Empty),
                                         op: *op,
                                         ty: *ty,
                                         is_column_left: false,
@@ -675,13 +675,13 @@ impl ScalarExpression {
                     left_expr: Box::new(ScalarExpression::Binary {
                         op: left_op,
                         left_expr: expr.clone(),
-                        right_expr: left_expr.clone(),
+                        right_expr: mem::replace(left_expr, Box::new(ScalarExpression::Empty)),
                         ty: LogicalType::Boolean,
                     }),
                     right_expr: Box::new(ScalarExpression::Binary {
                         op: right_op,
-                        left_expr: expr.clone(),
-                        right_expr: right_expr.clone(),
+                        left_expr: mem::replace(expr, Box::new(ScalarExpression::Empty)),
+                        right_expr: mem::replace(right_expr, Box::new(ScalarExpression::Empty)),
                         ty: LogicalType::Boolean,
                     }),
                     ty: LogicalType::Boolean,
@@ -741,11 +741,13 @@ impl ScalarExpression {
             ty: fix_ty,
         } = replace_unary;
         let _ = mem::replace(col_expr, Box::new(child_expr));
+
+        let expr = mem::replace(val_expr, Box::new(ScalarExpression::Empty));
         let _ = mem::replace(
             val_expr,
             Box::new(ScalarExpression::Unary {
                 op: fix_op,
-                expr: val_expr.clone(),
+                expr,
                 ty: fix_ty,
             }),
         );
@@ -802,13 +804,14 @@ impl ScalarExpression {
             BinaryOperator::LtEq => BinaryOperator::GtEq,
             source_op => source_op,
         };
+        let temp_expr = mem::replace(right_expr, Box::new(ScalarExpression::Empty));
         let (fixed_op, fixed_left_expr, fixed_right_expr) = if is_column_left {
-            (op_flip(fix_op), right_expr.clone(), Box::new(val_expr))
+            (op_flip(fix_op), temp_expr, Box::new(val_expr))
         } else {
             if matches!(fix_op, BinaryOperator::Minus | BinaryOperator::Multiply) {
                 let _ = mem::replace(op, comparison_flip(*op));
             }
-            (fix_op, Box::new(val_expr), right_expr.clone())
+            (fix_op, Box::new(val_expr), temp_expr)
         };
 
         let _ = mem::replace(left_expr, Box::new(column_expr));
@@ -939,10 +942,12 @@ impl ScalarExpression {
                 | ScalarExpression::In { .. }
                 | ScalarExpression::Between { .. }
                 | ScalarExpression::SubString { .. } => expr.convert_binary(col_id),
+                ScalarExpression::Empty => unreachable!(),
             },
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)
             | ScalarExpression::AggCall { .. } => Ok(None),
+            ScalarExpression::Empty => unreachable!(),
         }
     }
 

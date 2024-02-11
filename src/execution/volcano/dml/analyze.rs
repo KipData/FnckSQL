@@ -67,10 +67,10 @@ impl Analyze {
         #[for_await]
         for tuple in build_read(input, transaction) {
             let Tuple {
-                columns, values, ..
+                schema_ref, values, ..
             } = tuple?;
 
-            for (i, column) in columns.iter().enumerate() {
+            for (i, column) in schema_ref.iter().enumerate() {
                 if !column.desc.is_index() {
                     continue;
                 }
@@ -114,7 +114,7 @@ impl Analyze {
 
         yield Tuple {
             id: None,
-            columns: Arc::new(columns),
+            schema_ref: Arc::new(columns),
             values,
         };
     }

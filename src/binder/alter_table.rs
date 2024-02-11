@@ -35,15 +35,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
                             "illegal column naming".to_string(),
                         ));
                     }
-                    LogicalPlan {
-                        operator: Operator::AddColumn(AddColumnOperator {
+                    LogicalPlan::new(
+                        Operator::AddColumn(AddColumnOperator {
                             table_name,
                             if_not_exists: *if_not_exists,
                             column,
                         }),
-                        childrens: vec![plan],
-                        physical_option: None,
-                    }
+                        vec![plan],
+                    )
                 }
                 AlterTableOperation::DropColumn {
                     column_name,
@@ -53,15 +52,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     let plan = ScanOperator::build(table_name.clone(), table);
                     let column_name = column_name.value.clone();
 
-                    LogicalPlan {
-                        operator: Operator::DropColumn(DropColumnOperator {
+                    LogicalPlan::new(
+                        Operator::DropColumn(DropColumnOperator {
                             table_name,
                             if_exists: *if_exists,
                             column_name,
                         }),
-                        childrens: vec![plan],
-                        physical_option: None,
-                    }
+                        vec![plan],
+                    )
                 }
                 AlterTableOperation::DropPrimaryKey => todo!(),
                 AlterTableOperation::RenameColumn {

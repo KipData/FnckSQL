@@ -44,7 +44,7 @@ impl AddColumn {
             let mut tuple: Tuple = tuple?;
 
             let tuples_columns = tuple_columns.get_or_insert_with(|| {
-                let mut columns = Vec::clone(&tuple.columns);
+                let mut columns = Vec::clone(&tuple.schema_ref);
 
                 columns.push(Arc::new(column.clone()));
                 Arc::new(columns)
@@ -57,7 +57,7 @@ impl AddColumn {
             } else {
                 tuple.values.push(Arc::new(DataValue::Null));
             }
-            tuple.columns = tuples_columns.clone();
+            tuple.schema_ref = tuples_columns.clone();
             tuples.push(tuple);
         }
         for tuple in tuples {

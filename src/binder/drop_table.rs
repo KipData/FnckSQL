@@ -15,14 +15,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
     ) -> Result<LogicalPlan, DatabaseError> {
         let table_name = Arc::new(lower_case_name(name)?);
 
-        let plan = LogicalPlan {
-            operator: Operator::DropTable(DropTableOperator {
+        let plan = LogicalPlan::new(
+            Operator::DropTable(DropTableOperator {
                 table_name,
                 if_exists: *if_exists,
             }),
-            childrens: vec![],
-            physical_option: None,
-        };
+            vec![],
+        );
         Ok(plan)
     }
 }

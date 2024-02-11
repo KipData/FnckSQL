@@ -53,24 +53,25 @@ impl Insert {
         let mut primary_key_index = None;
         let mut unique_values = HashMap::new();
         let mut tuple_values = Vec::new();
-        let mut tuple_columns = Vec::new();
+        let mut tuple_schema_ref = None;
 
         if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
+            let _ = tuple_schema_ref.get_or_insert_with(|| table_catalog.schema_ref().clone());
             #[for_await]
             for tuple in build_read(input, transaction) {
                 let Tuple {
-                    columns, values, ..
+                    schema_ref, values, ..
                 } = tuple?;
                 let mut tuple_map = HashMap::new();
                 for (i, value) in values.into_iter().enumerate() {
-                    let col = &columns[i];
+                    let column = &schema_ref[i];
 
-                    if let Some(col_id) = col.id() {
-                        tuple_map.insert(col_id, value);
+                    if let Some(column_id) = column.id() {
+                        tuple_map.insert(column_id, value);
                     }
                 }
                 let primary_col_id = primary_key_index.get_or_insert_with(|| {
-                    columns
+                    schema_ref
                         .iter()
                         .find(|col| col.desc.is_primary)
                         .map(|col| col.id().unwrap())
@@ -79,12 +80,9 @@ impl Insert {
                 let tuple_id = tuple_map.get(primary_col_id).cloned().unwrap();
                 let mut values = Vec::with_capacity(table_catalog.columns_len());
 
-                for (col_id, col) in table_catalog.columns_with_id() {
-                    if table_catalog.columns_len() > tuple_columns.len() {
-                        tuple_columns.push(col.clone());
-                    }
+                for col in table_catalog.columns() {
                     let value = tuple_map
-                        .remove(col_id)
+                        .remove(&col.id().unwrap())
                         .or_else(|| col.default_value())
                         .unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())));
 
@@ -101,7 +99,8 @@ impl Insert {
                 }
                 tuple_values.push((tuple_id, values));
             }
-            let tuple_builder = TupleBuilder::new(tuple_columns);
+            let tuple_schema_ref = tuple_schema_ref.ok_or(DatabaseError::ColumnsEmpty)?;
+            let tuple_builder = TupleBuilder::new(&tuple_schema_ref);
 
             // Unique Index
             for (col_id, values) in unique_values {

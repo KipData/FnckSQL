@@ -17,6 +17,7 @@ mod update;
 
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::catalog::{TableCatalog, TableName};
 use crate::errors::DatabaseError;
@@ -30,6 +31,20 @@ pub enum InputRefType {
     GroupBy,
 }
 
+// Tips: only query now!
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub enum QueryBindStep {
+    From,
+    Join,
+    Where,
+    Agg,
+    Having,
+    Distinct,
+    Sort,
+    Project,
+    Limit,
+}
+
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
     transaction: &'a T,
@@ -40,6 +55,11 @@ pub struct BinderContext<'a, T: Transaction> {
     // agg
     group_by_exprs: Vec<ScalarExpression>,
     pub(crate) agg_calls: Vec<ScalarExpression>,
+
+    bind_step: QueryBindStep,
+    sub_queries: HashMap<QueryBindStep, Vec<LogicalPlan>>,
+
+    temp_table_id: usize,
 }
 
 impl<'a, T: Transaction> BinderContext<'a, T> {
@@ -51,7 +71,30 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             table_aliases: Default::default(),
             group_by_exprs: vec![],
             agg_calls: Default::default(),
+            bind_step: QueryBindStep::From,
+            sub_queries: Default::default(),
+            temp_table_id: 0,
         }
+    }
+
+    pub fn temp_table(&mut self) -> TableName {
+        self.temp_table_id += 1;
+        Arc::new(format!("_temp_table_{}_", self.temp_table_id))
+    }
+
+    pub fn step(&mut self, bind_step: QueryBindStep) {
+        self.bind_step = bind_step;
+    }
+
+    pub fn sub_query(&mut self, sub_query: LogicalPlan) {
+        self.sub_queries
+            .entry(self.bind_step)
+            .or_default()
+            .push(sub_query)
+    }
+
+    pub fn sub_queries_at_now(&mut self) -> Option<Vec<LogicalPlan>> {
+        self.sub_queries.remove(&self.bind_step)
     }
 
     pub fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
