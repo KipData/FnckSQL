@@ -80,7 +80,6 @@ pub enum ScalarExpression {
     Reference {
         expr: Box<ScalarExpression>,
         pos: usize,
-        ty: LogicalType,
     },
 }
 
@@ -105,9 +104,8 @@ impl ScalarExpression {
             .iter()
             .find_position(|expr| self.output_name() == expr.output_name())
         {
-            let ty = self.return_type();
             let expr = Box::new(mem::replace(self, ScalarExpression::Empty));
-            *self = ScalarExpression::Reference { expr, pos, ty };
+            *self = ScalarExpression::Reference { expr, pos };
             return;
         }
 
@@ -209,9 +207,10 @@ impl ScalarExpression {
                 LogicalType::Boolean
             }
             Self::SubString { .. } => LogicalType::Varchar(None),
-            Self::Alias { expr, .. } => expr.return_type(),
+            Self::Alias { expr, .. } | ScalarExpression::Reference { expr, .. } => {
+                expr.return_type()
+            }
             ScalarExpression::Empty => unreachable!(),
-            ScalarExpression::Reference { ty, .. } => *ty,
         }
     }
 
