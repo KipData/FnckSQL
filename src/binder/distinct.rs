@@ -12,6 +12,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
     ) -> LogicalPlan {
         self.context.step(QueryBindStep::Distinct);
 
-        AggregateOperator::build(children, vec![], select_list)
+        AggregateOperator::build(children, vec![], select_list, true)
     }
 }

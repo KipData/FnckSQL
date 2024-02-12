@@ -1,4 +1,3 @@
-use crate::catalog::ColumnSummary;
 use crate::errors::DatabaseError;
 use crate::expression::value_compute::{binary_op, unary_op};
 use crate::expression::{AliasType, ScalarExpression};
@@ -29,14 +28,14 @@ macro_rules! eval_to_num {
 
 impl ScalarExpression {
     pub fn eval(&self, tuple: &Tuple) -> Result<ValueRef, DatabaseError> {
-        if let Some(value) = Self::eval_with_summary(tuple, self.output_column().summary()) {
-            return Ok(value.clone());
-        }
-
-        match &self {
+        match self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
             ScalarExpression::ColumnRef(col) => {
-                let value = Self::eval_with_summary(tuple, col.summary())
+                let value = tuple
+                    .schema_ref
+                    .iter()
+                    .find_position(|tul_col| tul_col.summary() == col.summary())
+                    .map(|(i, _)| &tuple.values[i])
                     .unwrap_or(&NULL_VALUE)
                     .clone();
 
@@ -116,11 +115,7 @@ impl ScalarExpression {
                 Ok(Arc::new(unary_op(&value, op)?))
             }
             ScalarExpression::AggCall { .. } => {
-                let value = Self::eval_with_summary(tuple, self.output_column().summary())
-                    .unwrap_or(&NULL_VALUE)
-                    .clone();
-
-                Ok(value)
+                unreachable!("must use `NormalizationRuleImpl::ExpressionRemapper`")
             }
             ScalarExpression::Between {
                 expr,
@@ -166,15 +161,14 @@ impl ScalarExpression {
                     Ok(Arc::new(DataValue::Utf8(None)))
                 }
             }
+            ScalarExpression::Reference { pos, .. } => {
+                return Ok(tuple
+                    .values
+                    .get(*pos)
+                    .unwrap_or_else(|| &NULL_VALUE)
+                    .clone());
+            }
             ScalarExpression::Empty => unreachable!(),
         }
-    }
-
-    fn eval_with_summary<'a>(tuple: &'a Tuple, summary: &ColumnSummary) -> Option<&'a ValueRef> {
-        tuple
-            .schema_ref
-            .iter()
-            .find_position(|tul_col| tul_col.summary() == summary)
-            .map(|(i, _)| &tuple.values[i])
     }
 }

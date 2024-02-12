@@ -22,7 +22,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     ) -> LogicalPlan {
         self.context.step(QueryBindStep::Agg);
 
-        AggregateOperator::build(children, agg_calls, groupby_exprs)
+        AggregateOperator::build(children, agg_calls, groupby_exprs, false)
     }
 
     pub fn extract_select_aggregate(
@@ -137,6 +137,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => (),
             ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Reference { .. } => unreachable!(),
         }
 
         Ok(())
@@ -310,6 +311,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
             ScalarExpression::Constant(_) => Ok(()),
             ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Reference { .. } => unreachable!(),
         }
     }
 }

@@ -172,6 +172,11 @@ impl<S: Storage> Database<S> {
                     NormalizationRuleImpl::EliminateLimits,
                 ],
             )
+            .batch(
+                "Expression Remapper".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![NormalizationRuleImpl::ExpressionRemapper],
+            )
             .implementations(vec![
                 // DQL
                 ImplementationRuleImpl::SimpleAggregate,

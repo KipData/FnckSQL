@@ -19,6 +19,7 @@ pub mod update;
 pub mod values;
 
 use crate::catalog::ColumnRef;
+use crate::expression::ScalarExpression;
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
 use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
@@ -103,6 +104,50 @@ pub enum PhysicalOption {
 }
 
 impl Operator {
+    pub fn output_exprs(&self) -> Option<Vec<ScalarExpression>> {
+        match self {
+            Operator::Dummy => None,
+            Operator::Aggregate(op) => Some(
+                op.agg_calls
+                    .iter()
+                    .chain(op.groupby_exprs.iter())
+                    .cloned()
+                    .collect_vec(),
+            ),
+            Operator::Filter(_) | Operator::Join(_) => None,
+            Operator::Project(op) => Some(op.exprs.clone()),
+            Operator::Scan(op) => Some(
+                op.columns
+                    .iter()
+                    .cloned()
+                    .map(|(_, column)| ScalarExpression::ColumnRef(column))
+                    .collect_vec(),
+            ),
+            Operator::Sort(_) | Operator::Limit(_) => None,
+            Operator::Values(op) => Some(
+                op.schema_ref
+                    .iter()
+                    .cloned()
+                    .map(ScalarExpression::ColumnRef)
+                    .collect_vec(),
+            ),
+            Operator::Show
+            | Operator::Explain
+            | Operator::Describe(_)
+            | Operator::Insert(_)
+            | Operator::Update(_)
+            | Operator::Delete(_)
+            | Operator::Analyze(_)
+            | Operator::AddColumn(_)
+            | Operator::DropColumn(_)
+            | Operator::CreateTable(_)
+            | Operator::DropTable(_)
+            | Operator::Truncate(_)
+            | Operator::CopyFromFile(_)
+            | Operator::CopyToFile(_) => None,
+        }
+    }
+
     pub fn referenced_columns(&self, only_column_ref: bool) -> Vec<ColumnRef> {
         match self {
             Operator::Aggregate(op) => op

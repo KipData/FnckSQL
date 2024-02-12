@@ -411,7 +411,9 @@ struct ReplaceUnary {
 impl ScalarExpression {
     pub fn exist_column(&self, table_name: &str, col_id: &ColumnId) -> bool {
         match self {
-            ScalarExpression::ColumnRef(col) => Self::_is_belong(table_name, col) && col.id() == Some(*col_id),
+            ScalarExpression::ColumnRef(col) => {
+                Self::_is_belong(table_name, col) && col.id() == Some(*col_id)
+            }
             ScalarExpression::Alias { expr, .. } => expr.exist_column(table_name, col_id),
             ScalarExpression::TypeCast { expr, .. } => expr.exist_column(table_name, col_id),
             ScalarExpression::IsNull { expr, .. } => expr.exist_column(table_name, col_id),
@@ -458,7 +460,8 @@ impl ScalarExpression {
                         .map(|expr| expr.exist_column(table_name, col_id))
                         == Some(true)
             }
-            ScalarExpression::Constant(_) | ScalarExpression::Empty => false,
+            ScalarExpression::Constant(_) => false,
+            ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
         }
     }
 
@@ -988,12 +991,12 @@ impl ScalarExpression {
                 | ScalarExpression::In { .. }
                 | ScalarExpression::Between { .. }
                 | ScalarExpression::SubString { .. } => expr.convert_binary(table_name, id),
-                ScalarExpression::Empty => unreachable!(),
+                ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             },
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)
             | ScalarExpression::AggCall { .. } => Ok(None),
-            ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
         }
     }
 
