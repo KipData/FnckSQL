@@ -182,6 +182,13 @@ impl HepGraph {
             .map(|edge| edge.target())
     }
 
+    pub fn youngest_child_at(&self, id: HepNodeId) -> Option<HepNodeId> {
+        self.graph
+            .edges(id)
+            .max_by_key(|edge| edge.weight())
+            .map(|edge| edge.target())
+    }
+
     pub fn into_plan(mut self, memo: Option<&Memo>) -> Option<LogicalPlan> {
         self.build_childrens(self.root_index, memo)
     }

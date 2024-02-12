@@ -23,7 +23,7 @@ pub struct HashJoin {
 
 impl From<(JoinOperator, LogicalPlan, LogicalPlan)> for HashJoin {
     fn from(
-        (JoinOperator { on, join_type }, left_input, right_input): (
+        (JoinOperator { on, join_type, .. }, left_input, right_input): (
             JoinOperator,
             LogicalPlan,
             LogicalPlan,
@@ -180,7 +180,7 @@ impl HashJoinStatus {
             &filter,
             join_tuples.is_empty() || matches!(ty, JoinType::Full | JoinType::Cross),
         ) {
-            let mut filter_tuples = Vec::with_capacity(join_tuples.len());
+            let mut filter_tuples = Vec::new();
 
             for mut tuple in join_tuples {
                 if let DataValue::Boolean(option) = expr.eval(&tuple)?.as_ref() {

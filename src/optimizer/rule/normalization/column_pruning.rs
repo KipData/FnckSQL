@@ -1,4 +1,4 @@
-use crate::catalog::{ColumnRef, ColumnSummary};
+use crate::catalog::ColumnSummary;
 use crate::errors::DatabaseError;
 use crate::expression::agg::AggKind;
 use crate::expression::ScalarExpression;
@@ -25,8 +25,18 @@ lazy_static! {
 #[derive(Clone)]
 pub struct ColumnPruning;
 
+macro_rules! trans_references {
+    ($columns:expr) => {{
+        let mut column_references = HashSet::with_capacity($columns.len());
+        for column in $columns {
+            column_references.insert(column.summary());
+        }
+        column_references
+    }};
+}
+
 impl ColumnPruning {
-    fn clear_exprs(column_references: HashSet<&ColumnSummary>, exprs: &mut Vec<ScalarExpression>) {
+    fn clear_exprs(column_references: &HashSet<&ColumnSummary>, exprs: &mut Vec<ScalarExpression>) {
         exprs.retain(|expr| {
             if column_references.contains(expr.output_column().summary()) {
                 return true;
@@ -48,7 +58,7 @@ impl ColumnPruning {
         match operator {
             Operator::Aggregate(op) => {
                 if !all_referenced {
-                    Self::clear_exprs(column_references, &mut op.agg_calls);
+                    Self::clear_exprs(&column_references, &mut op.agg_calls);
 
                     if op.agg_calls.is_empty() && op.groupby_exprs.is_empty() {
                         let value = Arc::new(DataValue::Utf8(Some("*".to_string())));
@@ -62,28 +72,28 @@ impl ColumnPruning {
                         })
                     }
                 }
-                let op_ref_columns = operator.referenced_columns(false);
+                let is_distinct = op.is_distinct;
+                let referenced_columns = operator.referenced_columns(false);
+                let mut new_column_references = trans_references!(&referenced_columns);
+                // on distinct
+                if is_distinct {
+                    for summary in column_references {
+                        new_column_references.insert(summary);
+                    }
+                }
 
-                Self::recollect_apply(op_ref_columns, false, node_id, graph);
+                Self::recollect_apply(new_column_references, false, node_id, graph);
             }
             Operator::Project(op) => {
                 let has_count_star = op.exprs.iter().any(ScalarExpression::has_count_star);
                 if !has_count_star {
                     if !all_referenced {
-                        Self::clear_exprs(column_references, &mut op.exprs);
+                        Self::clear_exprs(&column_references, &mut op.exprs);
                     }
-                    let op_ref_columns = operator.referenced_columns(false);
+                    let referenced_columns = operator.referenced_columns(false);
+                    let new_column_references = trans_references!(&referenced_columns);
 
-                    Self::recollect_apply(op_ref_columns, false, node_id, graph);
-                }
-            }
-            Operator::Sort(_op) => {
-                if !all_referenced {
-                    // Todo: Order Project
-                    // https://github.com/duckdb/duckdb/blob/main/src/optimizer/remove_unused_columns.cpp#L174
-                }
-                if let Some(child_id) = graph.eldest_child_at(node_id) {
-                    Self::_apply(column_references, true, child_id, graph);
+                    Self::recollect_apply(new_column_references, false, node_id, graph);
                 }
             }
             Operator::Scan(op) => {
@@ -92,7 +102,7 @@ impl ColumnPruning {
                         .retain(|(_, column)| column_references.contains(column.summary()));
                 }
             }
-            Operator::Limit(_) | Operator::Join(_) | Operator::Filter(_) => {
+            Operator::Sort(_) | Operator::Limit(_) | Operator::Join(_) | Operator::Filter(_) => {
                 let temp_columns = operator.referenced_columns(false);
                 // why?
                 let mut column_references = column_references;
@@ -119,10 +129,11 @@ impl ColumnPruning {
             | Operator::Update(_)
             | Operator::Delete(_)
             | Operator::Analyze(_) => {
-                let op_ref_columns = operator.referenced_columns(false);
+                let referenced_columns = operator.referenced_columns(false);
+                let new_column_references = trans_references!(&referenced_columns);
 
                 if let Some(child_id) = graph.eldest_child_at(node_id) {
-                    Self::recollect_apply(op_ref_columns, true, child_id, graph);
+                    Self::recollect_apply(new_column_references, true, child_id, graph);
                 } else {
                     unreachable!();
                 }
@@ -141,18 +152,15 @@ impl ColumnPruning {
     }
 
     fn recollect_apply(
-        referenced_columns: Vec<ColumnRef>,
+        referenced_columns: HashSet<&ColumnSummary>,
         all_referenced: bool,
         node_id: HepNodeId,
         graph: &mut HepGraph,
     ) {
         for child_id in graph.children_at(node_id).collect_vec() {
-            let new_references: HashSet<&ColumnSummary> = referenced_columns
-                .iter()
-                .map(|column| column.summary())
-                .collect();
+            let copy_references: HashSet<&ColumnSummary> = referenced_columns.clone();
 
-            Self::_apply(new_references, all_referenced, child_id, graph);
+            Self::_apply(copy_references, all_referenced, child_id, graph);
         }
     }
 }

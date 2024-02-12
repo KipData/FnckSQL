@@ -1,3 +1,4 @@
+use crate::catalog::TableName;
 use crate::expression::simplify::ConstantBinary;
 use crate::types::value::ValueRef;
 use crate::types::ColumnId;
@@ -20,6 +21,7 @@ pub struct IndexInfo {
 pub struct IndexMeta {
     pub id: IndexId,
     pub column_ids: Vec<ColumnId>,
+    pub table_name: TableName,
     pub name: String,
     pub is_unique: bool,
     pub is_primary: bool,

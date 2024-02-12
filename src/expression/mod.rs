@@ -1,8 +1,8 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use std::{fmt, mem};
 
 use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
 
@@ -77,6 +77,10 @@ pub enum ScalarExpression {
     },
     // Temporary expression used for expression substitution
     Empty,
+    Reference {
+        expr: Box<ScalarExpression>,
+        pos: usize,
+    },
 }
 
 impl ScalarExpression {
@@ -85,6 +89,85 @@ impl ScalarExpression {
             expr.unpack_alias()
         } else {
             self
+        }
+    }
+    pub fn unpack_reference(&self) -> &ScalarExpression {
+        if let ScalarExpression::Reference { expr, .. } = self {
+            expr.unpack_reference()
+        } else {
+            self
+        }
+    }
+
+    pub fn try_reference(&mut self, output_exprs: &[ScalarExpression]) {
+        if let Some((pos, _)) = output_exprs
+            .iter()
+            .find_position(|expr| self.output_name() == expr.output_name())
+        {
+            let expr = Box::new(mem::replace(self, ScalarExpression::Empty));
+            *self = ScalarExpression::Reference { expr, pos };
+            return;
+        }
+
+        match self {
+            ScalarExpression::Alias { expr, .. } => {
+                expr.try_reference(output_exprs);
+            }
+            ScalarExpression::TypeCast { expr, .. } => {
+                expr.try_reference(output_exprs);
+            }
+            ScalarExpression::IsNull { expr, .. } => {
+                expr.try_reference(output_exprs);
+            }
+            ScalarExpression::Unary { expr, .. } => {
+                expr.try_reference(output_exprs);
+            }
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                left_expr.try_reference(output_exprs);
+                right_expr.try_reference(output_exprs);
+            }
+            ScalarExpression::AggCall { args, .. } => {
+                for arg in args {
+                    arg.try_reference(output_exprs);
+                }
+            }
+            ScalarExpression::In { expr, args, .. } => {
+                expr.try_reference(output_exprs);
+                for arg in args {
+                    arg.try_reference(output_exprs);
+                }
+            }
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                expr.try_reference(output_exprs);
+                left_expr.try_reference(output_exprs);
+                right_expr.try_reference(output_exprs);
+            }
+            ScalarExpression::SubString {
+                expr,
+                for_expr,
+                from_expr,
+            } => {
+                expr.try_reference(output_exprs);
+                if let Some(expr) = for_expr {
+                    expr.try_reference(output_exprs);
+                }
+                if let Some(expr) = from_expr {
+                    expr.try_reference(output_exprs);
+                }
+            }
+            ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Constant(_)
+            | ScalarExpression::ColumnRef(_)
+            | ScalarExpression::Reference { .. } => (),
         }
     }
 
@@ -124,7 +207,9 @@ impl ScalarExpression {
                 LogicalType::Boolean
             }
             Self::SubString { .. } => LogicalType::Varchar(None),
-            Self::Alias { expr, .. } => expr.return_type(),
+            Self::Alias { expr, .. } | ScalarExpression::Reference { expr, .. } => {
+                expr.return_type()
+            }
             ScalarExpression::Empty => unreachable!(),
         }
     }
@@ -193,7 +278,8 @@ impl ScalarExpression {
                         columns_collect(from_expr, vec, only_column_ref);
                     }
                 }
-                ScalarExpression::Constant(_) | ScalarExpression::Empty => (),
+                ScalarExpression::Constant(_) => (),
+                ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             }
         }
         let mut exprs = Vec::new();
@@ -241,7 +327,7 @@ impl ScalarExpression {
                         Some(true)
                     )
             }
-            ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
         }
     }
 
@@ -261,7 +347,7 @@ impl ScalarExpression {
                 }
             },
             ScalarExpression::TypeCast { expr, ty } => {
-                format!("CAST({} as {})", expr.output_name(), ty)
+                format!("cast ({} as {})", expr.output_name(), ty)
             }
             ScalarExpression::IsNull { expr, negated } => {
                 let suffix = if *negated { "is not null" } else { "is null" };
@@ -289,7 +375,7 @@ impl ScalarExpression {
                 let args_str = args.iter().map(|expr| expr.output_name()).join(", ");
                 let op = |allow_distinct, distinct| {
                     if allow_distinct && distinct {
-                        "DISTINCT "
+                        "distinct "
                     } else {
                         ""
                     }
@@ -344,6 +430,7 @@ impl ScalarExpression {
                     op("for", for_expr),
                 )
             }
+            ScalarExpression::Reference { expr, .. } => expr.output_name(),
             ScalarExpression::Empty => unreachable!(),
         }
     }

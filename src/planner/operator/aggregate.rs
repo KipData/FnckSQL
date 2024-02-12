@@ -8,6 +8,7 @@ use std::fmt::Formatter;
 pub struct AggregateOperator {
     pub groupby_exprs: Vec<ScalarExpression>,
     pub agg_calls: Vec<ScalarExpression>,
+    pub is_distinct: bool,
 }
 
 impl AggregateOperator {
@@ -15,11 +16,13 @@ impl AggregateOperator {
         children: LogicalPlan,
         agg_calls: Vec<ScalarExpression>,
         groupby_exprs: Vec<ScalarExpression>,
+        is_distinct: bool,
     ) -> LogicalPlan {
         LogicalPlan::new(
             Operator::Aggregate(Self {
                 groupby_exprs,
                 agg_calls,
+                is_distinct,
             }),
             vec![children],
         )

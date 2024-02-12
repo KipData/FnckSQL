@@ -215,7 +215,9 @@ impl NormalizationRule for PushPredicateIntoScan {
                 if let Operator::Scan(child_op) = graph.operator_mut(child_id) {
                     //FIXME: now only support unique
                     for IndexInfo { meta, binaries } in &mut child_op.index_infos {
-                        let mut option = op.predicate.convert_binary(&meta.column_ids[0])?;
+                        let mut option = op
+                            .predicate
+                            .convert_binary(meta.table_name.as_str(), &meta.column_ids[0])?;
 
                         if let Some(mut binary) = option.take() {
                             binary.scope_aggregation()?;

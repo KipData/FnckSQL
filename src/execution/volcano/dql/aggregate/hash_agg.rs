@@ -26,6 +26,7 @@ impl From<(AggregateOperator, LogicalPlan)> for HashAggExecutor {
             AggregateOperator {
                 agg_calls,
                 groupby_exprs,
+                ..
             },
             input,
         ): (AggregateOperator, LogicalPlan),
@@ -197,6 +198,7 @@ mod test {
                 args: vec![ScalarExpression::ColumnRef(t1_columns[1].clone())],
                 ty: LogicalType::Integer,
             }],
+            is_distinct: false,
         };
 
         let input = LogicalPlan {
