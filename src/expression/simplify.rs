@@ -426,7 +426,7 @@ impl ScalarExpression {
                 left_expr.exist_column(table_name, col_id)
                     || right_expr.exist_column(table_name, col_id)
             }
-            ScalarExpression::AggCall { args, .. } => args
+            ScalarExpression::AggCall { args, .. } | ScalarExpression::Tuple(args) => args
                 .iter()
                 .any(|expr| expr.exist_column(table_name, col_id)),
             ScalarExpression::In { expr, args, .. } => {
@@ -729,6 +729,7 @@ impl ScalarExpression {
 
                 let _ = mem::replace(self, new_expr);
             }
+            // FIXME: Maybe `ScalarExpression::Tuple` can be replaced?
             _ => (),
         }
 
@@ -991,11 +992,13 @@ impl ScalarExpression {
                 | ScalarExpression::In { .. }
                 | ScalarExpression::Between { .. }
                 | ScalarExpression::SubString { .. } => expr.convert_binary(table_name, id),
-                ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
+                ScalarExpression::Tuple(_)
+                | ScalarExpression::Reference { .. }
+                | ScalarExpression::Empty => unreachable!(),
             },
-            ScalarExpression::Constant(_)
-            | ScalarExpression::ColumnRef(_)
-            | ScalarExpression::AggCall { .. } => Ok(None),
+            ScalarExpression::Constant(_) | ScalarExpression::ColumnRef(_) => Ok(None),
+            // FIXME: support `convert_binary`
+            ScalarExpression::Tuple(_) | ScalarExpression::AggCall { .. } => Ok(None),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
         }
     }

@@ -113,6 +113,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     )))),
                 })
             }
+            Expr::Tuple(exprs) => {
+                let mut bond_exprs = Vec::with_capacity(exprs.len());
+
+                for expr in exprs {
+                    bond_exprs.push(self.bind_expr(expr)?);
+                }
+                Ok(ScalarExpression::Tuple(bond_exprs))
+            }
             _ => {
                 todo!()
             }

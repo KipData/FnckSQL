@@ -1,0 +1,60 @@
+query B
+select (1, 2) = (1, 2)
+----
+true
+
+query B
+select (1, 2) = (2, 1)
+----
+false
+
+query B
+select (1, 2) != (1, 2)
+----
+false
+
+query B
+select (1, 2) != (2, 1)
+----
+true
+
+statement ok
+create table t1(id int primary key, v1 int unique)
+
+statement ok
+insert into t1 values (1,1), (2,2), (3,3), (4,4)
+
+query T
+select (id, v1) from t1;
+----
+(1, 1)
+(2, 2)
+(3, 3)
+(4, 4)
+
+query T
+select * from t1 where (id,v1) == (1,1);
+----
+1 1
+
+query T
+select * from t1 where (id,v1) != (1,1);
+----
+(2, 2)
+(3, 3)
+(4, 4)
+
+query T
+select * from t1 where (id,v1) in ((1,1), (2, 2));
+----
+1 1
+2 2
+
+query T
+select * from t1 where (id,v1) not in ((1,1), (2, 2));
+----
+3 3
+4 4
+
+statement ok
+drop t1
