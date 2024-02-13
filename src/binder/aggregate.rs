@@ -136,8 +136,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 }
             }
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => (),
-            ScalarExpression::Empty => unreachable!(),
-            ScalarExpression::Reference { .. } => unreachable!(),
+            ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Tuple(args) => {
+                for expr in args {
+                    self.visit_column_agg_expr(expr)?;
+                }
+            }
         }
 
         Ok(())
@@ -310,8 +314,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 Ok(())
             }
             ScalarExpression::Constant(_) => Ok(()),
-            ScalarExpression::Empty => unreachable!(),
-            ScalarExpression::Reference { .. } => unreachable!(),
+            ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Tuple(args) => {
+                for expr in args {
+                    self.validate_having_orderby(expr)?;
+                }
+                Ok(())
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::errors::DatabaseError;
 use crate::expression::{BinaryOperator, UnaryOperator};
-use crate::types::value::DataValue;
+use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
 use regex::Regex;
 
@@ -14,6 +14,13 @@ fn unpack_bool(value: DataValue) -> Option<bool> {
 fn unpack_utf8(value: DataValue) -> Option<String> {
     match value {
         DataValue::Utf8(inner) => inner,
+        _ => None,
+    }
+}
+
+fn unpack_tuple(value: DataValue) -> Option<Vec<ValueRef>> {
+    match value {
+        DataValue::Tuple(inner) => inner,
         _ => None,
     }
 }
@@ -169,7 +176,12 @@ macro_rules! numeric_binary_compute {
 
                 DataValue::Boolean(value)
             }
-            _ => todo!("unsupported operator"),
+            _ => {
+                return Err(DatabaseError::UnsupportedBinaryOperator(
+                    *$unified_type,
+                    *$op,
+                ))
+            }
         }
     };
 }
@@ -446,7 +458,7 @@ pub fn binary_op(
 
                     DataValue::Boolean(value)
                 }
-                _ => todo!("unsupported operator"),
+                _ => return Err(DatabaseError::UnsupportedBinaryOperator(unified_type, *op)),
             }
         }
         LogicalType::Boolean => {
@@ -472,7 +484,7 @@ pub fn binary_op(
 
                     DataValue::Boolean(value)
                 }
-                _ => todo!("unsupported operator"),
+                _ => return Err(DatabaseError::UnsupportedBinaryOperator(unified_type, *op)),
             }
         }
         LogicalType::Varchar(_) => {
@@ -542,11 +554,37 @@ pub fn binary_op(
 
                     DataValue::Utf8(value)
                 }
-                _ => todo!("unsupported operator"),
+                _ => return Err(DatabaseError::UnsupportedBinaryOperator(unified_type, *op)),
             }
         }
         LogicalType::SqlNull => return Ok(DataValue::Null),
         LogicalType::Invalid => return Err(DatabaseError::InvalidType),
+        LogicalType::Tuple => {
+            let left_value = unpack_tuple(left.clone().cast(&unified_type)?);
+            let right_value = unpack_tuple(right.clone().cast(&unified_type)?);
+
+            match op {
+                BinaryOperator::Eq => {
+                    let value = match (left_value, right_value) {
+                        (Some(v1), Some(v2)) => Some(v1 == v2),
+                        (None, None) => Some(true),
+                        (_, _) => None,
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                BinaryOperator::NotEq => {
+                    let value = match (left_value, right_value) {
+                        (Some(v1), Some(v2)) => Some(v1 != v2),
+                        (None, None) => Some(false),
+                        (_, _) => None,
+                    };
+
+                    DataValue::Boolean(value)
+                }
+                _ => return Err(DatabaseError::UnsupportedBinaryOperator(unified_type, *op)),
+            }
+        }
     };
 
     Ok(value)

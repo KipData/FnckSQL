@@ -308,6 +308,7 @@ impl Histogram {
                 | LogicalType::Decimal(_, _) => {
                     value.clone().cast(&LogicalType::Double).unwrap().double()
                 }
+                LogicalType::Tuple => unreachable!(),
             }
             .unwrap_or(0.0)
         };

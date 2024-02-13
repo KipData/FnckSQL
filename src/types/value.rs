@@ -50,6 +50,7 @@ pub enum DataValue {
     /// Date stored as a signed 64bit int timestamp since UNIX epoch 1970-01-01
     Date64(Option<i64>),
     Decimal(Option<Decimal>),
+    Tuple(Option<Vec<ValueRef>>),
 }
 
 macro_rules! generate_get_option {
@@ -133,6 +134,8 @@ impl PartialEq for DataValue {
             (Date64(_), _) => false,
             (Decimal(v1), Decimal(v2)) => v1.eq(v2),
             (Decimal(_), _) => false,
+            (Tuple(values_1), Tuple(values_2)) => values_1.eq(values_2),
+            (Tuple(_), _) => false,
         }
     }
 }
@@ -181,6 +184,7 @@ impl PartialOrd for DataValue {
             (Date64(_), _) => None,
             (Decimal(v1), Decimal(v2)) => v1.partial_cmp(v2),
             (Decimal(_), _) => None,
+            (Tuple(_), _) => None,
         }
     }
 }
@@ -219,6 +223,11 @@ impl Hash for DataValue {
             Date32(v) => v.hash(state),
             Date64(v) => v.hash(state),
             Decimal(v) => v.hash(state),
+            Tuple(values) => {
+                for v in values {
+                    v.hash(state)
+                }
+            }
         }
     }
 }
@@ -313,6 +322,7 @@ impl DataValue {
             DataValue::Date32(value) => value.is_none(),
             DataValue::Date64(value) => value.is_none(),
             DataValue::Decimal(value) => value.is_none(),
+            DataValue::Tuple(value) => value.is_none(),
         }
     }
 
@@ -335,6 +345,7 @@ impl DataValue {
             LogicalType::Date => DataValue::Date32(None),
             LogicalType::DateTime => DataValue::Date64(None),
             LogicalType::Decimal(_, _) => DataValue::Decimal(None),
+            LogicalType::Tuple => DataValue::Tuple(None),
         }
     }
 
@@ -357,6 +368,7 @@ impl DataValue {
             LogicalType::Date => DataValue::Date32(Some(UNIX_DATETIME.num_days_from_ce())),
             LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.timestamp())),
             LogicalType::Decimal(_, _) => DataValue::Decimal(Some(Decimal::new(0, 0))),
+            LogicalType::Tuple => DataValue::Tuple(Some(vec![])),
         }
     }
 
@@ -378,6 +390,7 @@ impl DataValue {
             DataValue::Date32(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::Date64(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::Decimal(v) => v.map(|v| v.serialize().to_vec()),
+            DataValue::Tuple(_) => unreachable!(),
         }
         .unwrap_or(vec![])
     }
@@ -434,6 +447,7 @@ impl DataValue {
                 (!bytes.is_empty())
                     .then(|| Decimal::deserialize(<[u8; 16]>::try_from(bytes).unwrap())),
             ),
+            LogicalType::Tuple => unreachable!(),
         }
     }
 
@@ -455,6 +469,7 @@ impl DataValue {
             DataValue::Date32(_) => LogicalType::Date,
             DataValue::Date64(_) => LogicalType::DateTime,
             DataValue::Decimal(_) => LogicalType::Decimal(None, None),
+            DataValue::Tuple(_) => LogicalType::Tuple,
         }
     }
 
@@ -576,6 +591,7 @@ impl DataValue {
                 LogicalType::Date => Ok(DataValue::Date32(None)),
                 LogicalType::DateTime => Ok(DataValue::Date64(None)),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(None)),
+                LogicalType::Tuple => Ok(DataValue::Tuple(None)),
             },
             DataValue::Boolean(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -863,6 +879,7 @@ impl DataValue {
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(
                     value.map(|v| Decimal::from_str(&v)).transpose()?,
                 )),
+                _ => Err(DatabaseError::CastFail),
             },
             DataValue::Date32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -899,6 +916,10 @@ impl DataValue {
                 LogicalType::Double => Ok(DataValue::Float64(value.and_then(|v| v.to_f64()))),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(value)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
+                _ => Err(DatabaseError::CastFail),
+            },
+            DataValue::Tuple(values) => match to {
+                LogicalType::Tuple => Ok(DataValue::Tuple(values)),
                 _ => Err(DatabaseError::CastFail),
             },
         }
@@ -1059,6 +1080,20 @@ impl fmt::Display for DataValue {
             DataValue::Date32(e) => format_option!(f, e.and_then(DataValue::date_format))?,
             DataValue::Date64(e) => format_option!(f, e.and_then(DataValue::date_time_format))?,
             DataValue::Decimal(e) => format_option!(f, e.as_ref().map(DataValue::decimal_format))?,
+            DataValue::Tuple(e) => {
+                write!(f, "(")?;
+                if let Some(values) = e {
+                    let len = values.len();
+
+                    for (i, value) in values.iter().enumerate() {
+                        value.fmt(f)?;
+                        if len != i + 1 {
+                            write!(f, ", ")?;
+                        }
+                    }
+                }
+                write!(f, ")")?;
+            }
         };
         Ok(())
     }
@@ -1084,6 +1119,7 @@ impl fmt::Debug for DataValue {
             DataValue::Date32(_) => write!(f, "Date32({})", self),
             DataValue::Date64(_) => write!(f, "Date64({})", self),
             DataValue::Decimal(_) => write!(f, "Decimal({})", self),
+            DataValue::Tuple(_) => write!(f, "Tuple({})", self),
         }
     }
 }

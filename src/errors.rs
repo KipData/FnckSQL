@@ -1,3 +1,4 @@
+use crate::expression::BinaryOperator;
 use crate::types::LogicalType;
 use chrono::ParseError;
 use kip_db::KernelError;
@@ -161,9 +162,10 @@ pub enum DatabaseError {
     AggMiss(String),
     #[error("copy error: {0}")]
     UnsupportedCopySource(String),
+    #[error("the {0} cannot support {1} for calculations")]
+    UnsupportedBinaryOperator(LogicalType, BinaryOperator),
     #[error("can not compare two types: {0} and {1}")]
     Incomparable(LogicalType, LogicalType),
-
     #[error("transaction already exists")]
     TransactionAlreadyExists,
     #[error("no transaction begin")]

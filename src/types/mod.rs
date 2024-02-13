@@ -38,6 +38,7 @@ pub enum LogicalType {
     DateTime,
     // decimal (precision, scale)
     Decimal(Option<u8>, Option<u8>),
+    Tuple,
 }
 
 impl LogicalType {
@@ -97,6 +98,7 @@ impl LogicalType {
             LogicalType::Decimal(_, _) => Some(16),
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
+            LogicalType::Tuple => unreachable!(),
         }
     }
 
@@ -288,7 +290,7 @@ impl LogicalType {
             LogicalType::Varchar(_) => false,
             LogicalType::Date => matches!(to, LogicalType::DateTime | LogicalType::Varchar(_)),
             LogicalType::DateTime => matches!(to, LogicalType::Date | LogicalType::Varchar(_)),
-            LogicalType::Decimal(_, _) => false,
+            LogicalType::Decimal(_, _) | LogicalType::Tuple => false,
         }
     }
 }

@@ -168,6 +168,16 @@ impl ScalarExpression {
                     .unwrap_or_else(|| &NULL_VALUE)
                     .clone());
             }
+            ScalarExpression::Tuple(exprs) => {
+                let mut values = Vec::with_capacity(exprs.len());
+
+                for expr in exprs {
+                    values.push(expr.eval(tuple)?);
+                }
+                Ok(Arc::new(DataValue::Tuple(
+                    (!values.is_empty()).then_some(values),
+                )))
+            }
             ScalarExpression::Empty => unreachable!(),
         }
     }
