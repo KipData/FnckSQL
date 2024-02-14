@@ -30,10 +30,7 @@ impl<'a> TupleBuilder<'a> {
         values: Vec<ValueRef>,
     ) -> Result<Tuple, DatabaseError> {
         if values.len() != self.schema_ref.len() {
-            return Err(DatabaseError::MisMatch(
-                "types".to_string(),
-                "values".to_string(),
-            ));
+            return Err(DatabaseError::MisMatch("types", "values"));
         }
 
         Ok(Tuple {
@@ -61,10 +58,7 @@ impl<'a> TupleBuilder<'a> {
             values.push(data_value);
         }
         if values.len() != self.schema_ref.len() {
-            return Err(DatabaseError::MisMatch(
-                "types".to_string(),
-                "values".to_string(),
-            ));
+            return Err(DatabaseError::MisMatch("types", "values"));
         }
 
         Ok(Tuple {

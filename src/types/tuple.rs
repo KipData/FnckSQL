@@ -146,7 +146,7 @@ pub fn create_table(tuples: &[Tuple]) -> Table {
 
     let mut header = Vec::new();
     for col in tuples[0].schema_ref.iter() {
-        header.push(Cell::new(col.name().to_string()));
+        header.push(Cell::new(col.full_name()));
     }
     table.set_header(header);
 

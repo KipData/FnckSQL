@@ -364,12 +364,7 @@ impl ScalarExpression {
     pub fn output_name(&self) -> String {
         match self {
             ScalarExpression::Constant(value) => format!("{}", value),
-            ScalarExpression::ColumnRef(col) => {
-                if let Some(table_name) = col.table_name() {
-                    return format!("{}.{}", table_name, col.name());
-                }
-                col.name().to_string()
-            }
+            ScalarExpression::ColumnRef(col) => col.full_name(),
             ScalarExpression::Alias { alias, expr } => match alias {
                 AliasType::Name(alias) => alias.to_string(),
                 AliasType::Expr(alias_expr) => {

@@ -63,6 +63,13 @@ impl ColumnCatalog {
         &self.summary.name
     }
 
+    pub fn full_name(&self) -> String {
+        if let Some(table_name) = self.table_name() {
+            return format!("{}.{}", table_name, self.name());
+        }
+        self.name().to_string()
+    }
+
     pub fn table_name(&self) -> Option<&TableName> {
         self.summary.table_name.as_ref()
     }

@@ -102,7 +102,11 @@ impl ColumnPruning {
                         .retain(|(_, column)| column_references.contains(column.summary()));
                 }
             }
-            Operator::Sort(_) | Operator::Limit(_) | Operator::Join(_) | Operator::Filter(_) => {
+            Operator::Sort(_)
+            | Operator::Limit(_)
+            | Operator::Join(_)
+            | Operator::Filter(_)
+            | Operator::Union(_) => {
                 let temp_columns = operator.referenced_columns(false);
                 // why?
                 let mut column_references = column_references;

@@ -80,7 +80,7 @@ pub enum DatabaseError {
         FromUtf8Error,
     ),
     #[error("{0} and {1} do not match")]
-    MisMatch(String, String),
+    MisMatch(&'static str, &'static str),
     #[error("io: {0}")]
     IO(
         #[source]

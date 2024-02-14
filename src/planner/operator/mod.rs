@@ -15,6 +15,7 @@ pub mod project;
 pub mod scan;
 pub mod sort;
 pub mod truncate;
+pub mod union;
 pub mod update;
 pub mod values;
 
@@ -31,6 +32,7 @@ use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::truncate::TruncateOperator;
+use crate::planner::operator::union::UnionOperator;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::types::index::IndexInfo;
@@ -59,6 +61,7 @@ pub enum Operator {
     Show,
     Explain,
     Describe(DescribeOperator),
+    Union(UnionOperator),
     // DML
     Insert(InsertOperator),
     Update(UpdateOperator),
@@ -124,9 +127,20 @@ impl Operator {
                     .collect_vec(),
             ),
             Operator::Sort(_) | Operator::Limit(_) => None,
-            Operator::Values(op) => Some(
-                op.schema_ref
+            Operator::Values(ValuesOperator { schema_ref, .. }) => Some(
+                schema_ref
                     .iter()
+                    .cloned()
+                    .map(ScalarExpression::ColumnRef)
+                    .collect_vec(),
+            ),
+            Operator::Union(UnionOperator {
+                left_schema_ref,
+                right_schema_ref,
+            }) => Some(
+                left_schema_ref
+                    .iter()
+                    .chain(right_schema_ref.iter())
                     .cloned()
                     .map(ScalarExpression::ColumnRef)
                     .collect_vec(),
@@ -189,10 +203,31 @@ impl Operator {
                 .map(|field| &field.expr)
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
-            Operator::Values(op) => Vec::clone(&op.schema_ref),
+            Operator::Values(ValuesOperator { schema_ref, .. }) => Vec::clone(schema_ref),
+            Operator::Union(UnionOperator {
+                left_schema_ref,
+                right_schema_ref,
+            }) => {
+                let mut schema = Vec::clone(left_schema_ref);
+                schema.extend_from_slice(right_schema_ref.as_slice());
+                schema
+            }
             Operator::Analyze(op) => op.columns.clone(),
             Operator::Delete(op) => vec![op.primary_key_column.clone()],
-            _ => vec![],
+            Operator::Dummy
+            | Operator::Limit(_)
+            | Operator::Show
+            | Operator::Explain
+            | Operator::Describe(_)
+            | Operator::Insert(_)
+            | Operator::Update(_)
+            | Operator::AddColumn(_)
+            | Operator::DropColumn(_)
+            | Operator::CreateTable(_)
+            | Operator::DropTable(_)
+            | Operator::Truncate(_)
+            | Operator::CopyFromFile(_)
+            | Operator::CopyToFile(_) => vec![],
         }
     }
 }
@@ -223,6 +258,7 @@ impl fmt::Display for Operator {
             Operator::Truncate(op) => write!(f, "{}", op),
             Operator::CopyFromFile(op) => write!(f, "{}", op),
             Operator::CopyToFile(_) => todo!(),
+            Operator::Union(op) => write!(f, "{}", op),
         }
     }
 }
