@@ -1,6 +1,8 @@
 pub mod operator;
 
 use crate::catalog::TableName;
+use crate::planner::operator::union::UnionOperator;
+use crate::planner::operator::values::ValuesOperator;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::types::tuple::SchemaRef;
 use itertools::Itertools;
@@ -83,7 +85,15 @@ impl LogicalPlan {
                         .collect_vec();
                     Arc::new(out_columns)
                 }
-                Operator::Values(op) => op.schema_ref.clone(),
+                Operator::Values(ValuesOperator { schema_ref, .. }) => schema_ref.clone(),
+                Operator::Union(UnionOperator {
+                    left_schema_ref,
+                    right_schema_ref,
+                }) => {
+                    let mut schema = Vec::clone(left_schema_ref);
+                    schema.extend_from_slice(right_schema_ref.as_slice());
+                    Arc::new(schema)
+                }
                 Operator::Dummy
                 | Operator::Show
                 | Operator::Explain

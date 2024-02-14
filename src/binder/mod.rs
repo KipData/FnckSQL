@@ -240,6 +240,20 @@ impl<'a, T: Transaction> Binder<'a, T> {
         };
         Ok(plan)
     }
+
+    pub fn bind_set_expr(&mut self, set_expr: &SetExpr) -> Result<LogicalPlan, DatabaseError> {
+        match set_expr {
+            SetExpr::Select(select) => self.bind_select(select, &[]),
+            SetExpr::Query(query) => self.bind_query(query),
+            SetExpr::SetOperation {
+                op,
+                set_quantifier,
+                left,
+                right,
+            } => self.bind_set_operation(op, set_quantifier, left, right),
+            _ => todo!(),
+        }
+    }
 }
 
 fn lower_ident(ident: &Ident) -> String {

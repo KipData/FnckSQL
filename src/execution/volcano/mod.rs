@@ -25,6 +25,7 @@ use crate::execution::volcano::dql::projection::Projection;
 use crate::execution::volcano::dql::seq_scan::SeqScan;
 use crate::execution::volcano::dql::show_table::ShowTables;
 use crate::execution::volcano::dql::sort::Sort;
+use crate::execution::volcano::dql::union::Union;
 use crate::execution::volcano::dql::values::Values;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::planner::LogicalPlan;
@@ -109,6 +110,12 @@ pub fn build_read<T: Transaction>(plan: LogicalPlan, transaction: &T) -> BoxedEx
             Explain::from(input).execute(transaction)
         }
         Operator::Describe(op) => Describe::from(op).execute(transaction),
+        Operator::Union(_) => {
+            let left_input = childrens.remove(0);
+            let right_input = childrens.remove(0);
+
+            Union::from((left_input, right_input)).execute(transaction)
+        }
         _ => unreachable!(),
     }
 }

@@ -92,7 +92,8 @@ impl ExpressionRemapper {
             | Operator::DropTable(_)
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)
-            | Operator::CopyToFile(_) => (),
+            | Operator::CopyToFile(_)
+            | Operator::Union(_) => (),
         }
         if let Some(exprs) = operator.output_exprs() {
             *output_exprs = exprs;

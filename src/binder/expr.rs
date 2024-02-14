@@ -96,8 +96,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 if sub_query_schema.len() != 1 {
                     return Err(DatabaseError::MisMatch(
-                        "expects only one expression to be returned".to_string(),
-                        "the expression returned by the subquery".to_string(),
+                        "expects only one expression to be returned",
+                        "the expression returned by the subquery",
                     ));
                 }
                 let column = sub_query_schema[0].clone();

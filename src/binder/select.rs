@@ -22,14 +22,15 @@ use crate::execution::volcano::dql::join::joins_nullable;
 use crate::expression::{AliasType, BinaryOperator};
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
+use crate::planner::operator::union::UnionOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::tuple::Schema;
+use crate::types::tuple::{Schema, SchemaRef};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use sqlparser::ast::{
     Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
-    SelectItem, SetExpr, TableAlias, TableFactor, TableWithJoins,
+    SelectItem, SetExpr, SetOperator, SetQuantifier, TableAlias, TableFactor, TableWithJoins,
 };
 
 impl<'a, T: Transaction> Binder<'a, T> {
@@ -41,6 +42,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let mut plan = match query.body.borrow() {
             SetExpr::Select(select) => self.bind_select(select, &query.order_by),
             SetExpr::Query(query) => self.bind_query(query),
+            SetExpr::SetOperation {
+                op,
+                set_quantifier,
+                left,
+                right,
+            } => self.bind_set_operation(op, set_quantifier, left, right),
             _ => unimplemented!(),
         }?;
 
@@ -54,7 +61,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(plan)
     }
 
-    fn bind_select(
+    pub(crate) fn bind_select(
         &mut self,
         select: &Select,
         orderby: &[OrderByExpr],
@@ -105,6 +112,90 @@ impl<'a, T: Transaction> Binder<'a, T> {
         plan = self.bind_project(plan, select_list)?;
 
         Ok(plan)
+    }
+
+    pub(crate) fn bind_set_operation(
+        &mut self,
+        op: &SetOperator,
+        set_quantifier: &SetQuantifier,
+        left: &SetExpr,
+        right: &SetExpr,
+    ) -> Result<LogicalPlan, DatabaseError> {
+        let is_all = match set_quantifier {
+            SetQuantifier::All => true,
+            SetQuantifier::Distinct | SetQuantifier::None => false,
+        };
+        let mut left_plan = self.bind_set_expr(left)?;
+        let mut right_plan = self.bind_set_expr(right)?;
+        let fn_eq = |left_schema: &SchemaRef, right_schema: &SchemaRef| {
+            let left_len = left_schema.len();
+
+            if left_len != right_schema.len() {
+                return false;
+            }
+            for i in 0..left_len {
+                if left_schema[i].datatype() != right_schema[i].datatype() {
+                    return false;
+                }
+            }
+            true
+        };
+        match (op, is_all) {
+            (SetOperator::Union, true) => {
+                let left_schema = left_plan.output_schema();
+                let right_schema = right_plan.output_schema();
+
+                if !fn_eq(left_schema, right_schema) {
+                    return Err(DatabaseError::MisMatch(
+                        "the output types on the left",
+                        "the output types on the right",
+                    ));
+                }
+                Ok(UnionOperator::build(
+                    left_schema.clone(),
+                    right_schema.clone(),
+                    left_plan,
+                    right_plan,
+                ))
+            }
+            (SetOperator::Union, false) => {
+                let left_schema = left_plan.output_schema();
+                let right_schema = right_plan.output_schema();
+
+                if !fn_eq(left_schema, right_schema) {
+                    return Err(DatabaseError::MisMatch(
+                        "the output types on the left",
+                        "the output types on the right",
+                    ));
+                }
+                let union_op = Operator::Union(UnionOperator {
+                    left_schema_ref: left_schema.clone(),
+                    right_schema_ref: right_schema.clone(),
+                });
+                let distinct_exprs = left_schema
+                    .iter()
+                    .cloned()
+                    .map(ScalarExpression::ColumnRef)
+                    .collect_vec();
+
+                Ok(self.bind_distinct(
+                    LogicalPlan::new(union_op, vec![left_plan, right_plan]),
+                    distinct_exprs,
+                ))
+            }
+            (SetOperator::Intersect, true) => {
+                todo!()
+            }
+            (SetOperator::Intersect, false) => {
+                todo!()
+            }
+            (SetOperator::Except, true) => {
+                todo!()
+            }
+            (SetOperator::Except, false) => {
+                todo!()
+            }
+        }
     }
 
     pub(crate) fn bind_table_ref(
@@ -192,10 +283,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 .ok_or(DatabaseError::TableNotFound)?;
 
             if alias_column.len() != table.columns_len() {
-                return Err(DatabaseError::MisMatch(
-                    "Alias".to_string(),
-                    "Columns".to_string(),
-                ));
+                return Err(DatabaseError::MisMatch("alias", "columns"));
             }
             let aliases_with_columns = alias_column
                 .iter()

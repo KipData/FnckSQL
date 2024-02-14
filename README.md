@@ -139,6 +139,7 @@ implement_from_tuple!(
   - [x] Show Tables
   - [x] Explain
   - [x] Describe
+  - [x] Union
 - DML
   - [x] Insert
   - [x] Insert Overwrite
@@ -162,6 +163,7 @@ implement_from_tuple!(
   - Varchar
   - Date
   - DateTime
+  - Tuple
 
 ## Roadmap
 - SQL 2016

@@ -10,6 +10,7 @@ pub(crate) mod projection;
 pub(crate) mod seq_scan;
 pub(crate) mod show_table;
 pub(crate) mod sort;
+pub(crate) mod union;
 pub(crate) mod values;
 
 #[cfg(test)]
