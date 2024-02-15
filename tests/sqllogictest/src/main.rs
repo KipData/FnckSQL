@@ -1,4 +1,4 @@
-use fnck_sql::db::Database;
+use fnck_sql::db::DataBaseBuilder;
 use sqllogictest::Runner;
 use sqllogictest_test::KipSQL;
 use std::fs::File;
@@ -26,7 +26,8 @@ async fn main() {
             .to_string();
         println!("-> Now the test file is: {}", filepath);
 
-        let db = Database::with_kipdb(temp_dir.path())
+        let db = DataBaseBuilder::path(temp_dir.path())
+            .build()
             .await
             .expect("init db error");
         let mut tester = Runner::new(KipSQL { db });
