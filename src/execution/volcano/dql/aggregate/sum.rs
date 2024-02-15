@@ -1,6 +1,5 @@
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::aggregate::Accumulator;
-use crate::expression::value_compute::binary_op;
 use crate::expression::BinaryOperator;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
@@ -25,7 +24,7 @@ impl SumAccumulator {
 impl Accumulator for SumAccumulator {
     fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
         if !value.is_null() {
-            self.result = binary_op(&self.result, value, &BinaryOperator::Plus)?;
+            self.result = DataValue::binary_op(&self.result, value, &BinaryOperator::Plus)?;
         }
 
         Ok(())

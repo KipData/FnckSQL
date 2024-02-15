@@ -108,7 +108,7 @@ fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), DatabaseError> {
 #[cfg(test)]
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
-    use crate::db::Database;
+    use crate::db::DataBaseBuilder;
     use futures::StreamExt;
     use std::io::Write;
     use std::sync::Arc;
@@ -176,7 +176,7 @@ mod tests {
         };
 
         let temp_dir = TempDir::new().unwrap();
-        let db = Database::with_kipdb(temp_dir.path()).await?;
+        let db = DataBaseBuilder::path(temp_dir.path()).build().await?;
         let _ = db
             .run("create table test_copy (a int primary key, b float, c varchar(10))")
             .await;

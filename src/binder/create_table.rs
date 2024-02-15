@@ -148,9 +148,10 @@ mod tests {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = KipStorage::new(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;
+        let functions = Default::default();
 
         let sql = "create table t1 (id int primary key, name varchar(10) null)";
-        let mut binder = Binder::new(BinderContext::new(&transaction));
+        let mut binder = Binder::new(BinderContext::new(&transaction, &functions));
         let stmt = crate::parser::parse_sql(sql).unwrap();
         let plan1 = binder.bind(&stmt[0]).unwrap();
 

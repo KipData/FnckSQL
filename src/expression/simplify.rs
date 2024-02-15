@@ -1,6 +1,6 @@
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
-use crate::expression::value_compute::{binary_op, unary_op};
+use crate::expression::function::ScalarFunction;
 use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
 use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
 use crate::types::{ColumnId, LogicalType};
@@ -426,7 +426,9 @@ impl ScalarExpression {
                 left_expr.exist_column(table_name, col_id)
                     || right_expr.exist_column(table_name, col_id)
             }
-            ScalarExpression::AggCall { args, .. } | ScalarExpression::Tuple(args) => args
+            ScalarExpression::AggCall { args, .. }
+            | ScalarExpression::Tuple(args)
+            | ScalarExpression::Function(ScalarFunction { args, .. }) => args
                 .iter()
                 .any(|expr| expr.exist_column(table_name, col_id)),
             ScalarExpression::In { expr, args, .. } => {
@@ -480,7 +482,7 @@ impl ScalarExpression {
             ScalarExpression::Unary { expr, op, .. } => {
                 let val = expr.unpack_val()?;
 
-                unary_op(&val, op).ok().map(Arc::new)
+                DataValue::unary_op(&val, op).ok().map(Arc::new)
             }
             ScalarExpression::Binary {
                 left_expr,
@@ -491,7 +493,7 @@ impl ScalarExpression {
                 let left = left_expr.unpack_val()?;
                 let right = right_expr.unpack_val()?;
 
-                binary_op(&left, &right, op).ok().map(Arc::new)
+                DataValue::binary_op(&left, &right, op).ok().map(Arc::new)
             }
             _ => None,
         }
@@ -529,7 +531,7 @@ impl ScalarExpression {
                 expr.constant_calculation()?;
 
                 if let ScalarExpression::Constant(unary_val) = expr.as_ref() {
-                    let value = unary_op(unary_val, op)?;
+                    let value = DataValue::unary_op(unary_val, op)?;
                     let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
                 }
             }
@@ -547,7 +549,7 @@ impl ScalarExpression {
                     ScalarExpression::Constant(right_val),
                 ) = (left_expr.as_ref(), right_expr.as_ref())
                 {
-                    let value = binary_op(left_val, right_val, op)?;
+                    let value = DataValue::binary_op(left_val, right_val, op)?;
                     let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
                 }
             }
@@ -648,7 +650,8 @@ impl ScalarExpression {
             }
             ScalarExpression::Unary { expr, op, ty } => {
                 if let Some(val) = expr.unpack_val() {
-                    let new_expr = ScalarExpression::Constant(Arc::new(unary_op(&val, op)?));
+                    let new_expr =
+                        ScalarExpression::Constant(Arc::new(DataValue::unary_op(&val, op)?));
                     let _ = mem::replace(self, new_expr);
                 } else {
                     replaces.push(Replace::Unary(ReplaceUnary {
@@ -991,14 +994,17 @@ impl ScalarExpression {
                 | ScalarExpression::AggCall { .. }
                 | ScalarExpression::In { .. }
                 | ScalarExpression::Between { .. }
-                | ScalarExpression::SubString { .. } => expr.convert_binary(table_name, id),
+                | ScalarExpression::SubString { .. }
+                | ScalarExpression::Function(_) => expr.convert_binary(table_name, id),
                 ScalarExpression::Tuple(_)
                 | ScalarExpression::Reference { .. }
                 | ScalarExpression::Empty => unreachable!(),
             },
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef(_) => Ok(None),
             // FIXME: support `convert_binary`
-            ScalarExpression::Tuple(_) | ScalarExpression::AggCall { .. } => Ok(None),
+            ScalarExpression::Tuple(_)
+            | ScalarExpression::AggCall { .. }
+            | ScalarExpression::Function(_) => Ok(None),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
         }
     }

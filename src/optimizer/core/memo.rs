@@ -81,7 +81,7 @@ impl Memo {
 #[cfg(test)]
 mod tests {
     use crate::binder::{Binder, BinderContext};
-    use crate::db::Database;
+    use crate::db::DataBaseBuilder;
     use crate::errors::DatabaseError;
     use crate::optimizer::core::memo::Memo;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
@@ -98,8 +98,7 @@ mod tests {
     #[tokio::test]
     async fn test_build_memo() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-
-        let database = Database::with_kipdb(temp_dir.path()).await?;
+        let database = DataBaseBuilder::path(temp_dir.path()).build().await?;
         database
             .run("create table t1 (c1 int primary key, c2 int)")
             .await?;
@@ -115,7 +114,8 @@ mod tests {
         database.run("analyze table t1").await?;
 
         let transaction = database.storage.transaction().await?;
-        let mut binder = Binder::new(BinderContext::new(&transaction));
+        let functions = Default::default();
+        let mut binder = Binder::new(BinderContext::new(&transaction, &functions));
         let stmt = crate::parser::parse_sql(
             // FIXME: Only by bracketing (c1 > 40 or c1 = 2) can the filter be pushed down below the join
             "select c1, c3 from t1 inner join t2 on c1 = c3 where (c1 > 40 or c1 = 2) and c3 > 22",

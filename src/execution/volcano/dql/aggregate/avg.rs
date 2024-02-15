@@ -1,7 +1,6 @@
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::aggregate::sum::SumAccumulator;
 use crate::execution::volcano::dql::aggregate::Accumulator;
-use crate::expression::value_compute::binary_op;
 use crate::expression::BinaryOperator;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
@@ -40,7 +39,7 @@ impl Accumulator for AvgAccumulator {
             DataValue::UInt32(Some(self.count as u32))
         };
 
-        Ok(Arc::new(binary_op(
+        Ok(Arc::new(DataValue::binary_op(
             &value,
             &quantity,
             &BinaryOperator::Divide,

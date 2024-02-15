@@ -4,6 +4,7 @@ use sqlparser::ast::{Expr, OrderByExpr};
 use std::collections::HashSet;
 
 use crate::errors::DatabaseError;
+use crate::expression::function::ScalarFunction;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::{
@@ -137,7 +138,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => (),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
-            ScalarExpression::Tuple(args) => {
+            ScalarExpression::Tuple(args)
+            | ScalarExpression::Function(ScalarFunction { args, .. }) => {
                 for expr in args {
                     self.visit_column_agg_expr(expr)?;
                 }
@@ -248,7 +250,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 Err(DatabaseError::AggMiss(
                     format!(
-                        "column {:?} must appear in the GROUP BY clause or be used in an aggregate function",
+                        "expression '{}' must appear in the GROUP BY clause or be used in an aggregate function",
                         expr
                     )
                 ))
@@ -263,7 +265,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 Err(DatabaseError::AggMiss(
                     format!(
-                        "column {:?} must appear in the GROUP BY clause or be used in an aggregate function",
+                        "expression '{}' must appear in the GROUP BY clause or be used in an aggregate function",
                         expr
                     )
                 ))
@@ -315,7 +317,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
             ScalarExpression::Constant(_) => Ok(()),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
-            ScalarExpression::Tuple(args) => {
+            ScalarExpression::Tuple(args)
+            | ScalarExpression::Function(ScalarFunction { args, .. }) => {
                 for expr in args {
                     self.validate_having_orderby(expr)?;
                 }
