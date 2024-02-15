@@ -50,7 +50,9 @@ then use `psql` to enter sql
 ![pg](./static/images/pg.gif)
 Using FnckSQL in code
 ```rust
-let fnck_sql = Database::with_kipdb("./data").await?;
+let fnck_sql = DataBaseBuilder::path("./data")
+    .build()
+    .await?;
 let tuples = fnck_sql.run("select * from t1").await?;
 ```
 Storage Support:
@@ -79,6 +81,18 @@ implement_from_tuple!(
         }
     )
 );
+```
+- User-Defined Function: `features = ["marcos"]`
+```rust
+function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+    let value = DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)?;
+    DataValue::unary_op(&value, &UnaryOperator::Minus)
+});
+
+let fnck_sql = DataBaseBuilder::path("./data")
+    .register_function(TestFunction::new())
+    .build()
+    .await?;
 ```
 - Optimizer
   - RBO

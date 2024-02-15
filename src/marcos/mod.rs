@@ -53,11 +53,83 @@ macro_rules! implement_from_tuple {
     };
 }
 
+/// # Examples
+///
+/// ```
+/// function!(MyFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+///     DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)
+/// });
+///
+/// let fnck_sql = DataBaseBuilder::path("./example")
+///     .register_function(TestFunction::new())
+///     .build()
+///     .await?;
+/// ```
+#[macro_export]
+macro_rules! function {
+    ($struct_name:ident::$function_name:ident($($arg_ty:expr),*) -> $return_ty:expr => $closure:expr) => {
+        #[derive(Debug)]
+        struct $struct_name {
+            summary: FunctionSummary
+        }
+
+        impl $struct_name {
+            fn new() -> Arc<Self> {
+                let function_name = stringify!($function_name);
+
+                let mut arg_types = Vec::new();
+                $({
+                    arg_types.push($arg_ty);
+                })*
+
+                Arc::new(Self {
+                    summary: FunctionSummary {
+                        name: function_name.to_string(),
+                        arg_types
+                    }
+                })
+            }
+        }
+
+        impl ScalarFunctionImpl for $struct_name {
+            fn eval(&self, args: &[ScalarExpression], tuple: &Tuple) -> Result<DataValue, DatabaseError> {
+                let mut _index = 0;
+
+                $closure($({
+                    let mut value = args[_index].eval(tuple)?;
+                    _index += 1;
+
+                    if value.logical_type() != $arg_ty {
+                        value = Arc::new(DataValue::clone(&value).cast(&$arg_ty)?);
+                    }
+                    value
+                }, )*)
+            }
+
+            fn monotonicity(&self) -> Option<FuncMonotonicity> {
+                todo!()
+            }
+
+            fn return_type(&self) -> &LogicalType {
+                &$return_ty
+            }
+
+            fn summary(&self) -> &FunctionSummary {
+                &self.summary
+            }
+        }
+    };
+}
+
 #[cfg(test)]
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::errors::DatabaseError;
+    use crate::expression::function::{FuncMonotonicity, FunctionSummary, ScalarFunctionImpl};
+    use crate::expression::BinaryOperator;
+    use crate::expression::ScalarExpression;
     use crate::types::tuple::Tuple;
-    use crate::types::value::DataValue;
+    use crate::types::value::{DataValue, ValueRef};
     use crate::types::LogicalType;
     use std::sync::Arc;
 
@@ -115,5 +187,37 @@ mod test {
 
         assert_eq!(my_struct.c1, 9);
         assert_eq!(my_struct.c2, "LOL");
+    }
+
+    function!(MyFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+        DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)
+    });
+
+    #[test]
+    fn test_function() -> Result<(), DatabaseError> {
+        let function = MyFunction::new();
+        let sum = function.eval(
+            &[
+                ScalarExpression::Constant(Arc::new(DataValue::Int8(Some(1)))),
+                ScalarExpression::Constant(Arc::new(DataValue::Utf8(Some("1".to_string())))),
+            ],
+            &Tuple {
+                id: None,
+                schema_ref: Arc::new(vec![]),
+                values: vec![],
+            },
+        )?;
+
+        println!("{:?}", function);
+
+        assert_eq!(
+            function.summary,
+            FunctionSummary {
+                name: "sum".to_string(),
+                arg_types: vec![LogicalType::Integer, LogicalType::Integer],
+            }
+        );
+        assert_eq!(sum, DataValue::Int32(Some(2)));
+        Ok(())
     }
 }

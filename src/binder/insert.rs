@@ -1,6 +1,5 @@
 use crate::binder::{lower_case_name, Binder};
 use crate::errors::DatabaseError;
-use crate::expression::value_compute::unary_op;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::values::ValuesOperator;
@@ -72,7 +71,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         ScalarExpression::Unary { expr, op, .. } => {
                             if let ScalarExpression::Constant(value) = expr.as_ref() {
                                 row.push(Arc::new(
-                                    unary_op(value, op)?.cast(schema_ref[i].datatype())?,
+                                    DataValue::unary_op(value, op)?
+                                        .cast(schema_ref[i].datatype())?,
                                 ))
                             } else {
                                 unreachable!()

@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use fnck_sql::db::Database;
+use fnck_sql::db::{DataBaseBuilder, Database};
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::execution::volcano;
 use fnck_sql::storage::kip::KipStorage;
@@ -18,7 +18,8 @@ const QUERY_BENCH_SQLITE_PATH: &'static str = "./sqlite_bench";
 const TABLE_ROW_NUM: u64 = 2_00_000;
 
 async fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
-    let database = Database::with_kipdb(QUERY_BENCH_FNCK_SQL_PATH)
+    let database = DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH)
+        .build()
         .await
         .unwrap();
     database
@@ -96,7 +97,8 @@ fn query_on_execute(c: &mut Criterion) {
             init_fncksql_query_bench().await.unwrap();
         }
 
-        Database::<KipStorage>::with_kipdb(QUERY_BENCH_FNCK_SQL_PATH)
+        DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH)
+            .build()
             .await
             .unwrap()
     });

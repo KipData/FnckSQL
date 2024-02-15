@@ -1,6 +1,5 @@
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::aggregate::Accumulator;
-use crate::expression::value_compute::binary_op;
 use crate::expression::BinaryOperator;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
@@ -32,7 +31,9 @@ impl Accumulator for MinMaxAccumulator {
     fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
         if !value.is_null() {
             if let Some(inner_value) = &self.inner {
-                if let DataValue::Boolean(Some(result)) = binary_op(inner_value, value, &self.op)? {
+                if let DataValue::Boolean(Some(result)) =
+                    DataValue::binary_op(inner_value, value, &self.op)?
+                {
                     result
                 } else {
                     unreachable!()

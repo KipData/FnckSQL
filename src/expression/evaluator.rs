@@ -1,5 +1,5 @@
 use crate::errors::DatabaseError;
-use crate::expression::value_compute::{binary_op, unary_op};
+use crate::expression::function::ScalarFunction;
 use crate::expression::{AliasType, ScalarExpression};
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
@@ -74,7 +74,7 @@ impl ScalarExpression {
                 let left = left_expr.eval(tuple)?;
                 let right = right_expr.eval(tuple)?;
 
-                Ok(Arc::new(binary_op(&left, &right, op)?))
+                Ok(Arc::new(DataValue::binary_op(&left, &right, op)?))
             }
             ScalarExpression::IsNull { expr, negated } => {
                 let mut is_null = expr.eval(tuple)?.is_null();
@@ -112,7 +112,7 @@ impl ScalarExpression {
             ScalarExpression::Unary { expr, op, .. } => {
                 let value = expr.eval(tuple)?;
 
-                Ok(Arc::new(unary_op(&value, op)?))
+                Ok(Arc::new(DataValue::unary_op(&value, op)?))
             }
             ScalarExpression::AggCall { .. } => {
                 unreachable!("must use `NormalizationRuleImpl::ExpressionRemapper`")
@@ -178,6 +178,9 @@ impl ScalarExpression {
                     (!values.is_empty()).then_some(values),
                 )))
             }
+            ScalarExpression::Function(ScalarFunction { inner, args, .. }) => Ok(Arc::new(
+                inner.eval(args, tuple)?.cast(inner.return_type())?,
+            )),
             ScalarExpression::Empty => unreachable!(),
         }
     }

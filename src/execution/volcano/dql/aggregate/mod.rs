@@ -43,7 +43,7 @@ fn create_accumulator(expr: &ScalarExpression) -> Box<dyn Accumulator> {
         }
     } else {
         unreachable!(
-            "create_accumulator called with non-aggregate expression {:?}",
+            "create_accumulator called with non-aggregate expression {}",
             expr
         );
     }

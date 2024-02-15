@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
+use std::hash::Hash;
 use std::sync::Arc;
 use std::{fmt, mem};
 
@@ -8,15 +9,17 @@ use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUn
 
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
+use crate::expression::function::ScalarFunction;
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 
 pub mod agg;
 mod evaluator;
+pub mod function;
 pub mod simplify;
 pub mod value_compute;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum AliasType {
     Name(String),
     Expr(Box<ScalarExpression>),
@@ -26,7 +29,7 @@ pub enum AliasType {
 /// SELECT a+1, b FROM t1.
 /// a+1 -> ScalarExpression::Unary(a + 1)
 /// b   -> ScalarExpression::ColumnRef()
-#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum ScalarExpression {
     Constant(ValueRef),
     ColumnRef(ColumnRef),
@@ -82,6 +85,7 @@ pub enum ScalarExpression {
         pos: usize,
     },
     Tuple(Vec<ScalarExpression>),
+    Function(ScalarFunction),
 }
 
 impl ScalarExpression {
@@ -169,6 +173,11 @@ impl ScalarExpression {
                     expr.try_reference(output_exprs);
                 }
             }
+            ScalarExpression::Function(function) => {
+                for expr in function.args.iter_mut() {
+                    expr.try_reference(output_exprs);
+                }
+            }
         }
     }
 
@@ -183,7 +192,10 @@ impl ScalarExpression {
                 right_expr,
                 ..
             } => left_expr.has_count_star() || right_expr.has_count_star(),
-            ScalarExpression::AggCall { args, .. } => args.iter().any(Self::has_count_star),
+            ScalarExpression::AggCall { args, .. }
+            | ScalarExpression::Function(ScalarFunction { args, .. }) => {
+                args.iter().any(Self::has_count_star)
+            }
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef(_) => false,
             ScalarExpression::In { expr, args, .. } => {
                 expr.has_count_star() || args.iter().any(Self::has_count_star)
@@ -240,6 +252,7 @@ impl ScalarExpression {
             }
             ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Tuple(_) => LogicalType::Tuple,
+            ScalarExpression::Function(ScalarFunction { inner, .. }) => *inner.return_type(),
         }
     }
 
@@ -273,7 +286,9 @@ impl ScalarExpression {
                     columns_collect(left_expr, vec, only_column_ref);
                     columns_collect(right_expr, vec, only_column_ref);
                 }
-                ScalarExpression::AggCall { args, .. } | ScalarExpression::Tuple(args) => {
+                ScalarExpression::AggCall { args, .. }
+                | ScalarExpression::Function(ScalarFunction { args, .. })
+                | ScalarExpression::Tuple(args) => {
                     for expr in args {
                         columns_collect(expr, vec, only_column_ref)
                     }
@@ -357,7 +372,10 @@ impl ScalarExpression {
                     )
             }
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
-            ScalarExpression::Tuple(args) => args.iter().any(Self::has_agg_call),
+            ScalarExpression::Tuple(args)
+            | ScalarExpression::Function(ScalarFunction { args, .. }) => {
+                args.iter().any(Self::has_agg_call)
+            }
         }
     }
 
@@ -460,6 +478,10 @@ impl ScalarExpression {
             ScalarExpression::Tuple(args) => {
                 let args_str = args.iter().map(|expr| expr.output_name()).join(", ");
                 format!("({})", args_str)
+            }
+            ScalarExpression::Function(ScalarFunction { args, inner }) => {
+                let args_str = args.iter().map(|expr| expr.output_name()).join(", ");
+                format!("{}({})", inner.summary().name, args_str)
             }
         }
     }

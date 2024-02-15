@@ -10,6 +10,7 @@ use std::slice;
 use std::sync::Arc;
 
 use super::{lower_ident, Binder};
+use crate::expression::function::{FunctionSummary, ScalarFunction};
 use crate::expression::{AliasType, ScalarExpression};
 use crate::storage::Transaction;
 use crate::types::value::DataValue;
@@ -267,56 +268,72 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 _ => todo!(),
             }
         }
+        let function_name = func.name.to_string().to_lowercase();
 
-        Ok(match func.name.to_string().to_lowercase().as_str() {
-            "count" => ScalarExpression::AggCall {
-                distinct: func.distinct,
-                kind: AggKind::Count,
-                args,
-                ty: LogicalType::Integer,
-            },
+        match function_name.as_str() {
+            "count" => {
+                return Ok(ScalarExpression::AggCall {
+                    distinct: func.distinct,
+                    kind: AggKind::Count,
+                    args,
+                    ty: LogicalType::Integer,
+                })
+            }
             "sum" => {
                 let ty = args[0].return_type();
 
-                ScalarExpression::AggCall {
+                return Ok(ScalarExpression::AggCall {
                     distinct: func.distinct,
                     kind: AggKind::Sum,
                     args,
                     ty,
-                }
+                });
             }
             "min" => {
                 let ty = args[0].return_type();
 
-                ScalarExpression::AggCall {
+                return Ok(ScalarExpression::AggCall {
                     distinct: func.distinct,
                     kind: AggKind::Min,
                     args,
                     ty,
-                }
+                });
             }
             "max" => {
                 let ty = args[0].return_type();
 
-                ScalarExpression::AggCall {
+                return Ok(ScalarExpression::AggCall {
                     distinct: func.distinct,
                     kind: AggKind::Max,
                     args,
                     ty,
-                }
+                });
             }
             "avg" => {
                 let ty = args[0].return_type();
 
-                ScalarExpression::AggCall {
+                return Ok(ScalarExpression::AggCall {
                     distinct: func.distinct,
                     kind: AggKind::Avg,
                     args,
                     ty,
-                }
+                });
             }
-            _ => todo!(),
-        })
+            _ => (),
+        }
+        let arg_types = args.iter().map(ScalarExpression::return_type).collect_vec();
+        let summary = FunctionSummary {
+            name: function_name,
+            arg_types,
+        };
+        if let Some(function) = self.context.functions.get(&summary) {
+            return Ok(ScalarExpression::Function(ScalarFunction {
+                args,
+                inner: function.clone(),
+            }));
+        }
+
+        Err(DatabaseError::NotFound("function", summary.name))
     }
 
     fn bind_is_null(

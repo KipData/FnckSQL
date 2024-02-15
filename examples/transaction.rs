@@ -1,9 +1,9 @@
-use fnck_sql::db::Database;
+use fnck_sql::db::DataBaseBuilder;
 use fnck_sql::errors::DatabaseError;
 
 #[tokio::main]
 async fn main() -> Result<(), DatabaseError> {
-    let database = Database::with_kipdb("./transaction").await?;
+    let database = DataBaseBuilder::path("./transaction").build().await?;
     let mut tx_1 = database.new_transaction().await?;
 
     let _ = tx_1

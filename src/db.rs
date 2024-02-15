@@ -1,9 +1,12 @@
+use ahash::HashMap;
 use sqlparser::ast::Statement;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::binder::{Binder, BinderContext};
 use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_write, try_collect};
+use crate::expression::function::{FunctionSummary, ScalarFunctionImpl};
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
@@ -14,23 +17,47 @@ use crate::storage::kip::KipStorage;
 use crate::storage::{Storage, Transaction};
 use crate::types::tuple::Tuple;
 
+pub(crate) type Functions = HashMap<FunctionSummary, Arc<dyn ScalarFunctionImpl>>;
+
 #[derive(Copy, Clone)]
 pub enum QueryExecute {
     Volcano,
     Codegen,
 }
 
-pub struct Database<S: Storage> {
-    pub storage: S,
+pub struct DataBaseBuilder {
+    path: PathBuf,
+    functions: Functions,
 }
 
-impl Database<KipStorage> {
-    /// Create a new Database instance With KipDB.
-    pub async fn with_kipdb(path: impl Into<PathBuf> + Send) -> Result<Self, DatabaseError> {
-        let storage = KipStorage::new(path).await?;
-
-        Ok(Database { storage })
+impl DataBaseBuilder {
+    pub fn path(path: impl Into<PathBuf> + Send) -> Self {
+        DataBaseBuilder {
+            path: path.into(),
+            functions: Default::default(),
+        }
     }
+
+    pub fn register_function(mut self, function: Arc<dyn ScalarFunctionImpl>) -> Self {
+        let summary = function.summary().clone();
+
+        self.functions.insert(summary, function);
+        self
+    }
+
+    pub async fn build(self) -> Result<Database<KipStorage>, DatabaseError> {
+        let storage = KipStorage::new(self.path).await?;
+
+        Ok(Database {
+            storage,
+            functions: Arc::new(self.functions),
+        })
+    }
+}
+
+pub struct Database<S: Storage> {
+    pub storage: S,
+    functions: Arc<Functions>,
 }
 
 impl Database<KipStorage> {
@@ -71,15 +98,11 @@ impl Database<KipStorage> {
 }
 
 impl<S: Storage> Database<S> {
-    /// Create a new Database instance.
-    pub fn new(storage: S) -> Result<Self, DatabaseError> {
-        Ok(Database { storage })
-    }
-
     /// Run SQL queries.
     pub async fn run<T: AsRef<str>>(&self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
-        let (plan, _) = Self::build_plan::<T, S::TransactionType>(sql, &transaction)?;
+        let (plan, _) =
+            Self::build_plan::<T, S::TransactionType>(sql, &transaction, &self.functions)?;
 
         Self::run_volcano(transaction, plan).await
     }
@@ -100,19 +123,23 @@ impl<S: Storage> Database<S> {
     pub async fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
 
-        Ok(DBTransaction { inner: transaction })
+        Ok(DBTransaction {
+            inner: transaction,
+            functions: self.functions.clone(),
+        })
     }
 
     pub fn build_plan<V: AsRef<str>, T: Transaction>(
         sql: V,
         transaction: &<S as Storage>::TransactionType,
+        functions: &Functions,
     ) -> Result<(LogicalPlan, Statement), DatabaseError> {
         // parse
         let mut stmts = parse_sql(sql)?;
         if stmts.is_empty() {
             return Err(DatabaseError::EmptyStatement);
         }
-        let mut binder = Binder::new(BinderContext::new(transaction));
+        let mut binder = Binder::new(BinderContext::new(transaction, functions));
         /// Build a logical plan.
         ///
         /// SELECT a,b FROM t1 ORDER BY a LIMIT 1;
@@ -209,11 +236,13 @@ impl<S: Storage> Database<S> {
 
 pub struct DBTransaction<S: Storage> {
     inner: S::TransactionType,
+    functions: Arc<Functions>,
 }
 
 impl<S: Storage> DBTransaction<S> {
     pub async fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
-        let (plan, _) = Database::<S>::build_plan::<T, S::TransactionType>(sql, &self.inner)?;
+        let (plan, _) =
+            Database::<S>::build_plan::<T, S::TransactionType>(sql, &self.inner, &self.functions)?;
         let mut stream = build_write(plan, &mut self.inner);
 
         try_collect(&mut stream).await
@@ -229,10 +258,14 @@ impl<S: Storage> DBTransaction<S> {
 #[cfg(test)]
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::db::{Database, DatabaseError, QueryExecute};
+    use crate::db::{DataBaseBuilder, DatabaseError, QueryExecute};
+    use crate::expression::function::{FuncMonotonicity, FunctionSummary, ScalarFunctionImpl};
+    use crate::expression::ScalarExpression;
+    use crate::expression::{BinaryOperator, UnaryOperator};
+    use crate::function;
     use crate::storage::{Storage, Transaction};
     use crate::types::tuple::{create_table, Tuple};
-    use crate::types::value::DataValue;
+    use crate::types::value::{DataValue, ValueRef};
     use crate::types::LogicalType;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -259,7 +292,7 @@ mod test {
     #[tokio::test]
     async fn test_run_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let database = Database::with_kipdb(temp_dir.path()).await?;
+        let database = DataBaseBuilder::path(temp_dir.path()).build().await?;
         let transaction = database.storage.transaction().await?;
         build_table(transaction).await?;
 
@@ -269,10 +302,34 @@ mod test {
         Ok(())
     }
 
+    function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+        let value = DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)?;
+        DataValue::unary_op(&value, &UnaryOperator::Minus)
+    });
+
+    #[tokio::test]
+    async fn test_udf() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path())
+            .register_function(TestFunction::new())
+            .build()
+            .await?;
+        let _ = fnck_sql
+            .run("CREATE TABLE test (id int primary key, c1 int, c2 int);")
+            .await?;
+        let _ = fnck_sql
+            .run("INSERT INTO test VALUES (1, 2, 2), (0, 1, 1), (2, 1, 1), (3, 3, 3);")
+            .await?;
+        let tuples = fnck_sql.run("select test(c1, 1) from test").await?;
+        println!("{}", create_table(&tuples));
+
+        Ok(())
+    }
+
     #[tokio::test]
     async fn test_transaction_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let fnck_sql = Database::with_kipdb(temp_dir.path()).await?;
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build().await?;
 
         let mut tx_1 = fnck_sql.new_transaction().await?;
         let mut tx_2 = fnck_sql.new_transaction().await?;
@@ -366,7 +423,7 @@ mod test {
     async fn _test_crud_sql(query_execute: QueryExecute) -> Result<Vec<Vec<Tuple>>, DatabaseError> {
         let mut results = Vec::new();
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let fnck_sql = Database::with_kipdb(temp_dir.path()).await?;
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build().await?;
 
         let _ = fnck_sql.run_on_query("create table t1 (a int primary key, b int unique null, k int, z varchar unique null)", query_execute).await?;
         let _ = fnck_sql

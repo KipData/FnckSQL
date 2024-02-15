@@ -525,7 +525,7 @@ impl Iter for KipIter<'_> {
 #[cfg(test)]
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
-    use crate::db::Database;
+    use crate::db::DataBaseBuilder;
     use crate::errors::DatabaseError;
     use crate::expression::simplify::ConstantBinary;
     use crate::storage::kip::KipStorage;
@@ -616,7 +616,7 @@ mod test {
     #[tokio::test]
     async fn test_index_iter_pk() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let fnck_sql = Database::with_kipdb(temp_dir.path()).await?;
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build().await?;
 
         let _ = fnck_sql.run("create table t1 (a int primary key)").await?;
         let _ = fnck_sql
@@ -671,7 +671,7 @@ mod test {
     #[tokio::test]
     async fn test_read_by_index() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let fnck_sql = Database::with_kipdb(temp_dir.path()).await?;
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build().await?;
         let _ = fnck_sql
             .run("create table t1 (a int primary key, b int unique)")
             .await?;

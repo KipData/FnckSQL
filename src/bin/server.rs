@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use clap::Parser;
-use fnck_sql::db::{DBTransaction, Database};
+use fnck_sql::db::{DBTransaction, DataBaseBuilder, Database};
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::storage::kip::KipStorage;
 use fnck_sql::types::tuple::Tuple;
@@ -79,7 +79,7 @@ impl MakeHandler for FnckSQLBackend {
 
 impl FnckSQLBackend {
     pub async fn new(path: impl Into<PathBuf> + Send) -> Result<FnckSQLBackend, DatabaseError> {
-        let database = Database::with_kipdb(path).await?;
+        let database = DataBaseBuilder::path(path).build().await?;
 
         Ok(FnckSQLBackend {
             inner: Arc::new(database),

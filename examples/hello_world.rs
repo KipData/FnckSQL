@@ -1,4 +1,4 @@
-use fnck_sql::db::Database;
+use fnck_sql::db::DataBaseBuilder;
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::implement_from_tuple;
 use fnck_sql::types::tuple::Tuple;
@@ -30,7 +30,7 @@ implement_from_tuple!(
 #[cfg(feature = "marcos")]
 #[tokio::main]
 async fn main() -> Result<(), DatabaseError> {
-    let database = Database::with_kipdb("./hello_world").await?;
+    let database = DataBaseBuilder::path("./hello_world").build().await?;
 
     let _ = database
         .run("create table if not exists my_struct (c1 int primary key, c2 int)")

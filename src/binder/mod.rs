@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::catalog::{TableCatalog, TableName};
+use crate::db::Functions;
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::JoinType;
@@ -47,7 +48,8 @@ pub enum QueryBindStep {
 
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
-    transaction: &'a T,
+    functions: &'a Functions,
+    pub(crate) transaction: &'a T,
     pub(crate) bind_table: HashMap<TableName, (&'a TableCatalog, Option<JoinType>)>,
     // alias
     expr_aliases: HashMap<String, ScalarExpression>,
@@ -63,8 +65,9 @@ pub struct BinderContext<'a, T: Transaction> {
 }
 
 impl<'a, T: Transaction> BinderContext<'a, T> {
-    pub fn new(transaction: &'a T) -> Self {
+    pub fn new(transaction: &'a T, functions: &'a Functions) -> Self {
         BinderContext {
+            functions,
             transaction,
             bind_table: Default::default(),
             expr_aliases: Default::default(),
@@ -336,7 +339,8 @@ pub mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = build_test_catalog(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;
-        let mut binder = Binder::new(BinderContext::new(&transaction));
+        let functions = Default::default();
+        let mut binder = Binder::new(BinderContext::new(&transaction, &functions));
         let stmt = crate::parser::parse_sql(sql)?;
 
         Ok(binder.bind(&stmt[0])?)
