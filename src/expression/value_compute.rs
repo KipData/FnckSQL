@@ -472,7 +472,7 @@ impl DataValue {
                         let value = match (left_value, right_value) {
                             (Some(v1), Some(v2)) => Some(v1 && v2),
                             (Some(false), _) | (_, Some(false)) => Some(false),
-                            _ => None
+                            _ => None,
                         };
 
                         DataValue::Boolean(value)
@@ -481,7 +481,7 @@ impl DataValue {
                         let value = match (left_value, right_value) {
                             (Some(v1), Some(v2)) => Some(v1 || v2),
                             (Some(true), _) | (_, Some(true)) => Some(true),
-                            _ => None
+                            _ => None,
                         };
 
                         DataValue::Boolean(value)
@@ -1478,7 +1478,7 @@ mod test {
                 &DataValue::Boolean(Some(true)),
                 &BinaryOperator::Or
             )?,
-            DataValue::Boolean(None)
+            DataValue::Boolean(Some(true))
         );
 
         Ok(())
