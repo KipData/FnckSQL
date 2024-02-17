@@ -247,6 +247,16 @@ macro_rules! varchar_cast {
     };
 }
 
+macro_rules! numeric_to_boolean {
+    ($value:expr) => {
+        match $value {
+            Some(0) => Ok(DataValue::Boolean(Some(false))),
+            Some(1) => Ok(DataValue::Boolean(Some(true))),
+            _ => Err(DatabaseError::CastFail),
+        }
+    };
+}
+
 impl DataValue {
     pub fn date(&self) -> Option<NaiveDate> {
         if let DataValue::Date32(Some(val)) = self {
@@ -670,6 +680,7 @@ impl DataValue {
 
                     decimal
                 }))),
+                LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::Int16(value) => match to {
@@ -696,6 +707,7 @@ impl DataValue {
 
                     decimal
                 }))),
+                LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::Int32(value) => match to {
@@ -721,6 +733,7 @@ impl DataValue {
 
                     decimal
                 }))),
+                LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::Int64(value) => match to {
@@ -745,6 +758,7 @@ impl DataValue {
 
                     decimal
                 }))),
+                LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::UInt8(value) => match to {
@@ -765,6 +779,7 @@ impl DataValue {
 
                     decimal
                 }))),
+                LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::UInt16(value) => match to {
@@ -783,6 +798,7 @@ impl DataValue {
 
                     decimal
                 }))),
+                LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::UInt32(value) => match to {
@@ -799,6 +815,7 @@ impl DataValue {
 
                     decimal
                 }))),
+                LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::UInt64(value) => match to {
@@ -813,6 +830,7 @@ impl DataValue {
 
                     decimal
                 }))),
+                LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::Utf8(value) => match to {

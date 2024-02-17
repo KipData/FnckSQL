@@ -146,6 +146,7 @@ select * from t1 where id not in (1, 2)
 query IT
 select * from t1 where id in (1, null)
 ----
+1 KipDB
 
 query IT
 select * from t1 where null in (1, 2)
@@ -195,6 +196,7 @@ select * from t1 where null between 1 and null
 query IT
 select * from t1 where id not between 1 and null
 ----
+0 KipSQL
 
 query IT
 select * from t1 where null not between 1 and 2

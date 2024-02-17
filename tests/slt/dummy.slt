@@ -1,0 +1,46 @@
+query I
+SELECT 1
+----
+1
+
+statement error
+SELECT x
+
+query T
+SELECT 'a'
+----
+a
+
+query B
+SELECT NOT(1=1)
+----
+false
+
+query B
+SELECT NOT(1::boolean)
+----
+false
+
+query B
+SELECT TRUE
+----
+true
+
+query B
+SELECT FALSE
+----
+false
+
+query B
+SELECT NOT(TRUE)
+----
+false
+
+# issue: https://github.com/sqlparser-rs/sqlparser-rs/issues/362
+# query T
+# SELECT 'That\'s good.'
+# ----
+# That's good.
+
+statement error
+SELECT *
