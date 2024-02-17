@@ -69,12 +69,11 @@ create table t(id int primary key, v1 int null, v2 int);
 statement ok
 insert into t values (0, 1, 1), (1, null, 2), (2, null, 3), (3, 4, 4);
 
-# TODO: Support `IsNull`
-# query I
-# select v2 from t where v1 is null;
-# ----
-# 2
-# 3
+query I
+select v2 from t where v1 is null;
+----
+2
+3
 
 # query I
 # select v2 from t where v1 is not null;

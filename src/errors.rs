@@ -152,8 +152,6 @@ pub enum DatabaseError {
     AmbiguousColumn(String),
     #[error("values length not match, expect {0}, got {1}")]
     ValuesLenMismatch(usize, usize),
-    #[error("values list must all be the same length")]
-    ValuesLenNotSame(),
     #[error("binary operator types mismatch: {0} != {1}")]
     BinaryOpTypeMismatch(String, String),
     #[error("subquery error: {0}")]
