@@ -20,6 +20,7 @@ use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::join::joins_nullable;
 use crate::expression::{AliasType, BinaryOperator};
+use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::operator::union::UnionOperator;
@@ -30,7 +31,8 @@ use crate::types::LogicalType;
 use itertools::Itertools;
 use sqlparser::ast::{
     Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
-    SelectItem, SetExpr, SetOperator, SetQuantifier, TableAlias, TableFactor, TableWithJoins,
+    SelectInto, SelectItem, SetExpr, SetOperator, SetQuantifier, TableAlias, TableFactor,
+    TableWithJoins,
 };
 
 impl<'a, T: Transaction> Binder<'a, T> {
@@ -110,6 +112,25 @@ impl<'a, T: Transaction> Binder<'a, T> {
         }
 
         plan = self.bind_project(plan, select_list)?;
+
+        if let Some(SelectInto {
+            name,
+            unlogged,
+            temporary,
+            ..
+        }) = &select.into
+        {
+            if *unlogged || *temporary {
+                todo!()
+            }
+            plan = LogicalPlan::new(
+                Operator::Insert(InsertOperator {
+                    table_name: Arc::new(lower_case_name(name)?),
+                    is_overwrite: false,
+                }),
+                vec![plan],
+            )
+        }
 
         Ok(plan)
     }

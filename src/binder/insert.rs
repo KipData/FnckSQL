@@ -55,7 +55,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             let mut rows = Vec::with_capacity(expr_rows.len());
             for expr_row in expr_rows {
                 if expr_row.len() != values_len {
-                    return Err(DatabaseError::ValuesLenNotSame());
+                    return Err(DatabaseError::ValuesLenMismatch(expr_row.len(), values_len));
                 }
                 let mut row = Vec::with_capacity(expr_row.len());
 
