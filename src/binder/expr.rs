@@ -122,6 +122,44 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 }
                 Ok(ScalarExpression::Tuple(bond_exprs))
             }
+            Expr::Case {
+                operand,
+                conditions,
+                results,
+                else_result,
+            } => {
+                let mut operand_expr = None;
+                let mut ty = LogicalType::SqlNull;
+                if let Some(expr) = operand {
+                    operand_expr = Some(Box::new(self.bind_expr(expr)?));
+                }
+                let mut expr_pairs = Vec::with_capacity(conditions.len());
+                for i in 0..conditions.len() {
+                    let result = self.bind_expr(&results[i])?;
+                    let result_ty = result.return_type();
+
+                    if result_ty != LogicalType::SqlNull {
+                        if ty == LogicalType::SqlNull {
+                            ty = result_ty;
+                        } else if ty != result_ty {
+                            return Err(DatabaseError::Incomparable(ty, result_ty));
+                        }
+                    }
+                    expr_pairs.push((self.bind_expr(&conditions[i])?, result))
+                }
+
+                let mut else_expr = None;
+                if let Some(expr) = else_result {
+                    else_expr = Some(Box::new(self.bind_expr(expr)?));
+                }
+
+                Ok(ScalarExpression::CaseWhen {
+                    operand_expr,
+                    expr_pairs,
+                    else_expr,
+                    ty,
+                })
+            }
             _ => {
                 todo!()
             }
@@ -272,14 +310,20 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         match function_name.as_str() {
             "count" => {
+                if args.len() != 1 {
+                    return Err(DatabaseError::MisMatch("number of count() parameters", "1"));
+                }
                 return Ok(ScalarExpression::AggCall {
                     distinct: func.distinct,
                     kind: AggKind::Count,
                     args,
                     ty: LogicalType::Integer,
-                })
+                });
             }
             "sum" => {
+                if args.len() != 1 {
+                    return Err(DatabaseError::MisMatch("number of sum() parameters", "1"));
+                }
                 let ty = args[0].return_type();
 
                 return Ok(ScalarExpression::AggCall {
@@ -290,6 +334,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 });
             }
             "min" => {
+                if args.len() != 1 {
+                    return Err(DatabaseError::MisMatch("number of min() parameters", "1"));
+                }
                 let ty = args[0].return_type();
 
                 return Ok(ScalarExpression::AggCall {
@@ -300,6 +347,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 });
             }
             "max" => {
+                if args.len() != 1 {
+                    return Err(DatabaseError::MisMatch("number of max() parameters", "1"));
+                }
                 let ty = args[0].return_type();
 
                 return Ok(ScalarExpression::AggCall {
@@ -310,6 +360,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 });
             }
             "avg" => {
+                if args.len() != 1 {
+                    return Err(DatabaseError::MisMatch("number of avg() parameters", "1"));
+                }
                 let ty = args[0].return_type();
 
                 return Ok(ScalarExpression::AggCall {
@@ -318,6 +371,77 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     args,
                     ty,
                 });
+            }
+            "if" => {
+                if args.len() != 3 {
+                    return Err(DatabaseError::MisMatch("number of if() parameters", "3"));
+                }
+                let ty = Self::return_type(&args[1], &args[2])?;
+                let right_expr = Box::new(args.pop().unwrap());
+                let left_expr = Box::new(args.pop().unwrap());
+                let condition = Box::new(args.pop().unwrap());
+
+                return Ok(ScalarExpression::If {
+                    condition,
+                    left_expr,
+                    right_expr,
+                    ty,
+                });
+            }
+            "nullif" => {
+                if args.len() != 2 {
+                    return Err(DatabaseError::MisMatch(
+                        "number of nullif() parameters",
+                        "3",
+                    ));
+                }
+                let ty = Self::return_type(&args[0], &args[1])?;
+                let right_expr = Box::new(args.pop().unwrap());
+                let left_expr = Box::new(args.pop().unwrap());
+
+                return Ok(ScalarExpression::NullIf {
+                    left_expr,
+                    right_expr,
+                    ty,
+                });
+            }
+            "ifnull" => {
+                if args.len() != 2 {
+                    return Err(DatabaseError::MisMatch(
+                        "number of ifnull() parameters",
+                        "3",
+                    ));
+                }
+                let ty = Self::return_type(&args[0], &args[1])?;
+                let right_expr = Box::new(args.pop().unwrap());
+                let left_expr = Box::new(args.pop().unwrap());
+
+                return Ok(ScalarExpression::IfNull {
+                    left_expr,
+                    right_expr,
+                    ty,
+                });
+            }
+            "coalesce" => {
+                let mut ty = LogicalType::SqlNull;
+
+                if !args.is_empty() {
+                    ty = args[0].return_type();
+
+                    for arg in args.iter() {
+                        let temp_ty = arg.return_type();
+
+                        if temp_ty == LogicalType::SqlNull {
+                            continue;
+                        }
+                        if ty == LogicalType::SqlNull && temp_ty != LogicalType::SqlNull {
+                            ty = temp_ty;
+                        } else if ty != temp_ty {
+                            return Err(DatabaseError::Incomparable(ty, temp_ty));
+                        }
+                    }
+                }
+                return Ok(ScalarExpression::Coalesce { exprs: args, ty });
             }
             _ => (),
         }
@@ -334,6 +458,20 @@ impl<'a, T: Transaction> Binder<'a, T> {
         }
 
         Err(DatabaseError::NotFound("function", summary.name))
+    }
+
+    fn return_type(
+        expr_1: &ScalarExpression,
+        expr_2: &ScalarExpression,
+    ) -> Result<LogicalType, DatabaseError> {
+        let temp_ty_1 = expr_1.return_type();
+        let temp_ty_2 = expr_2.return_type();
+
+        match (temp_ty_1, temp_ty_2) {
+            (LogicalType::SqlNull, LogicalType::SqlNull) => Ok(LogicalType::SqlNull),
+            (ty, LogicalType::SqlNull) | (LogicalType::SqlNull, ty) => Ok(ty),
+            (ty_1, ty_2) => LogicalType::max_logical_type(&ty_1, &ty_2),
+        }
     }
 
     fn bind_is_null(

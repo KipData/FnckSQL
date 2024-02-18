@@ -1,5 +1,3 @@
-# Test subquery
-
 statement ok
 create table t1(id int primary key, a int not null, b int not null);
 

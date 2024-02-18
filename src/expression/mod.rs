@@ -86,6 +86,32 @@ pub enum ScalarExpression {
     },
     Tuple(Vec<ScalarExpression>),
     Function(ScalarFunction),
+    If {
+        condition: Box<ScalarExpression>,
+        left_expr: Box<ScalarExpression>,
+        right_expr: Box<ScalarExpression>,
+        ty: LogicalType,
+    },
+    IfNull {
+        left_expr: Box<ScalarExpression>,
+        right_expr: Box<ScalarExpression>,
+        ty: LogicalType,
+    },
+    NullIf {
+        left_expr: Box<ScalarExpression>,
+        right_expr: Box<ScalarExpression>,
+        ty: LogicalType,
+    },
+    Coalesce {
+        exprs: Vec<ScalarExpression>,
+        ty: LogicalType,
+    },
+    CaseWhen {
+        operand_expr: Option<Box<ScalarExpression>>,
+        expr_pairs: Vec<(ScalarExpression, ScalarExpression)>,
+        else_expr: Option<Box<ScalarExpression>>,
+        ty: LogicalType,
+    },
 }
 
 impl ScalarExpression {
@@ -130,7 +156,9 @@ impl ScalarExpression {
                 left_expr.try_reference(output_exprs);
                 right_expr.try_reference(output_exprs);
             }
-            ScalarExpression::AggCall { args, .. } => {
+            ScalarExpression::AggCall { args, .. }
+            | ScalarExpression::Coalesce { exprs: args, .. }
+            | ScalarExpression::Tuple(args) => {
                 for arg in args {
                     arg.try_reference(output_exprs);
                 }
@@ -168,13 +196,48 @@ impl ScalarExpression {
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)
             | ScalarExpression::Reference { .. } => (),
-            ScalarExpression::Tuple(exprs) => {
-                for expr in exprs {
+            ScalarExpression::Function(function) => {
+                for expr in function.args.iter_mut() {
                     expr.try_reference(output_exprs);
                 }
             }
-            ScalarExpression::Function(function) => {
-                for expr in function.args.iter_mut() {
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                condition.try_reference(output_exprs);
+                left_expr.try_reference(output_exprs);
+                right_expr.try_reference(output_exprs);
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            }
+            | ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                left_expr.try_reference(output_exprs);
+                right_expr.try_reference(output_exprs);
+            }
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                if let Some(expr) = operand_expr {
+                    expr.try_reference(output_exprs);
+                }
+                for (expr_1, expr_2) in expr_pairs {
+                    expr_1.try_reference(output_exprs);
+                    expr_2.try_reference(output_exprs);
+                }
+                if let Some(expr) = else_expr {
                     expr.try_reference(output_exprs);
                 }
             }
@@ -193,7 +256,8 @@ impl ScalarExpression {
                 ..
             } => left_expr.has_count_star() || right_expr.has_count_star(),
             ScalarExpression::AggCall { args, .. }
-            | ScalarExpression::Function(ScalarFunction { args, .. }) => {
+            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::Coalesce { exprs: args, .. } => {
                 args.iter().any(Self::has_count_star)
             }
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef(_) => false,
@@ -224,30 +288,82 @@ impl ScalarExpression {
             ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Reference { expr, .. } => expr.has_count_star(),
             ScalarExpression::Tuple(args) => args.iter().any(Self::has_count_star),
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                condition.has_count_star()
+                    || left_expr.has_count_star()
+                    || right_expr.has_count_star()
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            }
+            | ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => left_expr.has_count_star() || right_expr.has_count_star(),
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                matches!(
+                    operand_expr.as_ref().map(|expr| expr.has_count_star()),
+                    Some(true)
+                ) || expr_pairs
+                    .iter()
+                    .any(|(expr_1, expr_2)| expr_1.has_count_star() || expr_2.has_count_star())
+                    || matches!(
+                        else_expr.as_ref().map(|expr| expr.has_count_star()),
+                        Some(true)
+                    )
+            }
         }
     }
 
     pub fn return_type(&self) -> LogicalType {
         match self {
-            Self::Constant(v) => v.logical_type(),
-            Self::ColumnRef(col) => *col.datatype(),
-            Self::Binary {
+            ScalarExpression::Constant(v) => v.logical_type(),
+            ScalarExpression::ColumnRef(col) => *col.datatype(),
+            ScalarExpression::Binary {
                 ty: return_type, ..
-            } => *return_type,
-            Self::Unary {
-                ty: return_type, ..
-            } => *return_type,
-            Self::TypeCast {
-                ty: return_type, ..
-            } => *return_type,
-            Self::AggCall {
-                ty: return_type, ..
-            } => *return_type,
-            Self::IsNull { .. } | Self::In { .. } | ScalarExpression::Between { .. } => {
-                LogicalType::Boolean
             }
-            Self::SubString { .. } => LogicalType::Varchar(None),
-            Self::Alias { expr, .. } | ScalarExpression::Reference { expr, .. } => {
+            | ScalarExpression::Unary {
+                ty: return_type, ..
+            }
+            | ScalarExpression::TypeCast {
+                ty: return_type, ..
+            }
+            | ScalarExpression::AggCall {
+                ty: return_type, ..
+            }
+            | ScalarExpression::If {
+                ty: return_type, ..
+            }
+            | ScalarExpression::IfNull {
+                ty: return_type, ..
+            }
+            | ScalarExpression::NullIf {
+                ty: return_type, ..
+            }
+            | ScalarExpression::Coalesce {
+                ty: return_type, ..
+            }
+            | ScalarExpression::CaseWhen {
+                ty: return_type, ..
+            } => *return_type,
+            ScalarExpression::IsNull { .. }
+            | ScalarExpression::In { .. }
+            | ScalarExpression::Between { .. } => LogicalType::Boolean,
+            ScalarExpression::SubString { .. } => LogicalType::Varchar(None),
+            ScalarExpression::Alias { expr, .. } | ScalarExpression::Reference { expr, .. } => {
                 expr.return_type()
             }
             ScalarExpression::Empty => unreachable!(),
@@ -288,7 +404,8 @@ impl ScalarExpression {
                 }
                 ScalarExpression::AggCall { args, .. }
                 | ScalarExpression::Function(ScalarFunction { args, .. })
-                | ScalarExpression::Tuple(args) => {
+                | ScalarExpression::Tuple(args)
+                | ScalarExpression::Coalesce { exprs: args, .. } => {
                     for expr in args {
                         columns_collect(expr, vec, only_column_ref)
                     }
@@ -324,6 +441,46 @@ impl ScalarExpression {
                 }
                 ScalarExpression::Constant(_) => (),
                 ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
+                ScalarExpression::If {
+                    condition,
+                    left_expr,
+                    right_expr,
+                    ..
+                } => {
+                    columns_collect(condition, vec, only_column_ref);
+                    columns_collect(left_expr, vec, only_column_ref);
+                    columns_collect(right_expr, vec, only_column_ref);
+                }
+                ScalarExpression::IfNull {
+                    left_expr,
+                    right_expr,
+                    ..
+                }
+                | ScalarExpression::NullIf {
+                    left_expr,
+                    right_expr,
+                    ..
+                } => {
+                    columns_collect(left_expr, vec, only_column_ref);
+                    columns_collect(right_expr, vec, only_column_ref);
+                }
+                ScalarExpression::CaseWhen {
+                    operand_expr,
+                    expr_pairs,
+                    else_expr,
+                    ..
+                } => {
+                    if let Some(expr) = operand_expr {
+                        columns_collect(expr, vec, only_column_ref);
+                    }
+                    for (expr_1, expr_2) in expr_pairs {
+                        columns_collect(expr_1, vec, only_column_ref);
+                        columns_collect(expr_2, vec, only_column_ref);
+                    }
+                    if let Some(expr) = else_expr {
+                        columns_collect(expr, vec, only_column_ref);
+                    }
+                }
             }
         }
         let mut exprs = Vec::new();
@@ -373,8 +530,40 @@ impl ScalarExpression {
             }
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Tuple(args)
-            | ScalarExpression::Function(ScalarFunction { args, .. }) => {
-                args.iter().any(Self::has_agg_call)
+            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::Coalesce { exprs: args, .. } => args.iter().any(Self::has_agg_call),
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => condition.has_agg_call() || left_expr.has_agg_call() || right_expr.has_agg_call(),
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            }
+            | ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => left_expr.has_agg_call() || right_expr.has_agg_call(),
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                matches!(
+                    operand_expr.as_ref().map(|expr| expr.has_agg_call()),
+                    Some(true)
+                ) || expr_pairs
+                    .iter()
+                    .any(|(expr_1, expr_2)| expr_1.has_agg_call() || expr_2.has_agg_call())
+                    || matches!(
+                        else_expr.as_ref().map(|expr| expr.has_agg_call()),
+                        Some(true)
+                    )
             }
         }
     }
@@ -482,6 +671,55 @@ impl ScalarExpression {
             ScalarExpression::Function(ScalarFunction { args, inner }) => {
                 let args_str = args.iter().map(|expr| expr.output_name()).join(", ");
                 format!("{}({})", inner.summary().name, args_str)
+            }
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                format!("if {} ({}, {})", condition, left_expr, right_expr)
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                format!("ifnull({}, {})", left_expr, right_expr)
+            }
+            ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                format!("ifnull({}, {})", left_expr, right_expr)
+            }
+            ScalarExpression::Coalesce { exprs, .. } => {
+                let exprs_str = exprs.iter().map(|expr| expr.output_name()).join(", ");
+                format!("coalesce({})", exprs_str)
+            }
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                let op = |tag: &str, expr: &Option<Box<ScalarExpression>>| {
+                    expr.as_ref()
+                        .map(|expr| format!("{}{} ", tag, expr.output_name()))
+                        .unwrap_or_default()
+                };
+                let expr_pairs_str = expr_pairs
+                    .iter()
+                    .map(|(when_expr, then_expr)| format!("when {} then {}", when_expr, then_expr))
+                    .join(" ");
+
+                format!(
+                    "case {}{} {}end",
+                    op("", operand_expr),
+                    expr_pairs_str,
+                    op("else ", else_expr)
+                )
             }
         }
     }

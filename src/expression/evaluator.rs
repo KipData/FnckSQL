@@ -1,6 +1,6 @@
 use crate::errors::DatabaseError;
 use crate::expression::function::ScalarFunction;
-use crate::expression::{AliasType, ScalarExpression};
+use crate::expression::{AliasType, BinaryOperator, ScalarExpression};
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
@@ -182,6 +182,88 @@ impl ScalarExpression {
                 inner.eval(args, tuple)?.cast(inner.return_type())?,
             )),
             ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                if condition.eval(tuple)?.is_true()? {
+                    left_expr.eval(tuple)
+                } else {
+                    right_expr.eval(tuple)
+                }
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                let value = left_expr.eval(tuple)?;
+
+                if value.is_null() {
+                    return right_expr.eval(tuple);
+                }
+                Ok(value)
+            }
+            ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                let value = left_expr.eval(tuple)?;
+
+                if right_expr.eval(tuple)? == value {
+                    return Ok(NULL_VALUE.clone());
+                }
+                Ok(value)
+            }
+            ScalarExpression::Coalesce { exprs, .. } => {
+                let mut value = None;
+
+                for expr in exprs {
+                    let temp = expr.eval(tuple)?;
+
+                    if !temp.is_null() {
+                        value = Some(temp);
+                        break;
+                    }
+                }
+                Ok(value.unwrap_or_else(|| NULL_VALUE.clone()))
+            }
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                let mut operand_value = None;
+                let mut result = None;
+
+                if let Some(expr) = operand_expr {
+                    operand_value = Some(expr.eval(tuple)?);
+                }
+                for (when_expr, result_expr) in expr_pairs {
+                    let when_value = when_expr.eval(tuple)?;
+                    let is_true = if let Some(operand_value) = &operand_value {
+                        operand_value
+                            .binary_op(&when_value, &BinaryOperator::Eq)?
+                            .is_true()?
+                    } else {
+                        when_value.is_true()?
+                    };
+                    if is_true {
+                        result = Some(result_expr.eval(tuple)?);
+                        break;
+                    }
+                }
+                if result.is_none() {
+                    if let Some(expr) = else_expr {
+                        result = Some(expr.eval(tuple)?);
+                    }
+                }
+                Ok(result.unwrap_or_else(|| NULL_VALUE.clone()))
+            }
         }
     }
 }

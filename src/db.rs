@@ -1,5 +1,4 @@
 use ahash::HashMap;
-use sqlparser::ast::Statement;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -101,8 +100,7 @@ impl<S: Storage> Database<S> {
     /// Run SQL queries.
     pub async fn run<T: AsRef<str>>(&self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
         let transaction = self.storage.transaction().await?;
-        let (plan, _) =
-            Self::build_plan::<T, S::TransactionType>(sql, &transaction, &self.functions)?;
+        let plan = Self::build_plan::<T, S::TransactionType>(sql, &transaction, &self.functions)?;
 
         Self::run_volcano(transaction, plan).await
     }
@@ -133,9 +131,9 @@ impl<S: Storage> Database<S> {
         sql: V,
         transaction: &<S as Storage>::TransactionType,
         functions: &Functions,
-    ) -> Result<(LogicalPlan, Statement), DatabaseError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         // parse
-        let mut stmts = parse_sql(sql)?;
+        let stmts = parse_sql(sql)?;
         if stmts.is_empty() {
             return Err(DatabaseError::EmptyStatement);
         }
@@ -154,7 +152,7 @@ impl<S: Storage> Database<S> {
             Self::default_optimizer(source_plan).find_best(Some(&transaction.meta_loader()))?;
         // println!("best_plan plan: {:#?}", best_plan);
 
-        Ok((best_plan, stmts.remove(0)))
+        Ok(best_plan)
     }
 
     pub(crate) fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
@@ -241,7 +239,7 @@ pub struct DBTransaction<S: Storage> {
 
 impl<S: Storage> DBTransaction<S> {
     pub async fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<Vec<Tuple>, DatabaseError> {
-        let (plan, _) =
+        let plan =
             Database::<S>::build_plan::<T, S::TransactionType>(sql, &self.inner, &self.functions)?;
         let mut stream = build_write(plan, &mut self.inner);
 

@@ -120,7 +120,6 @@ macro_rules! numeric_binary_compute {
             BinaryOperator::Eq => {
                 let value = match ($left.cast($unified_type)?, $right.cast($unified_type)?) {
                     ($compute_type(Some(v1)), $compute_type(Some(v2))) => Some(v1 == v2),
-                    ($compute_type(None), $compute_type(None)) => Some(true),
                     (_, _) => None,
                 };
 
@@ -129,7 +128,6 @@ macro_rules! numeric_binary_compute {
             BinaryOperator::NotEq => {
                 let value = match ($left.cast($unified_type)?, $right.cast($unified_type)?) {
                     ($compute_type(Some(v1)), $compute_type(Some(v2))) => Some(v1 != v2),
-                    ($compute_type(None), $compute_type(None)) => Some(false),
                     (_, _) => None,
                 };
 
@@ -443,7 +441,6 @@ impl DataValue {
                             (DataValue::Decimal(Some(v1)), DataValue::Decimal(Some(v2))) => {
                                 Some(v1 == v2)
                             }
-                            (DataValue::Decimal(None), DataValue::Decimal(None)) => Some(true),
                             (_, _) => None,
                         };
 
@@ -454,7 +451,6 @@ impl DataValue {
                             (DataValue::Decimal(Some(v1)), DataValue::Decimal(Some(v2))) => {
                                 Some(v1 != v2)
                             }
-                            (DataValue::Decimal(None), DataValue::Decimal(None)) => Some(false),
                             (_, _) => None,
                         };
 
@@ -482,6 +478,22 @@ impl DataValue {
                             (Some(v1), Some(v2)) => Some(v1 || v2),
                             (Some(true), _) | (_, Some(true)) => Some(true),
                             _ => None,
+                        };
+
+                        DataValue::Boolean(value)
+                    }
+                    BinaryOperator::Eq => {
+                        let value = match (left_value, right_value) {
+                            (Some(v1), Some(v2)) => Some(v1 == v2),
+                            (_, _) => None,
+                        };
+
+                        DataValue::Boolean(value)
+                    }
+                    BinaryOperator::NotEq => {
+                        let value = match (left_value, right_value) {
+                            (Some(v1), Some(v2)) => Some(v1 != v2),
+                            (_, _) => None,
                         };
 
                         DataValue::Boolean(value)
@@ -533,7 +545,6 @@ impl DataValue {
                     BinaryOperator::Eq => {
                         let value = match (left_value, right_value) {
                             (Some(v1), Some(v2)) => Some(v1 == v2),
-                            (None, None) => Some(true),
                             (_, _) => None,
                         };
 
@@ -542,7 +553,6 @@ impl DataValue {
                     BinaryOperator::NotEq => {
                         let value = match (left_value, right_value) {
                             (Some(v1), Some(v2)) => Some(v1 != v2),
-                            (None, None) => Some(false),
                             (_, _) => None,
                         };
 
@@ -569,7 +579,6 @@ impl DataValue {
                     BinaryOperator::Eq => {
                         let value = match (left_value, right_value) {
                             (Some(v1), Some(v2)) => Some(v1 == v2),
-                            (None, None) => Some(true),
                             (_, _) => None,
                         };
 
@@ -578,7 +587,6 @@ impl DataValue {
                     BinaryOperator::NotEq => {
                         let value = match (left_value, right_value) {
                             (Some(v1), Some(v2)) => Some(v1 != v2),
-                            (None, None) => Some(false),
                             (_, _) => None,
                         };
 
@@ -1069,7 +1077,7 @@ mod test {
                 &DataValue::Int32(None),
                 &BinaryOperator::Eq
             )?,
-            DataValue::Boolean(Some(true))
+            DataValue::Boolean(None)
         );
 
         Ok(())
@@ -1181,7 +1189,7 @@ mod test {
                 &DataValue::Int64(None),
                 &BinaryOperator::Eq
             )?,
-            DataValue::Boolean(Some(true))
+            DataValue::Boolean(None)
         );
 
         Ok(())
@@ -1293,7 +1301,7 @@ mod test {
                 &DataValue::Float64(None),
                 &BinaryOperator::Eq
             )?,
-            DataValue::Boolean(Some(true))
+            DataValue::Boolean(None)
         );
 
         Ok(())
@@ -1405,7 +1413,7 @@ mod test {
                 &DataValue::Float32(None),
                 &BinaryOperator::Eq
             )?,
-            DataValue::Boolean(Some(true))
+            DataValue::Boolean(None)
         );
 
         Ok(())
