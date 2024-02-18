@@ -581,6 +581,17 @@ impl DataValue {
         Ok(())
     }
 
+    pub fn is_true(&self) -> Result<bool, DatabaseError> {
+        if self.is_null() {
+            return Ok(false);
+        }
+        if let DataValue::Boolean(option) = self {
+            Ok(matches!(option, Some(true)))
+        } else {
+            Err(DatabaseError::InvalidType)
+        }
+    }
+
     pub fn cast(self, to: &LogicalType) -> Result<DataValue, DatabaseError> {
         match self {
             DataValue::Null => match to {

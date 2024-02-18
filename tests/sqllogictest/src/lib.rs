@@ -4,12 +4,12 @@ use fnck_sql::storage::kip::KipStorage;
 use sqllogictest::{AsyncDB, DBOutput, DefaultColumnType};
 use std::time::Instant;
 
-pub struct KipSQL {
+pub struct SQLBase {
     pub db: Database<KipStorage>,
 }
 
 #[async_trait::async_trait]
-impl AsyncDB for KipSQL {
+impl AsyncDB for SQLBase {
     type Error = DatabaseError;
     type ColumnType = DefaultColumnType;
 
@@ -17,7 +17,7 @@ impl AsyncDB for KipSQL {
         let start = Instant::now();
         let tuples = self.db.run(sql).await?;
         println!("|— Input SQL: {}", sql);
-        println!(" |— Time consuming: {:?}", start.elapsed());
+        println!(" |— time spent: {:?}", start.elapsed());
 
         if tuples.is_empty() {
             return Ok(DBOutput::StatementComplete(0));

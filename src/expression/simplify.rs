@@ -428,7 +428,8 @@ impl ScalarExpression {
             }
             ScalarExpression::AggCall { args, .. }
             | ScalarExpression::Tuple(args)
-            | ScalarExpression::Function(ScalarFunction { args, .. }) => args
+            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::Coalesce { exprs: args, .. } => args
                 .iter()
                 .any(|expr| expr.exist_column(table_name, col_id)),
             ScalarExpression::In { expr, args, .. } => {
@@ -464,6 +465,50 @@ impl ScalarExpression {
             }
             ScalarExpression::Constant(_) => false,
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                condition.exist_column(table_name, col_id)
+                    || left_expr.exist_column(table_name, col_id)
+                    || right_expr.exist_column(table_name, col_id)
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            }
+            | ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                left_expr.exist_column(table_name, col_id)
+                    || right_expr.exist_column(table_name, col_id)
+            }
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                matches!(
+                    operand_expr
+                        .as_ref()
+                        .map(|expr| expr.exist_column(table_name, col_id)),
+                    Some(true)
+                ) || expr_pairs.iter().any(|(expr_1, expr_2)| {
+                    expr_1.exist_column(table_name, col_id)
+                        || expr_2.exist_column(table_name, col_id)
+                }) || matches!(
+                    else_expr
+                        .as_ref()
+                        .map(|expr| expr.exist_column(table_name, col_id)),
+                    Some(true)
+                )
+            }
         }
     }
 
@@ -995,7 +1040,12 @@ impl ScalarExpression {
                 | ScalarExpression::In { .. }
                 | ScalarExpression::Between { .. }
                 | ScalarExpression::SubString { .. }
-                | ScalarExpression::Function(_) => expr.convert_binary(table_name, id),
+                | ScalarExpression::Function(_)
+                | ScalarExpression::If { .. }
+                | ScalarExpression::IfNull { .. }
+                | ScalarExpression::NullIf { .. }
+                | ScalarExpression::Coalesce { .. }
+                | ScalarExpression::CaseWhen { .. } => expr.convert_binary(table_name, id),
                 ScalarExpression::Tuple(_)
                 | ScalarExpression::Reference { .. }
                 | ScalarExpression::Empty => unreachable!(),
@@ -1004,7 +1054,12 @@ impl ScalarExpression {
             // FIXME: support `convert_binary`
             ScalarExpression::Tuple(_)
             | ScalarExpression::AggCall { .. }
-            | ScalarExpression::Function(_) => Ok(None),
+            | ScalarExpression::Function(_)
+            | ScalarExpression::If { .. }
+            | ScalarExpression::IfNull { .. }
+            | ScalarExpression::NullIf { .. }
+            | ScalarExpression::Coalesce { .. }
+            | ScalarExpression::CaseWhen { .. } => Ok(None),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
         }
     }

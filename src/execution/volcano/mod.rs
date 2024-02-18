@@ -57,7 +57,7 @@ pub fn build_read<T: Transaction>(plan: LogicalPlan, transaction: &T) -> BoxedEx
     match operator {
         Operator::Dummy => Dummy {}.execute(transaction),
         Operator::Aggregate(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
 
             if op.groupby_exprs.is_empty() {
                 SimpleAggExecutor::from((op, input)).execute(transaction)
@@ -66,18 +66,18 @@ pub fn build_read<T: Transaction>(plan: LogicalPlan, transaction: &T) -> BoxedEx
             }
         }
         Operator::Filter(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
 
             Filter::from((op, input)).execute(transaction)
         }
         Operator::Join(op) => {
-            let left_input = childrens.remove(0);
-            let right_input = childrens.remove(0);
+            let right_input = childrens.pop().unwrap();
+            let left_input = childrens.pop().unwrap();
 
             HashJoin::from((op, left_input, right_input)).execute(transaction)
         }
         Operator::Project(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
 
             Projection::from((op, input)).execute(transaction)
         }
@@ -93,26 +93,26 @@ pub fn build_read<T: Transaction>(plan: LogicalPlan, transaction: &T) -> BoxedEx
             }
         }
         Operator::Sort(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
 
             Sort::from((op, input)).execute(transaction)
         }
         Operator::Limit(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
 
             Limit::from((op, input)).execute(transaction)
         }
         Operator::Values(op) => Values::from(op).execute(transaction),
         Operator::Show => ShowTables.execute(transaction),
         Operator::Explain => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
 
             Explain::from(input).execute(transaction)
         }
         Operator::Describe(op) => Describe::from(op).execute(transaction),
         Operator::Union(_) => {
-            let left_input = childrens.remove(0);
-            let right_input = childrens.remove(0);
+            let right_input = childrens.pop().unwrap();
+            let left_input = childrens.pop().unwrap();
 
             Union::from((left_input, right_input)).execute(transaction)
         }
@@ -130,27 +130,27 @@ pub fn build_write<T: Transaction>(plan: LogicalPlan, transaction: &mut T) -> Bo
 
     match operator {
         Operator::Insert(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
 
             Insert::from((op, input)).execute_mut(transaction)
         }
         Operator::Update(op) => {
-            let input = childrens.remove(0);
-            let values = childrens.remove(0);
+            let values = childrens.pop().unwrap();
+            let input = childrens.pop().unwrap();
 
             Update::from((op, input, values)).execute_mut(transaction)
         }
         Operator::Delete(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
 
             Delete::from((op, input)).execute_mut(transaction)
         }
         Operator::AddColumn(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
             AddColumn::from((op, input)).execute_mut(transaction)
         }
         Operator::DropColumn(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
             DropColumn::from((op, input)).execute_mut(transaction)
         }
         Operator::CreateTable(op) => CreateTable::from(op).execute_mut(transaction),
@@ -162,7 +162,7 @@ pub fn build_write<T: Transaction>(plan: LogicalPlan, transaction: &mut T) -> Bo
             todo!()
         }
         Operator::Analyze(op) => {
-            let input = childrens.remove(0);
+            let input = childrens.pop().unwrap();
 
             Analyze::from((op, input)).execute_mut(transaction)
         }

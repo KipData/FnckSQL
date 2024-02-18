@@ -69,13 +69,13 @@ macro_rules! implement_from_tuple {
 macro_rules! function {
     ($struct_name:ident::$function_name:ident($($arg_ty:expr),*) -> $return_ty:expr => $closure:expr) => {
         #[derive(Debug)]
-        struct $struct_name {
+        pub(crate) struct $struct_name {
             summary: FunctionSummary
         }
 
         impl $struct_name {
-            fn new() -> Arc<Self> {
-                let function_name = stringify!($function_name);
+            pub(crate) fn new() -> Arc<Self> {
+                let function_name = stringify!($function_name).to_lowercase();
 
                 let mut arg_types = Vec::new();
                 $({

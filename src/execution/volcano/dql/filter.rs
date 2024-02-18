@@ -5,7 +5,6 @@ use crate::planner::operator::filter::FilterOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
-use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
 
 pub struct Filter {
@@ -33,14 +32,9 @@ impl Filter {
         #[for_await]
         for tuple in build_read(input, transaction) {
             let tuple = tuple?;
-            if let DataValue::Boolean(option) = predicate.eval(&tuple)?.as_ref() {
-                if let Some(true) = option {
-                    yield tuple;
-                } else {
-                    continue;
-                }
-            } else {
-                unreachable!("only bool");
+
+            if predicate.eval(&tuple)?.is_true()? {
+                yield tuple;
             }
         }
     }

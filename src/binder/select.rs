@@ -273,12 +273,16 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     columns: alias_column,
                 }) = alias
                 {
-                    let table_alias = Arc::new(name.value.to_lowercase());
-
                     if tables.len() > 1 {
                         todo!("Implement virtual tables for multiple table aliases");
                     }
-                    self.register_alias(alias_column, table_alias.to_string(), tables.remove(0))?;
+                    let table_alias = Arc::new(name.value.to_lowercase());
+
+                    self.register_alias(
+                        alias_column,
+                        table_alias.to_string(),
+                        tables.pop().unwrap(),
+                    )?;
 
                     (Some(table_alias), plan)
                 } else {

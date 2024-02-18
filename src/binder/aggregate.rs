@@ -139,8 +139,49 @@ impl<'a, T: Transaction> Binder<'a, T> {
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => (),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Tuple(args)
-            | ScalarExpression::Function(ScalarFunction { args, .. }) => {
+            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::Coalesce { exprs: args, .. } => {
                 for expr in args {
+                    self.visit_column_agg_expr(expr)?;
+                }
+            }
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                self.visit_column_agg_expr(condition)?;
+                self.visit_column_agg_expr(left_expr)?;
+                self.visit_column_agg_expr(right_expr)?;
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            }
+            | ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                self.visit_column_agg_expr(left_expr)?;
+                self.visit_column_agg_expr(right_expr)?;
+            }
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                if let Some(expr) = operand_expr {
+                    self.visit_column_agg_expr(expr)?;
+                }
+                for (expr_1, expr_2) in expr_pairs {
+                    self.visit_column_agg_expr(expr_1)?;
+                    self.visit_column_agg_expr(expr_2)?;
+                }
+                if let Some(expr) = else_expr {
                     self.visit_column_agg_expr(expr)?;
                 }
             }
@@ -318,10 +359,57 @@ impl<'a, T: Transaction> Binder<'a, T> {
             ScalarExpression::Constant(_) => Ok(()),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Tuple(args)
-            | ScalarExpression::Function(ScalarFunction { args, .. }) => {
+            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::Coalesce { exprs: args, .. } => {
                 for expr in args {
                     self.validate_having_orderby(expr)?;
                 }
+                Ok(())
+            }
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                self.validate_having_orderby(condition)?;
+                self.validate_having_orderby(left_expr)?;
+                self.validate_having_orderby(right_expr)?;
+
+                Ok(())
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            }
+            | ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                self.validate_having_orderby(left_expr)?;
+                self.validate_having_orderby(right_expr)?;
+
+                Ok(())
+            }
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                if let Some(expr) = operand_expr {
+                    self.validate_having_orderby(expr)?;
+                }
+                for (expr_1, expr_2) in expr_pairs {
+                    self.validate_having_orderby(expr_1)?;
+                    self.validate_having_orderby(expr_2)?;
+                }
+                if let Some(expr) = else_expr {
+                    self.validate_having_orderby(expr)?;
+                }
+
                 Ok(())
             }
         }
