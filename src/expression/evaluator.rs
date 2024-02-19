@@ -193,7 +193,7 @@ impl ScalarExpression {
                 condition,
                 left_expr,
                 right_expr,
-                ty
+                ty,
             } => {
                 if condition.eval(tuple)?.is_true()? {
                     check_cast(left_expr.eval(tuple)?, ty)
@@ -204,19 +204,19 @@ impl ScalarExpression {
             ScalarExpression::IfNull {
                 left_expr,
                 right_expr,
-                ty
+                ty,
             } => {
                 let mut value = left_expr.eval(tuple)?;
 
                 if value.is_null() {
-                    value =  right_expr.eval(tuple)?;
+                    value = right_expr.eval(tuple)?;
                 }
                 check_cast(value, ty)
             }
             ScalarExpression::NullIf {
                 left_expr,
                 right_expr,
-                ty
+                ty,
             } => {
                 let mut value = left_expr.eval(tuple)?;
 
@@ -242,7 +242,7 @@ impl ScalarExpression {
                 operand_expr,
                 expr_pairs,
                 else_expr,
-                ty
+                ty,
             } => {
                 let mut operand_value = None;
                 let mut result = None;
