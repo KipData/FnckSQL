@@ -120,15 +120,11 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
         .ok_or(DatabaseError::TableNotFound)?;
 
-        let is_bound = self
+        let old_table = self
             .bind_table
-            .insert(table_name.clone(), (table, join_type))
-            .is_some();
-        if is_bound {
-            return Err(DatabaseError::InvalidTable(format!(
-                "{} duplicated",
-                table_name
-            )));
+            .insert(table_name.clone(), (table, join_type));
+        if matches!(old_table, Some((_, Some(_)))) {
+            return Err(DatabaseError::Duplicated("table", table_name.to_string()));
         }
 
         Ok(table)

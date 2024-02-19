@@ -1,8 +1,6 @@
 # # F261-04: COALESCE
 
-# TODO: COALESCE
-
-# query I
-# SELECT COALESCE ( 1 , 1 )
-# ----
-# 1
+query I
+SELECT COALESCE ( 1 , 1 )
+----
+1

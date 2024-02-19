@@ -1,8 +1,6 @@
 # F261-03: NULLIF
 
-# TODO: `NULLIF`
-
-# query I
-# SELECT NULLIF ( 1 , 1 )
-# ----
-# null
+query I
+SELECT NULLIF ( 1 , 1 )
+----
+null
