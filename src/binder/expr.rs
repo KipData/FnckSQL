@@ -160,8 +160,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     ty,
                 })
             }
-            _ => {
-                todo!()
+            expr => {
+                todo!("{}", expr)
             }
         }
     }
