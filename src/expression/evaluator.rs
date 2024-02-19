@@ -28,6 +28,13 @@ macro_rules! eval_to_num {
 
 impl ScalarExpression {
     pub fn eval(&self, tuple: &Tuple) -> Result<ValueRef, DatabaseError> {
+        let check_cast = |value: ValueRef, return_type: &LogicalType| {
+            if value.logical_type() != *return_type {
+                return Ok(Arc::new(DataValue::clone(&value).cast(return_type)?));
+            }
+            Ok(value)
+        };
+
         match self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
             ScalarExpression::ColumnRef(col) => {
@@ -186,39 +193,39 @@ impl ScalarExpression {
                 condition,
                 left_expr,
                 right_expr,
-                ..
+                ty,
             } => {
                 if condition.eval(tuple)?.is_true()? {
-                    left_expr.eval(tuple)
+                    check_cast(left_expr.eval(tuple)?, ty)
                 } else {
-                    right_expr.eval(tuple)
+                    check_cast(right_expr.eval(tuple)?, ty)
                 }
             }
             ScalarExpression::IfNull {
                 left_expr,
                 right_expr,
-                ..
+                ty,
             } => {
-                let value = left_expr.eval(tuple)?;
+                let mut value = left_expr.eval(tuple)?;
 
                 if value.is_null() {
-                    return right_expr.eval(tuple);
+                    value = right_expr.eval(tuple)?;
                 }
-                Ok(value)
+                check_cast(value, ty)
             }
             ScalarExpression::NullIf {
                 left_expr,
                 right_expr,
-                ..
+                ty,
             } => {
-                let value = left_expr.eval(tuple)?;
+                let mut value = left_expr.eval(tuple)?;
 
                 if right_expr.eval(tuple)? == value {
-                    return Ok(NULL_VALUE.clone());
+                    value = NULL_VALUE.clone();
                 }
-                Ok(value)
+                check_cast(value, ty)
             }
-            ScalarExpression::Coalesce { exprs, .. } => {
+            ScalarExpression::Coalesce { exprs, ty } => {
                 let mut value = None;
 
                 for expr in exprs {
@@ -229,13 +236,13 @@ impl ScalarExpression {
                         break;
                     }
                 }
-                Ok(value.unwrap_or_else(|| NULL_VALUE.clone()))
+                check_cast(value.unwrap_or_else(|| NULL_VALUE.clone()), ty)
             }
             ScalarExpression::CaseWhen {
                 operand_expr,
                 expr_pairs,
                 else_expr,
-                ..
+                ty,
             } => {
                 let mut operand_value = None;
                 let mut result = None;
@@ -262,7 +269,7 @@ impl ScalarExpression {
                         result = Some(expr.eval(tuple)?);
                     }
                 }
-                Ok(result.unwrap_or_else(|| NULL_VALUE.clone()))
+                check_cast(result.unwrap_or_else(|| NULL_VALUE.clone()), ty)
             }
         }
     }
