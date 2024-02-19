@@ -128,6 +128,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 results,
                 else_result,
             } => {
+                let fn_check_ty = |ty: &mut LogicalType, result_ty| {
+                    if result_ty != LogicalType::SqlNull {
+                        if ty == &LogicalType::SqlNull {
+                            *ty = result_ty;
+                        } else if ty != &result_ty {
+                            return Err(DatabaseError::Incomparable(*ty, result_ty));
+                        }
+                    }
+
+                    Ok(())
+                };
                 let mut operand_expr = None;
                 let mut ty = LogicalType::SqlNull;
                 if let Some(expr) = operand {
@@ -138,19 +149,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     let result = self.bind_expr(&results[i])?;
                     let result_ty = result.return_type();
 
-                    if result_ty != LogicalType::SqlNull {
-                        if ty == LogicalType::SqlNull {
-                            ty = result_ty;
-                        } else if ty != result_ty {
-                            return Err(DatabaseError::Incomparable(ty, result_ty));
-                        }
-                    }
+                    fn_check_ty(&mut ty, result_ty)?;
                     expr_pairs.push((self.bind_expr(&conditions[i])?, result))
                 }
 
                 let mut else_expr = None;
                 if let Some(expr) = else_result {
-                    else_expr = Some(Box::new(self.bind_expr(expr)?));
+                    let temp_expr = Box::new(self.bind_expr(expr)?);
+                    let else_ty = temp_expr.return_type();
+
+                    fn_check_ty(&mut ty, else_ty)?;
+                    else_expr = Some(temp_expr);
                 }
 
                 Ok(ScalarExpression::CaseWhen {
