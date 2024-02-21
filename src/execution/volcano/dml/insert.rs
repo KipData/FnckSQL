@@ -64,7 +64,8 @@ impl Insert {
                 } = tuple?;
 
                 if primary_key_id.is_none() {
-                    let id = schema_ref.iter()
+                    let id = schema_ref
+                        .iter()
                         .find(|col| col.desc.is_primary)
                         .map(|col| col.id())
                         .ok_or_else(|| DatabaseError::NotNull)?;

@@ -9,7 +9,7 @@ use sqlparser::ast::{
 use std::slice;
 use std::sync::Arc;
 
-use super::{lower_ident, Binder};
+use super::{lower_ident, Binder, QueryBindStep};
 use crate::expression::function::{FunctionSummary, ScalarFunction};
 use crate::expression::{AliasType, ScalarExpression};
 use crate::storage::Transaction;
@@ -110,17 +110,21 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     ));
                 }
                 let column = sub_query_schema[0].clone();
-                let mut alias_column = ColumnCatalog::clone(&column);
-                alias_column.set_table_name(self.context.temp_table());
-
                 self.context.sub_query(sub_query);
 
-                Ok(ScalarExpression::Alias {
-                    expr: Box::new(ScalarExpression::ColumnRef(column)),
-                    alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
-                        alias_column,
-                    )))),
-                })
+                if self.context.is_step(&QueryBindStep::Where) {
+                    let mut alias_column = ColumnCatalog::clone(&column);
+                    alias_column.set_table_name(self.context.temp_table());
+
+                    Ok(ScalarExpression::Alias {
+                        expr: Box::new(ScalarExpression::ColumnRef(column)),
+                        alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
+                            alias_column,
+                        )))),
+                    })
+                } else {
+                    Ok(ScalarExpression::ColumnRef(column))
+                }
             }
             Expr::Tuple(exprs) => {
                 let mut bond_exprs = Vec::with_capacity(exprs.len());
@@ -240,7 +244,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         } else {
             // handle col syntax
             let mut got_column = None;
-            for (table_catalog, _) in self.context.bind_table.values() {
+            for table_catalog in self.context.bind_table.values() {
                 if let Some(column_catalog) = table_catalog.get_column_by_name(&column_name) {
                     got_column = Some(column_catalog);
                 }

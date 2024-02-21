@@ -122,7 +122,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                             DataValue::clone(&value).cast(&column_desc.column_datatype)?;
                         column_desc.default = Some(Arc::new(cast_value));
                     } else {
-                        return Err(DatabaseError::UnsupportedStmt("'default' only for constant".to_string()));
+                        return Err(DatabaseError::UnsupportedStmt(
+                            "'default' only for constant".to_string(),
+                        ));
                     }
                 }
                 _ => todo!(),
