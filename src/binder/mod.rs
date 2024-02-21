@@ -62,6 +62,7 @@ pub struct BinderContext<'a, T: Transaction> {
     sub_queries: HashMap<QueryBindStep, Vec<LogicalPlan>>,
 
     temp_table_id: usize,
+    pub(crate) allow_default: bool,
 }
 
 impl<'a, T: Transaction> BinderContext<'a, T> {
@@ -77,6 +78,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             bind_step: QueryBindStep::From,
             sub_queries: Default::default(),
             temp_table_id: 0,
+            allow_default: false,
         }
     }
 

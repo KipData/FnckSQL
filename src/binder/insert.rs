@@ -20,6 +20,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
         expr_rows: &Vec<Vec<Expr>>,
         is_overwrite: bool,
     ) -> Result<LogicalPlan, DatabaseError> {
+        // FIXME: Make it better to detect the current BindStep
+        self.context.allow_default = true;
         let table_name = Arc::new(lower_case_name(name)?);
 
         if let Some(table) = self.context.table(table_name.clone()) {
@@ -43,7 +45,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         Some(table_name.to_string()),
                     )? {
                         ScalarExpression::ColumnRef(catalog) => columns.push(catalog),
-                        _ => unreachable!(),
+                        _ => return Err(DatabaseError::UnsupportedStmt(ident.to_string())),
                     }
                 }
                 if values_len != columns.len() {
@@ -53,6 +55,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
             let schema_ref = _schema_ref.ok_or(DatabaseError::ColumnsEmpty)?;
             let mut rows = Vec::with_capacity(expr_rows.len());
+
             for expr_row in expr_rows {
                 if expr_row.len() != values_len {
                     return Err(DatabaseError::ValuesLenMismatch(expr_row.len(), values_len));
@@ -60,30 +63,30 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let mut row = Vec::with_capacity(expr_row.len());
 
                 for (i, expr) in expr_row.iter().enumerate() {
-                    match &self.bind_expr(expr)? {
-                        ScalarExpression::Constant(value) => {
+                    let mut expression = self.bind_expr(expr)?;
+
+                    expression.constant_calculation()?;
+                    match expression {
+                        ScalarExpression::Constant(mut value) => {
+                            let ty = schema_ref[i].datatype();
                             // Check if the value length is too long
-                            value.check_len(schema_ref[i].datatype())?;
-                            let cast_value =
-                                DataValue::clone(value).cast(schema_ref[i].datatype())?;
-                            row.push(Arc::new(cast_value))
-                        }
-                        ScalarExpression::Unary { expr, op, .. } => {
-                            if let ScalarExpression::Constant(value) = expr.as_ref() {
-                                row.push(Arc::new(
-                                    DataValue::unary_op(value, op)?
-                                        .cast(schema_ref[i].datatype())?,
-                                ))
-                            } else {
-                                unreachable!()
+                            value.check_len(ty)?;
+
+                            if value.logical_type() != *ty {
+                                value = Arc::new(DataValue::clone(&value).cast(ty)?);
                             }
+                            row.push(value);
                         }
-                        _ => unreachable!(),
+                        ScalarExpression::Empty => {
+                            row.push(schema_ref[i].default_value()
+                                .ok_or_else(|| DatabaseError::InvalidColumn("column does not exist default".to_string()))?);
+                        }
+                        _ => return Err(DatabaseError::UnsupportedStmt(expr.to_string())),
                     }
                 }
-
                 rows.push(row);
             }
+            self.context.allow_default = false;
             let values_plan = self.bind_values(rows, schema_ref);
 
             Ok(LogicalPlan::new(
@@ -94,10 +97,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 vec![values_plan],
             ))
         } else {
-            Err(DatabaseError::InvalidTable(format!(
-                "not found table {}",
-                table_name
-            )))
+            Err(DatabaseError::TableNotFound)
         }
     }
 

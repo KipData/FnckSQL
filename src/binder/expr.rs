@@ -27,6 +27,14 @@ macro_rules! try_alias {
     };
 }
 
+macro_rules! try_default {
+    ($table_name:expr, $column_name:expr) => {
+        if let (None, "default") = ($table_name, $column_name.as_str()) {
+            return Ok(ScalarExpression::Empty);
+        }
+    };
+}
+
 impl<'a, T: Transaction> Binder<'a, T> {
     pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, DatabaseError> {
         match expr {
@@ -215,8 +223,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ))
             }
         };
+        try_alias!(self.context, column_name);
+        if self.context.allow_default {
+            try_default!(&table_name, column_name);
+        }
         if let Some(table) = table_name.or(bind_table_name) {
-            try_alias!(self.context, column_name);
             let table_catalog = self
                 .context
                 .table(Arc::new(table.clone()))
@@ -227,7 +238,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 .ok_or_else(|| DatabaseError::NotFound("column", column_name))?;
             Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
         } else {
-            try_alias!(self.context, column_name);
             // handle col syntax
             let mut got_column = None;
             for (table_catalog, _) in self.context.bind_table.values() {
