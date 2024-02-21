@@ -440,13 +440,13 @@ mod test {
             .await?;
         let _ = fnck_sql
             .run_on_query(
-                "insert into t3 (a, b) values (1, 1111), (2, 2.01), (3, 3.00)",
+                "insert into t3 (a, b) values (1, 99), (2, 2.01), (3, 3.00)",
                 query_execute,
             )
             .await?;
         let _ = fnck_sql
             .run_on_query(
-                "insert into t3 (a, b) values (4, 4444), (5, 5222), (6, 1.00)",
+                "insert into t3 (a, b) values (4, 44), (5, 52), (6, 1.00)",
                 query_execute,
             )
             .await?;
