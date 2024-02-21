@@ -15,7 +15,7 @@ pub enum DatabaseError {
     EmptyStatement,
     #[error("invalid type")]
     InvalidType,
-    #[error("must contain PrimaryKey!")]
+    #[error("must contain primary key!")]
     PrimaryKeyNotFound,
     #[error("not implemented sqlparser datatype: {0}")]
     NotImplementedSqlparserDataType(String),
@@ -99,8 +99,8 @@ pub enum DatabaseError {
     DuplicateUniqueValue,
     #[error("the table not found")]
     TableNotFound,
-    #[error("the some column already exists")]
-    DuplicateColumn,
+    #[error("the some column: {0} already exists")]
+    DuplicateColumn(String),
     #[error("add column must be nullable or specify a default value")]
     NeedNullAbleOrDefault,
     #[error("the table already exists")]
@@ -148,8 +148,6 @@ pub enum DatabaseError {
     InvalidTable(String),
     #[error("invalid column: {0}")]
     InvalidColumn(String),
-    #[error("ambiguous column: {0}")]
-    AmbiguousColumn(String),
     #[error("values length not match, expect {0}, got {1}")]
     ValuesLenMismatch(usize, usize),
     #[error("binary operator types mismatch: {0} != {1}")]

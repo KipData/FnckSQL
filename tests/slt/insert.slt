@@ -56,9 +56,21 @@ insert into t1 values (1)
 statement ok
 insert into t1 values (2)
 
+statement ok
+insert into t1 values (3, DEFAULT)
+
+statement ok
+insert into t1 values (4, 0)
+
+statement ok
+insert into t1 (v1, id) values (DEFAULT, 5)
+
 query III rowsort
 select * from t1
 ----
 0 233
 1 233
 2 233
+3 233
+4 0
+5 233

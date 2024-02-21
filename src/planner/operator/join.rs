@@ -7,7 +7,7 @@ use strum_macros::Display;
 
 use super::Operator;
 
-#[derive(Debug, Display, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, Display, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
 pub enum JoinType {
     Inner,
     Left,

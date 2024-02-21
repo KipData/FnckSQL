@@ -212,7 +212,7 @@ impl Transaction for KipTransaction {
                     return if if_not_exists {
                         Ok(col.id().unwrap())
                     } else {
-                        Err(DatabaseError::DuplicateColumn)
+                        Err(DatabaseError::DuplicateColumn(column.name().to_string()))
                     };
                 }
             }

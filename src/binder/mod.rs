@@ -16,7 +16,7 @@ mod truncate;
 mod update;
 
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use crate::catalog::{TableCatalog, TableName};
@@ -50,7 +50,8 @@ pub enum QueryBindStep {
 pub struct BinderContext<'a, T: Transaction> {
     functions: &'a Functions,
     pub(crate) transaction: &'a T,
-    pub(crate) bind_table: HashMap<TableName, (&'a TableCatalog, Option<JoinType>)>,
+    // Tips: When there are multiple tables and Wildcard, use BTreeMap to ensure that the order of the output tables is certain.
+    pub(crate) bind_table: BTreeMap<(TableName, Option<JoinType>), &'a TableCatalog>,
     // alias
     expr_aliases: HashMap<String, ScalarExpression>,
     table_aliases: HashMap<String, TableName>,
@@ -62,6 +63,7 @@ pub struct BinderContext<'a, T: Transaction> {
     sub_queries: HashMap<QueryBindStep, Vec<LogicalPlan>>,
 
     temp_table_id: usize,
+    pub(crate) allow_default: bool,
 }
 
 impl<'a, T: Transaction> BinderContext<'a, T> {
@@ -77,6 +79,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             bind_step: QueryBindStep::From,
             sub_queries: Default::default(),
             temp_table_id: 0,
+            allow_default: false,
         }
     }
 
@@ -87,6 +90,10 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
 
     pub fn step(&mut self, bind_step: QueryBindStep) {
         self.bind_step = bind_step;
+    }
+
+    pub fn is_step(&self, bind_step: &QueryBindStep) -> bool {
+        &self.bind_step == bind_step
     }
 
     pub fn sub_query(&mut self, sub_query: LogicalPlan) {
@@ -120,12 +127,8 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
         .ok_or(DatabaseError::TableNotFound)?;
 
-        let old_table = self
-            .bind_table
-            .insert(table_name.clone(), (table, join_type));
-        if matches!(old_table, Some((_, Some(_)))) {
-            return Err(DatabaseError::Duplicated("table", table_name.to_string()));
-        }
+        self.bind_table
+            .insert((table_name.clone(), join_type), table);
 
         Ok(table)
     }

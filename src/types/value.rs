@@ -593,7 +593,7 @@ impl DataValue {
     }
 
     pub fn cast(self, to: &LogicalType) -> Result<DataValue, DatabaseError> {
-        match self {
+        let value = match self {
             DataValue::Null => match to {
                 LogicalType::Invalid => Err(DatabaseError::CastFail),
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -951,7 +951,9 @@ impl DataValue {
                 LogicalType::Tuple => Ok(DataValue::Tuple(values)),
                 _ => Err(DatabaseError::CastFail),
             },
-        }
+        }?;
+        value.check_len(to)?;
+        Ok(value)
     }
 
     pub fn common_prefix_length(&self, target: &DataValue) -> Option<usize> {

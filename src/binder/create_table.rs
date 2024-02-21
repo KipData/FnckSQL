@@ -36,8 +36,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
             let mut set = HashSet::new();
             for col in columns.iter() {
                 let col_name = &col.name.value;
-                if !set.insert(col_name.clone()) {
-                    return Err(DatabaseError::AmbiguousColumn(col_name.to_string()));
+                if !set.insert(col_name) {
+                    return Err(DatabaseError::DuplicateColumn(col_name.clone()));
                 }
                 if !is_valid_identifier(col_name) {
                     return Err(DatabaseError::InvalidColumn(
@@ -122,7 +122,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                             DataValue::clone(&value).cast(&column_desc.column_datatype)?;
                         column_desc.default = Some(Arc::new(cast_value));
                     } else {
-                        unreachable!("'default' only for constant")
+                        return Err(DatabaseError::UnsupportedStmt(
+                            "'default' only for constant".to_string(),
+                        ));
                     }
                 }
                 _ => todo!(),

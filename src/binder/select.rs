@@ -14,7 +14,7 @@ use crate::{
     types::value::DataValue,
 };
 
-use super::{lower_case_name, lower_ident, Binder, QueryBindStep};
+use super::{lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep};
 
 use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
@@ -338,7 +338,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let scan_op = ScanOperator::build(table_name.clone(), table_catalog);
 
         if let Some(TableAlias { name, columns }) = alias {
-            self.register_alias(columns, name.value.to_lowercase(), table_name.clone())?;
+            let alias = lower_ident(name);
+            self.register_alias(columns, alias.clone(), table_name.clone())?;
+
+            return Ok((Arc::new(alias), scan_op));
         }
 
         Ok((table_name, scan_op))
@@ -371,7 +374,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     });
                 }
                 SelectItem::Wildcard(_) => {
-                    for table_name in self.context.bind_table.keys() {
+                    for (table_name, _) in self.context.bind_table.keys() {
                         self.bind_table_column_refs(&mut select_items, table_name.clone())?;
                     }
                 }
@@ -443,19 +446,16 @@ impl<'a, T: Transaction> Binder<'a, T> {
         };
         let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type))?;
         let right_table = Self::unpack_name(right_table, false);
+        let fn_table = |context: &BinderContext<_>, table| {
+            context
+                .table(table)
+                .map(|table| table.schema_ref())
+                .cloned()
+                .ok_or(DatabaseError::TableNotFound)
+        };
 
-        let left_table = self
-            .context
-            .table(left_table)
-            .map(|table| table.schema_ref())
-            .cloned()
-            .ok_or(DatabaseError::TableNotFound)?;
-        let right_table = self
-            .context
-            .table(right_table)
-            .map(|table| table.schema_ref())
-            .cloned()
-            .ok_or(DatabaseError::TableNotFound)?;
+        let left_table = fn_table(&self.context, left_table.clone())?;
+        let right_table = fn_table(&self.context, right_table.clone())?;
 
         let on = match joint_condition {
             Some(constraint) => self.bind_join_constraint(&left_table, &right_table, constraint)?,
@@ -605,7 +605,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let mut left_table_force_nullable = false;
         let mut left_table = None;
 
-        for (table, join_option) in bind_tables.values() {
+        for ((_, join_option), table) in bind_tables {
             if let Some(join_type) = join_option {
                 let (left_force_nullable, right_force_nullable) = joins_nullable(join_type);
                 table_force_nullable.push((table, right_force_nullable));
@@ -671,6 +671,31 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     filter: join_filter,
                 })
             }
+            JoinConstraint::Using(idents) => {
+                let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = vec![];
+                let fn_column = |schema: &Schema, ident: &Ident| {
+                    schema
+                        .iter()
+                        .find(|column| column.name() == lower_ident(ident))
+                        .map(|column| ScalarExpression::ColumnRef(column.clone()))
+                };
+
+                for ident in idents {
+                    if let (Some(left_column), Some(right_column)) = (
+                        fn_column(left_schema, ident),
+                        fn_column(right_schema, ident),
+                    ) {
+                        on_keys.push((left_column, right_column));
+                    } else {
+                        return Err(DatabaseError::InvalidColumn("not found column".to_string()))?;
+                    }
+                }
+                Ok(JoinCondition::On {
+                    on: on_keys,
+                    filter: None,
+                })
+            }
+            JoinConstraint::None => Ok(JoinCondition::None),
             _ => unimplemented!("not supported join constraint {:?}", constraint),
         }
     }
