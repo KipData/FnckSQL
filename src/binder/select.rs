@@ -14,7 +14,7 @@ use crate::{
     types::value::DataValue,
 };
 
-use super::{lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep};
+use super::{lower_case_name, lower_ident, Binder, QueryBindStep};
 
 use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
@@ -26,7 +26,7 @@ use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::operator::union::UnionOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::tuple::{Schema, SchemaRef};
+use crate::types::tuple::Schema;
 use crate::types::LogicalType;
 use itertools::Itertools;
 use sqlparser::ast::{
@@ -148,7 +148,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         };
         let mut left_plan = self.bind_set_expr(left)?;
         let mut right_plan = self.bind_set_expr(right)?;
-        let fn_eq = |left_schema: &SchemaRef, right_schema: &SchemaRef| {
+        let fn_eq = |left_schema: &Schema, right_schema: &Schema| {
             let left_len = left_schema.len();
 
             if left_len != right_schema.len() {
@@ -174,7 +174,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 }
                 Ok(UnionOperator::build(
                     left_schema.clone(),
-                    right_schema.clone(),
                     left_plan,
                     right_plan,
                 ))
@@ -190,8 +189,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     ));
                 }
                 let union_op = Operator::Union(UnionOperator {
-                    left_schema_ref: left_schema.clone(),
-                    right_schema_ref: right_schema.clone(),
+                    schema_ref: left_schema.clone(),
                 });
                 let distinct_exprs = left_schema
                     .iter()
@@ -446,19 +444,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
         };
         let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type))?;
         let right_table = Self::unpack_name(right_table, false);
-        let fn_table = |context: &BinderContext<_>, table| {
-            context
-                .table(table)
-                .map(|table| table.schema_ref())
-                .cloned()
-                .ok_or(DatabaseError::TableNotFound)
-        };
-
-        let left_table = fn_table(&self.context, left_table.clone())?;
-        let right_table = fn_table(&self.context, right_table.clone())?;
 
         let on = match joint_condition {
-            Some(constraint) => self.bind_join_constraint(&left_table, &right_table, constraint)?,
+            Some(constraint) => self.bind_join_constraint(left_table, right_table, constraint)?,
             None => JoinCondition::None,
         };
 
@@ -636,8 +624,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     fn bind_join_constraint(
         &mut self,
-        left_schema: &Schema,
-        right_schema: &Schema,
+        left_table: TableName,
+        right_table: TableName,
         constraint: &JoinConstraint,
     ) -> Result<JoinCondition, DatabaseError> {
         match constraint {
@@ -648,12 +636,21 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let mut filter = vec![];
                 let expr = self.bind_expr(expr)?;
 
+                let left_table = self
+                    .context
+                    .table(left_table)
+                    .ok_or(DatabaseError::TableNotFound)?;
+                let right_table = self
+                    .context
+                    .table(right_table)
+                    .ok_or(DatabaseError::TableNotFound)?;
+
                 Self::extract_join_keys(
                     expr,
                     &mut on_keys,
                     &mut filter,
-                    left_schema,
-                    right_schema,
+                    left_table.schema_ref(),
+                    right_table.schema_ref(),
                 )?;
 
                 // combine multiple filter exprs into one BinaryExpr
@@ -679,11 +676,19 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         .find(|column| column.name() == lower_ident(ident))
                         .map(|column| ScalarExpression::ColumnRef(column.clone()))
                 };
+                let left_table = self
+                    .context
+                    .table(left_table)
+                    .ok_or(DatabaseError::TableNotFound)?;
+                let right_table = self
+                    .context
+                    .table(right_table)
+                    .ok_or(DatabaseError::TableNotFound)?;
 
                 for ident in idents {
                     if let (Some(left_column), Some(right_column)) = (
-                        fn_column(left_schema, ident),
-                        fn_column(right_schema, ident),
+                        fn_column(left_table.schema_ref(), ident),
+                        fn_column(right_table.schema_ref(), ident),
                     ) {
                         on_keys.push((left_column, right_column));
                     } else {

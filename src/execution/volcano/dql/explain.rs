@@ -1,4 +1,3 @@
-use crate::catalog::ColumnCatalog;
 use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::planner::LogicalPlan;
@@ -27,13 +26,8 @@ impl<T: Transaction> ReadExecutor<T> for Explain {
 impl Explain {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute(self) {
-        let schema_ref = Arc::new(vec![Arc::new(ColumnCatalog::new_dummy("PLAN".to_string()))]);
         let values = vec![Arc::new(DataValue::Utf8(Some(self.plan.explain(0))))];
 
-        yield Tuple {
-            id: None,
-            schema_ref,
-            values,
-        };
+        yield Tuple { id: None, values };
     }
 }

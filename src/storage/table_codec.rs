@@ -1,7 +1,7 @@
 use crate::catalog::{ColumnCatalog, TableMeta};
 use crate::errors::DatabaseError;
 use crate::types::index::{Index, IndexId, IndexMeta};
-use crate::types::tuple::{SchemaRef, Tuple, TupleId};
+use crate::types::tuple::{Schema, Tuple, TupleId};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use bytes::Bytes;
@@ -175,10 +175,10 @@ impl TableCodec {
     pub fn decode_tuple(
         table_types: &[LogicalType],
         projections: &[usize],
-        tuple_schema_ref: &SchemaRef,
+        schema: &Schema,
         bytes: &[u8],
     ) -> Tuple {
-        Tuple::deserialize_from(table_types, projections, tuple_schema_ref, bytes)
+        Tuple::deserialize_from(table_types, projections, schema, bytes)
     }
 
     /// Key: {TableName}{INDEX_META_TAG}{BOUND_MIN_TAG}{IndexID}
@@ -315,17 +315,16 @@ mod tests {
 
         let tuple = Tuple {
             id: Some(Arc::new(DataValue::Int32(Some(0)))),
-            schema_ref: table_catalog.schema_ref().clone(),
             values: vec![
                 Arc::new(DataValue::Int32(Some(0))),
                 Arc::new(DataValue::Decimal(Some(Decimal::new(1, 0)))),
             ],
         };
         let (_, bytes) = TableCodec::encode_tuple(&table_catalog.name, &tuple)?;
-        let columns = table_catalog.schema_ref().clone();
+        let schema = table_catalog.schema_ref();
 
         assert_eq!(
-            TableCodec::decode_tuple(&table_catalog.types(), &[0, 1], &columns, &bytes),
+            TableCodec::decode_tuple(&table_catalog.types(), &[0, 1], schema, &bytes),
             tuple
         );
 

@@ -6,13 +6,11 @@ use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::tuple::Tuple;
+use crate::types::tuple::{SchemaRef, Tuple};
 use crate::types::value::ValueRef;
 use ahash::HashMap;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use std::mem;
-use std::sync::Arc;
 
 pub struct HashAggExecutor {
     agg_calls: Vec<ScalarExpression>,
@@ -46,6 +44,8 @@ impl<T: Transaction> ReadExecutor<T> for HashAggExecutor {
 }
 
 pub(crate) struct HashAggStatus {
+    schema_ref: SchemaRef,
+
     agg_calls: Vec<ScalarExpression>,
     groupby_exprs: Vec<ScalarExpression>,
 
@@ -55,10 +55,12 @@ pub(crate) struct HashAggStatus {
 
 impl HashAggStatus {
     pub(crate) fn new(
+        schema_ref: SchemaRef,
         agg_calls: Vec<ScalarExpression>,
         groupby_exprs: Vec<ScalarExpression>,
     ) -> Self {
         HashAggStatus {
+            schema_ref,
             agg_calls,
             groupby_exprs,
             group_columns: vec![],
@@ -84,7 +86,7 @@ impl HashAggStatus {
             .iter()
             .map(|expr| {
                 if let ScalarExpression::AggCall { args, .. } = expr {
-                    args[0].eval(&tuple)
+                    args[0].eval(&tuple, &self.schema_ref)
                 } else {
                     unreachable!()
                 }
@@ -94,7 +96,7 @@ impl HashAggStatus {
         let group_keys: Vec<ValueRef> = self
             .groupby_exprs
             .iter()
-            .map(|expr| expr.eval(&tuple))
+            .map(|expr| expr.eval(&tuple, &self.schema_ref))
             .try_collect()?;
 
         for (acc, value) in self
@@ -111,8 +113,6 @@ impl HashAggStatus {
     }
 
     pub(crate) fn as_tuples(&mut self) -> Result<Vec<Tuple>, DatabaseError> {
-        let group_columns = Arc::new(mem::take(&mut self.group_columns));
-
         self.group_hash_accs
             .drain()
             .map(|(group_keys, accs)| {
@@ -123,11 +123,7 @@ impl HashAggStatus {
                     .chain(group_keys.into_iter().map(Ok))
                     .try_collect()?;
 
-                Ok::<Tuple, DatabaseError>(Tuple {
-                    id: None,
-                    schema_ref: group_columns.clone(),
-                    values,
-                })
+                Ok::<Tuple, DatabaseError>(Tuple { id: None, values })
             })
             .try_collect()
     }
@@ -139,13 +135,14 @@ impl HashAggExecutor {
         let HashAggExecutor {
             agg_calls,
             groupby_exprs,
-            ..
+            mut input,
         } = self;
 
-        let mut agg_status = HashAggStatus::new(agg_calls, groupby_exprs);
+        let mut agg_status =
+            HashAggStatus::new(input.output_schema().clone(), agg_calls, groupby_exprs);
 
         #[for_await]
-        for tuple in build_read(self.input, transaction) {
+        for tuple in build_read(input, transaction) {
             agg_status.update(tuple?)?;
         }
 
@@ -184,18 +181,18 @@ mod test {
         let transaction = storage.transaction().await?;
         let desc = ColumnDesc::new(LogicalType::Integer, false, false, None);
 
-        let t1_columns = vec![
+        let t1_schema = Arc::new(vec![
             Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
             Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
             Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
-        ];
+        ]);
 
         let operator = AggregateOperator {
-            groupby_exprs: vec![ScalarExpression::ColumnRef(t1_columns[0].clone())],
+            groupby_exprs: vec![ScalarExpression::ColumnRef(t1_schema[0].clone())],
             agg_calls: vec![ScalarExpression::AggCall {
                 distinct: false,
                 kind: AggKind::Sum,
-                args: vec![ScalarExpression::ColumnRef(t1_columns[1].clone())],
+                args: vec![ScalarExpression::ColumnRef(t1_schema[1].clone())],
                 ty: LogicalType::Integer,
             }],
             is_distinct: false,
@@ -225,7 +222,7 @@ mod test {
                         Arc::new(DataValue::Int32(Some(3))),
                     ],
                 ],
-                schema_ref: Arc::new(t1_columns),
+                schema_ref: t1_schema.clone(),
             }),
             childrens: vec![],
             physical_option: None,
@@ -236,7 +233,13 @@ mod test {
             try_collect(&mut HashAggExecutor::from((operator, input)).execute(&transaction))
                 .await?;
 
-        println!("hash_agg_test: \n{}", create_table(&tuples));
+        println!(
+            "hash_agg_test: \n{}",
+            create_table(
+                &Arc::new(vec![t1_schema[0].clone(), t1_schema[1].clone()]),
+                &tuples
+            )
+        );
 
         assert_eq!(tuples.len(), 2);
 

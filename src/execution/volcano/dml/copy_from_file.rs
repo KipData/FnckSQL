@@ -95,10 +95,7 @@ impl CopyFromFile {
 }
 
 fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), DatabaseError> {
-    let tuple = TupleBuilder::build_result(
-        "COPY FROM SOURCE".to_string(),
-        format!("import {} rows", size),
-    )?;
+    let tuple = TupleBuilder::build_result(format!("import {} rows", size));
 
     tx.blocking_send(tuple)
         .map_err(|_| DatabaseError::ChannelClose)?;
@@ -190,11 +187,7 @@ mod tests {
             .unwrap()?;
         assert_eq!(
             tuple,
-            TupleBuilder::build_result(
-                "COPY FROM SOURCE".to_string(),
-                format!("import {} rows", 2)
-            )
-            .unwrap()
+            TupleBuilder::build_result(format!("import {} rows", 2))
         );
 
         Ok(())

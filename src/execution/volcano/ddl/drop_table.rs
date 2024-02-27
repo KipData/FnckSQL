@@ -3,6 +3,7 @@ use crate::execution::volcano::{BoxedExecutor, WriteExecutor};
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
+use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
 
 pub struct DropTable {
@@ -28,7 +29,8 @@ impl DropTable {
             table_name,
             if_exists,
         } = self.op;
-
         transaction.drop_table(&table_name, if_exists)?;
+
+        yield TupleBuilder::build_result(format!("{}", table_name));
     }
 }

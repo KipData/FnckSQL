@@ -1,3 +1,4 @@
+use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
@@ -40,7 +41,12 @@ pub struct FunctionSummary {
 }
 
 pub trait ScalarFunctionImpl: Debug + Send + Sync {
-    fn eval(&self, args: &[ScalarExpression], tuple: &Tuple) -> Result<DataValue, DatabaseError>;
+    fn eval(
+        &self,
+        args: &[ScalarExpression],
+        tuple: &Tuple,
+        schema: &[ColumnRef],
+    ) -> Result<DataValue, DatabaseError>;
 
     // TODO: Exploiting monotonicity when optimizing `ScalarFunctionImpl::monotonicity()`
     fn monotonicity(&self) -> Option<FuncMonotonicity>;

@@ -9,7 +9,6 @@ use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
 use futures_async_stream::try_stream;
 use itertools::Itertools;
-use std::sync::Arc;
 
 pub struct SimpleAggExecutor {
     agg_calls: Vec<ScalarExpression>,
@@ -33,25 +32,21 @@ impl<T: Transaction> ReadExecutor<T> for SimpleAggExecutor {
 impl SimpleAggExecutor {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
-        let mut accs = create_accumulators(&self.agg_calls);
-        let mut columns_option = None;
+        let SimpleAggExecutor {
+            agg_calls,
+            mut input,
+        } = self;
+        let mut accs = create_accumulators(&agg_calls);
+        let schema = input.output_schema().clone();
 
         #[for_await]
-        for tuple in build_read(self.input, transaction) {
+        for tuple in build_read(input, transaction) {
             let tuple = tuple?;
 
-            columns_option.get_or_insert_with(|| {
-                self.agg_calls
-                    .iter()
-                    .map(|expr| expr.output_column())
-                    .collect_vec()
-            });
-
-            let values: Vec<ValueRef> = self
-                .agg_calls
+            let values: Vec<ValueRef> = agg_calls
                 .iter()
                 .map(|expr| match expr {
-                    ScalarExpression::AggCall { args, .. } => args[0].eval(&tuple),
+                    ScalarExpression::AggCall { args, .. } => args[0].eval(&tuple, &schema),
                     _ => unreachable!(),
                 })
                 .try_collect()?;
@@ -60,15 +55,8 @@ impl SimpleAggExecutor {
                 acc.update_value(value)?;
             }
         }
+        let values: Vec<ValueRef> = accs.into_iter().map(|acc| acc.evaluate()).try_collect()?;
 
-        if let Some(columns) = columns_option {
-            let values: Vec<ValueRef> = accs.into_iter().map(|acc| acc.evaluate()).try_collect()?;
-
-            yield Tuple {
-                id: None,
-                schema_ref: Arc::new(columns),
-                values,
-            };
-        }
+        yield Tuple { id: None, values };
     }
 }

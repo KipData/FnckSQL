@@ -127,20 +127,10 @@ impl Operator {
                     .collect_vec(),
             ),
             Operator::Sort(_) | Operator::Limit(_) => None,
-            Operator::Values(ValuesOperator { schema_ref, .. }) => Some(
+            Operator::Values(ValuesOperator { schema_ref, .. })
+            | Operator::Union(UnionOperator { schema_ref }) => Some(
                 schema_ref
                     .iter()
-                    .cloned()
-                    .map(ScalarExpression::ColumnRef)
-                    .collect_vec(),
-            ),
-            Operator::Union(UnionOperator {
-                left_schema_ref,
-                right_schema_ref,
-            }) => Some(
-                left_schema_ref
-                    .iter()
-                    .chain(right_schema_ref.iter())
                     .cloned()
                     .map(ScalarExpression::ColumnRef)
                     .collect_vec(),
@@ -203,15 +193,8 @@ impl Operator {
                 .map(|field| &field.expr)
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
-            Operator::Values(ValuesOperator { schema_ref, .. }) => Vec::clone(schema_ref),
-            Operator::Union(UnionOperator {
-                left_schema_ref,
-                right_schema_ref,
-            }) => {
-                let mut schema = Vec::clone(left_schema_ref);
-                schema.extend_from_slice(right_schema_ref.as_slice());
-                schema
-            }
+            Operator::Values(ValuesOperator { schema_ref, .. })
+            | Operator::Union(UnionOperator { schema_ref }) => Vec::clone(schema_ref),
             Operator::Analyze(op) => op.columns.clone(),
             Operator::Delete(op) => vec![op.primary_key_column.clone()],
             Operator::Dummy

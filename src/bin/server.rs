@@ -3,7 +3,7 @@ use clap::Parser;
 use fnck_sql::db::{DBTransaction, DataBaseBuilder, Database};
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::storage::kip::KipStorage;
-use fnck_sql::types::tuple::Tuple;
+use fnck_sql::types::tuple::{Schema, Tuple};
 use fnck_sql::types::LogicalType;
 use futures::stream;
 use log::{error, info, LevelFilter};
@@ -146,28 +146,27 @@ impl SimpleQueryHandler for SessionBackend {
             _ => {
                 let mut guard = self.tx.lock().await;
 
-                let tuples = if let Some(transaction) = guard.as_mut() {
+                let (schema, tuples) = if let Some(transaction) = guard.as_mut() {
                     transaction.run(query).await
                 } else {
                     self.inner.run(query).await
                 }
                 .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
 
-                Ok(vec![Response::Query(encode_tuples(tuples)?)])
+                Ok(vec![Response::Query(encode_tuples(&schema, tuples)?)])
             }
         }
     }
 }
 
-fn encode_tuples<'a>(tuples: Vec<Tuple>) -> PgWireResult<QueryResponse<'a>> {
+fn encode_tuples<'a>(schema: &Schema, tuples: Vec<Tuple>) -> PgWireResult<QueryResponse<'a>> {
     if tuples.is_empty() {
         return Ok(QueryResponse::new(Arc::new(vec![]), stream::empty()));
     }
 
     let mut results = Vec::with_capacity(tuples.len());
     let schema = Arc::new(
-        tuples[0]
-            .schema_ref
+        schema
             .iter()
             .map(|column| {
                 let pg_type = into_pg_type(column.datatype())?;

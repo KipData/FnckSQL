@@ -3,7 +3,7 @@ use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::tuple::Tuple;
+use crate::types::tuple::{Schema, Tuple};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use std::mem;
@@ -34,6 +34,7 @@ pub(crate) fn radix_sort<T>(mut tuples: Vec<(T, Vec<u8>)>) -> Vec<T> {
 }
 
 pub(crate) fn sort(
+    schema: &Schema,
     sort_fields: &[SortField],
     tuples: Vec<Tuple>,
 ) -> Result<Vec<Tuple>, DatabaseError> {
@@ -50,7 +51,7 @@ pub(crate) fn sort(
             {
                 let mut key = Vec::new();
 
-                expr.eval(&tuple)?.memcomparable_encode(&mut key)?;
+                expr.eval(&tuple, schema)?.memcomparable_encode(&mut key)?;
                 key.push(if *nulls_first { u8::MIN } else { u8::MAX });
 
                 if !asc {
@@ -95,15 +96,16 @@ impl Sort {
         let Sort {
             sort_fields,
             limit,
-            input,
+            mut input,
         } = self;
+        let schema = input.output_schema().clone();
         let mut tuples: Vec<Tuple> = vec![];
 
         #[for_await]
         for tuple in build_read(input, transaction) {
             tuples.push(tuple?);
         }
-        let mut tuples = sort(&sort_fields, tuples)?;
+        let mut tuples = sort(&schema, &sort_fields, tuples)?;
         let len = limit.unwrap_or(tuples.len());
 
         for tuple in tuples.drain(..len) {

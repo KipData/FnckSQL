@@ -6,7 +6,6 @@ use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
-use crate::types::tuple_builder::TupleBuilder;
 use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
 use std::collections::HashMap;
@@ -47,35 +46,32 @@ impl Insert {
     pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Insert {
             table_name,
-            input,
+            mut input,
             is_overwrite,
         } = self;
-        let mut primary_key_id = None;
         let mut unique_values = HashMap::new();
         let mut tuple_values = Vec::new();
+        let schema = input.output_schema().clone();
+
+        let pk_index = schema
+            .iter()
+            .find(|col| col.desc.is_primary)
+            .map(|col| col.id())
+            .ok_or_else(|| DatabaseError::NotNull)?;
 
         if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
-            let tuple_schema_ref = table_catalog.schema_ref();
-
             #[for_await]
             for tuple in build_read(input, transaction) {
-                let Tuple {
-                    schema_ref, values, ..
-                } = tuple?;
+                let Tuple { values, .. } = tuple?;
 
-                if primary_key_id.is_none() {
-                    let id = schema_ref
-                        .iter()
-                        .find(|col| col.desc.is_primary)
-                        .map(|col| col.id())
-                        .ok_or_else(|| DatabaseError::NotNull)?;
-                    primary_key_id = Some(id);
-                }
                 let mut tuple_map = HashMap::new();
                 for (i, value) in values.into_iter().enumerate() {
-                    tuple_map.insert(schema_ref[i].id(), value);
+                    tuple_map.insert(schema[i].id(), value);
                 }
-                let tuple_id = tuple_map.get(&primary_key_id.unwrap()).cloned().unwrap();
+                let tuple_id = tuple_map
+                    .get(&pk_index)
+                    .cloned()
+                    .ok_or(DatabaseError::NotNull)?;
                 let mut values = Vec::with_capacity(table_catalog.columns_len());
 
                 for col in table_catalog.columns() {
@@ -97,7 +93,6 @@ impl Insert {
                 }
                 tuple_values.push((tuple_id, values));
             }
-            let tuple_builder = TupleBuilder::new(tuple_schema_ref);
 
             // Unique Index
             for (col_id, values) in unique_values {
@@ -113,9 +108,14 @@ impl Insert {
                 }
             }
             for (tuple_id, values) in tuple_values {
-                let tuple = tuple_builder.build(Some(tuple_id), values)?;
-
-                transaction.append(&table_name, tuple, is_overwrite)?;
+                transaction.append(
+                    &table_name,
+                    Tuple {
+                        id: Some(tuple_id),
+                        values,
+                    },
+                    is_overwrite,
+                )?;
             }
         }
     }

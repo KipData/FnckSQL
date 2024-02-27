@@ -40,13 +40,6 @@ impl Describe {
         let table = transaction
             .table(self.table_name.clone())
             .ok_or(DatabaseError::TableNotFound)?;
-        let columns = Arc::new(vec![
-            Arc::new(ColumnCatalog::new_dummy("FIELD".to_string())),
-            Arc::new(ColumnCatalog::new_dummy("TYPE".to_string())),
-            Arc::new(ColumnCatalog::new_dummy("NULL".to_string())),
-            Arc::new(ColumnCatalog::new_dummy("Key".to_string())),
-            Arc::new(ColumnCatalog::new_dummy("DEFAULT".to_string())),
-        ]);
         let key_fn = |column: &ColumnCatalog| {
             if column.desc.is_primary {
                 PRIMARY_KEY_TYPE.clone()
@@ -67,11 +60,7 @@ impl Describe {
                     .default_value()
                     .unwrap_or_else(|| Arc::new(DataValue::none(column.datatype()))),
             ];
-            yield Tuple {
-                id: None,
-                schema_ref: columns.clone(),
-                values,
-            };
+            yield Tuple { id: None, values };
         }
     }
 }

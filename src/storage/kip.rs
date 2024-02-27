@@ -572,7 +572,6 @@ mod test {
             &"test".to_string(),
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(1)))),
-                schema_ref: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(1))),
                     Arc::new(DataValue::Boolean(Some(true))),
@@ -584,7 +583,6 @@ mod test {
             &"test".to_string(),
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(2)))),
-                schema_ref: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(2))),
                     Arc::new(DataValue::Boolean(Some(false))),

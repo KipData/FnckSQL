@@ -1,4 +1,4 @@
-use crate::catalog::{ColumnCatalog, TableMeta};
+use crate::catalog::TableMeta;
 use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::storage::Transaction;
@@ -25,20 +25,12 @@ impl ShowTables {
             colum_meta_paths: histogram_paths,
         } in metas
         {
-            let schema_ref = Arc::new(vec![
-                Arc::new(ColumnCatalog::new_dummy("TABLE".to_string())),
-                Arc::new(ColumnCatalog::new_dummy("COLUMN_METAS_LEN".to_string())),
-            ]);
             let values = vec![
                 Arc::new(DataValue::Utf8(Some(table_name.to_string()))),
                 Arc::new(DataValue::UInt32(Some(histogram_paths.len() as u32))),
             ];
 
-            yield Tuple {
-                id: None,
-                schema_ref,
-                values,
-            };
+            yield Tuple { id: None, values };
         }
     }
 }

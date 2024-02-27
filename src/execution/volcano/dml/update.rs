@@ -38,9 +38,11 @@ impl Update {
     pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Update {
             table_name,
-            input,
-            values,
+            mut input,
+            mut values,
         } = self;
+        let values_schema = values.output_schema().clone();
+        let input_schema = input.output_schema().clone();
 
         if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
             let mut value_map = HashMap::new();
@@ -49,13 +51,9 @@ impl Update {
             // only once
             #[for_await]
             for tuple in build_read(values, transaction) {
-                let Tuple {
-                    schema_ref: columns,
-                    values,
-                    ..
-                } = tuple?;
-                for i in 0..columns.len() {
-                    value_map.insert(columns[i].id(), values[i].clone());
+                let Tuple { values, .. } = tuple?;
+                for i in 0..values.len() {
+                    value_map.insert(values_schema[i].id(), values[i].clone());
                 }
             }
             #[for_await]
@@ -68,7 +66,7 @@ impl Update {
             for mut tuple in tuples {
                 let mut is_overwrite = true;
 
-                for (i, column) in tuple.schema_ref.iter().enumerate() {
+                for (i, column) in input_schema.iter().enumerate() {
                     if let Some(value) = value_map.get(&column.id()) {
                         if column.desc.is_primary {
                             let old_key = tuple.id.replace(value.clone()).unwrap();

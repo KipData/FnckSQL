@@ -6,7 +6,7 @@ use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::tuple::{SchemaRef, Tuple};
+use crate::types::tuple::{Schema, SchemaRef, Tuple};
 use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
 use ahash::HashMap;
 use futures::stream::BoxStream;
@@ -108,9 +108,11 @@ impl HashJoinStatus {
         let HashJoinStatus {
             on_left_keys,
             build_map,
+            full_schema_ref,
+            left_schema_len,
             ..
         } = self;
-        let values = Self::eval_keys(on_left_keys, &tuple)?;
+        let values = Self::eval_keys(on_left_keys, &tuple, &full_schema_ref[0..*left_schema_len])?;
 
         build_map
             .entry(values)
@@ -132,8 +134,8 @@ impl HashJoinStatus {
             ..
         } = self;
 
-        let right_cols_len = tuple.schema_ref.len();
-        let values = Self::eval_keys(on_right_keys, &tuple)?;
+        let right_cols_len = tuple.values.len();
+        let values = Self::eval_keys(on_right_keys, &tuple, &full_schema_ref[*left_schema_len..])?;
 
         let mut join_tuples = Vec::with_capacity(1);
         if let Some((tuples, is_used)) = build_map.get_mut(&values) {
@@ -148,10 +150,11 @@ impl HashJoinStatus {
                     .collect_vec();
                 let tuple = Tuple {
                     id: None,
-                    schema_ref: full_schema_ref.clone(),
                     values: full_values,
                 };
-                if let Some(tuple) = Self::filter(tuple, filter, ty, *left_schema_len)? {
+                if let Some(tuple) =
+                    Self::filter(tuple, full_schema_ref, filter, ty, *left_schema_len)?
+                {
                     join_tuples.push(tuple);
                 }
             }
@@ -161,12 +164,9 @@ impl HashJoinStatus {
                 .map(|_| NULL_VALUE.clone())
                 .chain(tuple.values)
                 .collect_vec();
-            let tuple = Tuple {
-                id: None,
-                schema_ref: full_schema_ref.clone(),
-                values,
-            };
-            if let Some(tuple) = Self::filter(tuple, filter, ty, *left_schema_len)? {
+            let tuple = Tuple { id: None, values };
+            if let Some(tuple) = Self::filter(tuple, full_schema_ref, filter, ty, *left_schema_len)?
+            {
                 join_tuples.push(tuple);
             }
         }
@@ -176,14 +176,15 @@ impl HashJoinStatus {
 
     pub(crate) fn filter(
         mut tuple: Tuple,
+        schema: &Schema,
         filter: &Option<ScalarExpression>,
         join_ty: &JoinType,
         left_schema_len: usize,
     ) -> Result<Option<Tuple>, DatabaseError> {
         if let (Some(expr), false) = (filter, matches!(join_ty, JoinType::Full | JoinType::Cross)) {
-            match expr.eval(&tuple)?.as_ref() {
+            match expr.eval(&tuple, schema)?.as_ref() {
                 DataValue::Boolean(Some(false) | None) => {
-                    let full_schema_len = tuple.schema_ref.len();
+                    let full_schema_len = schema.len();
 
                     match join_ty {
                         JoinType::Left => {
@@ -222,8 +223,6 @@ impl HashJoinStatus {
                     .filter_map(|(_, (mut left_tuples, is_used))| {
                         if !is_used {
                             for tuple in left_tuples.iter_mut() {
-                                tuple.schema_ref = full_schema_ref.clone();
-
                                 while tuple.values.len() != full_schema_ref.len() {
                                     tuple.values.push(NULL_VALUE.clone());
                                 }
@@ -241,13 +240,13 @@ impl HashJoinStatus {
     fn eval_keys(
         on_keys: &[ScalarExpression],
         tuple: &Tuple,
+        schema: &[ColumnRef],
     ) -> Result<Vec<ValueRef>, DatabaseError> {
         let mut values = Vec::with_capacity(on_keys.len());
 
         for expr in on_keys {
-            values.push(expr.eval(tuple)?);
+            values.push(expr.eval(tuple, schema)?);
         }
-
         Ok(values)
     }
 }
@@ -312,7 +311,6 @@ mod test {
     use crate::planner::LogicalPlan;
     use crate::storage::kip::KipStorage;
     use crate::storage::Storage;
-    use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;
@@ -419,8 +417,6 @@ mod test {
         let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
-        println!("inner_test: \n{}", create_table(&tuples));
-
         assert_eq!(tuples.len(), 3);
 
         assert_eq!(
@@ -455,8 +451,6 @@ mod test {
         };
         let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
-
-        println!("left_test: \n{}", create_table(&tuples));
 
         assert_eq!(tuples.len(), 4);
 
@@ -497,8 +491,6 @@ mod test {
         let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
-        println!("right_test: \n{}", create_table(&tuples));
-
         assert_eq!(tuples.len(), 4);
 
         assert_eq!(
@@ -537,8 +529,6 @@ mod test {
         };
         let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
-
-        println!("full_test: \n{}", create_table(&tuples));
 
         assert_eq!(tuples.len(), 5);
 
