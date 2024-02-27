@@ -263,7 +263,7 @@ impl<S: Storage> DBTransaction<S> {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::db::{DataBaseBuilder, DatabaseError};
     use crate::expression::function::{FuncMonotonicity, FunctionSummary, ScalarFunctionImpl};
     use crate::expression::ScalarExpression;
