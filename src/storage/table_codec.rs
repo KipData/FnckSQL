@@ -2,9 +2,11 @@ use crate::catalog::{ColumnCatalog, TableMeta};
 use crate::errors::DatabaseError;
 use crate::types::index::{Index, IndexId, IndexMeta};
 use crate::types::tuple::{SchemaRef, Tuple, TupleId};
+use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use bytes::Bytes;
 use lazy_static::lazy_static;
+use std::sync::Arc;
 
 const BOUND_MIN_TAG: u8 = 0;
 const BOUND_MAX_TAG: u8 = 1;
@@ -212,14 +214,11 @@ impl TableCodec {
     pub fn encode_index(
         name: &str,
         index: &Index,
-        tuple_ids: &[TupleId],
+        tuple_id: &TupleId,
     ) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = TableCodec::encode_index_key(name, index)?;
 
-        Ok((
-            Bytes::from(key),
-            Bytes::from(bincode::serialize(tuple_ids)?),
-        ))
+        Ok((Bytes::from(key), Bytes::from(tuple_id.to_raw())))
     }
 
     pub fn encode_index_key(name: &str, index: &Index) -> Result<Vec<u8>, DatabaseError> {
@@ -236,8 +235,8 @@ impl TableCodec {
         Ok(key_prefix)
     }
 
-    pub fn decode_index(bytes: &[u8]) -> Result<Vec<TupleId>, DatabaseError> {
-        Ok(bincode::deserialize(bytes)?)
+    pub fn decode_index(bytes: &[u8], primary_key_ty: &LogicalType) -> TupleId {
+        Arc::new(DataValue::from_raw(bytes, primary_key_ty))
     }
 
     /// Key: {TableName}{COLUMN_TAG}{BOUND_MIN_TAG}{ColumnId}
@@ -354,6 +353,7 @@ mod tests {
             id: 0,
             column_ids: vec![0],
             table_name: Arc::new("T1".to_string()),
+            pk_ty: LogicalType::Integer,
             name: "index_1".to_string(),
             is_unique: false,
             is_primary: false,
@@ -373,10 +373,13 @@ mod tests {
             id: 0,
             column_values: vec![Arc::new(DataValue::Int32(Some(0)))],
         };
-        let tuple_ids = vec![Arc::new(DataValue::Int32(Some(0)))];
-        let (_, bytes) = TableCodec::encode_index(&table_catalog.name, &index, &tuple_ids)?;
+        let tuple_id = Arc::new(DataValue::Int32(Some(0)));
+        let (_, bytes) = TableCodec::encode_index(&table_catalog.name, &index, &tuple_id)?;
 
-        assert_eq!(TableCodec::decode_index(&bytes)?, tuple_ids);
+        assert_eq!(
+            TableCodec::decode_index(&bytes, &tuple_id.logical_type()),
+            tuple_id
+        );
 
         Ok(())
     }
@@ -449,6 +452,7 @@ mod tests {
                 id: index_id as u32,
                 column_ids: vec![],
                 table_name: Arc::new(table_name.to_string()),
+                pk_ty: LogicalType::Integer,
                 name: "".to_string(),
                 is_unique: false,
                 is_primary: false,

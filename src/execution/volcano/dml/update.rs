@@ -91,7 +91,7 @@ impl Update {
                                     transaction.add_index(
                                         &table_name,
                                         index,
-                                        vec![tuple.id.clone().unwrap()],
+                                        tuple.id.as_ref().unwrap(),
                                         true,
                                     )?;
                                 }

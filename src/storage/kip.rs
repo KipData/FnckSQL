@@ -141,16 +141,14 @@ impl Transaction for KipTransaction {
         &mut self,
         table_name: &str,
         index: Index,
-        tuple_ids: Vec<TupleId>,
+        tuple_id: &TupleId,
         is_unique: bool,
     ) -> Result<(), DatabaseError> {
-        let (key, value) = TableCodec::encode_index(table_name, &index, &tuple_ids)?;
+        let (key, value) = TableCodec::encode_index(table_name, &index, tuple_id)?;
 
         if let Some(bytes) = self.tx.get(&key)? {
             if is_unique {
-                let old_tuple_ids = TableCodec::decode_index(&bytes)?;
-
-                return if old_tuple_ids[0] != tuple_ids[0] {
+                return if bytes != value {
                     Err(DatabaseError::DuplicateUniqueValue)
                 } else {
                     Ok(())
@@ -224,7 +222,7 @@ impl Transaction for KipTransaction {
                     vec![col_id],
                     true,
                     false,
-                );
+                )?;
                 let (key, value) = TableCodec::encode_index_meta(table_name, meta_ref)?;
                 self.tx.set(key, value);
             }
@@ -471,7 +469,7 @@ impl KipTransaction {
                 vec![col_id],
                 col.desc.is_unique,
                 is_primary,
-            );
+            )?;
             let (key, value) = TableCodec::encode_index_meta(&table_name, meta_ref)?;
             tx.set(key, value);
         }
@@ -640,6 +638,7 @@ mod test {
                 id: 0,
                 column_ids: vec![0],
                 table_name,
+                pk_ty: LogicalType::Integer,
                 name: "pk_a".to_string(),
                 is_unique: false,
                 is_primary: true,

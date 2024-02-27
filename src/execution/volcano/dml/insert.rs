@@ -108,7 +108,7 @@ impl Insert {
                             column_values: vec![value],
                         };
 
-                        transaction.add_index(&table_name, index, vec![tuple_id], true)?;
+                        transaction.add_index(&table_name, index, &tuple_id, true)?;
                     }
                 }
             }

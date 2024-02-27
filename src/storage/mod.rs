@@ -53,7 +53,7 @@ pub trait Transaction: Sync + Send + 'static {
         &mut self,
         table_name: &str,
         index: Index,
-        tuple_ids: Vec<TupleId>,
+        tuple_id: &TupleId,
         is_unique: bool,
     ) -> Result<(), DatabaseError>;
 
@@ -178,7 +178,7 @@ impl Iter for IndexIter<'_> {
             if Self::offset_move(&mut self.offset) {
                 continue;
             }
-            match value {
+            let tuple = match value {
                 IndexValue::PrimaryKey(tuple) => {
                     if let Some(num) = self.limit.as_mut() {
                         num.sub_assign(1);
@@ -187,11 +187,12 @@ impl Iter for IndexIter<'_> {
                     return Ok(Some(tuple));
                 }
                 IndexValue::Normal(tuple_id) => {
-                    if let Some(tuple) = self.get_tuple_by_id(&tuple_id)? {
-                        return Ok(Some(tuple));
-                    }
+                    self.get_tuple_by_id(&tuple_id)?.ok_or_else(|| {
+                        DatabaseError::NotFound("index's tuple_id", tuple_id.to_string())
+                    })?
                 }
-            }
+            };
+            return Ok(Some(tuple));
         }
         assert!(self.index_values.is_empty());
 
@@ -201,7 +202,7 @@ impl Iter for IndexIter<'_> {
             let mut has_next = false;
             while let Some((_, value_option)) = iter.try_next()? {
                 if let Some(value) = value_option {
-                    if self.index_meta.is_primary {
+                    let index = if self.index_meta.is_primary {
                         let tuple = TableCodec::decode_tuple(
                             &self.table.types(),
                             &self.projections,
@@ -209,12 +210,11 @@ impl Iter for IndexIter<'_> {
                             &value,
                         );
 
-                        self.index_values.push_back(IndexValue::PrimaryKey(tuple));
+                        IndexValue::PrimaryKey(tuple)
                     } else {
-                        for tuple_id in TableCodec::decode_index(&value)? {
-                            self.index_values.push_back(IndexValue::Normal(tuple_id));
-                        }
-                    }
+                        IndexValue::Normal(TableCodec::decode_index(&value, &self.index_meta.pk_ty))
+                    };
+                    self.index_values.push_back(index);
                     has_next = true;
                     break;
                 }
@@ -265,10 +265,11 @@ impl Iter for IndexIter<'_> {
                 ConstantBinary::Eq(val) => {
                     let key = self.val_to_key(val)?;
                     if let Some(bytes) = self.tx.get(&key)? {
-                        if self.index_meta.is_unique {
-                            for tuple_id in TableCodec::decode_index(&bytes)? {
-                                self.index_values.push_back(IndexValue::Normal(tuple_id));
-                            }
+                        let index = if self.index_meta.is_unique {
+                            IndexValue::Normal(TableCodec::decode_index(
+                                &bytes,
+                                &self.index_meta.pk_ty,
+                            ))
                         } else if self.index_meta.is_primary {
                             let tuple = TableCodec::decode_tuple(
                                 &self.table.types(),
@@ -277,10 +278,11 @@ impl Iter for IndexIter<'_> {
                                 &bytes,
                             );
 
-                            self.index_values.push_back(IndexValue::PrimaryKey(tuple));
+                            IndexValue::PrimaryKey(tuple)
                         } else {
                             todo!()
-                        }
+                        };
+                        self.index_values.push_back(index);
                     }
                     self.scope_iter = None;
                 }

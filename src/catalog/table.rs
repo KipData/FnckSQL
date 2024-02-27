@@ -115,18 +115,20 @@ impl TableCatalog {
         column_ids: Vec<ColumnId>,
         is_unique: bool,
         is_primary: bool,
-    ) -> &IndexMeta {
+    ) -> Result<&IndexMeta, DatabaseError> {
         let index_id = self.indexes.last().map(|index| index.id + 1).unwrap_or(0);
+        let pk_ty = *self.primary_key()?.1.datatype();
         let index = IndexMeta {
             id: index_id,
             column_ids,
             table_name: self.name.clone(),
+            pk_ty,
             name,
             is_unique,
             is_primary,
         };
         self.indexes.push(Arc::new(index));
-        self.indexes.last().unwrap()
+        Ok(self.indexes.last().unwrap())
     }
 
     pub(crate) fn new(

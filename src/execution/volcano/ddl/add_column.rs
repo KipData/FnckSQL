@@ -78,7 +78,7 @@ impl AddColumn {
                     id: unique_meta.id,
                     column_values: vec![value],
                 };
-                transaction.add_index(table_name, index, vec![tuple_id], true)?;
+                transaction.add_index(table_name, index, &tuple_id, true)?;
             }
         }
 
