@@ -1,6 +1,7 @@
 pub mod operator;
 
 use crate::catalog::{ColumnCatalog, TableName};
+use crate::planner::operator::join::JoinType;
 use crate::planner::operator::union::UnionOperator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::planner::operator::{Operator, PhysicalOption};
@@ -61,7 +62,10 @@ impl LogicalPlan {
                         .collect_vec();
                     Arc::new(out_columns)
                 }
-                Operator::Join(_) => {
+                Operator::Join(op) => {
+                    if matches!(op.join_type, JoinType::LeftSemi | JoinType::LeftAnti) {
+                        return self.childrens[0].output_schema().clone();
+                    }
                     let out_columns = self
                         .childrens
                         .iter_mut()

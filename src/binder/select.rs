@@ -436,8 +436,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         let (join_type, joint_condition) = match join_operator {
             JoinOperator::Inner(constraint) => (JoinType::Inner, Some(constraint)),
-            JoinOperator::LeftOuter(constraint) => (JoinType::Left, Some(constraint)),
-            JoinOperator::RightOuter(constraint) => (JoinType::Right, Some(constraint)),
+            JoinOperator::LeftOuter(constraint) => (JoinType::LeftOuter, Some(constraint)),
+            JoinOperator::RightOuter(constraint) => (JoinType::RightOuter, Some(constraint)),
             JoinOperator::FullOuter(constraint) => (JoinType::Full, Some(constraint)),
             JoinOperator::CrossJoin => (JoinType::Cross, None),
             _ => unimplemented!(),
