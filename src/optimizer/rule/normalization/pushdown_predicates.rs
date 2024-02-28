@@ -111,7 +111,7 @@ impl NormalizationRule for PushPredicateThroughJoin {
         if let Operator::Join(child_op) = graph.operator(child_id) {
             if !matches!(
                 child_op.join_type,
-                JoinType::Inner | JoinType::LeftOuter | JoinType::RightOuter
+                JoinType::Inner | JoinType::LeftOuter | JoinType::LeftSemi | JoinType::LeftAnti | JoinType::RightOuter
             ) {
                 return Ok(());
             }
