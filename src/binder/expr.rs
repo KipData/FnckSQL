@@ -1,17 +1,19 @@
-use crate::catalog::ColumnCatalog;
+use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::errors::DatabaseError;
 use crate::expression;
 use crate::expression::agg::AggKind;
 use itertools::Itertools;
 use sqlparser::ast::{
-    BinaryOperator, DataType, Expr, Function, FunctionArg, FunctionArgExpr, Ident, UnaryOperator,
+    BinaryOperator, DataType, Expr, Function, FunctionArg, FunctionArgExpr, Ident, Query,
+    UnaryOperator,
 };
 use std::slice;
 use std::sync::Arc;
 
-use super::{lower_ident, Binder, QueryBindStep};
+use super::{lower_ident, Binder, QueryBindStep, SubQueryType};
 use crate::expression::function::{FunctionSummary, ScalarFunction};
 use crate::expression::{AliasType, ScalarExpression};
+use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
@@ -99,32 +101,39 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     from_expr,
                 })
             }
-            Expr::Subquery(query) => {
-                let mut sub_query = self.bind_query(query)?;
-                let sub_query_schema = sub_query.output_schema();
-
-                if sub_query_schema.len() != 1 {
-                    return Err(DatabaseError::MisMatch(
-                        "expects only one expression to be returned",
-                        "the expression returned by the subquery",
-                    ));
-                }
-                let column = sub_query_schema[0].clone();
-                self.context.sub_query(sub_query);
+            Expr::Subquery(subquery) => {
+                let (sub_query, column) = self.bind_subquery(subquery)?;
+                self.context.sub_query(SubQueryType::SubQuery(sub_query));
 
                 if self.context.is_step(&QueryBindStep::Where) {
-                    let mut alias_column = ColumnCatalog::clone(&column);
-                    alias_column.set_table_name(self.context.temp_table());
-
-                    Ok(ScalarExpression::Alias {
-                        expr: Box::new(ScalarExpression::ColumnRef(column)),
-                        alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
-                            alias_column,
-                        )))),
-                    })
+                    Ok(self.bind_temp_column(column))
                 } else {
                     Ok(ScalarExpression::ColumnRef(column))
                 }
+            }
+            Expr::InSubquery {
+                expr,
+                subquery,
+                negated,
+            } => {
+                let (sub_query, column) = self.bind_subquery(subquery)?;
+                self.context
+                    .sub_query(SubQueryType::InSubQuery(*negated, sub_query));
+
+                if !self.context.is_step(&QueryBindStep::Where) {
+                    return Err(DatabaseError::UnsupportedStmt(
+                        "`in subquery` can only appear in `Where`".to_string(),
+                    ));
+                }
+
+                let alias_expr = self.bind_temp_column(column);
+
+                Ok(ScalarExpression::Binary {
+                    op: expression::BinaryOperator::Eq,
+                    left_expr: Box::new(self.bind_expr(expr)?),
+                    right_expr: Box::new(alias_expr),
+                    ty: LogicalType::Boolean,
+                })
             }
             Expr::Tuple(exprs) => {
                 let mut bond_exprs = Vec::with_capacity(exprs.len());
@@ -185,6 +194,35 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 todo!("{}", expr)
             }
         }
+    }
+
+    fn bind_temp_column(&mut self, column: ColumnRef) -> ScalarExpression {
+        let mut alias_column = ColumnCatalog::clone(&column);
+        alias_column.set_table_name(self.context.temp_table());
+
+        ScalarExpression::Alias {
+            expr: Box::new(ScalarExpression::ColumnRef(column)),
+            alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
+                alias_column,
+            )))),
+        }
+    }
+
+    fn bind_subquery(
+        &mut self,
+        subquery: &Query,
+    ) -> Result<(LogicalPlan, Arc<ColumnCatalog>), DatabaseError> {
+        let mut sub_query = self.bind_query(subquery)?;
+        let sub_query_schema = sub_query.output_schema();
+
+        if sub_query_schema.len() != 1 {
+            return Err(DatabaseError::MisMatch(
+                "expects only one expression to be returned",
+                "the expression returned by the subquery",
+            ));
+        }
+        let column = sub_query_schema[0].clone();
+        Ok((sub_query, column))
     }
 
     pub fn bind_like(

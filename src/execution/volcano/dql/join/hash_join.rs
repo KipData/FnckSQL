@@ -123,6 +123,7 @@ impl HashJoinStatus {
     }
 
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
+    #[allow(unused_assignments)]
     pub(crate) async fn right_probe(&mut self, tuple: Tuple) {
         let HashJoinStatus {
             on_right_keys,
@@ -138,18 +139,19 @@ impl HashJoinStatus {
         let values = Self::eval_keys(on_right_keys, &tuple, &full_schema_ref[*left_schema_len..])?;
 
         if let Some((tuples, is_used, is_filtered)) = build_map.get_mut(&values) {
-            if *ty == JoinType::LeftAnti {
-                *is_used = true;
-                return Ok(());
-            }
             let mut bits_option = None;
+            *is_used = true;
 
-            if *ty != JoinType::LeftSemi {
-                *is_used = true;
-            } else if *is_filtered {
-                return Ok(());
-            } else {
-                bits_option = Some(BitVector::new(tuples.len()));
+            match ty {
+                JoinType::LeftSemi => {
+                    if *is_filtered {
+                        return Ok(());
+                    } else {
+                        bits_option = Some(BitVector::new(tuples.len()));
+                    }
+                }
+                JoinType::LeftAnti => return Ok(()),
+                _ => (),
             }
             for (i, Tuple { values, .. }) in tuples.iter().enumerate() {
                 let full_values = values
@@ -279,7 +281,12 @@ impl HashJoinStatus {
         join_ty: &'a JoinType,
         left_schema_len: usize,
     ) {
-        for (_, (left_tuples, is_used, is_filtered)) in build_map.drain() {
+        let is_left_semi = matches!(join_ty, JoinType::LeftSemi);
+
+        for (_, (left_tuples, mut is_used, is_filtered)) in build_map.drain() {
+            if is_left_semi {
+                is_used = !is_used;
+            }
             if is_used {
                 continue;
             }
@@ -541,7 +548,7 @@ mod test {
             executor.ty = JoinType::LeftSemi;
             let mut tuples = try_collect(&mut executor.execute(&transaction)).await?;
 
-            assert_eq!(tuples.len(), 3);
+            assert_eq!(tuples.len(), 2);
             tuples.sort_by_key(|tuple| {
                 let mut bytes = Vec::new();
                 tuple.values[0].memcomparable_encode(&mut bytes).unwrap();
@@ -555,10 +562,6 @@ mod test {
             assert_eq!(
                 tuples[1].values,
                 build_integers(vec![Some(1), Some(3), Some(5)])
-            );
-            assert_eq!(
-                tuples[2].values,
-                build_integers(vec![Some(3), Some(5), Some(7)])
             );
         }
         // Anti

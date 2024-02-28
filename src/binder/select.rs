@@ -14,7 +14,7 @@ use crate::{
     types::value::DataValue,
 };
 
-use super::{lower_case_name, lower_ident, Binder, QueryBindStep};
+use super::{lower_case_name, lower_ident, Binder, QueryBindStep, SubQueryType};
 
 use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
@@ -37,6 +37,8 @@ use sqlparser::ast::{
 
 impl<'a, T: Transaction> Binder<'a, T> {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, DatabaseError> {
+        let origin_step = self.context.step_now();
+
         if let Some(_with) = &query.with {
             // TODO support with clause.
         }
@@ -60,6 +62,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             plan = self.bind_limit(plan, limit, offset)?;
         }
 
+        self.context.step(origin_step);
         Ok(plan)
     }
 
@@ -463,16 +466,28 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let predicate = self.bind_expr(predicate)?;
 
         if let Some(sub_queries) = self.context.sub_queries_at_now() {
-            for mut sub_query in sub_queries {
+            for sub_query in sub_queries {
                 let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = vec![];
                 let mut filter = vec![];
+
+                let (mut plan, join_ty) = match sub_query {
+                    SubQueryType::SubQuery(plan) => (plan, JoinType::Inner),
+                    SubQueryType::InSubQuery(is_not, plan) => {
+                        let join_ty = if is_not {
+                            JoinType::LeftAnti
+                        } else {
+                            JoinType::LeftSemi
+                        };
+                        (plan, join_ty)
+                    }
+                };
 
                 Self::extract_join_keys(
                     predicate.clone(),
                     &mut on_keys,
                     &mut filter,
                     children.output_schema(),
-                    sub_query.output_schema(),
+                    plan.output_schema(),
                 )?;
 
                 // combine multiple filter exprs into one BinaryExpr
@@ -487,12 +502,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 children = LJoinOperator::build(
                     children,
-                    sub_query,
+                    plan,
                     JoinCondition::On {
                         on: on_keys,
                         filter: join_filter,
                     },
-                    JoinType::Inner,
+                    join_ty,
                 );
             }
             return Ok(children);
@@ -731,7 +746,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 fn_contains(left_schema, summary) || fn_contains(right_schema, summary)
             };
 
-        match expr {
+        match expr.unpack_alias() {
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
@@ -740,7 +755,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             } => {
                 match op {
                     BinaryOperator::Eq => {
-                        match (left_expr.as_ref(), right_expr.as_ref()) {
+                        match (left_expr.unpack_alias_ref(), right_expr.unpack_alias_ref()) {
                             // example: foo = bar
                             (ScalarExpression::ColumnRef(l), ScalarExpression::ColumnRef(r)) => {
                                 // reorder left and right joins keys to pattern: (left, right)
@@ -824,7 +839,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     }
                 }
             }
-            _ => {
+            expr => {
                 if expr
                     .referenced_columns(true)
                     .iter()

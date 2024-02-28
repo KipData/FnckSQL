@@ -44,5 +44,15 @@ select * from t1 where a <= (select 4) and (-a + 1) < (select 1) - 1
 ----
 1 3 4
 
+query III
+select * from t1 where a in (select 1)
+----
+0 1 2
+
+query III
+select * from t1 where a not in (select 1)
+----
+1 3 4
+
 statement ok
 drop table t1;

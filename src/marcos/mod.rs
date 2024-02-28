@@ -84,7 +84,7 @@ macro_rules! function {
 
                 Arc::new(Self {
                     summary: FunctionSummary {
-                        name: function_name.to_string(),
+                        name: function_name,
                         arg_types
                     }
                 })
