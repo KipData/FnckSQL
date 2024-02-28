@@ -144,7 +144,7 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - [x] Distinct
   - [x] Alias
   - [x] Aggregation: count()/sum()/avg()/min()/max()
-  - [x] SubQuery(from)
+  - [x] SubQuery[select/from/where]
   - [x] Join: Inner/Left/Right/Full Cross(x)
   - [x] Group By
   - [x] Having
