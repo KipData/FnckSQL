@@ -31,7 +31,7 @@ impl DropColumn {
             table_name,
             column_name,
             if_exists,
-        } = &self.op;
+        } = self.op;
         let tuple_columns = self.input.output_schema();
 
         if let Some((column_index, is_primary)) = tuple_columns
@@ -55,15 +55,15 @@ impl DropColumn {
                 tuples.push(tuple);
             }
             for tuple in tuples {
-                transaction.append(table_name, tuple, true)?;
+                transaction.append(&table_name, tuple, true)?;
             }
-            transaction.drop_column(table_name, column_name, *if_exists)?;
+            transaction.drop_column(&table_name, &column_name)?;
 
             yield TupleBuilder::build_result("1".to_string());
-        } else if *if_exists {
+        } else if if_exists {
             return Ok(());
         } else {
-            return Err(DatabaseError::ColumnsEmpty);
+            return Err(DatabaseError::NotFound("drop column", column_name));
         }
     }
 }

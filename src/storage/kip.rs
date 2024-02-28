@@ -13,7 +13,6 @@ use kip_db::kernel::lsm::mvcc::{CheckType, TransactionIter};
 use kip_db::kernel::lsm::storage::Config;
 use kip_db::kernel::lsm::{mvcc, storage};
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
-use kip_db::KernelError;
 use std::collections::hash_map::RandomState;
 use std::collections::{Bound, VecDeque};
 use std::ops::SubAssign;
@@ -242,10 +241,12 @@ impl Transaction for KipTransaction {
         &mut self,
         table_name: &TableName,
         column_name: &str,
-        if_exists: bool,
     ) -> Result<(), DatabaseError> {
         if let Some(catalog) = self.table(table_name.clone()).cloned() {
             let column = catalog.get_column_by_name(column_name).unwrap();
+
+            let (key, _) = TableCodec::encode_column(table_name, column)?;
+            self.tx.remove(&key)?;
 
             if let Some(index_meta) = catalog.get_unique_index(&column.id().unwrap()) {
                 let (index_meta_key, _) = TableCodec::encode_index_meta(table_name, index_meta)?;
@@ -254,17 +255,7 @@ impl Transaction for KipTransaction {
                 let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id);
                 Self::_drop_data(&mut self.tx, &index_min, &index_max)?;
             }
-            let (key, _) = TableCodec::encode_column(table_name, column)?;
 
-            match self.tx.remove(&key) {
-                Ok(_) => (),
-                Err(KernelError::KeyNotFound) => {
-                    if !if_exists {
-                        Err(KernelError::KeyNotFound)?;
-                    }
-                }
-                err => err?,
-            }
             self.table_cache.remove(table_name);
 
             Ok(())
