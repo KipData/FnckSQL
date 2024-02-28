@@ -24,11 +24,11 @@
 #[macro_export]
 macro_rules! implement_from_tuple {
     ($struct_name:ident, ($($field_name:ident : $field_type:ty => $closure:expr),+)) => {
-        impl From<Tuple> for $struct_name {
-            fn from(tuple: Tuple) -> Self {
-                fn try_get<T: 'static>(tuple: &Tuple, field_name: &str) -> Option<DataValue> {
+        impl From<(&SchemaRef, Tuple)> for $struct_name {
+            fn from((schema, tuple): (&SchemaRef, Tuple)) -> Self {
+                fn try_get<T: 'static>(tuple: &Tuple, schema: &SchemaRef, field_name: &str) -> Option<DataValue> {
                     let ty = LogicalType::type_trans::<T>()?;
-                    let (idx, _) = tuple.schema_ref
+                    let (idx, _) = schema
                         .iter()
                         .enumerate()
                         .find(|(_, col)| col.name() == field_name)?;
@@ -40,7 +40,7 @@ macro_rules! implement_from_tuple {
 
                 let mut struct_instance = $struct_name::default();
                 $(
-                    if let Some(value) = try_get::<$field_type>(&tuple, stringify!($field_name)) {
+                    if let Some(value) = try_get::<$field_type>(&tuple, schema, stringify!($field_name)) {
                         $closure(
                             &mut struct_instance,
                             value
@@ -84,7 +84,7 @@ macro_rules! function {
 
                 Arc::new(Self {
                     summary: FunctionSummary {
-                        name: function_name.to_string(),
+                        name: function_name,
                         arg_types
                     }
                 })
@@ -92,11 +92,11 @@ macro_rules! function {
         }
 
         impl ScalarFunctionImpl for $struct_name {
-            fn eval(&self, args: &[ScalarExpression], tuple: &Tuple) -> Result<DataValue, DatabaseError> {
+            fn eval(&self, args: &[ScalarExpression], tuple: &Tuple, schema: &[ColumnRef]) -> Result<DataValue, DatabaseError> {
                 let mut _index = 0;
 
                 $closure($({
-                    let mut value = args[_index].eval(tuple)?;
+                    let mut value = args[_index].eval(tuple, schema)?;
                     _index += 1;
 
                     if value.logical_type() != $arg_ty {
@@ -123,18 +123,19 @@ macro_rules! function {
 
 #[cfg(test)]
 mod test {
+    use crate::catalog::ColumnRef;
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::errors::DatabaseError;
     use crate::expression::function::{FuncMonotonicity, FunctionSummary, ScalarFunctionImpl};
     use crate::expression::BinaryOperator;
     use crate::expression::ScalarExpression;
-    use crate::types::tuple::Tuple;
+    use crate::types::tuple::{SchemaRef, Tuple};
     use crate::types::value::{DataValue, ValueRef};
     use crate::types::LogicalType;
     use std::sync::Arc;
 
-    fn build_tuple() -> Tuple {
-        let columns = Arc::new(vec![
+    fn build_tuple() -> (Tuple, SchemaRef) {
+        let schema_ref = Arc::new(vec![
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
@@ -151,11 +152,7 @@ mod test {
             Arc::new(DataValue::Utf8(Some("LOL".to_string()))),
         ];
 
-        Tuple {
-            id: None,
-            schema_ref: columns,
-            values,
-        }
+        (Tuple { id: None, values }, schema_ref)
     }
 
     #[derive(Default, Debug, PartialEq)]
@@ -181,7 +178,8 @@ mod test {
 
     #[test]
     fn test_from_tuple() {
-        let my_struct = MyStruct::from(build_tuple());
+        let (tuple, schema_ref) = build_tuple();
+        let my_struct = MyStruct::from((&schema_ref, tuple));
 
         println!("{:?}", my_struct);
 
@@ -203,9 +201,9 @@ mod test {
             ],
             &Tuple {
                 id: None,
-                schema_ref: Arc::new(vec![]),
                 values: vec![],
             },
+            &vec![],
         )?;
 
         println!("{:?}", function);

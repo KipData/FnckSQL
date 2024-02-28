@@ -24,14 +24,10 @@ impl<T: Transaction> ReadExecutor<T> for Values {
 impl Values {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute(self) {
-        let ValuesOperator { schema_ref, rows } = self.op;
+        let ValuesOperator { rows, .. } = self.op;
 
         for values in rows {
-            yield Tuple {
-                id: None,
-                schema_ref: schema_ref.clone(),
-                values,
-            };
+            yield Tuple { id: None, values };
         }
     }
 }

@@ -13,7 +13,6 @@ use kip_db::kernel::lsm::mvcc::{CheckType, TransactionIter};
 use kip_db::kernel::lsm::storage::Config;
 use kip_db::kernel::lsm::{mvcc, storage};
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
-use kip_db::KernelError;
 use std::collections::hash_map::RandomState;
 use std::collections::{Bound, VecDeque};
 use std::ops::SubAssign;
@@ -141,16 +140,14 @@ impl Transaction for KipTransaction {
         &mut self,
         table_name: &str,
         index: Index,
-        tuple_ids: Vec<TupleId>,
+        tuple_id: &TupleId,
         is_unique: bool,
     ) -> Result<(), DatabaseError> {
-        let (key, value) = TableCodec::encode_index(table_name, &index, &tuple_ids)?;
+        let (key, value) = TableCodec::encode_index(table_name, &index, tuple_id)?;
 
         if let Some(bytes) = self.tx.get(&key)? {
             if is_unique {
-                let old_tuple_ids = TableCodec::decode_index(&bytes)?;
-
-                return if old_tuple_ids[0] != tuple_ids[0] {
+                return if bytes != value {
                     Err(DatabaseError::DuplicateUniqueValue)
                 } else {
                     Ok(())
@@ -224,7 +221,7 @@ impl Transaction for KipTransaction {
                     vec![col_id],
                     true,
                     false,
-                );
+                )?;
                 let (key, value) = TableCodec::encode_index_meta(table_name, meta_ref)?;
                 self.tx.set(key, value);
             }
@@ -244,10 +241,12 @@ impl Transaction for KipTransaction {
         &mut self,
         table_name: &TableName,
         column_name: &str,
-        if_exists: bool,
     ) -> Result<(), DatabaseError> {
         if let Some(catalog) = self.table(table_name.clone()).cloned() {
             let column = catalog.get_column_by_name(column_name).unwrap();
+
+            let (key, _) = TableCodec::encode_column(table_name, column)?;
+            self.tx.remove(&key)?;
 
             if let Some(index_meta) = catalog.get_unique_index(&column.id().unwrap()) {
                 let (index_meta_key, _) = TableCodec::encode_index_meta(table_name, index_meta)?;
@@ -256,17 +255,7 @@ impl Transaction for KipTransaction {
                 let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id);
                 Self::_drop_data(&mut self.tx, &index_min, &index_max)?;
             }
-            let (key, _) = TableCodec::encode_column(table_name, column)?;
 
-            match self.tx.remove(&key) {
-                Ok(_) => (),
-                Err(KernelError::KeyNotFound) => {
-                    if !if_exists {
-                        Err(KernelError::KeyNotFound)?;
-                    }
-                }
-                err => err?,
-            }
             self.table_cache.remove(table_name);
 
             Ok(())
@@ -471,7 +460,7 @@ impl KipTransaction {
                 vec![col_id],
                 col.desc.is_unique,
                 is_primary,
-            );
+            )?;
             let (key, value) = TableCodec::encode_index_meta(&table_name, meta_ref)?;
             tx.set(key, value);
         }
@@ -574,7 +563,6 @@ mod test {
             &"test".to_string(),
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(1)))),
-                schema_ref: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(1))),
                     Arc::new(DataValue::Boolean(Some(true))),
@@ -586,7 +574,6 @@ mod test {
             &"test".to_string(),
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(2)))),
-                schema_ref: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(2))),
                     Arc::new(DataValue::Boolean(Some(false))),
@@ -640,6 +627,7 @@ mod test {
                 id: 0,
                 column_ids: vec![0],
                 table_name,
+                pk_ty: LogicalType::Integer,
                 name: "pk_a".to_string(),
                 is_unique: false,
                 is_primary: true,

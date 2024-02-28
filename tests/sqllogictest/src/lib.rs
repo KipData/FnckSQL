@@ -15,7 +15,7 @@ impl AsyncDB for SQLBase {
 
     async fn run(&mut self, sql: &str) -> Result<DBOutput<Self::ColumnType>, Self::Error> {
         let start = Instant::now();
-        let tuples = self.db.run(sql).await?;
+        let (schema, tuples) = self.db.run(sql).await?;
         println!("|— Input SQL: {}", sql);
         println!(" |— time spent: {:?}", start.elapsed());
 
@@ -23,7 +23,7 @@ impl AsyncDB for SQLBase {
             return Ok(DBOutput::StatementComplete(0));
         }
 
-        let types = vec![DefaultColumnType::Any; tuples[0].schema_ref.len()];
+        let types = vec![DefaultColumnType::Any; schema.len()];
         let rows = tuples
             .into_iter()
             .map(|tuple| {

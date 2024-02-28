@@ -3,7 +3,6 @@ use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
-use std::sync::Arc;
 
 pub struct Dummy {}
 
@@ -18,7 +17,6 @@ impl Dummy {
     pub async fn _execute(self) {
         yield Tuple {
             id: None,
-            schema_ref: Arc::new(vec![]),
             values: vec![],
         }
     }

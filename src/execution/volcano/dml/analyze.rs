@@ -1,4 +1,4 @@
-use crate::catalog::{ColumnCatalog, ColumnRef, TableMeta, TableName};
+use crate::catalog::{ColumnRef, TableMeta, TableName};
 use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::optimizer::core::column_meta::ColumnMeta;
@@ -54,10 +54,11 @@ impl Analyze {
     pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
         let Analyze {
             table_name,
-            input,
+            mut input,
             columns,
         } = self;
 
+        let schema = input.output_schema().clone();
         let mut builders = HashMap::with_capacity(columns.len());
 
         for column in &columns {
@@ -66,11 +67,9 @@ impl Analyze {
 
         #[for_await]
         for tuple in build_read(input, transaction) {
-            let Tuple {
-                schema_ref, values, ..
-            } = tuple?;
+            let Tuple { values, .. } = tuple?;
 
-            for (i, column) in schema_ref.iter().enumerate() {
+            for (i, column) in schema.iter().enumerate() {
                 if !column.desc.is_index() {
                     continue;
                 }
@@ -103,20 +102,13 @@ impl Analyze {
         }
         transaction.save_table_meta(&meta)?;
 
-        let columns: Vec<ColumnRef> = vec![Arc::new(ColumnCatalog::new_dummy(
-            "COLUMN_META_PATH".to_string(),
-        ))];
         let values = meta
             .colum_meta_paths
             .into_iter()
             .map(|path| Arc::new(DataValue::Utf8(Some(path))))
             .collect_vec();
 
-        yield Tuple {
-            id: None,
-            schema_ref: Arc::new(columns),
-            values,
-        };
+        yield Tuple { id: None, values };
     }
 }
 

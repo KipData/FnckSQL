@@ -27,13 +27,17 @@ impl<T: Transaction> ReadExecutor<T> for Filter {
 impl Filter {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
-        let Filter { predicate, input } = self;
+        let Filter {
+            predicate,
+            mut input,
+        } = self;
+        let schema = input.output_schema().clone();
 
         #[for_await]
         for tuple in build_read(input, transaction) {
             let tuple = tuple?;
 
-            if predicate.eval(&tuple)?.is_true()? {
+            if predicate.eval(&tuple, &schema)?.is_true()? {
                 yield tuple;
             }
         }

@@ -14,7 +14,7 @@ use crate::{
     types::value::DataValue,
 };
 
-use super::{lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep};
+use super::{lower_case_name, lower_ident, Binder, QueryBindStep, SubQueryType};
 
 use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
@@ -26,7 +26,7 @@ use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::operator::union::UnionOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::tuple::{Schema, SchemaRef};
+use crate::types::tuple::Schema;
 use crate::types::LogicalType;
 use itertools::Itertools;
 use sqlparser::ast::{
@@ -37,6 +37,8 @@ use sqlparser::ast::{
 
 impl<'a, T: Transaction> Binder<'a, T> {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, DatabaseError> {
+        let origin_step = self.context.step_now();
+
         if let Some(_with) = &query.with {
             // TODO support with clause.
         }
@@ -60,6 +62,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             plan = self.bind_limit(plan, limit, offset)?;
         }
 
+        self.context.step(origin_step);
         Ok(plan)
     }
 
@@ -148,7 +151,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         };
         let mut left_plan = self.bind_set_expr(left)?;
         let mut right_plan = self.bind_set_expr(right)?;
-        let fn_eq = |left_schema: &SchemaRef, right_schema: &SchemaRef| {
+        let fn_eq = |left_schema: &Schema, right_schema: &Schema| {
             let left_len = left_schema.len();
 
             if left_len != right_schema.len() {
@@ -174,7 +177,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 }
                 Ok(UnionOperator::build(
                     left_schema.clone(),
-                    right_schema.clone(),
                     left_plan,
                     right_plan,
                 ))
@@ -190,8 +192,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     ));
                 }
                 let union_op = Operator::Union(UnionOperator {
-                    left_schema_ref: left_schema.clone(),
-                    right_schema_ref: right_schema.clone(),
+                    schema_ref: left_schema.clone(),
                 });
                 let distinct_exprs = left_schema
                     .iter()
@@ -438,27 +439,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
         let (join_type, joint_condition) = match join_operator {
             JoinOperator::Inner(constraint) => (JoinType::Inner, Some(constraint)),
-            JoinOperator::LeftOuter(constraint) => (JoinType::Left, Some(constraint)),
-            JoinOperator::RightOuter(constraint) => (JoinType::Right, Some(constraint)),
+            JoinOperator::LeftOuter(constraint) => (JoinType::LeftOuter, Some(constraint)),
+            JoinOperator::RightOuter(constraint) => (JoinType::RightOuter, Some(constraint)),
             JoinOperator::FullOuter(constraint) => (JoinType::Full, Some(constraint)),
             JoinOperator::CrossJoin => (JoinType::Cross, None),
             _ => unimplemented!(),
         };
         let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type))?;
         let right_table = Self::unpack_name(right_table, false);
-        let fn_table = |context: &BinderContext<_>, table| {
-            context
-                .table(table)
-                .map(|table| table.schema_ref())
-                .cloned()
-                .ok_or(DatabaseError::TableNotFound)
-        };
-
-        let left_table = fn_table(&self.context, left_table.clone())?;
-        let right_table = fn_table(&self.context, right_table.clone())?;
 
         let on = match joint_condition {
-            Some(constraint) => self.bind_join_constraint(&left_table, &right_table, constraint)?,
+            Some(constraint) => self.bind_join_constraint(left_table, right_table, constraint)?,
             None => JoinCondition::None,
         };
 
@@ -475,16 +466,28 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let predicate = self.bind_expr(predicate)?;
 
         if let Some(sub_queries) = self.context.sub_queries_at_now() {
-            for mut sub_query in sub_queries {
+            for sub_query in sub_queries {
                 let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = vec![];
                 let mut filter = vec![];
+
+                let (mut plan, join_ty) = match sub_query {
+                    SubQueryType::SubQuery(plan) => (plan, JoinType::Inner),
+                    SubQueryType::InSubQuery(is_not, plan) => {
+                        let join_ty = if is_not {
+                            JoinType::LeftAnti
+                        } else {
+                            JoinType::LeftSemi
+                        };
+                        (plan, join_ty)
+                    }
+                };
 
                 Self::extract_join_keys(
                     predicate.clone(),
                     &mut on_keys,
                     &mut filter,
                     children.output_schema(),
-                    sub_query.output_schema(),
+                    plan.output_schema(),
                 )?;
 
                 // combine multiple filter exprs into one BinaryExpr
@@ -499,12 +502,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 children = LJoinOperator::build(
                     children,
-                    sub_query,
+                    plan,
                     JoinCondition::On {
                         on: on_keys,
                         filter: join_filter,
                     },
-                    JoinType::Inner,
+                    join_ty,
                 );
             }
             return Ok(children);
@@ -636,8 +639,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     fn bind_join_constraint(
         &mut self,
-        left_schema: &Schema,
-        right_schema: &Schema,
+        left_table: TableName,
+        right_table: TableName,
         constraint: &JoinConstraint,
     ) -> Result<JoinCondition, DatabaseError> {
         match constraint {
@@ -648,12 +651,21 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let mut filter = vec![];
                 let expr = self.bind_expr(expr)?;
 
+                let left_table = self
+                    .context
+                    .table(left_table)
+                    .ok_or(DatabaseError::TableNotFound)?;
+                let right_table = self
+                    .context
+                    .table(right_table)
+                    .ok_or(DatabaseError::TableNotFound)?;
+
                 Self::extract_join_keys(
                     expr,
                     &mut on_keys,
                     &mut filter,
-                    left_schema,
-                    right_schema,
+                    left_table.schema_ref(),
+                    right_table.schema_ref(),
                 )?;
 
                 // combine multiple filter exprs into one BinaryExpr
@@ -679,11 +691,19 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         .find(|column| column.name() == lower_ident(ident))
                         .map(|column| ScalarExpression::ColumnRef(column.clone()))
                 };
+                let left_table = self
+                    .context
+                    .table(left_table)
+                    .ok_or(DatabaseError::TableNotFound)?;
+                let right_table = self
+                    .context
+                    .table(right_table)
+                    .ok_or(DatabaseError::TableNotFound)?;
 
                 for ident in idents {
                     if let (Some(left_column), Some(right_column)) = (
-                        fn_column(left_schema, ident),
-                        fn_column(right_schema, ident),
+                        fn_column(left_table.schema_ref(), ident),
+                        fn_column(right_table.schema_ref(), ident),
                     ) {
                         on_keys.push((left_column, right_column));
                     } else {
@@ -726,7 +746,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 fn_contains(left_schema, summary) || fn_contains(right_schema, summary)
             };
 
-        match expr {
+        match expr.unpack_alias() {
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
@@ -735,7 +755,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             } => {
                 match op {
                     BinaryOperator::Eq => {
-                        match (left_expr.as_ref(), right_expr.as_ref()) {
+                        match (left_expr.unpack_alias_ref(), right_expr.unpack_alias_ref()) {
                             // example: foo = bar
                             (ScalarExpression::ColumnRef(l), ScalarExpression::ColumnRef(r)) => {
                                 // reorder left and right joins keys to pattern: (left, right)
@@ -819,7 +839,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     }
                 }
             }
-            _ => {
+            expr => {
                 if expr
                     .referenced_columns(true)
                     .iter()

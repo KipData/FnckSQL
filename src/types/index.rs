@@ -1,7 +1,7 @@
 use crate::catalog::TableName;
 use crate::expression::simplify::ConstantBinary;
 use crate::types::value::ValueRef;
-use crate::types::ColumnId;
+use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -22,6 +22,7 @@ pub struct IndexMeta {
     pub id: IndexId,
     pub column_ids: Vec<ColumnId>,
     pub table_name: TableName,
+    pub pk_ty: LogicalType,
     pub name: String,
     pub is_unique: bool,
     pub is_primary: bool,

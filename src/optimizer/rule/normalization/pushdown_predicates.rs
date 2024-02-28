@@ -111,7 +111,11 @@ impl NormalizationRule for PushPredicateThroughJoin {
         if let Operator::Join(child_op) = graph.operator(child_id) {
             if !matches!(
                 child_op.join_type,
-                JoinType::Inner | JoinType::Left | JoinType::Right
+                JoinType::Inner
+                    | JoinType::LeftOuter
+                    | JoinType::LeftSemi
+                    | JoinType::LeftAnti
+                    | JoinType::RightOuter
             ) {
                 return Ok(());
             }
@@ -149,7 +153,7 @@ impl NormalizationRule for PushPredicateThroughJoin {
 
                         common_filters
                     }
-                    JoinType::Left => {
+                    JoinType::LeftOuter | JoinType::LeftSemi | JoinType::LeftAnti => {
                         if !left_filters.is_empty() {
                             if let Some(left_filter_op) = reduce_filters(left_filters, op.having) {
                                 new_ops.0 = Some(Operator::Filter(left_filter_op));
@@ -161,7 +165,7 @@ impl NormalizationRule for PushPredicateThroughJoin {
                             .chain(right_filters)
                             .collect_vec()
                     }
-                    JoinType::Right => {
+                    JoinType::RightOuter => {
                         if !right_filters.is_empty() {
                             if let Some(right_filter_op) = reduce_filters(right_filters, op.having)
                             {

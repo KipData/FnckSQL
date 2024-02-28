@@ -10,8 +10,10 @@ use super::Operator;
 #[derive(Debug, Display, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
 pub enum JoinType {
     Inner,
-    Left,
-    Right,
+    LeftOuter,
+    LeftSemi,
+    LeftAnti,
+    RightOuter,
     Full,
     Cross,
 }

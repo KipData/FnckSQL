@@ -13,12 +13,15 @@ pub struct ValuesOperator {
 impl fmt::Display for ValuesOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let columns = self
-            .schema_ref
+            .rows
             .iter()
-            .map(|column| column.name().to_string())
+            .map(|row| {
+                let row_string = row.iter().map(|value| format!("{value}")).join(", ");
+                format!("[{row_string}]")
+            })
             .join(", ");
 
-        write!(f, "Values [{}], RowsLen: {}", columns, self.rows.len())?;
+        write!(f, "Values {}, RowsLen: {}", columns, self.rows.len())?;
 
         Ok(())
     }

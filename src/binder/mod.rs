@@ -46,6 +46,12 @@ pub enum QueryBindStep {
     Limit,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum SubQueryType {
+    SubQuery(LogicalPlan),
+    InSubQuery(bool, LogicalPlan),
+}
+
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
     functions: &'a Functions,
@@ -60,7 +66,7 @@ pub struct BinderContext<'a, T: Transaction> {
     pub(crate) agg_calls: Vec<ScalarExpression>,
 
     bind_step: QueryBindStep,
-    sub_queries: HashMap<QueryBindStep, Vec<LogicalPlan>>,
+    sub_queries: HashMap<QueryBindStep, Vec<SubQueryType>>,
 
     temp_table_id: usize,
     pub(crate) allow_default: bool,
@@ -96,14 +102,18 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         &self.bind_step == bind_step
     }
 
-    pub fn sub_query(&mut self, sub_query: LogicalPlan) {
+    pub fn step_now(&self) -> QueryBindStep {
+        self.bind_step
+    }
+
+    pub fn sub_query(&mut self, sub_query: SubQueryType) {
         self.sub_queries
             .entry(self.bind_step)
             .or_default()
             .push(sub_query)
     }
 
-    pub fn sub_queries_at_now(&mut self) -> Option<Vec<LogicalPlan>> {
+    pub fn sub_queries_at_now(&mut self) -> Option<Vec<SubQueryType>> {
         self.sub_queries.remove(&self.bind_step)
     }
 

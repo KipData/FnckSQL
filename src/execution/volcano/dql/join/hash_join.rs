@@ -6,13 +6,12 @@ use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::tuple::{SchemaRef, Tuple};
+use crate::types::tuple::{Schema, SchemaRef, Tuple};
 use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
 use ahash::HashMap;
-use futures::stream::BoxStream;
-use futures::{stream, StreamExt};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
+use kip_db::kernel::utils::bloom_filter::BitVector;
 use std::sync::Arc;
 
 pub struct HashJoin {
@@ -48,7 +47,7 @@ impl<T: Transaction> ReadExecutor<T> for HashJoin {
 pub(crate) struct HashJoinStatus {
     ty: JoinType,
     filter: Option<ScalarExpression>,
-    build_map: HashMap<Vec<ValueRef>, (Vec<Tuple>, bool)>,
+    build_map: HashMap<Vec<ValueRef>, (Vec<Tuple>, bool, bool)>,
 
     full_schema_ref: SchemaRef,
     left_schema_len: usize,
@@ -108,20 +107,24 @@ impl HashJoinStatus {
         let HashJoinStatus {
             on_left_keys,
             build_map,
+            full_schema_ref,
+            left_schema_len,
             ..
         } = self;
-        let values = Self::eval_keys(on_left_keys, &tuple)?;
+        let values = Self::eval_keys(on_left_keys, &tuple, &full_schema_ref[0..*left_schema_len])?;
 
         build_map
             .entry(values)
-            .or_insert_with(|| (Vec::new(), false))
+            .or_insert_with(|| (Vec::new(), false, false))
             .0
             .push(tuple);
 
         Ok(())
     }
 
-    pub(crate) fn right_probe(&mut self, tuple: Tuple) -> Result<Vec<Tuple>, DatabaseError> {
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
+    #[allow(unused_assignments)]
+    pub(crate) async fn right_probe(&mut self, tuple: Tuple) {
         let HashJoinStatus {
             on_right_keys,
             full_schema_ref,
@@ -132,15 +135,25 @@ impl HashJoinStatus {
             ..
         } = self;
 
-        let right_cols_len = tuple.schema_ref.len();
-        let values = Self::eval_keys(on_right_keys, &tuple)?;
+        let right_cols_len = tuple.values.len();
+        let values = Self::eval_keys(on_right_keys, &tuple, &full_schema_ref[*left_schema_len..])?;
 
-        let mut join_tuples = Vec::with_capacity(1);
-        if let Some((tuples, is_used)) = build_map.get_mut(&values) {
+        if let Some((tuples, is_used, is_filtered)) = build_map.get_mut(&values) {
+            let mut bits_option = None;
             *is_used = true;
-            join_tuples.reserve(tuples.len());
 
-            for Tuple { values, .. } in tuples {
+            match ty {
+                JoinType::LeftSemi => {
+                    if *is_filtered {
+                        return Ok(());
+                    } else {
+                        bits_option = Some(BitVector::new(tuples.len()));
+                    }
+                }
+                JoinType::LeftAnti => return Ok(()),
+                _ => (),
+            }
+            for (i, Tuple { values, .. }) in tuples.iter().enumerate() {
                 let full_values = values
                     .iter()
                     .cloned()
@@ -148,50 +161,60 @@ impl HashJoinStatus {
                     .collect_vec();
                 let tuple = Tuple {
                     id: None,
-                    schema_ref: full_schema_ref.clone(),
                     values: full_values,
                 };
-                if let Some(tuple) = Self::filter(tuple, filter, ty, *left_schema_len)? {
-                    join_tuples.push(tuple);
+                if let Some(tuple) =
+                    Self::filter(tuple, full_schema_ref, filter, ty, *left_schema_len)?
+                {
+                    if let Some(bits) = bits_option.as_mut() {
+                        bits.set_bit(i, true);
+                    } else {
+                        yield tuple;
+                    }
                 }
             }
-        } else if matches!(ty, JoinType::Right | JoinType::Full) {
+            if let Some(bits) = bits_option {
+                let mut cnt = 0;
+                tuples.retain(|_| {
+                    let res = bits.get_bit(cnt);
+                    cnt += 1;
+                    res
+                });
+                *is_filtered = true
+            }
+        } else if matches!(ty, JoinType::RightOuter | JoinType::Full) {
             let empty_len = full_schema_ref.len() - right_cols_len;
             let values = (0..empty_len)
                 .map(|_| NULL_VALUE.clone())
                 .chain(tuple.values)
                 .collect_vec();
-            let tuple = Tuple {
-                id: None,
-                schema_ref: full_schema_ref.clone(),
-                values,
-            };
-            if let Some(tuple) = Self::filter(tuple, filter, ty, *left_schema_len)? {
-                join_tuples.push(tuple);
+            let tuple = Tuple { id: None, values };
+            if let Some(tuple) = Self::filter(tuple, full_schema_ref, filter, ty, *left_schema_len)?
+            {
+                yield tuple;
             }
         }
-
-        Ok(join_tuples)
     }
 
     pub(crate) fn filter(
         mut tuple: Tuple,
+        schema: &Schema,
         filter: &Option<ScalarExpression>,
         join_ty: &JoinType,
         left_schema_len: usize,
     ) -> Result<Option<Tuple>, DatabaseError> {
         if let (Some(expr), false) = (filter, matches!(join_ty, JoinType::Full | JoinType::Cross)) {
-            match expr.eval(&tuple)?.as_ref() {
+            match expr.eval(&tuple, schema)?.as_ref() {
                 DataValue::Boolean(Some(false) | None) => {
-                    let full_schema_len = tuple.schema_ref.len();
+                    let full_schema_len = schema.len();
 
                     match join_ty {
-                        JoinType::Left => {
+                        JoinType::LeftOuter => {
                             for i in left_schema_len..full_schema_len {
                                 tuple.values[i] = NULL_VALUE.clone();
                             }
                         }
-                        JoinType::Right => {
+                        JoinType::RightOuter => {
                             for i in 0..left_schema_len {
                                 tuple.values[i] = NULL_VALUE.clone();
                             }
@@ -207,47 +230,91 @@ impl HashJoinStatus {
         Ok(Some(tuple))
     }
 
-    pub(crate) fn build_drop(&mut self) -> Option<BoxStream<Tuple>> {
+    pub(crate) fn build_drop(&mut self) -> Option<BoxedExecutor> {
         let HashJoinStatus {
             full_schema_ref,
             build_map,
             ty,
+            filter,
+            left_schema_len,
             ..
         } = self;
 
-        matches!(ty, JoinType::Left | JoinType::Full).then(|| {
-            stream::iter(
-                build_map
-                    .drain()
-                    .filter_map(|(_, (mut left_tuples, is_used))| {
-                        if !is_used {
-                            for tuple in left_tuples.iter_mut() {
-                                tuple.schema_ref = full_schema_ref.clone();
+        match ty {
+            JoinType::LeftOuter | JoinType::Full => {
+                Some(Self::right_null_tuple(build_map, full_schema_ref))
+            }
+            JoinType::LeftSemi | JoinType::LeftAnti => Some(Self::one_side_tuple(
+                build_map,
+                full_schema_ref,
+                filter,
+                ty,
+                *left_schema_len,
+            )),
+            _ => None,
+        }
+    }
 
-                                while tuple.values.len() != full_schema_ref.len() {
-                                    tuple.values.push(NULL_VALUE.clone());
-                                }
-                            }
-                            return Some(left_tuples);
-                        }
-                        None
-                    })
-                    .flatten(),
-            )
-            .boxed()
-        })
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
+    async fn right_null_tuple<'a>(
+        build_map: &'a mut HashMap<Vec<ValueRef>, (Vec<Tuple>, bool, bool)>,
+        schema: &'a Schema,
+    ) {
+        for (_, (left_tuples, is_used, _)) in build_map.drain() {
+            if is_used {
+                continue;
+            }
+            for mut tuple in left_tuples {
+                while tuple.values.len() != schema.len() {
+                    tuple.values.push(NULL_VALUE.clone());
+                }
+                yield tuple;
+            }
+        }
+    }
+
+    #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
+    async fn one_side_tuple<'a>(
+        build_map: &'a mut HashMap<Vec<ValueRef>, (Vec<Tuple>, bool, bool)>,
+        schema: &'a Schema,
+        filter: &'a Option<ScalarExpression>,
+        join_ty: &'a JoinType,
+        left_schema_len: usize,
+    ) {
+        let is_left_semi = matches!(join_ty, JoinType::LeftSemi);
+
+        for (_, (left_tuples, mut is_used, is_filtered)) in build_map.drain() {
+            if is_left_semi {
+                is_used = !is_used;
+            }
+            if is_used {
+                continue;
+            }
+            if is_filtered {
+                for tuple in left_tuples {
+                    yield tuple;
+                }
+                continue;
+            }
+            for tuple in left_tuples {
+                if let Some(tuple) = Self::filter(tuple, schema, filter, join_ty, left_schema_len)?
+                {
+                    yield tuple;
+                }
+            }
+        }
     }
 
     fn eval_keys(
         on_keys: &[ScalarExpression],
         tuple: &Tuple,
+        schema: &[ColumnRef],
     ) -> Result<Vec<ValueRef>, DatabaseError> {
         let mut values = Vec::with_capacity(on_keys.len());
 
         for expr in on_keys {
-            values.push(expr.eval(tuple)?);
+            values.push(expr.eval(tuple, schema)?);
         }
-
         Ok(values)
     }
 }
@@ -284,15 +351,16 @@ impl HashJoin {
         for tuple in build_read(right_input, transaction) {
             let tuple: Tuple = tuple?;
 
-            for tuple in join_status.right_probe(tuple)? {
-                yield tuple
+            #[for_await]
+            for tuple in join_status.right_probe(tuple) {
+                yield tuple?;
             }
         }
 
         if let Some(stream) = join_status.build_drop() {
             #[for_await]
             for tuple in stream {
-                yield tuple
+                yield tuple?;
             }
         };
     }
@@ -312,7 +380,6 @@ mod test {
     use crate::planner::LogicalPlan;
     use crate::storage::kip::KipStorage;
     use crate::storage::Storage;
-    use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;
@@ -419,8 +486,6 @@ mod test {
         let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
 
-        println!("inner_test: \n{}", create_table(&tuples));
-
         assert_eq!(tuples.len(), 3);
 
         assert_eq!(
@@ -451,31 +516,66 @@ mod test {
                 on: keys,
                 filter: None,
             },
-            join_type: JoinType::Left,
+            join_type: JoinType::LeftOuter,
         };
-        let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
-        let tuples = try_collect(&mut executor).await?;
+        //Outer
+        {
+            let executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
+            let tuples = try_collect(&mut executor.execute(&transaction)).await?;
 
-        println!("left_test: \n{}", create_table(&tuples));
+            assert_eq!(tuples.len(), 4);
 
-        assert_eq!(tuples.len(), 4);
+            assert_eq!(
+                tuples[0].values,
+                build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
+            );
+            assert_eq!(
+                tuples[1].values,
+                build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
+            );
+            assert_eq!(
+                tuples[2].values,
+                build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
+            );
+            assert_eq!(
+                tuples[3].values,
+                build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
+            );
+        }
+        // Semi
+        {
+            let mut executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
+            executor.ty = JoinType::LeftSemi;
+            let mut tuples = try_collect(&mut executor.execute(&transaction)).await?;
 
-        assert_eq!(
-            tuples[0].values,
-            build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
-        );
-        assert_eq!(
-            tuples[1].values,
-            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
-        );
-        assert_eq!(
-            tuples[2].values,
-            build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
-        );
-        assert_eq!(
-            tuples[3].values,
-            build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
-        );
+            assert_eq!(tuples.len(), 2);
+            tuples.sort_by_key(|tuple| {
+                let mut bytes = Vec::new();
+                tuple.values[0].memcomparable_encode(&mut bytes).unwrap();
+                bytes
+            });
+
+            assert_eq!(
+                tuples[0].values,
+                build_integers(vec![Some(0), Some(2), Some(4)])
+            );
+            assert_eq!(
+                tuples[1].values,
+                build_integers(vec![Some(1), Some(3), Some(5)])
+            );
+        }
+        // Anti
+        {
+            let mut executor = HashJoin::from((op, left, right));
+            executor.ty = JoinType::LeftAnti;
+            let tuples = try_collect(&mut executor.execute(&transaction)).await?;
+
+            assert_eq!(tuples.len(), 1);
+            assert_eq!(
+                tuples[0].values,
+                build_integers(vec![Some(3), Some(5), Some(7)])
+            );
+        }
 
         Ok(())
     }
@@ -492,12 +592,10 @@ mod test {
                 on: keys,
                 filter: None,
             },
-            join_type: JoinType::Right,
+            join_type: JoinType::RightOuter,
         };
         let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
-
-        println!("right_test: \n{}", create_table(&tuples));
 
         assert_eq!(tuples.len(), 4);
 
@@ -537,8 +635,6 @@ mod test {
         };
         let mut executor = HashJoin::from((op, left, right)).execute(&transaction);
         let tuples = try_collect(&mut executor).await?;
-
-        println!("full_test: \n{}", create_table(&tuples));
 
         assert_eq!(tuples.len(), 5);
 

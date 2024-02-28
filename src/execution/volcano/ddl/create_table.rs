@@ -32,9 +32,6 @@ impl CreateTable {
         } = self.op;
         let _ = transaction.create_table(table_name.clone(), columns, if_not_exists)?;
 
-        yield TupleBuilder::build_result(
-            "CREATE TABLE SUCCESS".to_string(),
-            format!("{}", table_name),
-        )?;
+        yield TupleBuilder::build_result(format!("{}", table_name));
     }
 }

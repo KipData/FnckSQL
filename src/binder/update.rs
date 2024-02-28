@@ -28,7 +28,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 plan = self.bind_where(plan, predicate)?;
             }
 
-            let mut columns = Vec::with_capacity(assignments.len());
+            let mut schema = Vec::with_capacity(assignments.len());
             let mut row = Vec::with_capacity(assignments.len());
 
             for Assignment { id, value } in assignments {
@@ -61,14 +61,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
                                 }
                                 _ => return Err(DatabaseError::UnsupportedStmt(value.to_string())),
                             }
-                            columns.push(column);
+                            schema.push(column);
                         }
                         _ => return Err(DatabaseError::InvalidColumn(ident.to_string())),
                     }
                 }
             }
             self.context.allow_default = false;
-            let values_plan = self.bind_values(vec![row], Arc::new(columns));
+            let values_plan = self.bind_values(vec![row], Arc::new(schema));
 
             Ok(LogicalPlan::new(
                 Operator::Update(UpdateOperator { table_name }),

@@ -1,7 +1,7 @@
 use fnck_sql::db::DataBaseBuilder;
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::implement_from_tuple;
-use fnck_sql::types::tuple::Tuple;
+use fnck_sql::types::tuple::{SchemaRef, Tuple};
 use fnck_sql::types::value::DataValue;
 use fnck_sql::types::LogicalType;
 use itertools::Itertools;
@@ -38,11 +38,10 @@ async fn main() -> Result<(), DatabaseError> {
     let _ = database
         .run("insert into my_struct values(0, 0), (1, 1)")
         .await?;
-    let tuples = database
-        .run("select * from my_struct")
-        .await?
+    let (schema, tuples) = database.run("select * from my_struct").await?;
+    let tuples = tuples
         .into_iter()
-        .map(MyStruct::from)
+        .map(|tuple| MyStruct::from((&schema, tuple)))
         .collect_vec();
 
     println!("{:#?}", tuples);

@@ -301,7 +301,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     return Ok(());
                 }
                 if matches!(expr, ScalarExpression::Alias { .. }) {
-                    return self.validate_having_orderby(expr.unpack_alias());
+                    return self.validate_having_orderby(expr.unpack_alias_ref());
                 }
 
                 Err(DatabaseError::AggMiss(

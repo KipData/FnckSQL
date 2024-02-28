@@ -6,7 +6,6 @@ use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
-use std::sync::Arc;
 
 pub struct DropColumn {
     op: DropColumnOperator,
@@ -27,55 +26,44 @@ impl<T: Transaction> WriteExecutor<T> for DropColumn {
 
 impl DropColumn {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
-    async fn _execute<T: Transaction>(self, transaction: &mut T) {
+    async fn _execute<T: Transaction>(mut self, transaction: &mut T) {
         let DropColumnOperator {
             table_name,
             column_name,
             if_exists,
-        } = &self.op;
-        let mut tuple_columns = None;
-        let mut tuples = Vec::new();
+        } = self.op;
+        let tuple_columns = self.input.output_schema();
 
-        #[for_await]
-        for tuple in build_read(self.input, transaction) {
-            let mut tuple: Tuple = tuple?;
-
-            if tuple_columns.is_none() {
-                if let Some((column_index, is_primary)) = tuple
-                    .schema_ref
-                    .iter()
-                    .enumerate()
-                    .find(|(_, column)| column.name() == column_name)
-                    .map(|(i, column)| (i, column.desc.is_primary))
-                {
-                    if is_primary {
-                        Err(DatabaseError::InvalidColumn(
-                            "drop of primary key column is not allowed.".to_owned(),
-                        ))?;
-                    }
-                    let mut columns = Vec::clone(&tuple.schema_ref);
-                    let _ = columns.remove(column_index);
-
-                    tuple_columns = Some((column_index, Arc::new(columns)));
-                }
+        if let Some((column_index, is_primary)) = tuple_columns
+            .iter()
+            .enumerate()
+            .find(|(_, column)| column.name() == column_name)
+            .map(|(i, column)| (i, column.desc.is_primary))
+        {
+            if is_primary {
+                Err(DatabaseError::InvalidColumn(
+                    "drop of primary key column is not allowed.".to_owned(),
+                ))?;
             }
-            if tuple_columns.is_none() && *if_exists {
-                return Ok(());
+            let mut tuples = Vec::new();
+
+            #[for_await]
+            for tuple in build_read(self.input, transaction) {
+                let mut tuple: Tuple = tuple?;
+                let _ = tuple.values.remove(column_index);
+
+                tuples.push(tuple);
             }
-            let (column_i, columns) = tuple_columns
-                .clone()
-                .ok_or_else(|| DatabaseError::InvalidColumn("not found column".to_string()))?;
+            for tuple in tuples {
+                transaction.append(&table_name, tuple, true)?;
+            }
+            transaction.drop_column(&table_name, &column_name)?;
 
-            tuple.schema_ref = columns;
-            let _ = tuple.values.remove(column_i);
-
-            tuples.push(tuple);
+            yield TupleBuilder::build_result("1".to_string());
+        } else if if_exists {
+            return Ok(());
+        } else {
+            return Err(DatabaseError::NotFound("drop column", column_name));
         }
-        for tuple in tuples {
-            transaction.append(table_name, tuple, true)?;
-        }
-        transaction.drop_column(table_name, column_name, *if_exists)?;
-
-        yield TupleBuilder::build_result("ALTER TABLE SUCCESS".to_string(), "1".to_string())?;
     }
 }

@@ -139,8 +139,10 @@ impl NormalizationRule for PushLimitThroughJoin {
                     let children = graph.children_at(child_id).collect_vec();
 
                     if let Some(grandson_id) = match ty {
-                        JoinType::Left => children.first(),
-                        JoinType::Right => children.last(),
+                        JoinType::LeftOuter | JoinType::LeftSemi | JoinType::LeftAnti => {
+                            children.first()
+                        }
+                        JoinType::RightOuter => children.last(),
                         _ => None,
                     } {
                         graph.add_node(child_id, Some(*grandson_id), Operator::Limit(op.clone()));

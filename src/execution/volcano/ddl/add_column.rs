@@ -36,19 +36,12 @@ impl AddColumn {
             if_not_exists,
         } = &self.op;
         let mut unique_values = column.desc().is_unique.then(Vec::new);
-        let mut tuple_columns = None;
         let mut tuples = Vec::new();
 
         #[for_await]
         for tuple in build_read(self.input, transaction) {
             let mut tuple: Tuple = tuple?;
 
-            let tuples_columns = tuple_columns.get_or_insert_with(|| {
-                let mut columns = Vec::clone(&tuple.schema_ref);
-
-                columns.push(Arc::new(column.clone()));
-                Arc::new(columns)
-            });
             if let Some(value) = column.default_value() {
                 if let Some(unique_values) = &mut unique_values {
                     unique_values.push((tuple.id.clone().unwrap(), value.clone()));
@@ -57,7 +50,6 @@ impl AddColumn {
             } else {
                 tuple.values.push(Arc::new(DataValue::Null));
             }
-            tuple.schema_ref = tuples_columns.clone();
             tuples.push(tuple);
         }
         for tuple in tuples {
@@ -78,10 +70,10 @@ impl AddColumn {
                     id: unique_meta.id,
                     column_values: vec![value],
                 };
-                transaction.add_index(table_name, index, vec![tuple_id], true)?;
+                transaction.add_index(table_name, index, &tuple_id, true)?;
             }
         }
 
-        yield TupleBuilder::build_result("ALTER TABLE SUCCESS".to_string(), "1".to_string())?;
+        yield TupleBuilder::build_result("1".to_string());
     }
 }

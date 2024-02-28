@@ -38,6 +38,9 @@ impl Accumulator for AvgAccumulator {
         } else {
             DataValue::UInt32(Some(self.count as u32))
         };
+        if self.count == 0 {
+            return Ok(Arc::new(DataValue::init(&value.logical_type())));
+        }
 
         Ok(Arc::new(DataValue::binary_op(
             &value,

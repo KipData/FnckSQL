@@ -15,7 +15,6 @@ pub type SchemaRef = Arc<Schema>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
     pub id: Option<TupleId>,
-    pub schema_ref: SchemaRef,
     pub values: Vec<ValueRef>,
 }
 
@@ -23,17 +22,17 @@ impl Tuple {
     pub fn deserialize_from(
         table_types: &[LogicalType],
         projections: &[usize],
-        tuple_schema_ref: &SchemaRef,
+        schema: &Schema,
         bytes: &[u8],
     ) -> Self {
-        assert!(!tuple_schema_ref.is_empty());
-        assert_eq!(projections.len(), tuple_schema_ref.len());
+        assert!(!schema.is_empty());
+        assert_eq!(projections.len(), schema.len());
 
         fn is_none(bits: u8, i: usize) -> bool {
             bits & (1 << (7 - i)) > 0
         }
 
-        let values_len = tuple_schema_ref.len();
+        let values_len = schema.len();
         let mut tuple_values = Vec::with_capacity(values_len);
         let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
         let mut id_option = None;
@@ -42,18 +41,13 @@ impl Tuple {
         let mut pos = bits_len;
 
         for (i, logic_type) in table_types.iter().enumerate() {
-            if projection_i >= tuple_schema_ref.len() {
+            if projection_i >= values_len {
                 break;
             }
             if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
                 if projections[projection_i] == i {
                     tuple_values.push(Arc::new(DataValue::none(logic_type)));
-                    Self::values_push(
-                        tuple_schema_ref,
-                        &tuple_values,
-                        &mut id_option,
-                        &mut projection_i,
-                    );
+                    Self::values_push(schema, &tuple_values, &mut id_option, &mut projection_i);
                 }
             } else if let Some(len) = logic_type.raw_len() {
                 /// fixed length (e.g.: int)
@@ -62,12 +56,7 @@ impl Tuple {
                         &bytes[pos..pos + len],
                         logic_type,
                     )));
-                    Self::values_push(
-                        tuple_schema_ref,
-                        &tuple_values,
-                        &mut id_option,
-                        &mut projection_i,
-                    );
+                    Self::values_push(schema, &tuple_values, &mut id_option, &mut projection_i);
                 }
                 pos += len;
             } else {
@@ -79,12 +68,7 @@ impl Tuple {
                         &bytes[pos..pos + len],
                         logic_type,
                     )));
-                    Self::values_push(
-                        tuple_schema_ref,
-                        &tuple_values,
-                        &mut id_option,
-                        &mut projection_i,
-                    );
+                    Self::values_push(schema, &tuple_values, &mut id_option, &mut projection_i);
                 }
                 pos += len;
             }
@@ -92,13 +76,12 @@ impl Tuple {
 
         Tuple {
             id: id_option,
-            schema_ref: tuple_schema_ref.clone(),
             values: tuple_values,
         }
     }
 
     fn values_push(
-        tuple_columns: &Arc<Vec<ColumnRef>>,
+        tuple_columns: &Schema,
         tuple_values: &[ValueRef],
         id_option: &mut Option<Arc<DataValue>>,
         projection_i: &mut usize,
@@ -137,7 +120,7 @@ impl Tuple {
     }
 }
 
-pub fn create_table(tuples: &[Tuple]) -> Table {
+pub fn create_table(schema: &Schema, tuples: &[Tuple]) -> Table {
     let mut table = Table::new();
 
     if tuples.is_empty() {
@@ -145,12 +128,14 @@ pub fn create_table(tuples: &[Tuple]) -> Table {
     }
 
     let mut header = Vec::new();
-    for col in tuples[0].schema_ref.iter() {
+    for col in schema.iter() {
         header.push(Cell::new(col.full_name()));
     }
     table.set_header(header);
 
     for tuple in tuples {
+        assert_eq!(schema.len(), tuple.values.len());
+
         let cells = tuple
             .values
             .iter()
@@ -246,7 +231,6 @@ mod tests {
         let tuples = vec![
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(0)))),
-                schema_ref: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(0))),
                     Arc::new(DataValue::UInt32(Some(1))),
@@ -265,7 +249,6 @@ mod tests {
             },
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(1)))),
-                schema_ref: columns.clone(),
                 values: vec![
                     Arc::new(DataValue::Int32(Some(1))),
                     Arc::new(DataValue::UInt32(None)),
