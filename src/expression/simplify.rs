@@ -915,10 +915,10 @@ impl ScalarExpression {
         );
     }
 
-    /// The definition of Or is not the Or in the Where condition.
+    /// Tips: The definition of `Or` is not the `Or` in the Where condition.
     /// The And and Or of ConstantBinary are concerned with the data range that needs to be aggregated.
-    /// - `ConstantBinary::And`: Aggregate the minimum range of all conditions in and
-    /// - `ConstantBinary::Or`: Rearrange and sort the range of each OR data
+    /// - [`ConstantBinary::And`]: Aggregate the minimum range of all conditions in and
+    /// - [`ConstantBinary::Or`]: Rearrange and sort the range of each OR data
     pub fn convert_binary(
         &self,
         table_name: &str,

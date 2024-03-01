@@ -217,7 +217,7 @@ impl NormalizationRule for PushPredicateIntoScan {
         if let Operator::Filter(op) = graph.operator(node_id).clone() {
             if let Some(child_id) = graph.eldest_child_at(node_id) {
                 if let Operator::Scan(child_op) = graph.operator_mut(child_id) {
-                    //FIXME: now only support unique
+                    //FIXME: now only support `unique` and `primary key`
                     for IndexInfo { meta, binaries } in &mut child_op.index_infos {
                         let mut option = op
                             .predicate
