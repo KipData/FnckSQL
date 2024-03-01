@@ -72,6 +72,8 @@ impl HashJoinStatus {
             JoinCondition::On { on, filter } => (on.into_iter().unzip(), filter),
             JoinCondition::None => unreachable!("HashJoin must has on condition"),
         };
+        assert!(!on_left_keys.is_empty());
+        assert!(!on_right_keys.is_empty());
 
         let fn_process = |schema: &mut Vec<ColumnRef>, force_nullable| {
             for column in schema.iter_mut() {

@@ -823,6 +823,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                             right_schema,
                         )?;
                     }
+                    BinaryOperator::Or => {
+                        todo!("`NestLoopJoin` is not supported yet")
+                    }
                     _ => {
                         if left_expr.referenced_columns(true).iter().all(|column| {
                             fn_or_contains(left_schema, right_schema, column.summary())
