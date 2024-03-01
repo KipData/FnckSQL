@@ -1,3 +1,4 @@
+use clap::Parser;
 use fnck_sql::db::DataBaseBuilder;
 use sqllogictest::Runner;
 use sqllogictest_test::SQLBase;
@@ -8,9 +9,16 @@ use std::path::Path;
 use std::time::Instant;
 use tempfile::TempDir;
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[clap(long, default_value = "tests/slt/**/*.slt")]
+    path: String,
+}
+
 #[tokio::main]
 async fn main() {
-    const SLT_PATTERN: &str = "tests/slt/**/*.slt";
+    let args = Args::parse();
 
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
     std::env::set_current_dir(path).unwrap();
@@ -20,7 +28,7 @@ async fn main() {
     let mut file_num = 0;
     let start = Instant::now();
 
-    for slt_file in glob::glob(SLT_PATTERN).expect("failed to find slt files") {
+    for slt_file in glob::glob(&args.path).expect("failed to find slt files") {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let filepath = slt_file.expect("failed to read slt file");
         println!(

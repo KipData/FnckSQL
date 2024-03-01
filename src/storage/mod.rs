@@ -98,6 +98,7 @@ pub trait Transaction: Sync + Send + 'static {
     async fn commit(self) -> Result<(), DatabaseError>;
 }
 
+#[derive(Debug)]
 enum IndexValue {
     PrimaryKey(Tuple),
     Normal(TupleId),
