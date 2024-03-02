@@ -227,9 +227,6 @@ impl NormalizationRule for PushPredicateIntoScan {
                             binary.scope_aggregation()?;
                             let rearrange_binaries = binary.rearrange()?;
 
-                            if rearrange_binaries.is_empty() {
-                                continue;
-                            }
                             let _ = binaries.replace(rearrange_binaries);
 
                             return Ok(());

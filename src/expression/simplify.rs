@@ -56,6 +56,17 @@ impl ConstantBinary {
                 if binaries.is_empty() {
                     return Ok(vec![]);
                 }
+                if binaries.len() == 1
+                    && matches!(
+                        binaries[0],
+                        ConstantBinary::Scope {
+                            min: Bound::Unbounded,
+                            max: Bound::Unbounded
+                        }
+                    )
+                {
+                    return Ok(binaries);
+                }
 
                 let mut condition_binaries = Vec::new();
 
@@ -219,9 +230,8 @@ impl ConstantBinary {
         for binary in binaries.iter().sorted_by_key(sort_op) {
             match binary {
                 ConstantBinary::Scope { min, max } => {
-                    // Skip if eq or noteq exists
-                    if !eq_set.is_empty() {
-                        continue;
+                    if eq_set.len() == 1 {
+                        break;
                     }
 
                     if let Some(order) = Self::bound_compared(&scope_min, min, true) {
@@ -248,14 +258,12 @@ impl ConstantBinary {
             }
         }
 
-        let eq_option = eq_set
-            .into_iter()
-            .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
-            .next()
-            .map(ConstantBinary::Eq);
+        if eq_set.len() == 1 {
+            let eq = eq_set.into_iter().next().map(ConstantBinary::Eq).unwrap();
 
-        if let Some(eq) = eq_option {
             Ok(vec![eq])
+        } else if eq_set.len() > 1 {
+            Ok(vec![])
         } else if !matches!(
             (&scope_min, &scope_max),
             (Bound::Unbounded, Bound::Unbounded)
@@ -267,7 +275,10 @@ impl ConstantBinary {
 
             Ok(vec![scope_binary])
         } else {
-            Ok(vec![])
+            Ok(vec![ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Unbounded,
+            }])
         }
     }
 
@@ -321,7 +332,10 @@ impl ConstantBinary {
             scope_margin,
             Some((Bound::Unbounded, Bound::Unbounded)) | None
         ) {
-            return vec![];
+            return vec![ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Unbounded,
+            }];
         }
 
         let mut merge_scopes: Vec<(Bound<ValueRef>, Bound<ValueRef>)> = Vec::new();
@@ -1299,7 +1313,7 @@ mod test {
 
         binary.scope_aggregation()?;
 
-        assert_eq!(binary, ConstantBinary::And(vec![ConstantBinary::Eq(val_0)]));
+        assert_eq!(binary, ConstantBinary::And(vec![]));
 
         Ok(())
     }

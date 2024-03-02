@@ -45,13 +45,17 @@ impl fmt::Display for IndexInfo {
         write!(f, " => ")?;
 
         if let Some(binaries) = &self.binaries {
+            if binaries.is_empty() {
+                write!(f, "DUMMY")?;
+                return Ok(());
+            }
             let binaries = binaries
                 .iter()
                 .map(|binary| format!("{}", binary))
                 .join(", ");
             write!(f, "{}", binaries)?;
         } else {
-            write!(f, "NONE")?;
+            write!(f, "EMPTY")?;
         }
 
         Ok(())

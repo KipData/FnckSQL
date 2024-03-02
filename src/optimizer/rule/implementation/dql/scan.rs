@@ -81,12 +81,14 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
                     if let Some(column_meta) =
                         find_column_meta(column_metas, &index_info.meta.column_ids[0])
                     {
-                        // need to return table query(non-covering index)
-                        cost = Some(column_meta.collect_count(binaries) * 2);
+                        let mut row_count = column_meta.collect_count(binaries);
+
+                        if !index_info.meta.is_primary {
+                            // need to return table query(non-covering index)
+                            row_count *= 2;
+                        }
+                        cost = Some(row_count);
                     }
-                }
-                if matches!(cost, Some(0)) {
-                    continue;
                 }
 
                 group_expr.append_expr(Expression {
