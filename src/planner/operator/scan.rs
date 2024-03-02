@@ -41,7 +41,7 @@ impl ScanOperator {
             .iter()
             .map(|meta| IndexInfo {
                 meta: meta.clone(),
-                binaries: None,
+                ranges: None,
             })
             .collect_vec();
 

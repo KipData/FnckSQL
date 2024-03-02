@@ -218,6 +218,7 @@ mod tests {
     use crate::errors::DatabaseError;
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;
+    use crate::planner::LogicalPlan;
     use petgraph::stable_graph::{EdgeIndex, NodeIndex};
 
     #[tokio::test]
@@ -350,7 +351,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_to_plan() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+        fn clear_output_schema_buf(plan: &mut LogicalPlan) {
+            plan._output_schema_ref = None;
+
+            for child in plan.childrens.iter_mut() {
+                clear_output_schema_buf(child);
+            }
+        }
+        let mut plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+        clear_output_schema_buf(&mut plan);
+
         let graph = HepGraph::new(plan.clone());
 
         let plan_for_graph = graph.into_plan(None).unwrap();

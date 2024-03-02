@@ -72,6 +72,9 @@ impl HashJoinStatus {
             JoinCondition::On { on, filter } => (on.into_iter().unzip(), filter),
             JoinCondition::None => unreachable!("HashJoin must has on condition"),
         };
+        if on_left_keys.is_empty() || on_right_keys.is_empty() {
+            todo!("`NestLoopJoin` should be used when there is no equivalent condition")
+        }
         assert!(!on_left_keys.is_empty());
         assert!(!on_right_keys.is_empty());
 
