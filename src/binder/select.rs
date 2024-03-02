@@ -324,8 +324,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let scan_op = ScanOperator::build(table_name.clone(), table_catalog);
 
         if let Some(TableAlias { name, columns }) = alias {
-            let alias = lower_ident(name);
-            self.register_alias(columns, alias.clone(), table_name.clone())?;
+            self.register_alias(columns, lower_ident(name), table_name.clone())?;
         }
 
         Ok(scan_op)

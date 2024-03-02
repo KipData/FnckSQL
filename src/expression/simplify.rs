@@ -151,15 +151,16 @@ impl ConstantBinary {
             // `Or` is allowed to contain And, `Scope`, `Eq/NotEq`
             // Tips: Only single-level `And`
             ConstantBinary::Or(binaries) => {
-                for binary in binaries.iter_mut() {
+                for binary in mem::take(binaries) {
                     match binary {
-                        ConstantBinary::And(and_binaries) => {
-                            Self::and_scope_aggregation(and_binaries)?
+                        ConstantBinary::And(mut and_binaries) => {
+                            Self::and_scope_aggregation(&mut and_binaries)?;
+                            binaries.append(&mut and_binaries);
                         }
                         ConstantBinary::Or(_) => {
                             unreachable!("`Or` does not allow nested `Or`")
                         }
-                        _ => (),
+                        binary => binaries.push(binary),
                     }
                 }
                 Self::or_scope_aggregation(binaries);
@@ -244,14 +245,17 @@ impl ConstantBinary {
 
                     // when there are multiple inconsistent eq conditions for the same field in And,
                     // then no row can meet the conditions.
-                    // e.g. `select * from t1 where c1 = 0 and c1 =1` no data can be both 0 and 1 at the same time
+                    // e.g. `select * from t1 where c1 = 0 and c1 = 1` no data can be both 0 and 1 at the same time
                     if eq_set.len() > 1 {
                         binaries.clear();
                         return Ok(());
                     }
                 }
                 ConstantBinary::NotEq(val) => {
-                    let _ = eq_set.remove(val);
+                    if eq_set.contains(val) {
+                        binaries.clear();
+                        return Ok(());
+                    }
                 }
                 ConstantBinary::Or(_) | ConstantBinary::And(_) => {
                     return Err(DatabaseError::InvalidType)
@@ -268,10 +272,17 @@ impl ConstantBinary {
             (&scope_min, &scope_max),
             (Bound::Unbounded, Bound::Unbounded)
         ) {
-            binaries.push(ConstantBinary::Scope {
-                min: scope_min,
-                max: scope_max,
-            });
+            // When there is something like `select * from t1 where c1 between 1 and null`,
+            // None will be returned
+            if matches!(
+                Self::bound_compared(&scope_min, &scope_max, true).map(Ordering::is_le),
+                Some(true)
+            ) {
+                binaries.push(ConstantBinary::Scope {
+                    min: scope_min,
+                    max: scope_max,
+                });
+            }
         } else if eq_set.is_empty() {
             binaries.push(ConstantBinary::Scope {
                 min: Bound::Unbounded,
@@ -288,11 +299,16 @@ impl ConstantBinary {
             return;
         }
         let mut scopes = Vec::new();
-        let mut eqs = Vec::new();
+        let mut eqs = HashSet::new();
 
         let mut scope_margin = None;
 
-        for binary in binaries.iter_mut() {
+        let sort_op = |binary: &&mut ConstantBinary| match binary {
+            ConstantBinary::NotEq(_) => 2,
+            ConstantBinary::Eq(_) => 1,
+            _ => 3,
+        };
+        for binary in binaries.iter_mut().sorted_by_key(sort_op) {
             if matches!(scope_margin, Some((Bound::Unbounded, Bound::Unbounded))) {
                 break;
             }
@@ -324,7 +340,12 @@ impl ConstantBinary {
 
                     scopes.push((min, max))
                 }
-                ConstantBinary::Eq(val) => eqs.push(val.clone()),
+                ConstantBinary::Eq(val) => {
+                    let _ = eqs.insert(val.clone());
+                }
+                ConstantBinary::NotEq(val) => {
+                    let _ = eqs.remove(val);
+                }
                 _ => (),
             }
         }
