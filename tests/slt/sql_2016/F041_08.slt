@@ -1,7 +1,6 @@
 # F041-08: All comparison operators are supported (rather than just =)
 
 # TODO: NestLoopJoin
-# TIPS: `>=` should be rewritten as `=` && `>` to make it usable by `HashJoin`
 
 # statement ok
 # CREATE TABLE TABLE_F041_08_01_011 ( ID INT PRIMARY KEY, A INTEGER );
