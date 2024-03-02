@@ -14,7 +14,7 @@ pub type IndexMetaRef = Arc<IndexMeta>;
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct IndexInfo {
     pub(crate) meta: IndexMetaRef,
-    pub(crate) binaries: Option<Vec<ConstantBinary>>,
+    pub(crate) ranges: Option<Vec<ConstantBinary>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -44,14 +44,18 @@ impl fmt::Display for IndexInfo {
         write!(f, "{}", self.meta)?;
         write!(f, " => ")?;
 
-        if let Some(binaries) = &self.binaries {
+        if let Some(binaries) = &self.ranges {
+            if binaries.is_empty() {
+                write!(f, "DUMMY")?;
+                return Ok(());
+            }
             let binaries = binaries
                 .iter()
                 .map(|binary| format!("{}", binary))
                 .join(", ");
             write!(f, "{}", binaries)?;
         } else {
-            write!(f, "NONE")?;
+            write!(f, "EMPTY")?;
         }
 
         Ok(())

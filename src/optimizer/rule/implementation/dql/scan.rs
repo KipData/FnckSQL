@@ -71,22 +71,24 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
         if let Operator::Scan(scan_op) = op {
             let column_metas = loader.load(scan_op.table_name.clone())?;
             for index_info in scan_op.index_infos.iter() {
-                if index_info.binaries.is_none() {
+                if index_info.ranges.is_none() {
                     continue;
                 }
                 let mut cost = None;
 
-                if let Some(binaries) = &index_info.binaries {
+                if let Some(binaries) = &index_info.ranges {
                     // FIXME: Only UniqueIndex
                     if let Some(column_meta) =
                         find_column_meta(column_metas, &index_info.meta.column_ids[0])
                     {
-                        // need to return table query(non-covering index)
-                        cost = Some(column_meta.collect_count(binaries) * 2);
+                        let mut row_count = column_meta.collect_count(binaries);
+
+                        if !index_info.meta.is_primary {
+                            // need to return table query(non-covering index)
+                            row_count *= 2;
+                        }
+                        cost = Some(row_count);
                     }
-                }
-                if matches!(cost, Some(0)) {
-                    continue;
                 }
 
                 group_expr.append_expr(Expression {

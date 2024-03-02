@@ -10,15 +10,15 @@ use futures_async_stream::try_stream;
 pub(crate) struct IndexScan {
     op: ScanOperator,
     index_by: IndexMetaRef,
-    binaries: Vec<ConstantBinary>,
+    ranges: Vec<ConstantBinary>,
 }
 
 impl From<(ScanOperator, IndexMetaRef, Vec<ConstantBinary>)> for IndexScan {
-    fn from((op, index_by, binaries): (ScanOperator, IndexMetaRef, Vec<ConstantBinary>)) -> Self {
+    fn from((op, index_by, ranges): (ScanOperator, IndexMetaRef, Vec<ConstantBinary>)) -> Self {
         IndexScan {
             op,
             index_by,
-            binaries,
+            ranges,
         }
     }
 }
@@ -39,7 +39,7 @@ impl IndexScan {
             ..
         } = self.op;
         let mut iter =
-            transaction.read_by_index(table_name, limit, columns, self.index_by, self.binaries)?;
+            transaction.read_by_index(table_name, limit, columns, self.index_by, self.ranges)?;
 
         while let Some(tuple) = iter.next_tuple()? {
             yield tuple;

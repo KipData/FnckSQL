@@ -56,6 +56,17 @@ impl ConstantBinary {
                 if binaries.is_empty() {
                     return Ok(vec![]);
                 }
+                if binaries.len() == 1
+                    && matches!(
+                        binaries[0],
+                        ConstantBinary::Scope {
+                            min: Bound::Unbounded,
+                            max: Bound::Unbounded
+                        }
+                    )
+                {
+                    return Ok(binaries);
+                }
 
                 let mut condition_binaries = Vec::new();
 
@@ -140,27 +151,23 @@ impl ConstantBinary {
             // `Or` is allowed to contain And, `Scope`, `Eq/NotEq`
             // Tips: Only single-level `And`
             ConstantBinary::Or(binaries) => {
-                let mut or_binaries = Vec::new();
-                for binary in binaries {
+                for binary in mem::take(binaries) {
                     match binary {
-                        ConstantBinary::And(and_binaries) => {
-                            or_binaries.append(&mut Self::and_scope_aggregation(and_binaries)?);
+                        ConstantBinary::And(mut and_binaries) => {
+                            Self::and_scope_aggregation(&mut and_binaries)?;
+                            binaries.append(&mut and_binaries);
                         }
                         ConstantBinary::Or(_) => {
                             unreachable!("`Or` does not allow nested `Or`")
                         }
-                        cb => {
-                            or_binaries.push(cb.clone());
-                        }
+                        binary => binaries.push(binary),
                     }
                 }
-                let or_binaries = Self::or_scope_aggregation(&or_binaries);
-                let _ = mem::replace(self, ConstantBinary::Or(or_binaries));
+                Self::or_scope_aggregation(binaries);
             }
             // `And` is allowed to contain Scope, `Eq/NotEq`
             ConstantBinary::And(binaries) => {
-                let and_binaries = Self::and_scope_aggregation(binaries)?;
-                let _ = mem::replace(self, ConstantBinary::And(and_binaries));
+                Self::and_scope_aggregation(binaries)?;
             }
             _ => (),
         }
@@ -197,11 +204,9 @@ impl ConstantBinary {
     }
 
     // Tips: It only makes sense if the condition is and aggregation
-    fn and_scope_aggregation(
-        binaries: &[ConstantBinary],
-    ) -> Result<Vec<ConstantBinary>, DatabaseError> {
+    fn and_scope_aggregation(binaries: &mut Vec<ConstantBinary>) -> Result<(), DatabaseError> {
         if binaries.is_empty() {
-            return Ok(vec![]);
+            return Ok(());
         }
 
         let mut scope_min = Bound::Unbounded;
@@ -219,9 +224,8 @@ impl ConstantBinary {
         for binary in binaries.iter().sorted_by_key(sort_op) {
             match binary {
                 ConstantBinary::Scope { min, max } => {
-                    // Skip if eq or noteq exists
-                    if !eq_set.is_empty() {
-                        continue;
+                    if eq_set.len() == 1 {
+                        break;
                     }
 
                     if let Some(order) = Self::bound_compared(&scope_min, min, true) {
@@ -238,9 +242,20 @@ impl ConstantBinary {
                 }
                 ConstantBinary::Eq(val) => {
                     let _ = eq_set.insert(val.clone());
+
+                    // when there are multiple inconsistent eq conditions for the same field in And,
+                    // then no row can meet the conditions.
+                    // e.g. `select * from t1 where c1 = 0 and c1 = 1` no data can be both 0 and 1 at the same time
+                    if eq_set.len() > 1 {
+                        binaries.clear();
+                        return Ok(());
+                    }
                 }
                 ConstantBinary::NotEq(val) => {
-                    let _ = eq_set.remove(val);
+                    if eq_set.contains(val) {
+                        binaries.clear();
+                        return Ok(());
+                    }
                 }
                 ConstantBinary::Or(_) | ConstantBinary::And(_) => {
                     return Err(DatabaseError::InvalidType)
@@ -248,40 +263,52 @@ impl ConstantBinary {
             }
         }
 
-        let eq_option = eq_set
-            .into_iter()
-            .sorted_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
-            .next()
-            .map(ConstantBinary::Eq);
+        binaries.clear();
+        if eq_set.len() == 1 {
+            let eq = eq_set.into_iter().next().map(ConstantBinary::Eq).unwrap();
 
-        if let Some(eq) = eq_option {
-            Ok(vec![eq])
+            binaries.push(eq);
         } else if !matches!(
             (&scope_min, &scope_max),
             (Bound::Unbounded, Bound::Unbounded)
         ) {
-            let scope_binary = ConstantBinary::Scope {
-                min: scope_min,
-                max: scope_max,
-            };
-
-            Ok(vec![scope_binary])
-        } else {
-            Ok(vec![])
+            // When there is something like `select * from t1 where c1 between 1 and null`,
+            // None will be returned
+            if matches!(
+                Self::bound_compared(&scope_min, &scope_max, true).map(Ordering::is_le),
+                Some(true)
+            ) {
+                binaries.push(ConstantBinary::Scope {
+                    min: scope_min,
+                    max: scope_max,
+                });
+            }
+        } else if eq_set.is_empty() {
+            binaries.push(ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Unbounded,
+            });
         }
+
+        Ok(())
     }
 
     // Tips: It only makes sense if the condition is or aggregation
-    fn or_scope_aggregation(binaries: &Vec<ConstantBinary>) -> Vec<ConstantBinary> {
+    fn or_scope_aggregation(binaries: &mut Vec<ConstantBinary>) {
         if binaries.is_empty() {
-            return vec![];
+            return;
         }
         let mut scopes = Vec::new();
-        let mut eqs = Vec::new();
+        let mut eqs = HashSet::new();
 
         let mut scope_margin = None;
 
-        for binary in binaries {
+        let sort_op = |binary: &&mut ConstantBinary| match binary {
+            ConstantBinary::NotEq(_) => 2,
+            ConstantBinary::Eq(_) => 1,
+            _ => 3,
+        };
+        for binary in binaries.iter_mut().sorted_by_key(sort_op) {
             if matches!(scope_margin, Some((Bound::Unbounded, Bound::Unbounded))) {
                 break;
             }
@@ -313,7 +340,12 @@ impl ConstantBinary {
 
                     scopes.push((min, max))
                 }
-                ConstantBinary::Eq(val) => eqs.push(val),
+                ConstantBinary::Eq(val) => {
+                    let _ = eqs.insert(val.clone());
+                }
+                ConstantBinary::NotEq(val) => {
+                    let _ = eqs.remove(val);
+                }
                 _ => (),
             }
         }
@@ -321,7 +353,18 @@ impl ConstantBinary {
             scope_margin,
             Some((Bound::Unbounded, Bound::Unbounded)) | None
         ) {
-            return vec![];
+            binaries.clear();
+            if eqs.is_empty() {
+                binaries.push(ConstantBinary::Scope {
+                    min: Bound::Unbounded,
+                    max: Bound::Unbounded,
+                });
+            } else {
+                for val in eqs {
+                    binaries.push(ConstantBinary::Eq(val));
+                }
+            }
+            return;
         }
 
         let mut merge_scopes: Vec<(Bound<ValueRef>, Bound<ValueRef>)> = Vec::new();
@@ -368,14 +411,14 @@ impl ConstantBinary {
                 }
             }
         }
-        merge_scopes
+        *binaries = merge_scopes
             .into_iter()
             .map(|(min, max)| ConstantBinary::Scope {
                 min: min.clone(),
                 max: max.clone(),
             })
-            .chain(eqs.into_iter().map(|val| ConstantBinary::Eq(val.clone())))
-            .collect_vec()
+            .chain(eqs.into_iter().map(ConstantBinary::Eq))
+            .collect_vec();
     }
 
     fn join_write(f: &mut Formatter, binaries: &[ConstantBinary], op: &str) -> fmt::Result {
@@ -971,9 +1014,16 @@ impl ScalarExpression {
                         }
                         (ConstantBinary::And(mut binaries), binary)
                         | (binary, ConstantBinary::And(mut binaries)) => {
-                            binaries.push(binary);
+                            if op == &BinaryOperator::Or {
+                                Ok(Some(ConstantBinary::Or(vec![
+                                    binary,
+                                    ConstantBinary::And(binaries),
+                                ])))
+                            } else {
+                                binaries.push(binary);
 
-                            Ok(Some(ConstantBinary::And(binaries)))
+                                Ok(Some(ConstantBinary::And(binaries)))
+                            }
                         }
                         (ConstantBinary::Or(mut binaries), binary)
                         | (binary, ConstantBinary::Or(mut binaries)) => {
@@ -1299,7 +1349,7 @@ mod test {
 
         binary.scope_aggregation()?;
 
-        assert_eq!(binary, ConstantBinary::And(vec![ConstantBinary::Eq(val_0)]));
+        assert_eq!(binary, ConstantBinary::And(vec![]));
 
         Ok(())
     }
@@ -1407,10 +1457,7 @@ mod test {
 
         binary.scope_aggregation()?;
 
-        assert_eq!(
-            binary,
-            ConstantBinary::And(vec![ConstantBinary::Eq(val_0.clone())])
-        );
+        assert_eq!(binary, ConstantBinary::And(vec![]));
 
         Ok(())
     }
@@ -1482,7 +1529,13 @@ mod test {
 
         binary.scope_aggregation()?;
 
-        assert_eq!(binary, ConstantBinary::Or(vec![]));
+        assert_eq!(
+            binary,
+            ConstantBinary::Or(vec![ConstantBinary::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Unbounded
+            }])
+        );
 
         Ok(())
     }

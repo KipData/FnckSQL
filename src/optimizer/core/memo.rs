@@ -83,6 +83,7 @@ mod tests {
     use crate::binder::{Binder, BinderContext};
     use crate::db::DataBaseBuilder;
     use crate::errors::DatabaseError;
+    use crate::expression::simplify::ConstantBinary;
     use crate::optimizer::core::memo::Memo;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::graph::HepGraph;
@@ -92,7 +93,12 @@ mod tests {
     use crate::planner::operator::PhysicalOption;
     use crate::storage::kip::KipTransaction;
     use crate::storage::{Storage, Transaction};
+    use crate::types::index::{IndexInfo, IndexMeta};
+    use crate::types::value::DataValue;
+    use crate::types::LogicalType;
     use petgraph::stable_graph::NodeIndex;
+    use std::ops::Bound;
+    use std::sync::Arc;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -152,11 +158,28 @@ mod tests {
         assert_eq!(exprs.exprs.len(), 2);
         assert_eq!(exprs.exprs[0].cost, Some(1000));
         assert_eq!(exprs.exprs[0].op, PhysicalOption::SeqScan);
-        assert!(exprs.exprs[1].cost.unwrap() >= 1920);
+        assert!(exprs.exprs[1].cost.unwrap() >= 960);
         assert!(matches!(exprs.exprs[1].op, PhysicalOption::IndexScan(_)));
         assert_eq!(
             best_plan.as_ref().unwrap().childrens[0].childrens[0].childrens[0].physical_option,
-            Some(PhysicalOption::SeqScan)
+            Some(PhysicalOption::IndexScan(IndexInfo {
+                meta: Arc::new(IndexMeta {
+                    id: 0,
+                    column_ids: vec![0],
+                    table_name: Arc::new("t1".to_string()),
+                    pk_ty: LogicalType::Integer,
+                    name: "pk_c1".to_string(),
+                    is_unique: false,
+                    is_primary: true,
+                }),
+                ranges: Some(vec![
+                    ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(2)))),
+                    ConstantBinary::Scope {
+                        min: Bound::Excluded(Arc::new(DataValue::Int32(Some(40)))),
+                        max: Bound::Unbounded,
+                    }
+                ]),
+            }))
         );
 
         Ok(())

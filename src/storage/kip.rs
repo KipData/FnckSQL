@@ -105,7 +105,7 @@ impl Transaction for KipTransaction {
         (offset_option, limit_option): Bounds,
         columns: Vec<(usize, ColumnRef)>,
         index_meta: IndexMetaRef,
-        binaries: Vec<ConstantBinary>,
+        ranges: Vec<ConstantBinary>,
     ) -> Result<IndexIter<'_>, DatabaseError> {
         assert!(columns.is_sorted_by_key(|(i, _)| i));
         assert!(columns.iter().map(|(i, _)| i).all_unique());
@@ -129,7 +129,7 @@ impl Transaction for KipTransaction {
             index_meta,
             table,
             index_values: VecDeque::new(),
-            binaries: VecDeque::from(binaries),
+            ranges: VecDeque::from(ranges),
             tx: &self.tx,
             scope_iter: None,
             projections,
@@ -633,7 +633,7 @@ mod test {
                 is_primary: true,
             }),
             table: &table,
-            binaries: VecDeque::from(vec![
+            ranges: VecDeque::from(vec![
                 ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(0)))),
                 ConstantBinary::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(2)))),

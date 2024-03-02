@@ -26,7 +26,7 @@ use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::operator::union::UnionOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::tuple::Schema;
+use crate::types::tuple::{Schema, SchemaRef};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use sqlparser::ast::{
@@ -232,36 +232,24 @@ impl<'a, T: Transaction> Binder<'a, T> {
         }
 
         let TableWithJoins { relation, joins } = &from[0];
+        let mut plan = self.bind_single_table_ref(relation, None)?;
 
-        let (left_name, mut plan) = self.bind_single_table_ref(relation, None)?;
-
-        if !joins.is_empty() {
-            let left_name = Self::unpack_name(left_name, true);
-
-            for join in joins {
-                plan = self.bind_join(left_name.clone(), plan, join)?;
-            }
+        for join in joins {
+            plan = self.bind_join(plan, join)?;
         }
         Ok(plan)
-    }
-
-    fn unpack_name(table_name: Option<TableName>, is_left: bool) -> TableName {
-        let title = if is_left { "Left" } else { "Right" };
-        table_name.unwrap_or_else(|| panic!("{}: Table is not named", title))
     }
 
     fn bind_single_table_ref(
         &mut self,
         table: &TableFactor,
         joint_type: Option<JoinType>,
-    ) -> Result<(Option<TableName>, LogicalPlan), DatabaseError> {
-        let plan_with_name = match table {
+    ) -> Result<LogicalPlan, DatabaseError> {
+        let plan = match table {
             TableFactor::Table { name, alias, .. } => {
                 let table_name = lower_case_name(name)?;
 
-                let (table, plan) =
-                    self._bind_single_table_ref(joint_type, &table_name, alias.as_ref())?;
-                (Some(table), plan)
+                self._bind_single_table_ref(joint_type, &table_name, alias.as_ref())?
             }
             TableFactor::Derived {
                 subquery, alias, ..
@@ -284,16 +272,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         table_alias.to_string(),
                         tables.pop().unwrap(),
                     )?;
-
-                    (Some(table_alias), plan)
-                } else {
-                    ((tables.len() > 1).then(|| tables.pop()).flatten(), plan)
                 }
+                plan
             }
             _ => unimplemented!(),
         };
 
-        Ok(plan_with_name)
+        Ok(plan)
     }
 
     fn register_alias(
@@ -332,20 +317,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
         join_type: Option<JoinType>,
         table: &str,
         alias: Option<&TableAlias>,
-    ) -> Result<(Arc<String>, LogicalPlan), DatabaseError> {
+    ) -> Result<LogicalPlan, DatabaseError> {
         let table_name = Arc::new(table.to_string());
 
         let table_catalog = self.context.table_and_bind(table_name.clone(), join_type)?;
         let scan_op = ScanOperator::build(table_name.clone(), table_catalog);
 
         if let Some(TableAlias { name, columns }) = alias {
-            let alias = lower_ident(name);
-            self.register_alias(columns, alias.clone(), table_name.clone())?;
-
-            return Ok((Arc::new(alias), scan_op));
+            self.register_alias(columns, lower_ident(name), table_name.clone())?;
         }
 
-        Ok((table_name, scan_op))
+        Ok(scan_op)
     }
 
     /// Normalize select item.
@@ -428,8 +410,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     fn bind_join(
         &mut self,
-        left_table: TableName,
-        left: LogicalPlan,
+        mut left: LogicalPlan,
         join: &Join,
     ) -> Result<LogicalPlan, DatabaseError> {
         let Join {
@@ -445,11 +426,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
             JoinOperator::CrossJoin => (JoinType::Cross, None),
             _ => unimplemented!(),
         };
-        let (right_table, right) = self.bind_single_table_ref(relation, Some(join_type))?;
-        let right_table = Self::unpack_name(right_table, false);
+        let mut right = self.bind_single_table_ref(relation, Some(join_type))?;
 
         let on = match joint_condition {
-            Some(constraint) => self.bind_join_constraint(left_table, right_table, constraint)?,
+            Some(constraint) => {
+                self.bind_join_constraint(left.output_schema(), right.output_schema(), constraint)?
+            }
             None => JoinCondition::None,
         };
 
@@ -639,8 +621,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     fn bind_join_constraint(
         &mut self,
-        left_table: TableName,
-        right_table: TableName,
+        left_schema: &SchemaRef,
+        right_schema: &SchemaRef,
         constraint: &JoinConstraint,
     ) -> Result<JoinCondition, DatabaseError> {
         match constraint {
@@ -651,21 +633,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let mut filter = vec![];
                 let expr = self.bind_expr(expr)?;
 
-                let left_table = self
-                    .context
-                    .table(left_table)
-                    .ok_or(DatabaseError::TableNotFound)?;
-                let right_table = self
-                    .context
-                    .table(right_table)
-                    .ok_or(DatabaseError::TableNotFound)?;
-
                 Self::extract_join_keys(
                     expr,
                     &mut on_keys,
                     &mut filter,
-                    left_table.schema_ref(),
-                    right_table.schema_ref(),
+                    left_schema,
+                    right_schema,
                 )?;
 
                 // combine multiple filter exprs into one BinaryExpr
@@ -691,19 +664,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         .find(|column| column.name() == lower_ident(ident))
                         .map(|column| ScalarExpression::ColumnRef(column.clone()))
                 };
-                let left_table = self
-                    .context
-                    .table(left_table)
-                    .ok_or(DatabaseError::TableNotFound)?;
-                let right_table = self
-                    .context
-                    .table(right_table)
-                    .ok_or(DatabaseError::TableNotFound)?;
 
                 for ident in idents {
                     if let (Some(left_column), Some(right_column)) = (
-                        fn_column(left_table.schema_ref(), ident),
-                        fn_column(right_table.schema_ref(), ident),
+                        fn_column(left_schema, ident),
+                        fn_column(right_schema, ident),
                     ) {
                         on_keys.push((left_column, right_column));
                     } else {
@@ -822,6 +787,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                             left_schema,
                             right_schema,
                         )?;
+                    }
+                    BinaryOperator::Or => {
+                        todo!("`NestLoopJoin` is not supported yet")
                     }
                     _ => {
                         if left_expr.referenced_columns(true).iter().all(|column| {

@@ -218,19 +218,16 @@ impl NormalizationRule for PushPredicateIntoScan {
             if let Some(child_id) = graph.eldest_child_at(node_id) {
                 if let Operator::Scan(child_op) = graph.operator_mut(child_id) {
                     //FIXME: now only support `unique` and `primary key`
-                    for IndexInfo { meta, binaries } in &mut child_op.index_infos {
+                    for IndexInfo { meta, ranges } in &mut child_op.index_infos {
                         let mut option = op
                             .predicate
                             .convert_binary(meta.table_name.as_str(), &meta.column_ids[0])?;
 
                         if let Some(mut binary) = option.take() {
                             binary.scope_aggregation()?;
-                            let rearrange_binaries = binary.rearrange()?;
+                            let rearrange_ranges = binary.rearrange()?;
 
-                            if rearrange_binaries.is_empty() {
-                                continue;
-                            }
-                            let _ = binaries.replace(rearrange_binaries);
+                            let _ = ranges.replace(rearrange_ranges);
 
                             return Ok(());
                         }
@@ -283,7 +280,7 @@ mod tests {
                 max: Bound::Unbounded,
             }];
 
-            assert_eq!(op.index_infos[1].binaries, Some(mock_binaries));
+            assert_eq!(op.index_infos[1].ranges, Some(mock_binaries));
         } else {
             unreachable!("Should be a filter operator")
         }

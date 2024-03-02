@@ -46,7 +46,7 @@ pub trait Transaction: Sync + Send + 'static {
         bounds: Bounds,
         columns: Vec<(usize, ColumnRef)>,
         index_meta: IndexMetaRef,
-        binaries: Vec<ConstantBinary>,
+        ranges: Vec<ConstantBinary>,
     ) -> Result<IndexIter<'_>, DatabaseError>;
 
     fn add_index(
@@ -117,7 +117,7 @@ pub struct IndexIter<'a> {
 
     // for buffering data
     index_values: VecDeque<IndexValue>,
-    binaries: VecDeque<ConstantBinary>,
+    ranges: VecDeque<ConstantBinary>,
     scope_iter: Option<mvcc::TransactionIter<'a>>,
 }
 
@@ -156,7 +156,7 @@ impl IndexIter<'_> {
     }
 
     fn is_empty(&self) -> bool {
-        self.scope_iter.is_none() && self.index_values.is_empty() && self.binaries.is_empty()
+        self.scope_iter.is_none() && self.index_values.is_empty() && self.ranges.is_empty()
     }
 }
 
@@ -165,7 +165,7 @@ impl Iter for IndexIter<'_> {
         // 1. check limit
         if matches!(self.limit, Some(0)) || self.is_empty() {
             self.scope_iter = None;
-            self.binaries.clear();
+            self.ranges.clear();
 
             return Ok(None);
         }
@@ -222,7 +222,7 @@ impl Iter for IndexIter<'_> {
         }
 
         // 4. When `scope_iter` and `index_values` do not have a value, use the next expression to iterate
-        if let Some(binary) = self.binaries.pop_front() {
+        if let Some(binary) = self.ranges.pop_front() {
             match binary {
                 ConstantBinary::Scope { min, max } => {
                     let table_name = &self.table.name;
