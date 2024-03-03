@@ -121,3 +121,12 @@ select * from t1 where (id >= 0 or id <= 3) and (id >= 9 or id <= 12) limit 10;
 21 22 23
 24 25 26
 27 28 29
+
+query IIT
+select * from t1 where id = 5 or (id > 5 and (id > 6 or id < 8)  and id < 12);
+----
+6 7 8
+9 10 11
+
+statement ok
+drop table t1;
