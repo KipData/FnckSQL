@@ -12,6 +12,11 @@ SELECT 'a'
 a
 
 query B
+SELECT 1.01=1.01
+----
+true
+
+query B
 SELECT NULL=NULL
 ----
 null

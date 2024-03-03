@@ -306,6 +306,23 @@ mod test {
         Ok(())
     }
 
+    fn plan_filter(plan: LogicalPlan, expr: &str) -> Result<Option<FilterOperator>, DatabaseError> {
+        let best_plan = HepOptimizer::new(plan.clone())
+            .batch(
+                "test_simplify_filter".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![NormalizationRuleImpl::SimplifyFilter],
+            )
+            .find_best::<KipTransaction>(None)?;
+        if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+            println!("{expr}: {:#?}", filter_op);
+
+            Ok(Some(filter_op))
+        } else {
+            Ok(None)
+        }
+    }
+
     #[tokio::test]
     async fn test_simplify_filter_multiple_column() -> Result<(), DatabaseError> {
         // c1 + 1 < -1 => c1 < -2
@@ -319,27 +336,10 @@ mod test {
         // c1 > 0
         let plan_4 = select_sql_run("select * from t1 where c1 + 1 > 1 and -c2 > 1").await?;
 
-        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
-            let best_plan = HepOptimizer::new(plan.clone())
-                .batch(
-                    "test_simplify_filter".to_string(),
-                    HepBatchStrategy::once_topdown(),
-                    vec![NormalizationRuleImpl::SimplifyFilter],
-                )
-                .find_best::<KipTransaction>(None)?;
-            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                println!("{expr}: {:#?}", filter_op);
-
-                Ok(Some(filter_op))
-            } else {
-                Ok(None)
-            }
-        };
-
-        let op_1 = op(plan_1, "-(c1 + 1) > 1 and -(1 - c2) > 1")?.unwrap();
-        let op_2 = op(plan_2, "-(1 - c1) > 1 and -(c2 + 1) > 1")?.unwrap();
-        let op_3 = op(plan_3, "-c1 > 1 and c2 + 1 > 1")?.unwrap();
-        let op_4 = op(plan_4, "c1 + 1 > 1 and -c2 > 1")?.unwrap();
+        let op_1 = plan_filter(plan_1, "-(c1 + 1) > 1 and -(1 - c2) > 1")?.unwrap();
+        let op_2 = plan_filter(plan_2, "-(1 - c1) > 1 and -(c2 + 1) > 1")?.unwrap();
+        let op_3 = plan_filter(plan_3, "-c1 > 1 and c2 + 1 > 1")?.unwrap();
+        let op_4 = plan_filter(plan_4, "c1 + 1 > 1 and -c2 > 1")?.unwrap();
 
         let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
@@ -429,24 +429,7 @@ mod test {
         // c1 + 1 < -1 => c1 < -2
         let plan_1 = select_sql_run("select * from t1 where c1 > c2 or c1 > 1").await?;
 
-        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
-            let best_plan = HepOptimizer::new(plan.clone())
-                .batch(
-                    "test_simplify_filter".to_string(),
-                    HepBatchStrategy::once_topdown(),
-                    vec![NormalizationRuleImpl::SimplifyFilter],
-                )
-                .find_best::<KipTransaction>(None)?;
-            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                println!("{expr}: {:#?}", filter_op);
-
-                Ok(Some(filter_op))
-            } else {
-                Ok(None)
-            }
-        };
-
-        let op_1 = op(plan_1, "c1 > c2 or c1 > 1")?.unwrap();
+        let op_1 = plan_filter(plan_1, "c1 > c2 or c1 > 1")?.unwrap();
 
         let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
@@ -460,24 +443,7 @@ mod test {
     {
         let plan_1 = select_sql_run("select * from t1 where c1 = 4 and c1 > c2 or c1 > 1").await?;
 
-        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
-            let best_plan = HepOptimizer::new(plan.clone())
-                .batch(
-                    "test_simplify_filter".to_string(),
-                    HepBatchStrategy::once_topdown(),
-                    vec![NormalizationRuleImpl::SimplifyFilter],
-                )
-                .find_best::<KipTransaction>(None)?;
-            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                println!("{expr}: {:#?}", filter_op);
-
-                Ok(Some(filter_op))
-            } else {
-                Ok(None)
-            }
-        };
-
-        let op_1 = op(plan_1, "c1 = 4 and c2 > c1 or c1 > 1")?.unwrap();
+        let op_1 = plan_filter(plan_1, "c1 = 4 and c2 > c1 or c1 > 1")?.unwrap();
 
         let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
@@ -496,27 +462,55 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_simplify_filter_and_or_mixed() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run(
+            "select * from t1 where c1 = 5 or (c1 > 5 and (c1 > 6 or c1 < 8)  and c1 < 12)",
+        )
+        .await?;
+
+        let op_1 = plan_filter(
+            plan_1,
+            "c1 = 5 or (c1 > 5 and (c1 > 6 or c1 < 8)  and c1 < 12)",
+        )?
+        .unwrap();
+
+        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
+        println!("op_1 => c1: {:#?}", cb_1_c1);
+        assert_eq!(
+            cb_1_c1,
+            Some(ConstantBinary::Or(vec![
+                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(5)))),
+                ConstantBinary::And(vec![
+                    ConstantBinary::Scope {
+                        min: Bound::Excluded(Arc::new(DataValue::Int32(Some(5)))),
+                        max: Bound::Unbounded,
+                    },
+                    ConstantBinary::Or(vec![
+                        ConstantBinary::Scope {
+                            min: Bound::Excluded(Arc::new(DataValue::Int32(Some(6)))),
+                            max: Bound::Unbounded,
+                        },
+                        ConstantBinary::Scope {
+                            min: Bound::Unbounded,
+                            max: Bound::Excluded(Arc::new(DataValue::Int32(Some(8)))),
+                        }
+                    ]),
+                    ConstantBinary::Scope {
+                        min: Bound::Unbounded,
+                        max: Bound::Excluded(Arc::new(DataValue::Int32(Some(12)))),
+                    }
+                ])
+            ]))
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_simplify_filter_column_is_null() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 is null").await?;
 
-        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
-            let best_plan = HepOptimizer::new(plan.clone())
-                .batch(
-                    "test_simplify_filter".to_string(),
-                    HepBatchStrategy::once_topdown(),
-                    vec![NormalizationRuleImpl::SimplifyFilter],
-                )
-                .find_best::<KipTransaction>(None)?;
-            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                println!("{expr}: {:#?}", filter_op);
-
-                Ok(Some(filter_op))
-            } else {
-                Ok(None)
-            }
-        };
-
-        let op_1 = op(plan_1, "c1 is null")?.unwrap();
+        let op_1 = plan_filter(plan_1, "c1 is null")?.unwrap();
 
         let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
@@ -529,24 +523,7 @@ mod test {
     async fn test_simplify_filter_column_is_not_null() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 is not null").await?;
 
-        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
-            let best_plan = HepOptimizer::new(plan.clone())
-                .batch(
-                    "test_simplify_filter".to_string(),
-                    HepBatchStrategy::once_topdown(),
-                    vec![NormalizationRuleImpl::SimplifyFilter],
-                )
-                .find_best::<KipTransaction>(None)?;
-            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                println!("{expr}: {:#?}", filter_op);
-
-                Ok(Some(filter_op))
-            } else {
-                Ok(None)
-            }
-        };
-
-        let op_1 = op(plan_1, "c1 is not null")?.unwrap();
+        let op_1 = plan_filter(plan_1, "c1 is not null")?.unwrap();
 
         let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
@@ -562,24 +539,7 @@ mod test {
     async fn test_simplify_filter_column_in() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 in (1, 2, 3)").await?;
 
-        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
-            let best_plan = HepOptimizer::new(plan.clone())
-                .batch(
-                    "test_simplify_filter".to_string(),
-                    HepBatchStrategy::once_topdown(),
-                    vec![NormalizationRuleImpl::SimplifyFilter],
-                )
-                .find_best::<KipTransaction>(None)?;
-            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                println!("{expr}: {:#?}", filter_op);
-
-                Ok(Some(filter_op))
-            } else {
-                Ok(None)
-            }
-        };
-
-        let op_1 = op(plan_1, "c1 in (1, 2, 3)")?.unwrap();
+        let op_1 = plan_filter(plan_1, "c1 in (1, 2, 3)")?.unwrap();
 
         let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
@@ -599,24 +559,7 @@ mod test {
     async fn test_simplify_filter_column_not_in() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 not in (1, 2, 3)").await?;
 
-        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<FilterOperator>, DatabaseError> {
-            let best_plan = HepOptimizer::new(plan.clone())
-                .batch(
-                    "test_simplify_filter".to_string(),
-                    HepBatchStrategy::once_topdown(),
-                    vec![NormalizationRuleImpl::SimplifyFilter],
-                )
-                .find_best::<KipTransaction>(None)?;
-            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                println!("{expr}: {:#?}", filter_op);
-
-                Ok(Some(filter_op))
-            } else {
-                Ok(None)
-            }
-        };
-
-        let op_1 = op(plan_1, "c1 not in (1, 2, 3)")?.unwrap();
+        let op_1 = plan_filter(plan_1, "c1 not in (1, 2, 3)")?.unwrap();
 
         let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
         println!("op_1 => c1: {:#?}", cb_1_c1);
