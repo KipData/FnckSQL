@@ -1,6 +1,6 @@
 use crate::catalog::TableName;
 use crate::errors::DatabaseError;
-use crate::expression::simplify::ConstantBinary;
+use crate::expression::range_detacher::Range;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
 use crate::optimizer::core::histogram::Histogram;
 use crate::storage::Transaction;
@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::slice;
 
 pub struct ColumnMetaLoader<'a, T: Transaction> {
     cache: &'a ShardingLruCache<TableName, Vec<ColumnMeta>>,
@@ -72,12 +73,15 @@ impl ColumnMeta {
         &self.histogram
     }
 
-    /// Tips:
-    /// - binaries must be used `ConstantBinary::scope_aggregation` and `ConstantBinary::rearrange`
-    pub fn collect_count(&self, binaries: &[ConstantBinary]) -> usize {
+    pub fn collect_count(&self, range: &Range) -> usize {
         let mut count = 0;
 
-        count += self.histogram.collect_count(binaries, &self.cm_sketch);
+        let ranges = if let Range::SortedRanges(ranges) = range {
+            ranges.as_slice()
+        } else {
+            slice::from_ref(range)
+        };
+        count += self.histogram.collect_count(ranges, &self.cm_sketch);
         count
     }
 

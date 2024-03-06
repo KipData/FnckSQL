@@ -3,7 +3,7 @@ mod table_codec;
 
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::errors::DatabaseError;
-use crate::expression::simplify::ConstantBinary;
+use crate::expression::range_detacher::Range;
 use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::storage::table_codec::TableCodec;
 use crate::types::index::{Index, IndexMetaRef};
@@ -46,7 +46,7 @@ pub trait Transaction: Sync + Send + 'static {
         bounds: Bounds,
         columns: Vec<(usize, ColumnRef)>,
         index_meta: IndexMetaRef,
-        ranges: Vec<ConstantBinary>,
+        ranges: Vec<Range>,
     ) -> Result<IndexIter<'_>, DatabaseError>;
 
     fn add_index(
@@ -117,7 +117,7 @@ pub struct IndexIter<'a> {
 
     // for buffering data
     index_values: VecDeque<IndexValue>,
-    ranges: VecDeque<ConstantBinary>,
+    ranges: VecDeque<Range>,
     scope_iter: Option<mvcc::TransactionIter<'a>>,
 }
 
@@ -224,7 +224,7 @@ impl Iter for IndexIter<'_> {
         // 4. When `scope_iter` and `index_values` do not have a value, use the next expression to iterate
         if let Some(binary) = self.ranges.pop_front() {
             match binary {
-                ConstantBinary::Scope { min, max } => {
+                Range::Scope { min, max } => {
                     let table_name = &self.table.name;
                     let index_meta = &self.index_meta;
 
@@ -258,7 +258,7 @@ impl Iter for IndexIter<'_> {
                     )?;
                     self.scope_iter = Some(iter);
                 }
-                ConstantBinary::Eq(val) => {
+                Range::Eq(val) => {
                     let key = self.val_to_key(val)?;
                     if let Some(bytes) = self.tx.get(&key)? {
                         let index = if self.index_meta.is_unique {

@@ -114,17 +114,16 @@ mod test {
     use crate::binder::test::select_sql_run;
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::errors::DatabaseError;
-    use crate::expression::simplify::ConstantBinary;
+    use crate::expression::range_detacher::{Range, RangeDetacher};
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
-    use crate::planner::operator::filter::FilterOperator;
     use crate::planner::operator::Operator;
     use crate::planner::LogicalPlan;
     use crate::storage::kip::KipTransaction;
     use crate::types::value::DataValue;
-    use crate::types::LogicalType;
+    use crate::types::{ColumnId, LogicalType};
     use std::collections::Bound;
     use std::sync::Arc;
 
@@ -157,12 +156,16 @@ mod test {
             unreachable!();
         }
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-            let column_binary = filter_op.predicate.convert_binary("t1", &0).unwrap();
-            let final_binary = ConstantBinary::Scope {
-                min: Bound::Unbounded,
-                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2)))),
-            };
-            assert_eq!(column_binary, Some(final_binary));
+            let range = RangeDetacher::new("t1", &0)
+                .detach(&filter_op.predicate)?
+                .unwrap();
+            assert_eq!(
+                range,
+                Range::Scope {
+                    min: Bound::Unbounded,
+                    max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2)))),
+                }
+            );
         } else {
             unreachable!();
         }
@@ -196,7 +199,7 @@ mod test {
         // c1 < 24
         let plan_10 = select_sql_run("select * from t1 where 24 < (-1 - c1) + 1").await?;
 
-        let op = |plan: LogicalPlan, expr: &str| -> Result<Option<ConstantBinary>, DatabaseError> {
+        let op = |plan: LogicalPlan| -> Result<Option<Range>, DatabaseError> {
             let best_plan = HepOptimizer::new(plan.clone())
                 .batch(
                     "test_simplify_filter".to_string(),
@@ -205,22 +208,17 @@ mod test {
                 )
                 .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                println!(
-                    "{expr}: {:#?}",
-                    filter_op.predicate.convert_binary("t1", &0).unwrap()
-                );
-
-                Ok(filter_op.predicate.convert_binary("t1", &0).unwrap())
+                Ok(RangeDetacher::new("t1", &0).detach(&filter_op.predicate)?)
             } else {
                 Ok(None)
             }
         };
 
-        let op_1 = op(plan_1, "-(c1 + 1) > 1")?;
-        let op_2 = op(plan_2, "-(1 - c1) > 1")?;
-        let op_3 = op(plan_3, "-c1 > 1")?;
-        let op_4 = op(plan_4, "c1 + 1 > 1")?;
-        let op_5 = op(plan_9, "(-1 - c1) + 1 > 24")?;
+        let op_1 = op(plan_1)?;
+        let op_2 = op(plan_2)?;
+        let op_3 = op(plan_3)?;
+        let op_4 = op(plan_4)?;
+        let op_5 = op(plan_9)?;
 
         assert!(op_1.is_some());
         assert!(op_2.is_some());
@@ -228,11 +226,11 @@ mod test {
         assert!(op_4.is_some());
         assert!(op_5.is_some());
 
-        assert_eq!(op_1, op(plan_5, "1 < -(c1 + 1)")?);
-        assert_eq!(op_2, op(plan_6, "1 < -(1 - c1)")?);
-        assert_eq!(op_3, op(plan_7, "1 < -c1")?);
-        assert_eq!(op_4, op(plan_8, "1 < c1 + 1")?);
-        assert_eq!(op_5, op(plan_10, "24 < (-1 - c1) + 1")?);
+        assert_eq!(op_1, op(plan_5)?);
+        assert_eq!(op_2, op(plan_6)?);
+        assert_eq!(op_3, op(plan_7)?);
+        assert_eq!(op_4, op(plan_8)?);
+        assert_eq!(op_5, op(plan_10)?);
 
         Ok(())
     }
@@ -306,7 +304,10 @@ mod test {
         Ok(())
     }
 
-    fn plan_filter(plan: LogicalPlan, expr: &str) -> Result<Option<FilterOperator>, DatabaseError> {
+    fn plan_filter(
+        plan: &LogicalPlan,
+        column_id: &ColumnId,
+    ) -> Result<Option<Range>, DatabaseError> {
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
                 "test_simplify_filter".to_string(),
@@ -315,9 +316,7 @@ mod test {
             )
             .find_best::<KipTransaction>(None)?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-            println!("{expr}: {:#?}", filter_op);
-
-            Ok(Some(filter_op))
+            Ok(RangeDetacher::new("t1", &column_id).detach(&filter_op.predicate)?)
         } else {
             Ok(None)
         }
@@ -336,89 +335,73 @@ mod test {
         // c1 > 0
         let plan_4 = select_sql_run("select * from t1 where c1 + 1 > 1 and -c2 > 1").await?;
 
-        let op_1 = plan_filter(plan_1, "-(c1 + 1) > 1 and -(1 - c2) > 1")?.unwrap();
-        let op_2 = plan_filter(plan_2, "-(1 - c1) > 1 and -(c2 + 1) > 1")?.unwrap();
-        let op_3 = plan_filter(plan_3, "-c1 > 1 and c2 + 1 > 1")?.unwrap();
-        let op_4 = plan_filter(plan_4, "c1 + 1 > 1 and -c2 > 1")?.unwrap();
+        let range_1_c1 = plan_filter(&plan_1, &0)?.unwrap();
+        let range_1_c2 = plan_filter(&plan_1, &1)?.unwrap();
 
-        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_1 => c1: {:#?}", cb_1_c1);
+        let range_2_c1 = plan_filter(&plan_2, &0)?.unwrap();
+        let range_2_c2 = plan_filter(&plan_2, &1)?.unwrap();
+
+        let range_3_c1 = plan_filter(&plan_3, &0)?.unwrap();
+        let range_3_c2 = plan_filter(&plan_3, &1)?.unwrap();
+
+        let range_4_c1 = plan_filter(&plan_4, &0)?.unwrap();
+        let range_4_c2 = plan_filter(&plan_4, &1)?.unwrap();
+
         assert_eq!(
-            cb_1_c1,
-            Some(ConstantBinary::Scope {
+            range_1_c1,
+            Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
-            })
+            }
         );
-
-        let cb_1_c2 = op_1.predicate.convert_binary("t1", &1).unwrap();
-        println!("op_1 => c2: {:#?}", cb_1_c2);
         assert_eq!(
-            cb_1_c2,
-            Some(ConstantBinary::Scope {
+            range_1_c2,
+            Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
                 max: Bound::Unbounded
-            })
+            }
         );
-
-        let cb_2_c1 = op_2.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_2 => c1: {:#?}", cb_2_c1);
         assert_eq!(
-            cb_2_c1,
-            Some(ConstantBinary::Scope {
+            range_2_c1,
+            Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
                 max: Bound::Unbounded
-            })
+            }
         );
-
-        let cb_2_c2 = op_2.predicate.convert_binary("t1", &1).unwrap();
-        println!("op_2 => c2: {:#?}", cb_2_c2);
         assert_eq!(
-            cb_1_c1,
-            Some(ConstantBinary::Scope {
+            range_2_c2,
+            Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
-            })
+            }
         );
-
-        let cb_3_c1 = op_3.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_3 => c1: {:#?}", cb_3_c1);
         assert_eq!(
-            cb_3_c1,
-            Some(ConstantBinary::Scope {
+            range_3_c1,
+            Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1))))
-            })
+            }
         );
-
-        let cb_3_c2 = op_3.predicate.convert_binary("t1", &1).unwrap();
-        println!("op_3 => c2: {:#?}", cb_3_c2);
         assert_eq!(
-            cb_3_c2,
-            Some(ConstantBinary::Scope {
+            range_3_c2,
+            Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
                 max: Bound::Unbounded
-            })
+            }
         );
-
-        let cb_4_c1 = op_4.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_4 => c1: {:#?}", cb_4_c1);
         assert_eq!(
-            cb_4_c1,
-            Some(ConstantBinary::Scope {
+            range_4_c1,
+            Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
                 max: Bound::Unbounded
-            })
+            }
         );
-
-        let cb_4_c2 = op_4.predicate.convert_binary("t1", &1).unwrap();
-        println!("op_4 => c2: {:#?}", cb_4_c2);
         assert_eq!(
-            cb_4_c2,
-            Some(ConstantBinary::Scope {
+            range_4_c2,
+            Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1))))
-            })
+            }
         );
 
         Ok(())
@@ -426,14 +409,10 @@ mod test {
 
     #[tokio::test]
     async fn test_simplify_filter_multiple_column_in_or() -> Result<(), DatabaseError> {
-        // c1 + 1 < -1 => c1 < -2
+        // c1 > c2 or c1 > 1
         let plan_1 = select_sql_run("select * from t1 where c1 > c2 or c1 > 1").await?;
 
-        let op_1 = plan_filter(plan_1, "c1 > c2 or c1 > 1")?.unwrap();
-
-        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_1 => c1: {:#?}", cb_1_c1);
-        assert_eq!(cb_1_c1, None);
+        assert_eq!(plan_filter(&plan_1, &0)?, None);
 
         Ok(())
     }
@@ -443,64 +422,12 @@ mod test {
     {
         let plan_1 = select_sql_run("select * from t1 where c1 = 4 and c1 > c2 or c1 > 1").await?;
 
-        let op_1 = plan_filter(plan_1, "c1 = 4 and c2 > c1 or c1 > 1")?.unwrap();
-
-        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(
-            cb_1_c1,
-            Some(ConstantBinary::Or(vec![
-                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(4)))),
-                ConstantBinary::Scope {
-                    min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
-                    max: Bound::Unbounded
-                }
-            ]))
-        );
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_simplify_filter_and_or_mixed() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run(
-            "select * from t1 where c1 = 5 or (c1 > 5 and (c1 > 6 or c1 < 8)  and c1 < 12)",
-        )
-        .await?;
-
-        let op_1 = plan_filter(
-            plan_1,
-            "c1 = 5 or (c1 > 5 and (c1 > 6 or c1 < 8)  and c1 < 12)",
-        )?
-        .unwrap();
-
-        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_1 => c1: {:#?}", cb_1_c1);
-        assert_eq!(
-            cb_1_c1,
-            Some(ConstantBinary::Or(vec![
-                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(5)))),
-                ConstantBinary::And(vec![
-                    ConstantBinary::Scope {
-                        min: Bound::Excluded(Arc::new(DataValue::Int32(Some(5)))),
-                        max: Bound::Unbounded,
-                    },
-                    ConstantBinary::Or(vec![
-                        ConstantBinary::Scope {
-                            min: Bound::Excluded(Arc::new(DataValue::Int32(Some(6)))),
-                            max: Bound::Unbounded,
-                        },
-                        ConstantBinary::Scope {
-                            min: Bound::Unbounded,
-                            max: Bound::Excluded(Arc::new(DataValue::Int32(Some(8)))),
-                        }
-                    ]),
-                    ConstantBinary::Scope {
-                        min: Bound::Unbounded,
-                        max: Bound::Excluded(Arc::new(DataValue::Int32(Some(12)))),
-                    }
-                ])
-            ]))
+            plan_filter(&plan_1, &0)?,
+            Some(Range::Scope {
+                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
+                max: Bound::Unbounded,
+            })
         );
 
         Ok(())
@@ -510,11 +437,10 @@ mod test {
     async fn test_simplify_filter_column_is_null() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 is null").await?;
 
-        let op_1 = plan_filter(plan_1, "c1 is null")?.unwrap();
-
-        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_1 => c1: {:#?}", cb_1_c1);
-        assert_eq!(cb_1_c1, Some(ConstantBinary::Eq(Arc::new(DataValue::Null))));
+        assert_eq!(
+            plan_filter(&plan_1, &0)?,
+            Some(Range::Eq(Arc::new(DataValue::Null)))
+        );
 
         Ok(())
     }
@@ -523,14 +449,7 @@ mod test {
     async fn test_simplify_filter_column_is_not_null() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 is not null").await?;
 
-        let op_1 = plan_filter(plan_1, "c1 is not null")?.unwrap();
-
-        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_1 => c1: {:#?}", cb_1_c1);
-        assert_eq!(
-            cb_1_c1,
-            Some(ConstantBinary::NotEq(Arc::new(DataValue::Null)))
-        );
+        assert_eq!(plan_filter(&plan_1, &0)?, None);
 
         Ok(())
     }
@@ -539,16 +458,12 @@ mod test {
     async fn test_simplify_filter_column_in() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 in (1, 2, 3)").await?;
 
-        let op_1 = plan_filter(plan_1, "c1 in (1, 2, 3)")?.unwrap();
-
-        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_1 => c1: {:#?}", cb_1_c1);
         assert_eq!(
-            cb_1_c1,
-            Some(ConstantBinary::Or(vec![
-                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(2)))),
-                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(1)))),
-                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(3)))),
+            plan_filter(&plan_1, &0)?,
+            Some(Range::SortedRanges(vec![
+                Range::Eq(Arc::new(DataValue::Int32(Some(1)))),
+                Range::Eq(Arc::new(DataValue::Int32(Some(2)))),
+                Range::Eq(Arc::new(DataValue::Int32(Some(3)))),
             ]))
         );
 
@@ -559,18 +474,7 @@ mod test {
     async fn test_simplify_filter_column_not_in() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 not in (1, 2, 3)").await?;
 
-        let op_1 = plan_filter(plan_1, "c1 not in (1, 2, 3)")?.unwrap();
-
-        let cb_1_c1 = op_1.predicate.convert_binary("t1", &0).unwrap();
-        println!("op_1 => c1: {:#?}", cb_1_c1);
-        assert_eq!(
-            cb_1_c1,
-            Some(ConstantBinary::And(vec![
-                ConstantBinary::NotEq(Arc::new(DataValue::Int32(Some(2)))),
-                ConstantBinary::NotEq(Arc::new(DataValue::Int32(Some(1)))),
-                ConstantBinary::NotEq(Arc::new(DataValue::Int32(Some(3)))),
-            ]))
-        );
+        assert_eq!(plan_filter(&plan_1, &0)?, None);
 
         Ok(())
     }

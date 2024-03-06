@@ -16,6 +16,7 @@ use crate::types::LogicalType;
 pub mod agg;
 mod evaluator;
 pub mod function;
+pub mod range_detacher;
 pub mod simplify;
 pub mod value_compute;
 
