@@ -84,10 +84,10 @@ pub fn build_read<T: Transaction>(plan: LogicalPlan, transaction: &T) -> BoxedEx
         Operator::Scan(op) => {
             if let Some(PhysicalOption::IndexScan(IndexInfo {
                 meta,
-                ranges: Some(ranges),
+                range: Some(range),
             })) = plan.physical_option
             {
-                IndexScan::from((op, meta, ranges)).execute(transaction)
+                IndexScan::from((op, meta, range)).execute(transaction)
             } else {
                 SeqScan::from(op).execute(transaction)
             }

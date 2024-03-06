@@ -1,6 +1,6 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::errors::DatabaseError;
-use crate::expression::simplify::ConstantBinary;
+use crate::expression::range_detacher::Range;
 use crate::optimizer::core::column_meta::{ColumnMeta, ColumnMetaLoader};
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{Bounds, IndexIter, Iter, Storage, Transaction};
@@ -105,7 +105,7 @@ impl Transaction for KipTransaction {
         (offset_option, limit_option): Bounds,
         columns: Vec<(usize, ColumnRef)>,
         index_meta: IndexMetaRef,
-        ranges: Vec<ConstantBinary>,
+        ranges: Vec<Range>,
     ) -> Result<IndexIter<'_>, DatabaseError> {
         assert!(columns.is_sorted_by_key(|(i, _)| i));
         assert!(columns.iter().map(|(i, _)| i).all_unique());
@@ -516,7 +516,7 @@ mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::DataBaseBuilder;
     use crate::errors::DatabaseError;
-    use crate::expression::simplify::ConstantBinary;
+    use crate::expression::range_detacher::Range;
     use crate::storage::kip::KipStorage;
     use crate::storage::{IndexIter, Iter, Storage, Transaction};
     use crate::types::index::IndexMeta;
@@ -634,8 +634,8 @@ mod test {
             }),
             table: &table,
             ranges: VecDeque::from(vec![
-                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(0)))),
-                ConstantBinary::Scope {
+                Range::Eq(Arc::new(DataValue::Int32(Some(0)))),
+                Range::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(2)))),
                     max: Bound::Included(Arc::new(DataValue::Int32(Some(4)))),
                 },
@@ -679,7 +679,7 @@ mod test {
                 (Some(0), Some(1)),
                 columns,
                 table.indexes[0].clone(),
-                vec![ConstantBinary::Scope {
+                vec![Range::Scope {
                     min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
                     max: Bound::Unbounded,
                 }],

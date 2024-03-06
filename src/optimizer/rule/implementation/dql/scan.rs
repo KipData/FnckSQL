@@ -71,17 +71,17 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
         if let Operator::Scan(scan_op) = op {
             let column_metas = loader.load(scan_op.table_name.clone())?;
             for index_info in scan_op.index_infos.iter() {
-                if index_info.ranges.is_none() {
+                if index_info.range.is_none() {
                     continue;
                 }
                 let mut cost = None;
 
-                if let Some(binaries) = &index_info.ranges {
+                if let Some(range) = &index_info.range {
                     // FIXME: Only UniqueIndex
                     if let Some(column_meta) =
                         find_column_meta(column_metas, &index_info.meta.column_ids[0])
                     {
-                        let mut row_count = column_meta.collect_count(binaries);
+                        let mut row_count = column_meta.collect_count(range);
 
                         if !index_info.meta.is_primary {
                             // need to return table query(non-covering index)

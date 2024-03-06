@@ -1,4 +1,4 @@
-use crate::expression::simplify::ConstantBinary;
+use crate::expression::range_detacher::Range;
 use crate::types::value::DataValue;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -22,19 +22,13 @@ pub struct CountMinSketch<K> {
 }
 
 impl CountMinSketch<DataValue> {
-    /// Tips:
-    /// - binaries must be used `ConstantBinary::scope_aggregation` and `ConstantBinary::rearrange`
-    /// - just count with `ConstantBinary::Eq`
-    pub fn collect_count(&self, binaries: &[ConstantBinary]) -> usize {
+    pub fn collect_count(&self, ranges: &[Range]) -> usize {
         let mut count = 0;
 
-        for binary in binaries {
-            count += match binary {
-                ConstantBinary::Eq(value) => self.estimate(value),
-                ConstantBinary::NotEq(_) | ConstantBinary::Scope { .. } => 0,
-                ConstantBinary::And(binaries) | ConstantBinary::Or(binaries) => {
-                    self.collect_count(binaries)
-                }
+        for range in ranges {
+            count += match range {
+                Range::Eq(value) => self.estimate(value),
+                _ => 0,
             }
         }
 
@@ -165,7 +159,7 @@ impl<K: Hash> CountMinSketch<K> {
 
 #[cfg(test)]
 mod tests {
-    use crate::expression::simplify::ConstantBinary;
+    use crate::expression::range_detacher::Range;
     use crate::optimizer::core::cm_sketch::CountMinSketch;
     use crate::types::value::DataValue;
     use std::collections::Bound;
@@ -199,8 +193,8 @@ mod tests {
         }
         assert_eq!(
             cms.collect_count(&vec![
-                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(300)))),
-                ConstantBinary::Scope {
+                Range::Eq(Arc::new(DataValue::Int32(Some(300)))),
+                Range::Scope {
                     min: Bound::Unbounded,
                     max: Bound::Unbounded,
                 }

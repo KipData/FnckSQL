@@ -1,6 +1,6 @@
 use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
-use crate::expression::simplify::ConstantBinary;
+use crate::expression::range_detacher::Range;
 use crate::planner::operator::scan::ScanOperator;
 use crate::storage::{Iter, Transaction};
 use crate::types::index::IndexMetaRef;
@@ -10,11 +10,16 @@ use futures_async_stream::try_stream;
 pub(crate) struct IndexScan {
     op: ScanOperator,
     index_by: IndexMetaRef,
-    ranges: Vec<ConstantBinary>,
+    ranges: Vec<Range>,
 }
 
-impl From<(ScanOperator, IndexMetaRef, Vec<ConstantBinary>)> for IndexScan {
-    fn from((op, index_by, ranges): (ScanOperator, IndexMetaRef, Vec<ConstantBinary>)) -> Self {
+impl From<(ScanOperator, IndexMetaRef, Range)> for IndexScan {
+    fn from((op, index_by, range): (ScanOperator, IndexMetaRef, Range)) -> Self {
+        let ranges = match range {
+            Range::SortedRanges(ranges) => ranges,
+            range => vec![range],
+        };
+
         IndexScan {
             op,
             index_by,

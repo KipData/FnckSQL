@@ -1,7 +1,7 @@
 use crate::catalog::ColumnCatalog;
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::sort::radix_sort;
-use crate::expression::simplify::ConstantBinary;
+use crate::expression::range_detacher::Range;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::{ColumnId, LogicalType};
@@ -212,13 +212,8 @@ impl Histogram {
         self.values_len
     }
 
-    /// Tips: binaries must be used `ConstantBinary::scope_aggregation` and `ConstantBinary::rearrange`
-    pub fn collect_count(
-        &self,
-        binaries: &[ConstantBinary],
-        sketch: &CountMinSketch<DataValue>,
-    ) -> usize {
-        if self.buckets.is_empty() || binaries.is_empty() {
+    pub fn collect_count(&self, ranges: &[Range], sketch: &CountMinSketch<DataValue>) -> usize {
+        if self.buckets.is_empty() || ranges.is_empty() {
             return 0;
         }
 
@@ -227,15 +222,18 @@ impl Histogram {
         let mut bucket_i = 0;
         let mut bucket_idxs = Vec::new();
 
-        while bucket_i < self.buckets.len() && binary_i < binaries.len() {
-            self._collect_count(
-                binaries,
+        while bucket_i < self.buckets.len() && binary_i < ranges.len() {
+            let is_dummy = self._collect_count(
+                ranges,
                 &mut binary_i,
                 &mut bucket_i,
                 &mut bucket_idxs,
                 &mut count,
                 sketch,
             );
+            if is_dummy {
+                return 0;
+            }
         }
 
         bucket_idxs
@@ -247,13 +245,13 @@ impl Histogram {
 
     fn _collect_count(
         &self,
-        binaries: &[ConstantBinary],
+        ranges: &[Range],
         binary_i: &mut usize,
         bucket_i: &mut usize,
         bucket_idxs: &mut Vec<usize>,
         count: &mut usize,
         sketch: &CountMinSketch<DataValue>,
-    ) {
+    ) -> bool {
         let float_value = |value: &DataValue, prefix_len: usize| {
             match value.logical_type() {
                 LogicalType::Varchar(_) => match value {
@@ -320,8 +318,8 @@ impl Histogram {
 
         let distinct_1 = OrderedFloat(1.0 / self.number_of_distinct_value as f64);
 
-        match &binaries[*binary_i] {
-            ConstantBinary::Scope { min, max } => {
+        match &ranges[*binary_i] {
+            Range::Scope { min, max } => {
                 let bucket = &self.buckets[*bucket_i];
                 let mut temp_count = 0;
 
@@ -406,21 +404,15 @@ impl Histogram {
                 }
                 *count += cmp::max(temp_count, 0);
             }
-            ConstantBinary::Eq(value) => {
+            Range::Eq(value) => {
                 *count += sketch.estimate(value);
                 *binary_i += 1
             }
-            ConstantBinary::NotEq(_) => (),
-            ConstantBinary::And(inner_binaries) | ConstantBinary::Or(inner_binaries) => self
-                ._collect_count(
-                    inner_binaries,
-                    binary_i,
-                    bucket_i,
-                    bucket_idxs,
-                    count,
-                    sketch,
-                ),
+            Range::Dummy => return true,
+            Range::SortedRanges(_) => unreachable!(),
         }
+
+        false
     }
 }
 
@@ -440,7 +432,7 @@ impl Bucket {
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::errors::DatabaseError;
-    use crate::expression::simplify::ConstantBinary;
+    use crate::expression::range_detacher::Range;
     use crate::optimizer::core::histogram::{Bucket, HistogramBuilder};
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
@@ -690,8 +682,8 @@ mod tests {
 
         let count_1 = histogram.collect_count(
             &vec![
-                ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(2)))),
-                ConstantBinary::Scope {
+                Range::Eq(Arc::new(DataValue::Int32(Some(2)))),
+                Range::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(4)))),
                     max: Bound::Excluded(Arc::new(DataValue::Int32(Some(12)))),
                 },
@@ -702,7 +694,7 @@ mod tests {
         assert_eq!(count_1, 9);
 
         let count_2 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Included(Arc::new(DataValue::Int32(Some(4)))),
                 max: Bound::Unbounded,
             }],
@@ -712,7 +704,7 @@ mod tests {
         assert_eq!(count_2, 11);
 
         let count_3 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(7)))),
                 max: Bound::Unbounded,
             }],
@@ -722,7 +714,7 @@ mod tests {
         assert_eq!(count_3, 7);
 
         let count_4 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Included(Arc::new(DataValue::Int32(Some(11)))),
             }],
@@ -732,7 +724,7 @@ mod tests {
         assert_eq!(count_4, 12);
 
         let count_5 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(8)))),
             }],
@@ -742,7 +734,7 @@ mod tests {
         assert_eq!(count_5, 8);
 
         let count_6 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Included(Arc::new(DataValue::Int32(Some(2)))),
                 max: Bound::Unbounded,
             }],
@@ -752,7 +744,7 @@ mod tests {
         assert_eq!(count_6, 13);
 
         let count_7 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
                 max: Bound::Unbounded,
             }],
@@ -762,7 +754,7 @@ mod tests {
         assert_eq!(count_7, 13);
 
         let count_8 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Included(Arc::new(DataValue::Int32(Some(12)))),
             }],
@@ -772,7 +764,7 @@ mod tests {
         assert_eq!(count_8, 13);
 
         let count_9 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(13)))),
             }],
@@ -782,7 +774,7 @@ mod tests {
         assert_eq!(count_9, 13);
 
         let count_10 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(3)))),
             }],
@@ -792,7 +784,7 @@ mod tests {
         assert_eq!(count_10, 2);
 
         let count_11 = histogram.collect_count(
-            &vec![ConstantBinary::Scope {
+            &vec![Range::Scope {
                 min: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
                 max: Bound::Included(Arc::new(DataValue::Int32(Some(2)))),
             }],

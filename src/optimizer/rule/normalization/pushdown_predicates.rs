@@ -1,5 +1,6 @@
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
+use crate::expression::range_detacher::RangeDetacher;
 use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
@@ -218,19 +219,9 @@ impl NormalizationRule for PushPredicateIntoScan {
             if let Some(child_id) = graph.eldest_child_at(node_id) {
                 if let Operator::Scan(child_op) = graph.operator_mut(child_id) {
                     //FIXME: now only support `unique` and `primary key`
-                    for IndexInfo { meta, ranges } in &mut child_op.index_infos {
-                        let mut option = op
-                            .predicate
-                            .convert_binary(meta.table_name.as_str(), &meta.column_ids[0])?;
-
-                        if let Some(mut binary) = option.take() {
-                            binary.scope_aggregation()?;
-                            let rearrange_ranges = binary.rearrange()?;
-
-                            let _ = ranges.replace(rearrange_ranges);
-
-                            return Ok(());
-                        }
+                    for IndexInfo { meta, range } in &mut child_op.index_infos {
+                        *range = RangeDetacher::new(meta.table_name.as_str(), &meta.column_ids[0])
+                            .detach(&op.predicate)?;
                     }
                 }
             }
@@ -244,7 +235,7 @@ impl NormalizationRule for PushPredicateIntoScan {
 mod tests {
     use crate::binder::test::select_sql_run;
     use crate::errors::DatabaseError;
-    use crate::expression::simplify::ConstantBinary::Scope;
+    use crate::expression::range_detacher::Range;
     use crate::expression::{BinaryOperator, ScalarExpression};
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -275,12 +266,12 @@ mod tests {
             .find_best::<KipTransaction>(None)?;
 
         if let Operator::Scan(op) = &best_plan.childrens[0].childrens[0].operator {
-            let mock_binaries = vec![Scope {
+            let mock_range = Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
                 max: Bound::Unbounded,
-            }];
+            };
 
-            assert_eq!(op.index_infos[1].ranges, Some(mock_binaries));
+            assert_eq!(op.index_infos[1].range, Some(mock_range));
         } else {
             unreachable!("Should be a filter operator")
         }

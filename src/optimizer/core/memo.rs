@@ -83,7 +83,7 @@ mod tests {
     use crate::binder::{Binder, BinderContext};
     use crate::db::DataBaseBuilder;
     use crate::errors::DatabaseError;
-    use crate::expression::simplify::ConstantBinary;
+    use crate::expression::range_detacher::Range;
     use crate::optimizer::core::memo::Memo;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::graph::HepGraph;
@@ -172,13 +172,13 @@ mod tests {
                     is_unique: false,
                     is_primary: true,
                 }),
-                ranges: Some(vec![
-                    ConstantBinary::Eq(Arc::new(DataValue::Int32(Some(2)))),
-                    ConstantBinary::Scope {
+                range: Some(Range::SortedRanges(vec![
+                    Range::Eq(Arc::new(DataValue::Int32(Some(2)))),
+                    Range::Scope {
                         min: Bound::Excluded(Arc::new(DataValue::Int32(Some(40)))),
                         max: Bound::Unbounded,
                     }
-                ]),
+                ])),
             }))
         );
 

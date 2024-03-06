@@ -1,8 +1,7 @@
 use crate::catalog::TableName;
-use crate::expression::simplify::ConstantBinary;
+use crate::expression::range_detacher::Range;
 use crate::types::value::ValueRef;
 use crate::types::{ColumnId, LogicalType};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Formatter;
@@ -14,7 +13,7 @@ pub type IndexMetaRef = Arc<IndexMeta>;
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct IndexInfo {
     pub(crate) meta: IndexMetaRef,
-    pub(crate) ranges: Option<Vec<ConstantBinary>>,
+    pub(crate) range: Option<Range>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -44,16 +43,8 @@ impl fmt::Display for IndexInfo {
         write!(f, "{}", self.meta)?;
         write!(f, " => ")?;
 
-        if let Some(binaries) = &self.ranges {
-            if binaries.is_empty() {
-                write!(f, "DUMMY")?;
-                return Ok(());
-            }
-            let binaries = binaries
-                .iter()
-                .map(|binary| format!("{}", binary))
-                .join(", ");
-            write!(f, "{}", binaries)?;
+        if let Some(range) = &self.range {
+            write!(f, "{}", range)?;
         } else {
             write!(f, "EMPTY")?;
         }
