@@ -63,8 +63,8 @@ impl<'a> RangeDetacher<'a> {
 
                     Ok(None)
                 }
-                (Some(binary), None) => Ok(self.check_or(right_expr, op, binary)),
-                (None, Some(binary)) => Ok(self.check_or(left_expr, op, binary)),
+                (Some(binary), None) => Ok(self.check_or(op, binary)),
+                (None, Some(binary)) => Ok(self.check_or(op, binary)),
             },
             ScalarExpression::Alias { expr, .. }
             | ScalarExpression::TypeCast { expr, .. }
@@ -587,17 +587,10 @@ impl<'a> RangeDetacher<'a> {
         }
     }
 
-    /// check if: c1 > c2 or c1 > 1
+    /// check if: `c1 > c2 or c1 > 1` or `c2 > 1 or c1 > 1`
     /// this case it makes no sense to just extract c1 > 1
-    fn check_or(
-        &mut self,
-        right_expr: &ScalarExpression,
-        op: &BinaryOperator,
-        binary: Range,
-    ) -> Option<Range> {
-        if matches!(op, BinaryOperator::Or)
-            && right_expr.exist_column(self.table_name, self.column_id)
-        {
+    fn check_or(&mut self, op: &BinaryOperator, binary: Range) -> Option<Range> {
+        if matches!(op, BinaryOperator::Or) {
             return None;
         }
 
@@ -734,23 +727,6 @@ mod test {
                 }
             )
         }
-        // empty
-        {
-            let plan = select_sql_run("select * from t1 where true").await?;
-            let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
-            println!("empty => c1: {:#?}", range);
-            assert_eq!(range, None)
-        }
-        // other column
-        {
-            let plan = select_sql_run("select * from t1 where c2 = 1").await?;
-            let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
-            println!("c2 = 1 => c1: {:#?}", range);
-            assert_eq!(range, None)
-        }
-
         {
             let plan = select_sql_run("select * from t1 where c1 < 1 and c1 >= 0").await?;
             let op = plan_filter(plan)?.unwrap();
@@ -777,7 +753,7 @@ mod test {
                 }
             )
         }
-
+        // and & or
         {
             let plan = select_sql_run("select * from t1 where c1 = 1 and c1 = 0").await?;
             let op = plan_filter(plan)?.unwrap();
@@ -853,7 +829,6 @@ mod test {
                 }
             )
         }
-
         // scope
         {
             let plan = select_sql_run(
@@ -1019,6 +994,36 @@ mod test {
                     },
                 ])
             )
+        }
+        // empty
+        {
+            let plan = select_sql_run("select * from t1 where true").await?;
+            let op = plan_filter(plan)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            println!("empty => c1: {:#?}", range);
+            assert_eq!(range, None)
+        }
+        // other column
+        {
+            let plan = select_sql_run("select * from t1 where c2 = 1").await?;
+            let op = plan_filter(plan)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            println!("c2 = 1 => c1: {:#?}", range);
+            assert_eq!(range, None)
+        }
+        {
+            let plan = select_sql_run("select * from t1 where c1 > 1 or c2 > 1").await?;
+            let op = plan_filter(plan)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            println!("c1 > 1 or c2 > 1 => c1: {:#?}", range);
+            assert_eq!(range, None)
+        }
+        {
+            let plan = select_sql_run("select * from t1 where c1 > c2 or c2 > 1").await?;
+            let op = plan_filter(plan)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            println!("c1 > c2 or c2 > 1 => c1: {:#?}", range);
+            assert_eq!(range, None)
         }
         // case 1
         {
