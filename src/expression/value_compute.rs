@@ -307,7 +307,7 @@ impl DataValue {
                     &unified_type
                 )
             }
-            LogicalType::Double => {
+            LogicalType::Double | LogicalType::DoublePrecision => {
                 numeric_binary_compute!(
                     DataValue::Float64,
                     self.clone(),

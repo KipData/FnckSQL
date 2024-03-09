@@ -226,6 +226,11 @@ mod tests {
                 false,
                 ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None),
             )),
+            Arc::new(ColumnCatalog::new(
+                "c14".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::DoublePrecision, false, false, None),
+            )),
         ]);
 
         let tuples = vec![
@@ -245,6 +250,7 @@ mod tests {
                     Arc::new(DataValue::Date64(Some(0))),
                     Arc::new(DataValue::Date32(Some(0))),
                     Arc::new(DataValue::Decimal(Some(Decimal::new(0, 3)))),
+                    Arc::new(DataValue::Float64(Some(0.1))),
                 ],
             },
             Tuple {
@@ -263,6 +269,7 @@ mod tests {
                     Arc::new(DataValue::Date64(None)),
                     Arc::new(DataValue::Date32(None)),
                     Arc::new(DataValue::Decimal(None)),
+                    Arc::new(DataValue::Float64(None)),
                 ],
             },
         ];
@@ -274,13 +281,13 @@ mod tests {
 
         let tuple_0 = Tuple::deserialize_from(
             &types,
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
             &columns,
             &tuples[0].serialize_to(),
         );
         let tuple_1 = Tuple::deserialize_from(
             &types,
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
             &columns,
             &tuples[1].serialize_to(),
         );
