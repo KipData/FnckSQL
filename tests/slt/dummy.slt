@@ -17,6 +17,26 @@ SELECT 1.01=1.01
 true
 
 query B
+SELECT (0, 1) = (0, 1)
+----
+true
+
+query B
+SELECT (0, 1) != (0, 1)
+----
+false
+
+query B
+SELECT (0, 1, 2) = (0, 1)
+----
+false
+
+query B
+SELECT (0, 1, 2) >= (0, 1)
+----
+true
+
+query B
 SELECT NULL=NULL
 ----
 null
