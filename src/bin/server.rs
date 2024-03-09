@@ -197,7 +197,9 @@ fn encode_tuples<'a>(schema: &Schema, tuples: Vec<Tuple>) -> PgWireResult<QueryR
                 LogicalType::Bigint => encoder.encode_field(&value.i64()),
                 LogicalType::UBigint => encoder.encode_field(&value.u64().map(|v| v as i64)),
                 LogicalType::Float => encoder.encode_field(&value.float()),
-                LogicalType::Double | LogicalType::DoublePrecision => encoder.encode_field(&value.double()),
+                LogicalType::Double | LogicalType::DoublePrecision => {
+                    encoder.encode_field(&value.double())
+                }
                 LogicalType::Varchar(_) => encoder.encode_field(&value.utf8()),
                 LogicalType::Date => encoder.encode_field(&value.date()),
                 LogicalType::DateTime => encoder.encode_field(&value.datetime()),

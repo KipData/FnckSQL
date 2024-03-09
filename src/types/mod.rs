@@ -157,7 +157,10 @@ impl LogicalType {
     }
 
     pub fn is_floating_point_numeric(&self) -> bool {
-        matches!(self, LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision)
+        matches!(
+            self,
+            LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision
+        )
     }
 
     pub fn max_logical_type(
@@ -281,7 +284,10 @@ impl LogicalType {
             ),
             LogicalType::Integer => matches!(
                 to,
-                LogicalType::Bigint | LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision
+                LogicalType::Bigint
+                    | LogicalType::Float
+                    | LogicalType::Double
+                    | LogicalType::DoublePrecision
             ),
             LogicalType::UInteger => matches!(
                 to,
@@ -291,8 +297,14 @@ impl LogicalType {
                     | LogicalType::Double
                     | LogicalType::DoublePrecision
             ),
-            LogicalType::Bigint => matches!(to, LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision),
-            LogicalType::UBigint => matches!(to, LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision),
+            LogicalType::Bigint => matches!(
+                to,
+                LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision
+            ),
+            LogicalType::UBigint => matches!(
+                to,
+                LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision
+            ),
             LogicalType::Float => matches!(to, LogicalType::Double | LogicalType::DoublePrecision),
             LogicalType::Double => matches!(to, LogicalType::DoublePrecision),
             LogicalType::DoublePrecision => matches!(to, LogicalType::Double),
