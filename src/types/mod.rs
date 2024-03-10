@@ -33,7 +33,6 @@ pub enum LogicalType {
     UBigint,
     Float,
     Double,
-    DoublePrecision,
     Varchar(Option<u32>),
     Date,
     DateTime,
@@ -93,7 +92,7 @@ impl LogicalType {
             LogicalType::Bigint => Some(8),
             LogicalType::UBigint => Some(8),
             LogicalType::Float => Some(4),
-            LogicalType::Double | LogicalType::DoublePrecision => Some(8),
+            LogicalType::Double => Some(8),
             /// Note: The non-fixed length type's raw_len is None e.g. Varchar
             LogicalType::Varchar(_) => None,
             LogicalType::Decimal(_, _) => Some(16),
@@ -115,7 +114,6 @@ impl LogicalType {
             LogicalType::UBigint,
             LogicalType::Float,
             LogicalType::Double,
-            LogicalType::DoublePrecision,
         ]
     }
 
@@ -132,7 +130,6 @@ impl LogicalType {
                 | LogicalType::UBigint
                 | LogicalType::Float
                 | LogicalType::Double
-                | LogicalType::DoublePrecision
         )
     }
 
@@ -157,10 +154,7 @@ impl LogicalType {
     }
 
     pub fn is_floating_point_numeric(&self) -> bool {
-        matches!(
-            self,
-            LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision
-        )
+        matches!(self, LogicalType::Float | LogicalType::Double)
     }
 
     pub fn max_logical_type(
@@ -250,7 +244,6 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
-                    | LogicalType::DoublePrecision
             ),
             LogicalType::UTinyint => matches!(
                 to,
@@ -262,7 +255,6 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
-                    | LogicalType::DoublePrecision
             ),
             LogicalType::Smallint => matches!(
                 to,
@@ -270,7 +262,6 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
-                    | LogicalType::DoublePrecision
             ),
             LogicalType::USmallint => matches!(
                 to,
@@ -280,14 +271,10 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
-                    | LogicalType::DoublePrecision
             ),
             LogicalType::Integer => matches!(
                 to,
-                LogicalType::Bigint
-                    | LogicalType::Float
-                    | LogicalType::Double
-                    | LogicalType::DoublePrecision
+                LogicalType::Bigint | LogicalType::Float | LogicalType::Double
             ),
             LogicalType::UInteger => matches!(
                 to,
@@ -295,19 +282,11 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
-                    | LogicalType::DoublePrecision
             ),
-            LogicalType::Bigint => matches!(
-                to,
-                LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision
-            ),
-            LogicalType::UBigint => matches!(
-                to,
-                LogicalType::Float | LogicalType::Double | LogicalType::DoublePrecision
-            ),
-            LogicalType::Float => matches!(to, LogicalType::Double | LogicalType::DoublePrecision),
-            LogicalType::Double => matches!(to, LogicalType::DoublePrecision),
-            LogicalType::DoublePrecision => matches!(to, LogicalType::Double),
+            LogicalType::Bigint => matches!(to, LogicalType::Float | LogicalType::Double),
+            LogicalType::UBigint => matches!(to, LogicalType::Float | LogicalType::Double),
+            LogicalType::Float => matches!(to, LogicalType::Double),
+            LogicalType::Double => false,
             LogicalType::Varchar(_) => false,
             LogicalType::Date => matches!(to, LogicalType::DateTime | LogicalType::Varchar(_)),
             LogicalType::DateTime => matches!(to, LogicalType::Date | LogicalType::Varchar(_)),
@@ -326,8 +305,9 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                 Ok(LogicalType::Varchar(len.map(|len| len.length as u32)))
             }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
-            sqlparser::ast::DataType::Double => Ok(LogicalType::Double),
-            sqlparser::ast::DataType::DoublePrecision => Ok(LogicalType::DoublePrecision),
+            sqlparser::ast::DataType::Double | sqlparser::ast::DataType::DoublePrecision => {
+                Ok(LogicalType::Double)
+            }
             sqlparser::ast::DataType::TinyInt(_) => Ok(LogicalType::Tinyint),
             sqlparser::ast::DataType::UnsignedTinyInt(_) => Ok(LogicalType::UTinyint),
             sqlparser::ast::DataType::SmallInt(_) => Ok(LogicalType::Smallint),

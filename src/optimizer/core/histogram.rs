@@ -303,7 +303,6 @@ impl Histogram {
                 | LogicalType::UBigint
                 | LogicalType::Float
                 | LogicalType::Double
-                | LogicalType::DoublePrecision
                 | LogicalType::Decimal(_, _) => {
                     value.clone().cast(&LogicalType::Double).unwrap().double()
                 }
