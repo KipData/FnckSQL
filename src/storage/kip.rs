@@ -1,10 +1,10 @@
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
-use crate::optimizer::core::column_meta::{ColumnMeta, ColumnMetaLoader};
+use crate::optimizer::core::statistics_meta::{StatisticMetaLoader, StatisticsMeta};
 use crate::storage::table_codec::TableCodec;
 use crate::storage::{Bounds, IndexIter, Iter, Storage, Transaction};
-use crate::types::index::{Index, IndexMetaRef};
+use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
@@ -22,7 +22,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct KipStorage {
     pub inner: Arc<storage::KipStorage>,
-    pub(crate) meta_cache: Arc<ShardingLruCache<TableName, Vec<ColumnMeta>>>,
+    pub(crate) meta_cache: Arc<ShardingLruCache<TableName, Vec<StatisticsMeta>>>,
 }
 
 impl KipStorage {
@@ -56,7 +56,7 @@ impl Storage for KipStorage {
 pub struct KipTransaction {
     tx: mvcc::Transaction,
     table_cache: ShardingLruCache<String, TableCatalog>,
-    meta_cache: Arc<ShardingLruCache<TableName, Vec<ColumnMeta>>>,
+    meta_cache: Arc<ShardingLruCache<TableName, Vec<StatisticsMeta>>>,
 }
 
 impl Transaction for KipTransaction {
@@ -136,17 +136,35 @@ impl Transaction for KipTransaction {
         })
     }
 
+    fn add_index_meta(
+        &mut self,
+        table_name: &TableName,
+        index_name: String,
+        column_ids: Vec<ColumnId>,
+        ty: IndexType,
+    ) -> Result<IndexId, DatabaseError> {
+        if let Some(mut table) = self.table(table_name.clone()).cloned() {
+            let index_meta = table.add_index_meta(index_name, column_ids, ty)?;
+            let (key, value) = TableCodec::encode_index_meta(table_name, index_meta)?;
+            self.tx.set(key, value);
+            self.table_cache.remove(table_name);
+
+            Ok(index_meta.id)
+        } else {
+            Err(DatabaseError::TableNotFound)
+        }
+    }
+
     fn add_index(
         &mut self,
         table_name: &str,
         index: Index,
         tuple_id: &TupleId,
-        is_unique: bool,
     ) -> Result<(), DatabaseError> {
         let (key, value) = TableCodec::encode_index(table_name, &index, tuple_id)?;
 
         if let Some(bytes) = self.tx.get(&key)? {
-            if is_unique {
+            if matches!(index.ty, IndexType::Unique) {
                 return if bytes != value {
                     Err(DatabaseError::DuplicateUniqueValue)
                 } else {
@@ -162,8 +180,13 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn del_index(&mut self, table_name: &str, index: &Index) -> Result<(), DatabaseError> {
-        let key = TableCodec::encode_index_key(table_name, index)?;
+    fn del_index(
+        &mut self,
+        table_name: &str,
+        index: &Index,
+        tuple_id: Option<&TupleId>,
+    ) -> Result<(), DatabaseError> {
+        let key = TableCodec::encode_index_key(table_name, index, tuple_id)?;
 
         self.tx.remove(&key)?;
 
@@ -219,8 +242,7 @@ impl Transaction for KipTransaction {
                 let meta_ref = table.add_index_meta(
                     format!("uk_{}", column.name()),
                     vec![col_id],
-                    true,
-                    false,
+                    IndexType::Unique,
                 )?;
                 let (key, value) = TableCodec::encode_index_meta(table_name, meta_ref)?;
                 self.tx.set(key, value);
@@ -242,20 +264,22 @@ impl Transaction for KipTransaction {
         table_name: &TableName,
         column_name: &str,
     ) -> Result<(), DatabaseError> {
-        if let Some(catalog) = self.table(table_name.clone()).cloned() {
-            let column = catalog.get_column_by_name(column_name).unwrap();
+        if let Some(table_catalog) = self.table(table_name.clone()).cloned() {
+            let column = table_catalog.get_column_by_name(column_name).unwrap();
 
             let (key, _) = TableCodec::encode_column(table_name, column)?;
             self.tx.remove(&key)?;
 
-            if let Some(index_meta) = catalog.get_unique_index(&column.id().unwrap()) {
+            for index_meta in table_catalog.indexes.iter() {
+                if !index_meta.column_ids.contains(&column.id().unwrap()) {
+                    continue;
+                }
                 let (index_meta_key, _) = TableCodec::encode_index_meta(table_name, index_meta)?;
                 self.tx.remove(&index_meta_key)?;
 
                 let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id);
                 Self::_drop_data(&mut self.tx, &index_min, &index_max)?;
             }
-
             self.table_cache.remove(table_name);
 
             Ok(())
@@ -362,6 +386,7 @@ impl Transaction for KipTransaction {
     }
 
     fn save_table_meta(&mut self, table_meta: &TableMeta) -> Result<(), DatabaseError> {
+        // TODO: clean old meta file
         let _ = self.meta_cache.remove(&table_meta.table_name);
         let (key, value) = TableCodec::encode_root_table(table_meta)?;
         self.tx.set(key, value);
@@ -369,7 +394,7 @@ impl Transaction for KipTransaction {
         Ok(())
     }
 
-    fn column_meta_paths(&self, table_name: &str) -> Result<Vec<String>, DatabaseError> {
+    fn statistics_meta_paths(&self, table_name: &str) -> Result<Vec<String>, DatabaseError> {
         if let Some(bytes) = self
             .tx
             .get(&TableCodec::encode_root_table_key(table_name))?
@@ -382,11 +407,11 @@ impl Transaction for KipTransaction {
         Ok(vec![])
     }
 
-    fn meta_loader(&self) -> ColumnMetaLoader<Self>
+    fn meta_loader(&self) -> StatisticMetaLoader<Self>
     where
         Self: Sized,
     {
-        ColumnMetaLoader::new(self, &self.meta_cache)
+        StatisticMetaLoader::new(self, &self.meta_cache)
     }
 
     async fn commit(self) -> Result<(), DatabaseError> {
@@ -446,20 +471,26 @@ impl KipTransaction {
         let table_name = table.name.clone();
         let index_column = table
             .columns()
-            .filter(|column| column.desc.is_index())
+            .filter(|column| column.desc.is_primary || column.desc.is_unique)
             .map(|column| (column.id().unwrap(), column.clone()))
             .collect_vec();
 
         for (col_id, col) in index_column {
             let is_primary = col.desc.is_primary;
+            let index_ty = if is_primary {
+                IndexType::PrimaryKey
+            } else if col.desc.is_unique {
+                IndexType::Unique
+            } else {
+                continue;
+            };
             // FIXME: composite indexes may exist on future
             let prefix = if is_primary { "pk" } else { "uk" };
 
             let meta_ref = table.add_index_meta(
                 format!("{}_{}", prefix, col.name()),
                 vec![col_id],
-                col.desc.is_unique,
-                is_primary,
+                index_ty,
             )?;
             let (key, value) = TableCodec::encode_index_meta(&table_name, meta_ref)?;
             tx.set(key, value);
@@ -519,7 +550,7 @@ mod test {
     use crate::expression::range_detacher::Range;
     use crate::storage::kip::KipStorage;
     use crate::storage::{IndexIter, Iter, Storage, Transaction};
-    use crate::types::index::IndexMeta;
+    use crate::types::index::{IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
@@ -629,8 +660,7 @@ mod test {
                 table_name,
                 pk_ty: LogicalType::Integer,
                 name: "pk_a".to_string(),
-                is_unique: false,
-                is_primary: true,
+                ty: IndexType::PrimaryKey,
             }),
             table: &table,
             ranges: VecDeque::from(vec![

@@ -1,7 +1,7 @@
 use crate::errors::DatabaseError;
-use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
+use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
@@ -36,7 +36,7 @@ pub struct Memo {
 impl Memo {
     pub(crate) fn new<T: Transaction>(
         graph: &HepGraph,
-        loader: &ColumnMetaLoader<'_, T>,
+        loader: &StatisticMetaLoader<'_, T>,
         implementations: &[ImplementationRuleImpl],
     ) -> Result<Self, DatabaseError> {
         let node_count = graph.node_count();
@@ -93,7 +93,7 @@ mod tests {
     use crate::planner::operator::PhysicalOption;
     use crate::storage::kip::KipTransaction;
     use crate::storage::{Storage, Transaction};
-    use crate::types::index::{IndexInfo, IndexMeta};
+    use crate::types::index::{IndexInfo, IndexMeta, IndexType};
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use petgraph::stable_graph::NodeIndex;
@@ -169,8 +169,7 @@ mod tests {
                     table_name: Arc::new("t1".to_string()),
                     pk_ty: LogicalType::Integer,
                     name: "pk_c1".to_string(),
-                    is_unique: false,
-                    is_primary: true,
+                    ty: IndexType::PrimaryKey,
                 }),
                 range: Some(Range::SortedRanges(vec![
                     Range::Eq(Arc::new(DataValue::Int32(Some(2)))),

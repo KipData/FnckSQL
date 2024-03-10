@@ -6,7 +6,7 @@ use std::{slice, vec};
 
 use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::errors::DatabaseError;
-use crate::types::index::{IndexMeta, IndexMetaRef};
+use crate::types::index::{IndexMeta, IndexMetaRef, IndexType};
 use crate::types::tuple::SchemaRef;
 use crate::types::{ColumnId, LogicalType};
 
@@ -33,7 +33,7 @@ impl TableCatalog {
     pub(crate) fn get_unique_index(&self, col_id: &ColumnId) -> Option<&IndexMetaRef> {
         self.indexes
             .iter()
-            .find(|meta| meta.is_unique && &meta.column_ids[0] == col_id)
+            .find(|meta| matches!(meta.ty, IndexType::Unique) && &meta.column_ids[0] == col_id)
     }
 
     #[allow(dead_code)]
@@ -58,6 +58,10 @@ impl TableCatalog {
 
     pub(crate) fn columns(&self) -> slice::Iter<'_, ColumnRef> {
         self.schema_ref.iter()
+    }
+
+    pub(crate) fn indexes(&self) -> slice::Iter<'_, IndexMetaRef> {
+        self.indexes.iter()
     }
 
     pub(crate) fn schema_ref(&self) -> &SchemaRef {
@@ -113,9 +117,14 @@ impl TableCatalog {
         &mut self,
         name: String,
         column_ids: Vec<ColumnId>,
-        is_unique: bool,
-        is_primary: bool,
+        ty: IndexType,
     ) -> Result<&IndexMeta, DatabaseError> {
+        for index in self.indexes.iter() {
+            if index.name == name {
+                return Err(DatabaseError::DuplicateIndex(name));
+            }
+        }
+
         let index_id = self.indexes.last().map(|index| index.id + 1).unwrap_or(0);
         let pk_ty = *self.primary_key()?.1.datatype();
         let index = IndexMeta {
@@ -124,8 +133,7 @@ impl TableCatalog {
             table_name: self.name.clone(),
             pk_ty,
             name,
-            is_unique,
-            is_primary,
+            ty,
         };
         self.indexes.push(Arc::new(index));
         Ok(self.indexes.last().unwrap())

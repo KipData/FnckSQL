@@ -1,8 +1,8 @@
 use crate::errors::DatabaseError;
-use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::Memo;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
+use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::optimizer::heuristic::batch::{HepBatch, HepBatchStrategy};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
@@ -44,7 +44,7 @@ impl HepOptimizer {
 
     pub fn find_best<T: Transaction>(
         mut self,
-        loader: Option<&ColumnMetaLoader<'_, T>>,
+        loader: Option<&StatisticMetaLoader<'_, T>>,
     ) -> Result<LogicalPlan, DatabaseError> {
         for ref batch in self.batches {
             let mut batch_over = false;

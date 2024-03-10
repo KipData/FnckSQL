@@ -1,5 +1,6 @@
 use crate::catalog::TableName;
 use crate::errors::DatabaseError;
+use crate::execution::volcano::dql::projection::Projection;
 use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::LogicalPlan;
@@ -49,8 +50,7 @@ impl Insert {
             mut input,
             is_overwrite,
         } = self;
-        let mut unique_values = HashMap::new();
-        let mut tuple_values = Vec::new();
+        let mut tuples = Vec::new();
         let schema = input.output_schema().clone();
 
         let pk_index = schema
@@ -79,43 +79,27 @@ impl Insert {
                         .remove(&col.id())
                         .or_else(|| col.default_value())
                         .unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())));
-
-                    if col.desc.is_unique && !value.is_null() {
-                        unique_values
-                            .entry(col.id())
-                            .or_insert_with(Vec::new)
-                            .push((tuple_id.clone(), value.clone()))
-                    }
                     if value.is_null() && !col.nullable {
                         return Err(DatabaseError::NotNull);
                     }
                     values.push(value)
                 }
-                tuple_values.push((tuple_id, values));
+                tuples.push(Tuple {
+                    id: Some(tuple_id),
+                    values,
+                });
             }
+            for index_meta in table_catalog.indexes() {
+                let exprs = index_meta.column_exprs(&table_catalog)?;
 
-            // Unique Index
-            for (col_id, values) in unique_values {
-                if let Some(index_meta) = table_catalog.get_unique_index(&col_id.unwrap()) {
-                    for (tuple_id, value) in values {
-                        let index = Index {
-                            id: index_meta.id,
-                            column_values: vec![value],
-                        };
-
-                        transaction.add_index(&table_name, index, &tuple_id, true)?;
-                    }
+                for tuple in tuples.iter() {
+                    let values = Projection::projection(tuple, &exprs, &schema)?;
+                    let index = Index::new(index_meta.id, &values, index_meta.ty);
+                    transaction.add_index(&table_name, index, tuple.id.as_ref().unwrap())?;
                 }
             }
-            for (tuple_id, values) in tuple_values {
-                transaction.append(
-                    &table_name,
-                    Tuple {
-                        id: Some(tuple_id),
-                        values,
-                    },
-                    is_overwrite,
-                )?;
+            for tuple in tuples {
+                transaction.append(&table_name, tuple, is_overwrite)?;
             }
         }
     }

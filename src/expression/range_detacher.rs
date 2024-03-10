@@ -98,6 +98,14 @@ fn build_tree(ranges: &[Range], current_level: usize) -> Option<TreeNode<&ValueR
 }
 
 impl Range {
+    pub(crate) fn only_eq(&self) -> bool {
+        match self {
+            Range::Eq(_) => true,
+            Range::SortedRanges(ranges) => ranges.iter().all(|range| range.only_eq()),
+            _ => false,
+        }
+    }
+
     pub(crate) fn combining_eqs(&self, eqs: &[Range]) -> Option<Range> {
         #[allow(clippy::map_clone)]
         fn merge_value(tuple: &[&ValueRef], value: ValueRef) -> ValueRef {

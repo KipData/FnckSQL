@@ -4,18 +4,18 @@ mod table_codec;
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
-use crate::optimizer::core::column_meta::ColumnMetaLoader;
+use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::storage::table_codec::TableCodec;
-use crate::types::index::{Index, IndexMetaRef};
+use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
-use crate::types::value::ValueRef;
+use crate::types::value::{DataValue, ValueRef};
 use crate::types::ColumnId;
 use kip_db::kernel::lsm::iterator::Iter as DBIter;
 use kip_db::kernel::lsm::mvcc;
 use std::collections::{Bound, VecDeque};
-use std::mem;
 use std::ops::SubAssign;
 use std::sync::Arc;
+use std::{mem, slice};
 
 pub trait Storage: Sync + Send + Clone + 'static {
     type TransactionType: Transaction;
@@ -49,15 +49,27 @@ pub trait Transaction: Sync + Send + 'static {
         ranges: Vec<Range>,
     ) -> Result<IndexIter<'_>, DatabaseError>;
 
+    fn add_index_meta(
+        &mut self,
+        table_name: &TableName,
+        index_name: String,
+        column_ids: Vec<ColumnId>,
+        ty: IndexType,
+    ) -> Result<IndexId, DatabaseError>;
+
     fn add_index(
         &mut self,
         table_name: &str,
         index: Index,
         tuple_id: &TupleId,
-        is_unique: bool,
     ) -> Result<(), DatabaseError>;
 
-    fn del_index(&mut self, table_name: &str, index: &Index) -> Result<(), DatabaseError>;
+    fn del_index(
+        &mut self,
+        table_name: &str,
+        index: &Index,
+        tuple_id: Option<&TupleId>,
+    ) -> Result<(), DatabaseError>;
 
     fn append(
         &mut self,
@@ -89,8 +101,8 @@ pub trait Transaction: Sync + Send + 'static {
     fn table(&self, table_name: TableName) -> Option<&TableCatalog>;
     fn table_metas(&self) -> Result<Vec<TableMeta>, DatabaseError>;
     fn save_table_meta(&mut self, table_meta: &TableMeta) -> Result<(), DatabaseError>;
-    fn column_meta_paths(&self, table_name: &str) -> Result<Vec<String>, DatabaseError>;
-    fn meta_loader(&self) -> ColumnMetaLoader<Self>
+    fn statistics_meta_paths(&self, table_name: &str) -> Result<Vec<String>, DatabaseError>;
+    fn meta_loader(&self) -> StatisticMetaLoader<Self>
     where
         Self: Sized;
 
@@ -132,13 +144,31 @@ impl IndexIter<'_> {
         }
     }
 
-    fn val_to_key(&self, val: ValueRef) -> Result<Vec<u8>, DatabaseError> {
-        if self.index_meta.is_unique {
-            let index = Index::new(self.index_meta.id, vec![val]);
+    fn bound_key(&self, val: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError> {
+        match self.index_meta.ty {
+            IndexType::PrimaryKey => TableCodec::encode_tuple_key(&self.table.name, val),
+            IndexType::Unique => {
+                let index =
+                    Index::new(self.index_meta.id, slice::from_ref(val), self.index_meta.ty);
 
-            TableCodec::encode_index_key(&self.table.name, &index)
-        } else {
-            TableCodec::encode_tuple_key(&self.table.name, &val)
+                TableCodec::encode_index_key(&self.table.name, &index, None)
+            }
+            IndexType::Normal => {
+                let index =
+                    Index::new(self.index_meta.id, slice::from_ref(val), self.index_meta.ty);
+
+                TableCodec::encode_index_bound_key(&self.table.name, &index, is_upper)
+            }
+            IndexType::Composite => {
+                let values = if let DataValue::Tuple(Some(values)) = val.as_ref() {
+                    values.as_slice()
+                } else {
+                    slice::from_ref(val)
+                };
+                let index = Index::new(self.index_meta.id, values, self.index_meta.ty);
+
+                TableCodec::encode_index_bound_key(&self.table.name, &index, is_upper)
+            }
         }
     }
 
@@ -160,6 +190,7 @@ impl IndexIter<'_> {
     }
 }
 
+/// expression -> index value -> tuple
 impl Iter for IndexIter<'_> {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, DatabaseError> {
         // 1. check limit
@@ -198,7 +229,7 @@ impl Iter for IndexIter<'_> {
             let mut has_next = false;
             while let Some((_, value_option)) = iter.try_next()? {
                 if let Some(value) = value_option {
-                    let index = if self.index_meta.is_primary {
+                    let index = if matches!(self.index_meta.ty, IndexType::PrimaryKey) {
                         let tuple = TableCodec::decode_tuple(
                             &self.table.types(),
                             &self.projections,
@@ -228,28 +259,33 @@ impl Iter for IndexIter<'_> {
                     let table_name = &self.table.name;
                     let index_meta = &self.index_meta;
 
-                    let bound_encode = |bound: Bound<ValueRef>| -> Result<_, DatabaseError> {
-                        match bound {
-                            Bound::Included(val) => Ok(Bound::Included(self.val_to_key(val)?)),
-                            Bound::Excluded(val) => Ok(Bound::Excluded(self.val_to_key(val)?)),
-                            Bound::Unbounded => Ok(Bound::Unbounded),
-                        }
-                    };
+                    let bound_encode =
+                        |bound: Bound<ValueRef>, is_upper: bool| -> Result<_, DatabaseError> {
+                            match bound {
+                                Bound::Included(val) => {
+                                    Ok(Bound::Included(self.bound_key(&val, is_upper)?))
+                                }
+                                Bound::Excluded(val) => {
+                                    Ok(Bound::Excluded(self.bound_key(&val, is_upper)?))
+                                }
+                                Bound::Unbounded => Ok(Bound::Unbounded),
+                            }
+                        };
                     let check_bound = |value: &mut Bound<Vec<u8>>, bound: Vec<u8>| {
                         if matches!(value, Bound::Unbounded) {
                             let _ = mem::replace(value, Bound::Included(bound));
                         }
                     };
-                    let (bound_min, bound_max) = if index_meta.is_unique {
-                        TableCodec::index_bound(table_name, &index_meta.id)
-                    } else {
+                    let (bound_min, bound_max) = if matches!(index_meta.ty, IndexType::PrimaryKey) {
                         TableCodec::tuple_bound(table_name)
+                    } else {
+                        TableCodec::index_bound(table_name, &index_meta.id)
                     };
 
-                    let mut encode_min = bound_encode(min)?;
+                    let mut encode_min = bound_encode(min, false)?;
                     check_bound(&mut encode_min, bound_min);
 
-                    let mut encode_max = bound_encode(max)?;
+                    let mut encode_max = bound_encode(max, true)?;
                     check_bound(&mut encode_max, bound_max);
 
                     let iter = self.tx.iter(
@@ -259,28 +295,50 @@ impl Iter for IndexIter<'_> {
                     self.scope_iter = Some(iter);
                 }
                 Range::Eq(val) => {
-                    let key = self.val_to_key(val)?;
-                    if let Some(bytes) = self.tx.get(&key)? {
-                        let index = if self.index_meta.is_unique {
-                            IndexValue::Normal(TableCodec::decode_index(
-                                &bytes,
-                                &self.index_meta.pk_ty,
-                            ))
-                        } else if self.index_meta.is_primary {
+                    match self.index_meta.ty {
+                        IndexType::PrimaryKey => {
+                            let bytes =
+                                self.tx.get(&self.bound_key(&val, false)?)?.ok_or_else(|| {
+                                    DatabaseError::NotFound(
+                                        "secondary index",
+                                        format!("value -> {}", val),
+                                    )
+                                })?;
+
                             let tuple = TableCodec::decode_tuple(
                                 &self.table.types(),
                                 &self.projections,
                                 &self.tuple_schema_ref,
                                 &bytes,
                             );
+                            self.index_values.push_back(IndexValue::PrimaryKey(tuple));
+                            self.scope_iter = None;
+                        }
+                        IndexType::Unique => {
+                            let bytes =
+                                self.tx.get(&self.bound_key(&val, false)?)?.ok_or_else(|| {
+                                    DatabaseError::NotFound(
+                                        "secondary index",
+                                        format!("value -> {}", val),
+                                    )
+                                })?;
 
-                            IndexValue::PrimaryKey(tuple)
-                        } else {
-                            todo!()
-                        };
-                        self.index_values.push_back(index);
+                            self.index_values.push_back(IndexValue::Normal(
+                                TableCodec::decode_index(&bytes, &self.index_meta.pk_ty),
+                            ));
+                            self.scope_iter = None;
+                        }
+                        IndexType::Normal | IndexType::Composite => {
+                            let min = self.bound_key(&val, false)?;
+                            let max = self.bound_key(&val, true)?;
+
+                            let iter = self.tx.iter(
+                                Bound::Included(min.as_slice()),
+                                Bound::Included(max.as_slice()),
+                            )?;
+                            self.scope_iter = Some(iter);
+                        }
                     }
-                    self.scope_iter = None;
                 }
                 _ => (),
             }

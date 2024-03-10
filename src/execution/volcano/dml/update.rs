@@ -1,5 +1,6 @@
 use crate::catalog::TableName;
 use crate::errors::DatabaseError;
+use crate::execution::volcano::dql::projection::Projection;
 use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::LogicalPlan;
@@ -62,7 +63,17 @@ impl Update {
 
                 tuples.push(tuple);
             }
+            let mut index_metas = Vec::new();
+            for index_meta in table_catalog.indexes() {
+                let exprs = index_meta.column_exprs(&table_catalog)?;
 
+                for tuple in tuples.iter() {
+                    let values = Projection::projection(tuple, &exprs, &input_schema)?;
+                    let index = Index::new(index_meta.id, &values, index_meta.ty);
+                    transaction.del_index(&table_name, &index, Some(tuple.id.as_ref().unwrap()))?;
+                }
+                index_metas.push((index_meta, exprs));
+            }
             for mut tuple in tuples {
                 let mut is_overwrite = true;
 
@@ -74,30 +85,13 @@ impl Update {
                             transaction.delete(&table_name, old_key)?;
                             is_overwrite = false;
                         }
-                        if column.desc.is_unique && value != &tuple.values[i] {
-                            if let Some(index_meta) =
-                                table_catalog.get_unique_index(&column.id().unwrap())
-                            {
-                                let mut index = Index {
-                                    id: index_meta.id,
-                                    column_values: vec![tuple.values[i].clone()],
-                                };
-                                transaction.del_index(&table_name, &index)?;
-
-                                if !value.is_null() {
-                                    index.column_values[0] = value.clone();
-                                    transaction.add_index(
-                                        &table_name,
-                                        index,
-                                        tuple.id.as_ref().unwrap(),
-                                        true,
-                                    )?;
-                                }
-                            }
-                        }
-
                         tuple.values[i] = value.clone();
                     }
+                }
+                for (index_meta, exprs) in index_metas.iter() {
+                    let values = Projection::projection(&tuple, exprs, &input_schema)?;
+                    let index = Index::new(index_meta.id, &values, index_meta.ty);
+                    transaction.add_index(&table_name, index, tuple.id.as_ref().unwrap())?;
                 }
 
                 transaction.append(&table_name, tuple, is_overwrite)?;

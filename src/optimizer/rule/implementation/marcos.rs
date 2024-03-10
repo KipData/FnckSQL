@@ -11,7 +11,7 @@ macro_rules! single_mapping {
             fn to_expression(
                 &self,
                 _: &Operator,
-                _: &ColumnMetaLoader<'_, T>,
+                _: &StatisticMetaLoader<'_, T>,
                 group_expr: &mut GroupExpression,
             ) -> Result<(), DatabaseError> {
                 //TODO: CostModel

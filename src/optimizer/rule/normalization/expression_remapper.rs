@@ -89,6 +89,7 @@ impl ExpressionRemapper {
             | Operator::AddColumn(_)
             | Operator::DropColumn(_)
             | Operator::CreateTable(_)
+            | Operator::CreateIndex(_)
             | Operator::DropTable(_)
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)

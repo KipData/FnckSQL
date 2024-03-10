@@ -1,20 +1,19 @@
-use crate::catalog::ColumnCatalog;
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::sort::radix_sort;
 use crate::expression::range_detacher::Range;
+use crate::expression::BinaryOperator;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
+use crate::types::index::{IndexId, IndexMeta};
 use crate::types::value::{DataValue, ValueRef};
-use crate::types::{ColumnId, LogicalType};
+use crate::types::LogicalType;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
 use std::collections::Bound;
 use std::sync::Arc;
 use std::{cmp, mem};
 
 pub struct HistogramBuilder {
-    column_id: ColumnId,
-    data_type: LogicalType,
+    index_id: IndexId,
 
     null_count: usize,
     values: Vec<((usize, ValueRef), Vec<u8>)>,
@@ -25,8 +24,7 @@ pub struct HistogramBuilder {
 // Equal depth histogram
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Histogram {
-    column_id: ColumnId,
-    data_type: LogicalType,
+    index_id: IndexId,
 
     number_of_distinct_value: usize,
     null_count: usize,
@@ -48,10 +46,9 @@ struct Bucket {
 }
 
 impl HistogramBuilder {
-    pub fn new(column: &ColumnCatalog, capacity: Option<usize>) -> Result<Self, DatabaseError> {
+    pub fn new(index_meta: &IndexMeta, capacity: Option<usize>) -> Result<Self, DatabaseError> {
         Ok(Self {
-            column_id: column.id().ok_or(DatabaseError::OwnerLessColumn)?,
-            data_type: *column.datatype(),
+            index_id: index_meta.id,
             null_count: 0,
             values: capacity.map(Vec::with_capacity).unwrap_or_default(),
             value_index: 0,
@@ -86,8 +83,7 @@ impl HistogramBuilder {
 
         let mut sketch = CountMinSketch::new(self.values.len(), 0.95, 1.0);
         let HistogramBuilder {
-            column_id,
-            data_type,
+            index_id,
             null_count,
             values,
             ..
@@ -102,7 +98,7 @@ impl HistogramBuilder {
         let sorted_values = radix_sort(values);
 
         for i in 0..number_of_buckets {
-            let mut bucket = Bucket::empty(&data_type);
+            let mut bucket = Bucket::empty();
             let j = (i + 1) * bucket_len;
 
             bucket.upper = sorted_values[cmp::min(j, values_len) - 1].1.clone();
@@ -133,8 +129,7 @@ impl HistogramBuilder {
 
         Ok((
             Histogram {
-                column_id,
-                data_type,
+                index_id,
                 number_of_distinct_value,
                 null_count,
                 values_len,
@@ -158,63 +153,69 @@ impl HistogramBuilder {
     }
 }
 
-fn is_under(value: &ValueRef, target: &Bound<ValueRef>, is_min: bool) -> bool {
+fn is_under(
+    value: &ValueRef,
+    target: &Bound<ValueRef>,
+    is_min: bool,
+) -> Result<bool, DatabaseError> {
     let _is_under = |value: &ValueRef, target: &ValueRef, is_min: bool| {
-        value
-            .partial_cmp(target)
-            .map(|order| {
-                if is_min {
-                    Ordering::is_lt(order)
-                } else {
-                    Ordering::is_le(order)
-                }
-            })
-            .unwrap()
+        let res = value.binary_op(
+            target,
+            &if is_min {
+                BinaryOperator::Lt
+            } else {
+                BinaryOperator::LtEq
+            },
+        )?;
+        Ok::<bool, DatabaseError>(matches!(res, DataValue::Boolean(Some(true))))
     };
 
-    match target {
-        Bound::Included(target) => _is_under(value, target, is_min),
-        Bound::Excluded(target) => _is_under(value, target, !is_min),
+    Ok(match target {
+        Bound::Included(target) => _is_under(value, target, is_min)?,
+        Bound::Excluded(target) => _is_under(value, target, !is_min)?,
         Bound::Unbounded => !is_min,
-    }
+    })
 }
 
-fn is_above(value: &ValueRef, target: &Bound<ValueRef>, is_min: bool) -> bool {
+fn is_above(
+    value: &ValueRef,
+    target: &Bound<ValueRef>,
+    is_min: bool,
+) -> Result<bool, DatabaseError> {
     let _is_above = |value: &ValueRef, target: &ValueRef, is_min: bool| {
-        value
-            .partial_cmp(target)
-            .map(|order| {
-                if is_min {
-                    Ordering::is_ge(order)
-                } else {
-                    Ordering::is_gt(order)
-                }
-            })
-            .unwrap()
+        let res = value.binary_op(
+            target,
+            &if is_min {
+                BinaryOperator::GtEq
+            } else {
+                BinaryOperator::Gt
+            },
+        )?;
+        Ok::<bool, DatabaseError>(matches!(res, DataValue::Boolean(Some(true))))
     };
-
-    match target {
-        Bound::Included(target) => _is_above(value, target, is_min),
-        Bound::Excluded(target) => _is_above(value, target, !is_min),
+    Ok(match target {
+        Bound::Included(target) => _is_above(value, target, is_min)?,
+        Bound::Excluded(target) => _is_above(value, target, !is_min)?,
         Bound::Unbounded => is_min,
-    }
+    })
 }
 
 impl Histogram {
-    pub fn column_id(&self) -> ColumnId {
-        self.column_id
-    }
-    pub fn data_type(&self) -> LogicalType {
-        self.data_type
+    pub fn index_id(&self) -> IndexId {
+        self.index_id
     }
 
     pub fn values_len(&self) -> usize {
         self.values_len
     }
 
-    pub fn collect_count(&self, ranges: &[Range], sketch: &CountMinSketch<DataValue>) -> usize {
+    pub fn collect_count(
+        &self,
+        ranges: &[Range],
+        sketch: &CountMinSketch<DataValue>,
+    ) -> Result<usize, DatabaseError> {
         if self.buckets.is_empty() || ranges.is_empty() {
-            return 0;
+            return Ok(0);
         }
 
         let mut count = 0;
@@ -230,17 +231,17 @@ impl Histogram {
                 &mut bucket_idxs,
                 &mut count,
                 sketch,
-            );
+            )?;
             if is_dummy {
-                return 0;
+                return Ok(0);
             }
         }
 
-        bucket_idxs
+        Ok(bucket_idxs
             .iter()
             .map(|idx| self.buckets[*idx].count as usize)
             .sum::<usize>()
-            + count
+            + count)
     }
 
     fn _collect_count(
@@ -251,9 +252,9 @@ impl Histogram {
         bucket_idxs: &mut Vec<usize>,
         count: &mut usize,
         sketch: &CountMinSketch<DataValue>,
-    ) -> bool {
+    ) -> Result<bool, DatabaseError> {
         let float_value = |value: &DataValue, prefix_len: usize| {
-            match value.logical_type() {
+            let value = match value.logical_type() {
                 LogicalType::Varchar(_) => match value {
                     DataValue::Utf8(value) => value.as_ref().map(|string| {
                         if prefix_len > string.len() {
@@ -280,12 +281,10 @@ impl Histogram {
                 },
                 LogicalType::Date | LogicalType::DateTime => match value {
                     DataValue::Date32(value) => DataValue::Int32(*value)
-                        .cast(&LogicalType::Double)
-                        .unwrap()
+                        .cast(&LogicalType::Double)?
                         .double(),
                     DataValue::Date64(value) => DataValue::Int64(*value)
-                        .cast(&LogicalType::Double)
-                        .unwrap()
+                        .cast(&LogicalType::Double)?
                         .double(),
                     _ => unreachable!(),
                 },
@@ -303,17 +302,33 @@ impl Histogram {
                 | LogicalType::UBigint
                 | LogicalType::Float
                 | LogicalType::Double
-                | LogicalType::Decimal(_, _) => {
-                    value.clone().cast(&LogicalType::Double).unwrap().double()
-                }
-                LogicalType::Tuple => unreachable!(),
+                | LogicalType::Decimal(_, _) => value.clone().cast(&LogicalType::Double)?.double(),
+                LogicalType::Tuple => match value {
+                    DataValue::Tuple(Some(values)) => {
+                        let mut float = 0.0;
+
+                        for (i, value) in values.iter().enumerate() {
+                            if let Some(f) =
+                                DataValue::clone(value).cast(&LogicalType::Double)?.double()
+                            {
+                                float += f / (10_i32.pow(i as u32) as f64);
+                            }
+                        }
+                        Some(float)
+                    }
+                    DataValue::Tuple(None) => None,
+                    _ => unreachable!(),
+                },
             }
-            .unwrap_or(0.0)
+            .unwrap_or(0.0);
+            Ok::<f64, DatabaseError>(value)
         };
         let calc_fraction = |start: &DataValue, end: &DataValue, value: &DataValue| {
             let prefix_len = start.common_prefix_length(end).unwrap_or(0);
-            (float_value(value, prefix_len) - float_value(start, prefix_len))
-                / (float_value(end, prefix_len) - float_value(start, prefix_len))
+            Ok::<f64, DatabaseError>(
+                (float_value(value, prefix_len)? - float_value(start, prefix_len)?)
+                    / (float_value(end, prefix_len)? - float_value(start, prefix_len)?),
+            )
         };
 
         let distinct_1 = OrderedFloat(1.0 / self.number_of_distinct_value as f64);
@@ -328,21 +343,21 @@ impl Histogram {
                     _ => false,
                 };
 
-                if (is_above(&bucket.lower, min, true) || is_eq(&bucket.lower, min))
-                    && (is_under(&bucket.upper, max, false) || is_eq(&bucket.upper, max))
+                if (is_above(&bucket.lower, min, true)? || is_eq(&bucket.lower, min))
+                    && (is_under(&bucket.upper, max, false)? || is_eq(&bucket.upper, max))
                 {
                     bucket_idxs.push(mem::replace(bucket_i, *bucket_i + 1));
-                } else if is_above(&bucket.lower, max, false) {
+                } else if is_above(&bucket.lower, max, false)? {
                     *binary_i += 1;
-                } else if is_under(&bucket.upper, min, true) {
+                } else if is_under(&bucket.upper, min, true)? {
                     *bucket_i += 1;
-                } else if is_above(&bucket.lower, min, true) {
+                } else if is_above(&bucket.lower, min, true)? {
                     let (temp_ratio, option) = match max {
                         Bound::Included(val) => {
-                            (calc_fraction(&bucket.lower, &bucket.upper, val), None)
+                            (calc_fraction(&bucket.lower, &bucket.upper, val)?, None)
                         }
                         Bound::Excluded(val) => (
-                            calc_fraction(&bucket.lower, &bucket.upper, val),
+                            calc_fraction(&bucket.lower, &bucket.upper, val)?,
                             Some(sketch.estimate(val)),
                         ),
                         Bound::Unbounded => unreachable!(),
@@ -353,13 +368,13 @@ impl Histogram {
                         temp_count = temp_count.saturating_sub(count);
                     }
                     *bucket_i += 1;
-                } else if is_under(&bucket.upper, max, false) {
+                } else if is_under(&bucket.upper, max, false)? {
                     let (temp_ratio, option) = match min {
                         Bound::Included(val) => {
-                            (calc_fraction(&bucket.lower, &bucket.upper, val), None)
+                            (calc_fraction(&bucket.lower, &bucket.upper, val)?, None)
                         }
                         Bound::Excluded(val) => (
-                            calc_fraction(&bucket.lower, &bucket.upper, val),
+                            calc_fraction(&bucket.lower, &bucket.upper, val)?,
                             Some(sketch.estimate(val)),
                         ),
                         Bound::Unbounded => unreachable!(),
@@ -373,20 +388,20 @@ impl Histogram {
                 } else {
                     let (temp_ratio_max, option_max) = match max {
                         Bound::Included(val) => {
-                            (calc_fraction(&bucket.lower, &bucket.upper, val), None)
+                            (calc_fraction(&bucket.lower, &bucket.upper, val)?, None)
                         }
                         Bound::Excluded(val) => (
-                            calc_fraction(&bucket.lower, &bucket.upper, val),
+                            calc_fraction(&bucket.lower, &bucket.upper, val)?,
                             Some(sketch.estimate(val)),
                         ),
                         Bound::Unbounded => unreachable!(),
                     };
                     let (temp_ratio_min, option_min) = match min {
                         Bound::Included(val) => {
-                            (calc_fraction(&bucket.lower, &bucket.upper, val), None)
+                            (calc_fraction(&bucket.lower, &bucket.upper, val)?, None)
                         }
                         Bound::Excluded(val) => (
-                            calc_fraction(&bucket.lower, &bucket.upper, val),
+                            calc_fraction(&bucket.lower, &bucket.upper, val)?,
                             Some(sketch.estimate(val)),
                         ),
                         Bound::Unbounded => unreachable!(),
@@ -408,17 +423,17 @@ impl Histogram {
                 *count += sketch.estimate(value);
                 *binary_i += 1
             }
-            Range::Dummy => return true,
+            Range::Dummy => return Ok(true),
             Range::SortedRanges(_) => unreachable!(),
         }
 
-        false
+        Ok(false)
     }
 }
 
 impl Bucket {
-    fn empty(data_type: &LogicalType) -> Self {
-        let empty_value = Arc::new(DataValue::none(data_type));
+    fn empty() -> Self {
+        let empty_value = Arc::new(DataValue::Null);
 
         Bucket {
             lower: empty_value.clone(),
@@ -430,37 +445,29 @@ impl Bucket {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
     use crate::optimizer::core::histogram::{Bucket, HistogramBuilder};
+    use crate::types::index::{IndexMeta, IndexType};
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::ops::Bound;
     use std::sync::Arc;
 
-    fn int32_column() -> ColumnCatalog {
-        ColumnCatalog {
-            summary: ColumnSummary {
-                id: Some(1),
-                name: "c1".to_string(),
-                table_name: None,
-            },
-            nullable: false,
-            desc: ColumnDesc {
-                column_datatype: LogicalType::UInteger,
-                is_primary: false,
-                is_unique: false,
-                default: None,
-            },
+    fn index_meta() -> IndexMeta {
+        IndexMeta {
+            id: 0,
+            column_ids: vec![0],
+            table_name: Arc::new("t1".to_string()),
+            pk_ty: LogicalType::Integer,
+            name: "pk_c1".to_string(),
+            ty: IndexType::PrimaryKey,
         }
     }
 
     #[test]
     fn test_sort_tuples_on_histogram() -> Result<(), DatabaseError> {
-        let column = int32_column();
-
-        let mut builder = HistogramBuilder::new(&column, Some(15))?;
+        let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
 
         builder.append(&Arc::new(DataValue::Int32(Some(0))))?;
         builder.append(&Arc::new(DataValue::Int32(Some(1))))?;
@@ -526,9 +533,7 @@ mod tests {
 
     #[test]
     fn test_rev_sort_tuples_on_histogram() -> Result<(), DatabaseError> {
-        let column = int32_column();
-
-        let mut builder = HistogramBuilder::new(&column, Some(15))?;
+        let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
 
         builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
         builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
@@ -592,9 +597,7 @@ mod tests {
 
     #[test]
     fn test_non_average_on_histogram() -> Result<(), DatabaseError> {
-        let column = int32_column();
-
-        let mut builder = HistogramBuilder::new(&column, Some(15))?;
+        let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
 
         builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
         builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
@@ -653,9 +656,7 @@ mod tests {
 
     #[test]
     fn test_collect_count() -> Result<(), DatabaseError> {
-        let column = int32_column();
-
-        let mut builder = HistogramBuilder::new(&column, Some(15))?;
+        let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
 
         builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
         builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
@@ -689,7 +690,7 @@ mod tests {
                 },
             ],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_1, 9);
 
@@ -699,7 +700,7 @@ mod tests {
                 max: Bound::Unbounded,
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_2, 11);
 
@@ -709,7 +710,7 @@ mod tests {
                 max: Bound::Unbounded,
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_3, 7);
 
@@ -719,7 +720,7 @@ mod tests {
                 max: Bound::Included(Arc::new(DataValue::Int32(Some(11)))),
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_4, 12);
 
@@ -729,7 +730,7 @@ mod tests {
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(8)))),
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_5, 8);
 
@@ -739,7 +740,7 @@ mod tests {
                 max: Bound::Unbounded,
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_6, 13);
 
@@ -749,7 +750,7 @@ mod tests {
                 max: Bound::Unbounded,
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_7, 13);
 
@@ -759,7 +760,7 @@ mod tests {
                 max: Bound::Included(Arc::new(DataValue::Int32(Some(12)))),
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_8, 13);
 
@@ -769,7 +770,7 @@ mod tests {
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(13)))),
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_9, 13);
 
@@ -779,7 +780,7 @@ mod tests {
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(3)))),
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_10, 2);
 
@@ -789,7 +790,7 @@ mod tests {
                 max: Bound::Included(Arc::new(DataValue::Int32(Some(2)))),
             }],
             &sketch,
-        );
+        )?;
 
         assert_eq!(count_11, 2);
 

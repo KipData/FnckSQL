@@ -4,10 +4,10 @@ pub(crate) mod dql;
 pub(crate) mod marcos;
 
 use crate::errors::DatabaseError;
-use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::GroupExpression;
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
+use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::optimizer::rule::implementation::ddl::add_column::AddColumnImplementation;
 use crate::optimizer::rule::implementation::ddl::create_table::CreateTableImplementation;
 use crate::optimizer::rule::implementation::ddl::drop_column::DropColumnImplementation;
@@ -97,7 +97,7 @@ impl<T: Transaction> ImplementationRule<T> for ImplementationRuleImpl {
     fn to_expression(
         &self,
         operator: &Operator,
-        loader: &ColumnMetaLoader<'_, T>,
+        loader: &StatisticMetaLoader<'_, T>,
         group_expr: &mut GroupExpression,
     ) -> Result<(), DatabaseError> {
         match self {

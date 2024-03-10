@@ -3,6 +3,7 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 
 use crate::errors::DatabaseError;
+use crate::execution::volcano::ddl::create_index::CreateIndex;
 use crate::execution::volcano::ddl::create_table::CreateTable;
 use crate::execution::volcano::ddl::drop_column::DropColumn;
 use crate::execution::volcano::ddl::drop_table::DropTable;
@@ -154,6 +155,11 @@ pub fn build_write<T: Transaction>(plan: LogicalPlan, transaction: &mut T) -> Bo
             DropColumn::from((op, input)).execute_mut(transaction)
         }
         Operator::CreateTable(op) => CreateTable::from(op).execute_mut(transaction),
+        Operator::CreateIndex(op) => {
+            let input = childrens.pop().unwrap();
+
+            CreateIndex::from((op, input)).execute_mut(transaction)
+        }
         Operator::DropTable(op) => DropTable::from(op).execute_mut(transaction),
         Operator::Truncate(op) => Truncate::from(op).execute_mut(transaction),
         Operator::CopyFromFile(op) => CopyFromFile::from(op).execute_mut(transaction),

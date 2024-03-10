@@ -5,7 +5,6 @@ use crate::planner::operator::scan::ScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use itertools::Itertools;
 use sqlparser::ast::ObjectName;
 use std::sync::Arc;
 
@@ -14,16 +13,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let table_name = Arc::new(lower_case_name(name)?);
 
         let table_catalog = self.context.table_and_bind(table_name.clone(), None)?;
-        let columns = table_catalog
-            .columns()
-            .filter_map(|column| column.desc.is_index().then_some(column.clone()))
-            .collect_vec();
+        let index_metas = table_catalog.indexes.clone();
 
         let scan_op = ScanOperator::build(table_name.clone(), table_catalog);
         Ok(LogicalPlan::new(
             Operator::Analyze(AnalyzeOperator {
                 table_name,
-                columns,
+                index_metas,
             }),
             vec![scan_op],
         ))

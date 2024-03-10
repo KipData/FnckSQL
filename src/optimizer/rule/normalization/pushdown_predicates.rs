@@ -9,7 +9,7 @@ use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
-use crate::types::index::IndexInfo;
+use crate::types::index::{IndexInfo, IndexType};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -220,8 +220,39 @@ impl NormalizationRule for PushPredicateIntoScan {
                 if let Operator::Scan(child_op) = graph.operator_mut(child_id) {
                     //FIXME: now only support `unique` and `primary key`
                     for IndexInfo { meta, range } in &mut child_op.index_infos {
-                        *range = RangeDetacher::new(meta.table_name.as_str(), &meta.column_ids[0])
-                            .detach(&op.predicate)?;
+                        if range.is_some() {
+                            continue;
+                        }
+                        *range = match meta.ty {
+                            IndexType::PrimaryKey | IndexType::Unique | IndexType::Normal => {
+                                RangeDetacher::new(meta.table_name.as_str(), &meta.column_ids[0])
+                                    .detach(&op.predicate)?
+                            }
+                            IndexType::Composite => {
+                                let mut res = None;
+                                let mut eq_ranges = Vec::with_capacity(meta.column_ids.len());
+
+                                for column_id in meta.column_ids.iter() {
+                                    if let Some(range) =
+                                        RangeDetacher::new(meta.table_name.as_str(), column_id)
+                                            .detach(&op.predicate)?
+                                    {
+                                        if range.only_eq() {
+                                            eq_ranges.push(range);
+                                            continue;
+                                        }
+                                        res = range.combining_eqs(&eq_ranges);
+                                    }
+                                    break;
+                                }
+                                if res.is_none() {
+                                    if let Some(range) = eq_ranges.pop() {
+                                        res = range.combining_eqs(&eq_ranges);
+                                    }
+                                }
+                                res
+                            }
+                        }
                     }
                 }
             }

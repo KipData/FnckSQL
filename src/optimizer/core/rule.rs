@@ -1,7 +1,7 @@
 use crate::errors::DatabaseError;
-use crate::optimizer::core::column_meta::ColumnMetaLoader;
 use crate::optimizer::core::memo::GroupExpression;
 use crate::optimizer::core::pattern::Pattern;
+use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::planner::operator::Operator;
 use crate::storage::Transaction;
@@ -19,7 +19,7 @@ pub trait ImplementationRule<T: Transaction>: MatchPattern {
     fn to_expression(
         &self,
         op: &Operator,
-        loader: &ColumnMetaLoader<T>,
+        loader: &StatisticMetaLoader<T>,
         group_expr: &mut GroupExpression,
     ) -> Result<(), DatabaseError>;
 }
