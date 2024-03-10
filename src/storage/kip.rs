@@ -161,17 +161,18 @@ impl Transaction for KipTransaction {
         index: Index,
         tuple_id: &TupleId,
     ) -> Result<(), DatabaseError> {
+        if matches!(index.ty, IndexType::PrimaryKey) {
+            return Ok(());
+        }
         let (key, value) = TableCodec::encode_index(table_name, &index, tuple_id)?;
 
-        if let Some(bytes) = self.tx.get(&key)? {
-            if matches!(index.ty, IndexType::Unique) {
+        if matches!(index.ty, IndexType::Unique) {
+            if let Some(bytes) = self.tx.get(&key)? {
                 return if bytes != value {
                     Err(DatabaseError::DuplicateUniqueValue)
                 } else {
                     Ok(())
                 };
-            } else {
-                todo!("联合索引")
             }
         }
 
@@ -186,9 +187,11 @@ impl Transaction for KipTransaction {
         index: &Index,
         tuple_id: Option<&TupleId>,
     ) -> Result<(), DatabaseError> {
-        let key = TableCodec::encode_index_key(table_name, index, tuple_id)?;
-
-        self.tx.remove(&key)?;
+        if matches!(index.ty, IndexType::PrimaryKey) {
+            return Ok(());
+        }
+        self.tx
+            .remove(&TableCodec::encode_index_key(table_name, index, tuple_id)?)?;
 
         Ok(())
     }

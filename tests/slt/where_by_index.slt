@@ -5,6 +5,9 @@ statement ok
 copy t1 from 'tests/data/row_20000.csv' ( DELIMITER '|' );
 
 statement ok
+create index p_index on t1 (c1, c2);
+
+statement ok
 analyze table t1;
 
 query IIT
@@ -127,6 +130,16 @@ select * from t1 where id = 5 or (id > 5 and (id > 6 or id < 8) and id < 12);
 ----
 6 7 8
 9 10 11
+
+query IIT
+select * from t1 where c1 = 7 and c2 = 8;
+----
+6 7 8
+
+query IIT
+select * from t1 where c1 = 7 and c2 < 9;
+----
+6 7 8
 
 statement ok
 drop table t1;

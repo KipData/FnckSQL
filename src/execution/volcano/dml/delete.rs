@@ -48,30 +48,46 @@ impl Delete {
             .cloned()
             .ok_or(DatabaseError::TableNotFound)?;
         let mut tuple_ids = Vec::new();
-        let mut indexes: HashMap<IndexId, Value> =
-            HashMap::new();
+        let mut indexes: HashMap<IndexId, Value> = HashMap::new();
 
         #[for_await]
         for tuple in build_read(input, transaction) {
             let tuple: Tuple = tuple?;
 
             for index_meta in table.indexes() {
-                if let Some(Value { exprs, value_rows, .. }) = indexes.get_mut(&index_meta.id) {
+                if let Some(Value {
+                    exprs, value_rows, ..
+                }) = indexes.get_mut(&index_meta.id)
+                {
                     value_rows.push(Projection::projection(&tuple, exprs, &schema)?);
                 } else {
                     let exprs = index_meta.column_exprs(&table)?;
                     let values = Projection::projection(&tuple, &exprs, &schema)?;
 
-                    indexes.insert(index_meta.id, Value {
-                        exprs,
-                        value_rows:vec![values],
-                        index_ty: index_meta.ty,
-                    });
+                    indexes.insert(
+                        index_meta.id,
+                        Value {
+                            exprs,
+                            value_rows: vec![values],
+                            index_ty: index_meta.ty,
+                        },
+                    );
                 }
             }
             tuple_ids.push(tuple.id.unwrap());
         }
-        for (i, (index_id, Value { value_rows, index_ty, .. })) in indexes.into_iter().enumerate() {
+        for (
+            i,
+            (
+                index_id,
+                Value {
+                    value_rows,
+                    index_ty,
+                    ..
+                },
+            ),
+        ) in indexes.into_iter().enumerate()
+        {
             for values in value_rows {
                 transaction.del_index(
                     &table_name,
