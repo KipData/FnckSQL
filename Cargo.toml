@@ -5,11 +5,11 @@ name = "fnck_sql"
 version = "0.0.1-alpha.12"
 edition = "2021"
 authors = ["Kould <kould2333@gmail.com>", "Xwg <loloxwg@gmail.com>"]
-description = "Fast Insert OLTP SQL DBMS"
+description = "SQL as a Function for Rust"
 license = "Apache-2.0"
 repository = "https://github.com/KipData/KipSQL"
 readme = "README.md"
-keywords = ["async", "SQL", "Persistence"]
+keywords = ["async", "sql", "sqlite", "database", "mysql"]
 categories = ["development-tools", "database"]
 default-run = "fnck_sql"
 
