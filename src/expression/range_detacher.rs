@@ -754,7 +754,7 @@ impl fmt::Display for Range {
         match self {
             Range::Scope { min, max } => {
                 match min {
-                    Bound::Unbounded => write!(f, "(-∞")?,
+                    Bound::Unbounded => write!(f, "(-inf")?,
                     Bound::Included(value) => write!(f, "[{}", value)?,
                     Bound::Excluded(value) => write!(f, "({}", value)?,
                 }
@@ -762,7 +762,7 @@ impl fmt::Display for Range {
                 write!(f, ", ")?;
 
                 match max {
-                    Bound::Unbounded => write!(f, "+∞)")?,
+                    Bound::Unbounded => write!(f, "+inf)")?,
                     Bound::Included(value) => write!(f, "{}]", value)?,
                     Bound::Excluded(value) => write!(f, "{})", value)?,
                 }
