@@ -77,18 +77,15 @@ impl Delete {
             tuple_ids.push(tuple.id.unwrap());
         }
         for (
-            i,
-            (
-                index_id,
-                Value {
-                    value_rows,
-                    index_ty,
-                    ..
-                },
-            ),
-        ) in indexes.into_iter().enumerate()
+            index_id,
+            Value {
+                value_rows,
+                index_ty,
+                ..
+            },
+        ) in indexes
         {
-            for values in value_rows {
+            for (i, values) in value_rows.into_iter().enumerate() {
                 transaction.del_index(
                     &table_name,
                     &Index::new(index_id, &values, index_ty),
