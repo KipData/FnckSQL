@@ -571,6 +571,11 @@ impl DataValue {
             }
             DataValue::Null => (),
             DataValue::Decimal(Some(_v)) => todo!(),
+            DataValue::Tuple(Some(values)) => {
+                for v in values.iter() {
+                    v.memcomparable_encode(b)?;
+                }
+            }
             value => {
                 if !value.is_null() {
                     return Err(DatabaseError::InvalidType);

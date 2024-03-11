@@ -1,3 +1,4 @@
+use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
 use crate::expression::ScalarExpression;
@@ -5,6 +6,7 @@ use crate::planner::operator::project::ProjectOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
+use crate::types::value::ValueRef;
 use futures_async_stream::try_stream;
 
 pub struct Projection {
@@ -25,6 +27,19 @@ impl<T: Transaction> ReadExecutor<T> for Projection {
 }
 
 impl Projection {
+    pub fn projection(
+        tuple: &Tuple,
+        exprs: &[ScalarExpression],
+        schmea: &[ColumnRef],
+    ) -> Result<Vec<ValueRef>, DatabaseError> {
+        let mut values = Vec::with_capacity(exprs.len());
+
+        for expr in exprs.iter() {
+            values.push(expr.eval(tuple, schmea)?);
+        }
+        Ok(values)
+    }
+
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let Projection { exprs, mut input } = self;
@@ -33,13 +48,8 @@ impl Projection {
         #[for_await]
         for tuple in build_read(input, transaction) {
             let mut tuple = tuple?;
-            let mut values = Vec::with_capacity(exprs.len());
 
-            for expr in exprs.iter() {
-                values.push(expr.eval(&tuple, &schema)?);
-            }
-            tuple.values = values;
-
+            tuple.values = Self::projection(&tuple, &exprs, &schema)?;
             yield tuple;
         }
     }

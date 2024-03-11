@@ -94,7 +94,7 @@ impl LogicalPlan {
                 Operator::Dummy => Arc::new(vec![]),
                 Operator::Show => Arc::new(vec![
                     Arc::new(ColumnCatalog::new_dummy("TABLE".to_string())),
-                    Arc::new(ColumnCatalog::new_dummy("COLUMN_METAS_LEN".to_string())),
+                    Arc::new(ColumnCatalog::new_dummy("STATISTICS_METAS_LEN".to_string())),
                 ]),
                 Operator::Explain => {
                     Arc::new(vec![Arc::new(ColumnCatalog::new_dummy("PLAN".to_string()))])
@@ -116,7 +116,7 @@ impl LogicalPlan {
                     "DELETED".to_string(),
                 ))]),
                 Operator::Analyze(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
-                    "COLUMN_META_PATH".to_string(),
+                    "STATISTICS_META_PATH".to_string(),
                 ))]),
                 Operator::AddColumn(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
                     "ADD COLUMN SUCCESS".to_string(),
@@ -126,6 +126,9 @@ impl LogicalPlan {
                 ))]),
                 Operator::CreateTable(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
                     "CREATE TABLE SUCCESS".to_string(),
+                ))]),
+                Operator::CreateIndex(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
+                    "CREATE INDEX SUCCESS".to_string(),
                 ))]),
                 Operator::DropTable(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
                     "DROP TABLE SUCCESS".to_string(),

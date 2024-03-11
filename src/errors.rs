@@ -101,6 +101,8 @@ pub enum DatabaseError {
     TableNotFound,
     #[error("the some column: {0} already exists")]
     DuplicateColumn(String),
+    #[error("the some index: {0} already exists")]
+    DuplicateIndex(String),
     #[error("add column must be nullable or specify a default value")]
     NeedNullAbleOrDefault,
     #[error("the table already exists")]

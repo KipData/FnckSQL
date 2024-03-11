@@ -3,6 +3,7 @@ pub mod alter_table;
 pub mod analyze;
 pub mod copy_from_file;
 pub mod copy_to_file;
+pub mod create_index;
 pub mod create_table;
 pub mod delete;
 pub mod describe;
@@ -25,6 +26,7 @@ use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
 use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
+use crate::planner::operator::create_index::CreateIndexOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::describe::DescribeOperator;
@@ -71,6 +73,7 @@ pub enum Operator {
     AddColumn(AddColumnOperator),
     DropColumn(DropColumnOperator),
     CreateTable(CreateTableOperator),
+    CreateIndex(CreateIndexOperator),
     DropTable(DropTableOperator),
     Truncate(TruncateOperator),
     // Copy
@@ -145,6 +148,7 @@ impl Operator {
             | Operator::AddColumn(_)
             | Operator::DropColumn(_)
             | Operator::CreateTable(_)
+            | Operator::CreateIndex(_)
             | Operator::DropTable(_)
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)
@@ -195,7 +199,7 @@ impl Operator {
                 .collect_vec(),
             Operator::Values(ValuesOperator { schema_ref, .. })
             | Operator::Union(UnionOperator { schema_ref }) => Vec::clone(schema_ref),
-            Operator::Analyze(op) => op.columns.clone(),
+            Operator::Analyze(_) => vec![],
             Operator::Delete(op) => vec![op.primary_key_column.clone()],
             Operator::Dummy
             | Operator::Limit(_)
@@ -207,6 +211,7 @@ impl Operator {
             | Operator::AddColumn(_)
             | Operator::DropColumn(_)
             | Operator::CreateTable(_)
+            | Operator::CreateIndex(_)
             | Operator::DropTable(_)
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)
@@ -237,6 +242,7 @@ impl fmt::Display for Operator {
             Operator::AddColumn(op) => write!(f, "{}", op),
             Operator::DropColumn(op) => write!(f, "{}", op),
             Operator::CreateTable(op) => write!(f, "{}", op),
+            Operator::CreateIndex(op) => write!(f, "{}", op),
             Operator::DropTable(op) => write!(f, "{}", op),
             Operator::Truncate(op) => write!(f, "{}", op),
             Operator::CopyFromFile(op) => write!(f, "{}", op),

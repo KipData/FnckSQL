@@ -5,6 +5,18 @@ statement ok
 copy t1 from 'tests/data/row_20000.csv' ( DELIMITER '|' );
 
 statement ok
+insert into t1 values(100000000, null, null);
+
+statement ok
+create unique index u_c1_index on t1 (c1);
+
+statement ok
+create index c2_index on t1 (c2);
+
+statement ok
+create index p_index on t1 (c1, c2);
+
+statement ok
 analyze table t1;
 
 query IIT
@@ -127,6 +139,59 @@ select * from t1 where id = 5 or (id > 5 and (id > 6 or id < 8) and id < 12);
 ----
 6 7 8
 9 10 11
+
+query IIT
+select * from t1 where c1 = 7 and c2 = 8;
+----
+6 7 8
+
+query IIT
+select * from t1 where c1 = 7 and c2 < 9;
+----
+6 7 8
+
+query IIT
+select * from t1 where (c1 = 7 or c1 = 10) and c2 < 9;
+----
+6 7 8
+
+query IIT
+select * from t1 where c1 is null and c2 is null;
+----
+100000000 null null
+
+query IIT
+select * from t1 where c1 > 0 and c1 < 8;
+----
+0 1 2
+3 4 5
+6 7 8
+
+query IIT
+select * from t1 where c2 > 0 and c2 < 9;
+----
+0 1 2
+3 4 5
+6 7 8
+
+statement ok
+update t1 set c2 = 9 where c1 = 1
+
+query IIT rowsort
+select * from t1 where c2 > 0 and c2 < 10;
+----
+0 1 9
+3 4 5
+6 7 8
+
+statement ok
+delete from t1 where c1 = 4
+
+query IIT rowsort
+select * from t1 where c2 > 0 and c2 < 10;
+----
+0 1 9
+6 7 8
 
 statement ok
 drop table t1;

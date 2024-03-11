@@ -1,6 +1,6 @@
 use crate::catalog::{ColumnCatalog, TableMeta};
 use crate::errors::DatabaseError;
-use crate::types::index::{Index, IndexId, IndexMeta};
+use crate::types::index::{Index, IndexId, IndexMeta, IndexType};
 use crate::types::tuple::{Schema, Tuple, TupleId};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
@@ -202,12 +202,12 @@ impl TableCodec {
     }
 
     /// NonUnique Index:
-    /// Key: {TableName}{INDEX_TAG}{BOUND_MIN_TAG}{IndexID}{BOUND_MIN_TAG}{DataValue1}{DataValue2} ..
-    /// Value: TupleIDs
+    /// Key: {TableName}{INDEX_TAG}{BOUND_MIN_TAG}{IndexID}{BOUND_MIN_TAG}{DataValue1}{DataValue2} .. {TupleId}
+    /// Value: TupleID
     ///
     /// Unique Index:
     /// Key: {TableName}{INDEX_TAG}{BOUND_MIN_TAG}{IndexID}{BOUND_MIN_TAG}{DataValue}
-    /// Value: TupleIDs
+    /// Value: TupleID
     ///
     /// Tips: The unique index has only one ColumnID and one corresponding DataValue,
     /// so it can be positioned directly.
@@ -216,22 +216,51 @@ impl TableCodec {
         index: &Index,
         tuple_id: &TupleId,
     ) -> Result<(Bytes, Bytes), DatabaseError> {
-        let key = TableCodec::encode_index_key(name, index)?;
+        let key = TableCodec::encode_index_key(name, index, Some(tuple_id))?;
 
         Ok((Bytes::from(key), Bytes::from(tuple_id.to_raw())))
     }
 
-    pub fn encode_index_key(name: &str, index: &Index) -> Result<Vec<u8>, DatabaseError> {
+    fn _encode_index_key(name: &str, index: &Index) -> Result<Vec<u8>, DatabaseError> {
         let mut key_prefix = Self::key_prefix(CodecType::Index, name);
         key_prefix.push(BOUND_MIN_TAG);
-        key_prefix.append(&mut index.id.to_be_bytes().to_vec());
+        key_prefix.extend_from_slice(&index.id.to_be_bytes());
         key_prefix.push(BOUND_MIN_TAG);
 
-        for col_v in &index.column_values {
+        for col_v in index.column_values {
             col_v.memcomparable_encode(&mut key_prefix)?;
             key_prefix.push(BOUND_MIN_TAG);
         }
+        Ok(key_prefix)
+    }
 
+    pub fn encode_index_bound_key(
+        name: &str,
+        index: &Index,
+        is_upper: bool,
+    ) -> Result<Vec<u8>, DatabaseError> {
+        let mut key_prefix = Self::_encode_index_key(name, index)?;
+
+        if is_upper {
+            if let Some(last) = key_prefix.last_mut() {
+                *last = BOUND_MAX_TAG
+            }
+        }
+        Ok(key_prefix)
+    }
+
+    pub fn encode_index_key(
+        name: &str,
+        index: &Index,
+        tuple_id: Option<&TupleId>,
+    ) -> Result<Vec<u8>, DatabaseError> {
+        let mut key_prefix = Self::_encode_index_key(name, index)?;
+
+        if let Some(tuple_id) = tuple_id {
+            if matches!(index.ty, IndexType::Normal | IndexType::Composite) {
+                key_prefix.append(&mut tuple_id.to_raw());
+            }
+        }
         Ok(key_prefix)
     }
 
@@ -282,7 +311,7 @@ mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog, TableMeta};
     use crate::errors::DatabaseError;
     use crate::storage::table_codec::TableCodec;
-    use crate::types::index::{Index, IndexMeta};
+    use crate::types::index::{Index, IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
@@ -291,6 +320,7 @@ mod tests {
     use rust_decimal::Decimal;
     use std::collections::BTreeSet;
     use std::ops::Bound;
+    use std::slice;
     use std::sync::Arc;
 
     fn build_table_codec() -> TableCatalog {
@@ -354,8 +384,7 @@ mod tests {
             table_name: Arc::new("T1".to_string()),
             pk_ty: LogicalType::Integer,
             name: "index_1".to_string(),
-            is_unique: false,
-            is_primary: false,
+            ty: IndexType::PrimaryKey,
         };
         let (_, bytes) = TableCodec::encode_index_meta(&"T1".to_string(), &index_meta)?;
 
@@ -367,11 +396,8 @@ mod tests {
     #[test]
     fn test_table_codec_index() -> Result<(), DatabaseError> {
         let table_catalog = build_table_codec();
-
-        let index = Index {
-            id: 0,
-            column_values: vec![Arc::new(DataValue::Int32(Some(0)))],
-        };
+        let value = Arc::new(DataValue::Int32(Some(0)));
+        let index = Index::new(0, slice::from_ref(&value), IndexType::PrimaryKey);
         let tuple_id = Arc::new(DataValue::Int32(Some(0)));
         let (_, bytes) = TableCodec::encode_index(&table_catalog.name, &index, &tuple_id)?;
 
@@ -453,8 +479,7 @@ mod tests {
                 table_name: Arc::new(table_name.to_string()),
                 pk_ty: LogicalType::Integer,
                 name: "".to_string(),
-                is_unique: false,
-                is_primary: false,
+                ty: IndexType::PrimaryKey,
             };
 
             let (key, _) =
@@ -501,12 +526,14 @@ mod tests {
         let table_catalog = TableCatalog::new(Arc::new("T0".to_string()), vec![column]).unwrap();
 
         let op = |value: DataValue, index_id: usize, table_name: &String| {
-            let index = Index {
-                id: index_id as u32,
-                column_values: vec![Arc::new(value)],
-            };
+            let value = Arc::new(value);
+            let index = Index::new(
+                index_id as u32,
+                slice::from_ref(&value),
+                IndexType::PrimaryKey,
+            );
 
-            TableCodec::encode_index_key(table_name, &index).unwrap()
+            TableCodec::encode_index_key(table_name, &index, None).unwrap()
         };
 
         set.insert(op(DataValue::Int32(Some(0)), 0, &table_catalog.name));
@@ -555,12 +582,14 @@ mod tests {
     fn test_table_codec_index_all_bound() {
         let mut set = BTreeSet::new();
         let op = |value: DataValue, index_id: usize, table_name: &str| {
-            let index = Index {
-                id: index_id as u32,
-                column_values: vec![Arc::new(value)],
-            };
+            let value = Arc::new(value);
+            let index = Index::new(
+                index_id as u32,
+                slice::from_ref(&value),
+                IndexType::PrimaryKey,
+            );
 
-            TableCodec::encode_index_key(&table_name.to_string(), &index).unwrap()
+            TableCodec::encode_index_key(&table_name.to_string(), &index, None).unwrap()
         };
 
         set.insert(op(DataValue::Int32(Some(0)), 0, "T0"));

@@ -144,6 +144,7 @@ impl ColumnPruning {
             }
             // DDL Single Plan
             Operator::CreateTable(_)
+            | Operator::CreateIndex(_)
             | Operator::DropTable(_)
             | Operator::Truncate(_)
             | Operator::Show

@@ -1,13 +1,14 @@
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
 use crate::expression::{BinaryOperator, ScalarExpression};
-use crate::types::value::{ValueRef, NULL_VALUE};
+use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
 use crate::types::ColumnId;
 use itertools::Itertools;
 use std::cmp::Ordering;
 use std::collections::Bound;
-use std::fmt;
 use std::fmt::Formatter;
+use std::sync::Arc;
+use std::{fmt, mem};
 
 /// Used to represent binary relationships between fields and constants
 /// Tips: The NotEq case is ignored because it makes expression composition very complex
@@ -21,6 +22,156 @@ pub enum Range {
     Eq(ValueRef),
     Dummy,
     SortedRanges(Vec<Range>),
+}
+
+struct TreeNode<T> {
+    value: Option<T>,
+    children: Vec<TreeNode<T>>,
+}
+
+impl<T> TreeNode<T> {
+    fn new(value: Option<T>) -> Self {
+        TreeNode {
+            value,
+            children: Vec::new(),
+        }
+    }
+
+    fn add_child(&mut self, child: TreeNode<T>) {
+        self.children.push(child);
+    }
+}
+
+impl<T: Clone> TreeNode<T> {
+    fn enumeration(self, path: &mut Vec<T>, combinations: &mut Vec<Vec<T>>) {
+        if self.value.is_none() && self.children.is_empty() {
+            combinations.push(path.clone());
+        }
+        for mut child in self.children {
+            if let Some(val) = child.value.take() {
+                path.push(val);
+                Self::enumeration(child, path, combinations);
+                let _ = path.pop();
+            } else {
+                Self::enumeration(child, path, combinations);
+            }
+        }
+    }
+}
+
+fn build_tree(ranges: &[Range], current_level: usize) -> Option<TreeNode<&ValueRef>> {
+    fn build_subtree<'a>(
+        ranges: &'a [Range],
+        range: &'a Range,
+        current_level: usize,
+    ) -> Option<TreeNode<&'a ValueRef>> {
+        let value = match range {
+            Range::Eq(value) => value,
+            _ => return None,
+        };
+        let mut child = TreeNode::new(Some(value));
+        let subtree = build_tree(ranges, current_level + 1)?;
+
+        if !subtree.children.is_empty() || current_level == ranges.len() - 1 {
+            child.add_child(subtree);
+        }
+        Some(child)
+    }
+
+    let mut root = TreeNode::new(None);
+
+    if current_level < ranges.len() {
+        match &ranges[current_level] {
+            Range::SortedRanges(child_ranges) => {
+                for range in child_ranges.iter() {
+                    root.children
+                        .push(build_subtree(ranges, range, current_level)?);
+                }
+            }
+            range => {
+                root.children
+                    .push(build_subtree(ranges, range, current_level)?);
+            }
+        }
+    }
+    Some(root)
+}
+
+impl Range {
+    pub(crate) fn only_eq(&self) -> bool {
+        match self {
+            Range::Eq(_) => true,
+            Range::SortedRanges(ranges) => ranges.iter().all(|range| range.only_eq()),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn combining_eqs(&self, eqs: &[Range]) -> Option<Range> {
+        #[allow(clippy::map_clone)]
+        fn merge_value(tuple: &[&ValueRef], value: ValueRef) -> ValueRef {
+            let mut merge_tuple = Vec::with_capacity(tuple.len() + 1);
+            merge_tuple.extend(tuple.iter().map(|v| Arc::clone(v)));
+            merge_tuple.push(value);
+
+            Arc::new(DataValue::Tuple(Some(merge_tuple)))
+        }
+        fn _to_tuple_range(tuple: &[&ValueRef], range: Range) -> Range {
+            fn merge_value_on_bound(
+                tuple: &[&ValueRef],
+                bound: Bound<ValueRef>,
+            ) -> Bound<ValueRef> {
+                match bound {
+                    Bound::Included(v) => Bound::Included(merge_value(tuple, v)),
+                    Bound::Excluded(v) => Bound::Excluded(merge_value(tuple, v)),
+                    Bound::Unbounded => Bound::Unbounded,
+                }
+            }
+
+            match range {
+                Range::Scope { min, max } => Range::Scope {
+                    min: merge_value_on_bound(tuple, min),
+                    max: merge_value_on_bound(tuple, max),
+                },
+                Range::Eq(v) => Range::Eq(merge_value(tuple, v)),
+                Range::Dummy => Range::Dummy,
+                Range::SortedRanges(mut ranges) => {
+                    for range in &mut ranges {
+                        *range = _to_tuple_range(tuple, mem::replace(range, Range::Dummy));
+                    }
+                    Range::SortedRanges(ranges)
+                }
+            }
+        }
+
+        let node = build_tree(eqs, 0)?;
+        let mut combinations = Vec::new();
+
+        node.enumeration(&mut Vec::new(), &mut combinations);
+
+        if let Some(combination) = match self {
+            Range::Scope {
+                min: Bound::Unbounded,
+                ..
+            } => combinations.last(),
+            Range::Scope {
+                max: Bound::Unbounded,
+                ..
+            } => combinations.first(),
+            _ => None,
+        } {
+            return Some(_to_tuple_range(combination, self.clone()));
+        }
+
+        let mut ranges = Vec::new();
+
+        for tuple in combinations {
+            match _to_tuple_range(&tuple, self.clone()) {
+                Range::SortedRanges(mut res_ranges) => ranges.append(&mut res_ranges),
+                range => ranges.push(range),
+            }
+        }
+        Some(RangeDetacher::ranges2range(ranges))
+    }
 }
 
 pub struct RangeDetacher<'a> {
@@ -246,7 +397,7 @@ impl<'a> RangeDetacher<'a> {
                 let merged_ranges =
                     Self::extract_merge_ranges(op, Some(Range::Scope { min, max }), ranges, &mut 0);
 
-                Self::ranges2range(merged_ranges)
+                Some(Self::ranges2range(merged_ranges))
             }
             // e.g. c1 = 1 ? c1 = 2
             (Range::Eq(left_val), Range::Eq(right_val)) => {
@@ -280,7 +431,7 @@ impl<'a> RangeDetacher<'a> {
                 let merged_ranges =
                     Self::extract_merge_ranges(op, Some(Range::Eq(eq)), ranges, &mut 0);
 
-                Self::ranges2range(merged_ranges)
+                Some(Self::ranges2range(merged_ranges))
             }
             // e.g. (c1 = 1 or c1 = 2) ? (c1 = 1 or c1 = 2)
             (Range::SortedRanges(left_ranges), Range::SortedRanges(mut right_ranges)) => {
@@ -291,18 +442,18 @@ impl<'a> RangeDetacher<'a> {
                         Self::extract_merge_ranges(op, Some(left_range), right_ranges, &mut idx)
                 }
 
-                Self::ranges2range(right_ranges)
+                Some(Self::ranges2range(right_ranges))
             }
         }
     }
 
-    fn ranges2range(mut merged_ranges: Vec<Range>) -> Option<Range> {
+    fn ranges2range(mut merged_ranges: Vec<Range>) -> Range {
         if merged_ranges.is_empty() {
-            Some(Range::Dummy)
+            Range::Dummy
         } else if merged_ranges.len() == 1 {
-            Some(merged_ranges.pop().unwrap())
+            merged_ranges.pop().unwrap()
         } else {
-            Some(Range::SortedRanges(merged_ranges))
+            Range::SortedRanges(merged_ranges)
         }
     }
 
@@ -603,7 +754,7 @@ impl fmt::Display for Range {
         match self {
             Range::Scope { min, max } => {
                 match min {
-                    Bound::Unbounded => write!(f, "(-∞")?,
+                    Bound::Unbounded => write!(f, "(-inf")?,
                     Bound::Included(value) => write!(f, "[{}", value)?,
                     Bound::Excluded(value) => write!(f, "({}", value)?,
                 }
@@ -611,7 +762,7 @@ impl fmt::Display for Range {
                 write!(f, ", ")?;
 
                 match max {
-                    Bound::Unbounded => write!(f, "+∞)")?,
+                    Bound::Unbounded => write!(f, "+inf)")?,
                     Bound::Included(value) => write!(f, "{}]", value)?,
                     Bound::Excluded(value) => write!(f, "{})", value)?,
                 }
@@ -1281,5 +1432,190 @@ mod test {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn test_to_tuple_range_some() {
+        let eqs_ranges = vec![
+            Range::Eq(Arc::new(DataValue::Int32(Some(1)))),
+            Range::SortedRanges(vec![
+                Range::Eq(Arc::new(DataValue::Int32(None))),
+                Range::Eq(Arc::new(DataValue::Int32(Some(1)))),
+                Range::Eq(Arc::new(DataValue::Int32(Some(2)))),
+            ]),
+            Range::SortedRanges(vec![
+                Range::Eq(Arc::new(DataValue::Int32(Some(1)))),
+                Range::Eq(Arc::new(DataValue::Int32(Some(2)))),
+            ]),
+        ];
+
+        let range = Range::Scope {
+            min: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
+            max: Bound::Unbounded,
+        }
+        .combining_eqs(&eqs_ranges);
+
+        assert_eq!(
+            range,
+            Some(Range::Scope {
+                min: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(None)),
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(Some(1))),
+                ])))),
+                max: Bound::Unbounded,
+            })
+        );
+
+        let range = Range::Scope {
+            min: Bound::Unbounded,
+            max: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
+        }
+        .combining_eqs(&eqs_ranges);
+
+        assert_eq!(
+            range,
+            Some(Range::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Int32(Some(2))),
+                    Arc::new(DataValue::Int32(Some(2))),
+                    Arc::new(DataValue::Int32(Some(1))),
+                ])))),
+            })
+        );
+
+        let range = Range::Scope {
+            min: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
+            max: Bound::Included(Arc::new(DataValue::Int32(Some(2)))),
+        }
+        .combining_eqs(&eqs_ranges);
+
+        assert_eq!(
+            range,
+            Some(Range::SortedRanges(vec![
+                Range::Scope {
+                    min: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(None)),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                    ])))),
+                    max: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(None)),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                    ])))),
+                },
+                Range::Scope {
+                    min: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(None)),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                    ])))),
+                    max: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(None)),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                    ])))),
+                },
+                Range::Scope {
+                    min: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                    ])))),
+                    max: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                    ])))),
+                },
+                Range::Scope {
+                    min: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                    ])))),
+                    max: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                    ])))),
+                },
+                Range::Scope {
+                    min: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                    ])))),
+                    max: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                    ])))),
+                },
+                Range::Scope {
+                    min: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(1))),
+                    ])))),
+                    max: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
+                        Arc::new(DataValue::Int32(Some(1))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                        Arc::new(DataValue::Int32(Some(2))),
+                    ])))),
+                },
+            ]))
+        )
+    }
+
+    #[test]
+    fn test_to_tuple_range_none() {
+        let eqs_ranges_1 = vec![
+            Range::Eq(Arc::new(DataValue::Int32(Some(1)))),
+            Range::SortedRanges(vec![
+                Range::Eq(Arc::new(DataValue::Int32(Some(1)))),
+                Range::Scope {
+                    min: Bound::Unbounded,
+                    max: Bound::Unbounded,
+                },
+            ]),
+        ];
+        let eqs_ranges_2 = vec![
+            Range::Eq(Arc::new(DataValue::Int32(Some(1)))),
+            Range::Scope {
+                min: Bound::Unbounded,
+                max: Bound::Unbounded,
+            },
+        ];
+
+        let range_1 = Range::Scope {
+            min: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
+            max: Bound::Unbounded,
+        }
+        .combining_eqs(&eqs_ranges_1);
+        let range_2 = Range::Scope {
+            min: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
+            max: Bound::Unbounded,
+        }
+        .combining_eqs(&eqs_ranges_2);
+
+        assert_eq!(range_1, None);
+        assert_eq!(range_2, None);
     }
 }

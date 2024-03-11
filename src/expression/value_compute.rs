@@ -3,6 +3,7 @@ use crate::expression::{BinaryOperator, UnaryOperator};
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
 use regex::Regex;
+use std::cmp::Ordering;
 
 fn unpack_bool(value: DataValue) -> Option<bool> {
     match value {
@@ -592,12 +593,45 @@ impl DataValue {
 
                         DataValue::Boolean(value)
                     }
+                    BinaryOperator::Gt
+                    | BinaryOperator::GtEq
+                    | BinaryOperator::Lt
+                    | BinaryOperator::LtEq => {
+                        let value = match (left_value, right_value) {
+                            (Some(v1), Some(v2)) => Self::tuple_cmp(v1, v2).map(|order| match op {
+                                BinaryOperator::Gt => order.is_gt(),
+                                BinaryOperator::Lt => order.is_lt(),
+                                BinaryOperator::GtEq => order.is_ge(),
+                                BinaryOperator::LtEq => order.is_le(),
+                                _ => unreachable!(),
+                            }),
+                            (_, _) => None,
+                        };
+
+                        DataValue::Boolean(value)
+                    }
                     _ => return Err(DatabaseError::UnsupportedBinaryOperator(unified_type, *op)),
                 }
             }
         };
 
         Ok(value)
+    }
+
+    fn tuple_cmp(v1: Vec<ValueRef>, v2: Vec<ValueRef>) -> Option<Ordering> {
+        let mut order = Ordering::Equal;
+        let mut v1_iter = v1.iter();
+        let mut v2_iter = v2.iter();
+
+        while order == Ordering::Equal {
+            order = match (v1_iter.next(), v2_iter.next()) {
+                (Some(v1), Some(v2)) => v1.partial_cmp(v2)?,
+                (Some(_), None) => Ordering::Greater,
+                (None, Some(_)) => Ordering::Less,
+                (None, None) => break,
+            }
+        }
+        Some(order)
     }
 }
 

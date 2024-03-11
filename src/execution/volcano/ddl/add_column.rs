@@ -4,10 +4,11 @@ use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use crate::types::value::DataValue;
 use futures_async_stream::try_stream;
+use std::slice;
 use std::sync::Arc;
 
 use crate::planner::LogicalPlan;
-use crate::types::index::Index;
+use crate::types::index::{Index, IndexType};
 use crate::{planner::operator::alter_table::add_column::AddColumnOperator, storage::Transaction};
 
 pub struct AddColumn {
@@ -66,11 +67,8 @@ impl AddColumn {
                 .cloned(),
         ) {
             for (tuple_id, value) in unique_values {
-                let index = Index {
-                    id: unique_meta.id,
-                    column_values: vec![value],
-                };
-                transaction.add_index(table_name, index, &tuple_id, true)?;
+                let index = Index::new(unique_meta.id, slice::from_ref(&value), IndexType::Unique);
+                transaction.add_index(table_name, index, &tuple_id)?;
             }
         }
 

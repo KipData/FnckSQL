@@ -80,15 +80,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
             ));
         }
 
-        let plan = LogicalPlan::new(
+        Ok(LogicalPlan::new(
             Operator::CreateTable(CreateTableOperator {
                 table_name,
                 columns,
                 if_not_exists,
             }),
             vec![],
-        );
-        Ok(plan)
+        ))
     }
 
     pub fn bind_column(&mut self, column_def: &ColumnDef) -> Result<ColumnCatalog, DatabaseError> {

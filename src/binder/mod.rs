@@ -2,6 +2,7 @@ pub mod aggregate;
 mod alter_table;
 mod analyze;
 pub mod copy;
+mod create_index;
 mod create_table;
 mod delete;
 mod describe;
@@ -248,6 +249,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 describe_alias: true,
                 table_name,
             } => self.bind_describe(table_name)?,
+            Statement::CreateIndex {
+                table_name,
+                name,
+                columns,
+                if_not_exists,
+                unique,
+                ..
+            } => self.bind_create_index(table_name, name, columns, *if_not_exists, *unique)?,
             _ => return Err(DatabaseError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)

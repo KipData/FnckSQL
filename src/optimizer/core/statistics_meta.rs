@@ -4,8 +4,8 @@ use crate::expression::range_detacher::Range;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
 use crate::optimizer::core::histogram::Histogram;
 use crate::storage::Transaction;
+use crate::types::index::IndexId;
 use crate::types::value::DataValue;
-use crate::types::{ColumnId, LogicalType};
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
@@ -13,67 +13,62 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::slice;
 
-pub struct ColumnMetaLoader<'a, T: Transaction> {
-    cache: &'a ShardingLruCache<TableName, Vec<ColumnMeta>>,
+pub struct StatisticMetaLoader<'a, T: Transaction> {
+    cache: &'a ShardingLruCache<TableName, Vec<StatisticsMeta>>,
     tx: &'a T,
 }
 
-impl<'a, T: Transaction> ColumnMetaLoader<'a, T> {
+impl<'a, T: Transaction> StatisticMetaLoader<'a, T> {
     pub fn new(
         tx: &'a T,
-        cache: &'a ShardingLruCache<TableName, Vec<ColumnMeta>>,
-    ) -> ColumnMetaLoader<'a, T> {
-        ColumnMetaLoader { cache, tx }
+        cache: &'a ShardingLruCache<TableName, Vec<StatisticsMeta>>,
+    ) -> StatisticMetaLoader<'a, T> {
+        StatisticMetaLoader { cache, tx }
     }
 
-    pub fn load(&self, table_name: TableName) -> Result<&Vec<ColumnMeta>, DatabaseError> {
+    pub fn load(&self, table_name: TableName) -> Result<&Vec<StatisticsMeta>, DatabaseError> {
         let option = self.cache.get(&table_name);
 
-        if let Some(column_metas) = option {
-            Ok(column_metas)
+        if let Some(statistics_metas) = option {
+            Ok(statistics_metas)
         } else {
-            let paths = self.tx.column_meta_paths(&table_name)?;
-            let mut column_metas = Vec::with_capacity(paths.len());
+            let paths = self.tx.statistics_meta_paths(&table_name)?;
+            let mut statistics_metas = Vec::with_capacity(paths.len());
 
             for path in paths {
-                column_metas.push(ColumnMeta::from_file(path)?);
+                statistics_metas.push(StatisticsMeta::from_file(path)?);
             }
 
-            Ok(self.cache.get_or_insert(table_name, |_| Ok(column_metas))?)
+            Ok(self
+                .cache
+                .get_or_insert(table_name, |_| Ok(statistics_metas))?)
         }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ColumnMeta {
-    column_id: ColumnId,
-    data_type: LogicalType,
+pub struct StatisticsMeta {
+    index_id: IndexId,
     histogram: Histogram,
     cm_sketch: CountMinSketch<DataValue>,
 }
 
-impl ColumnMeta {
+impl StatisticsMeta {
     pub fn new(histogram: Histogram, cm_sketch: CountMinSketch<DataValue>) -> Self {
-        ColumnMeta {
-            column_id: histogram.column_id(),
-            data_type: histogram.data_type(),
+        StatisticsMeta {
+            index_id: histogram.index_id(),
             histogram,
             cm_sketch,
         }
     }
-
-    pub fn column_id(&self) -> ColumnId {
-        self.column_id
+    pub fn index_id(&self) -> IndexId {
+        self.index_id
     }
-    pub fn data_type(&self) -> LogicalType {
-        self.data_type
-    }
-
     pub fn histogram(&self) -> &Histogram {
         &self.histogram
     }
 
-    pub fn collect_count(&self, range: &Range) -> usize {
+    pub fn collect_count(&self, range: &Range) -> Result<usize, DatabaseError> {
         let mut count = 0;
 
         let ranges = if let Range::SortedRanges(ranges) = range {
@@ -81,8 +76,8 @@ impl ColumnMeta {
         } else {
             slice::from_ref(range)
         };
-        count += self.histogram.collect_count(ranges, &self.cm_sketch);
-        count
+        count += self.histogram.collect_count(ranges, &self.cm_sketch)?;
+        Ok(count)
     }
 
     pub fn to_file(&self, path: impl AsRef<Path>) -> Result<(), DatabaseError> {
@@ -113,38 +108,28 @@ impl ColumnMeta {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::errors::DatabaseError;
-    use crate::optimizer::core::column_meta::ColumnMeta;
     use crate::optimizer::core::histogram::HistogramBuilder;
+    use crate::optimizer::core::statistics_meta::StatisticsMeta;
+    use crate::types::index::{IndexMeta, IndexType};
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    fn int32_column() -> ColumnCatalog {
-        ColumnCatalog {
-            summary: ColumnSummary {
-                id: Some(1),
-                name: "c1".to_string(),
-                table_name: None,
-            },
-            nullable: false,
-            desc: ColumnDesc {
-                column_datatype: LogicalType::UInteger,
-                is_primary: false,
-                is_unique: false,
-                default: None,
-            },
-        }
-    }
-
     #[test]
     fn test_to_file_and_from_file() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let column = int32_column();
+        let index = IndexMeta {
+            id: 0,
+            column_ids: vec![0],
+            table_name: Arc::new("t1".to_string()),
+            pk_ty: LogicalType::Integer,
+            name: "pk_c1".to_string(),
+            ty: IndexType::PrimaryKey,
+        };
 
-        let mut builder = HistogramBuilder::new(&column, Some(15))?;
+        let mut builder = HistogramBuilder::new(&index, Some(15))?;
 
         builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
         builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
@@ -170,13 +155,13 @@ mod tests {
         let (histogram, sketch) = builder.build(4)?;
         let path = temp_dir.path().join("meta");
 
-        ColumnMeta::new(histogram.clone(), sketch.clone()).to_file(path.clone())?;
-        let column_meta = ColumnMeta::from_file(path)?;
+        StatisticsMeta::new(histogram.clone(), sketch.clone()).to_file(path.clone())?;
+        let statistics_meta = StatisticsMeta::from_file(path)?;
 
-        assert_eq!(histogram, column_meta.histogram);
+        assert_eq!(histogram, statistics_meta.histogram);
         assert_eq!(
             sketch.estimate(&DataValue::Null),
-            column_meta.cm_sketch.estimate(&DataValue::Null)
+            statistics_meta.cm_sketch.estimate(&DataValue::Null)
         );
 
         Ok(())
