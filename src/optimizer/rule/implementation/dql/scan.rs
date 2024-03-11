@@ -81,7 +81,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
                 if let Some(range) = &index_info.range {
                     // FIXME: Only UniqueIndex
                     if let Some(statistics_meta) =
-                        find_statistics_meta(statistics_metas, &index_info.meta.column_ids[0])
+                        find_statistics_meta(statistics_metas, &index_info.meta.id)
                     {
                         let mut row_count = statistics_meta.collect_count(range)?;
 

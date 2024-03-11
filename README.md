@@ -128,7 +128,7 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - Rollback (Server only)
   - Create
     - [x] Table
-    - [ ] Index
+    - [x] Index: Unique\Normal\Composite
   - Drop
     - [x] Table
     - [ ] Index
