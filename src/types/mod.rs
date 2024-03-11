@@ -305,7 +305,9 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                 Ok(LogicalType::Varchar(len.map(|len| len.length as u32)))
             }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
-            sqlparser::ast::DataType::Double => Ok(LogicalType::Double),
+            sqlparser::ast::DataType::Double | sqlparser::ast::DataType::DoublePrecision => {
+                Ok(LogicalType::Double)
+            }
             sqlparser::ast::DataType::TinyInt(_) => Ok(LogicalType::Tinyint),
             sqlparser::ast::DataType::UnsignedTinyInt(_) => Ok(LogicalType::UTinyint),
             sqlparser::ast::DataType::SmallInt(_) => Ok(LogicalType::Smallint),
