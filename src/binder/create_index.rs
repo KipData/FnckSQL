@@ -39,7 +39,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ScalarExpression::ColumnRef(column) => columns.push(column),
                 expr => {
                     return Err(DatabaseError::UnsupportedStmt(format!(
-                        "create index on {}",
+                        "'CREATE INDEX' by {}",
                         expr
                     )))
                 }

@@ -105,7 +105,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             match &option_def.option {
                 ColumnOption::Null => nullable = true,
                 ColumnOption::NotNull => nullable = false,
-                ColumnOption::Unique { is_primary } => {
+                ColumnOption::Unique { is_primary, .. } => {
                     if *is_primary {
                         column_desc.is_primary = true;
                         nullable = false;
@@ -122,7 +122,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         column_desc.default = Some(Arc::new(cast_value));
                     } else {
                         return Err(DatabaseError::UnsupportedStmt(
-                            "'default' only for constant".to_string(),
+                            "'DEFAULT' only with constant now".to_string(),
                         ));
                     }
                 }

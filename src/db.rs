@@ -18,12 +18,6 @@ use crate::types::tuple::{SchemaRef, Tuple};
 
 pub(crate) type Functions = HashMap<FunctionSummary, Arc<dyn ScalarFunctionImpl>>;
 
-#[derive(Copy, Clone)]
-pub enum QueryExecute {
-    Volcano,
-    Codegen,
-}
-
 pub struct DataBaseBuilder {
     path: PathBuf,
     functions: Functions,
@@ -57,43 +51,6 @@ impl DataBaseBuilder {
 pub struct Database<S: Storage> {
     pub storage: S,
     functions: Arc<Functions>,
-}
-
-impl Database<KipStorage> {
-    pub async fn run_on_query<S: AsRef<str>>(
-        &self,
-        sql: S,
-        query_execute: QueryExecute,
-    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
-        match query_execute {
-            QueryExecute::Volcano => self.run(sql).await,
-            QueryExecute::Codegen => {
-                #[cfg(feature = "codegen_execute")]
-                {
-                    use crate::execution::codegen::execute;
-                    use std::sync::Arc;
-
-                    let transaction = self.storage.transaction().await?;
-                    let (plan, statement) = Self::build_plan(sql, &transaction)?;
-
-                    if matches!(statement, Statement::Query(_)) {
-                        let transaction = Arc::new(transaction);
-
-                        let tuples = execute(plan, transaction.clone()).await?;
-                        Arc::into_inner(transaction).unwrap().commit().await?;
-
-                        Ok(tuples)
-                    } else {
-                        Self::run_volcano(transaction, plan).await
-                    }
-                }
-                #[cfg(not(feature = "codegen_execute"))]
-                {
-                    unreachable!("open feature: `codegen_execute` plz")
-                }
-            }
-        }
-    }
 }
 
 impl<S: Storage> Database<S> {

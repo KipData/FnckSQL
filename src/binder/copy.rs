@@ -65,9 +65,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 columns,
             } => (table_name, columns),
             CopySource::Query(_) => {
-                return Err(DatabaseError::UnsupportedCopySource(
-                    "bad copy source".to_string(),
-                ));
+                return Err(DatabaseError::UnsupportedStmt("'COPY SOURCE'".to_string()));
             }
         };
 

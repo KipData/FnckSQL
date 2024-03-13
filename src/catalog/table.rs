@@ -89,7 +89,7 @@ impl TableCatalog {
     /// Add a column to the table catalog.
     pub(crate) fn add_column(&mut self, mut col: ColumnCatalog) -> Result<ColumnId, DatabaseError> {
         if self.column_idxs.contains_key(col.name()) {
-            return Err(DatabaseError::Duplicated("column", col.name().to_string()));
+            return Err(DatabaseError::DuplicateColumn(col.name().to_string()));
         }
 
         let col_id = self
