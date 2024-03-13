@@ -2,8 +2,6 @@ use crate::expression::BinaryOperator;
 use crate::types::LogicalType;
 use chrono::ParseError;
 use kip_db::KernelError;
-#[cfg(feature = "codegen_execute")]
-use mlua::prelude::LuaError;
 use sqlparser::parser::ParserError;
 use std::num::{ParseFloatError, ParseIntError, TryFromIntError};
 use std::str::ParseBoolError;
@@ -126,13 +124,6 @@ pub enum DatabaseError {
         #[from]
         #[source]
         tokio::task::JoinError,
-    ),
-    #[cfg(feature = "codegen_execute")]
-    #[error("lua error")]
-    LuaError(
-        #[from]
-        #[source]
-        LuaError,
     ),
     #[error("channel close")]
     ChannelClose,

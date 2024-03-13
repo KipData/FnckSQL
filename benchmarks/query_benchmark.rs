@@ -1,16 +1,13 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use fnck_sql::db::{DataBaseBuilder, Database};
+use fnck_sql::db::DataBaseBuilder;
 use fnck_sql::errors::DatabaseError;
-use fnck_sql::execution::volcano;
-use fnck_sql::storage::kip::KipStorage;
-use fnck_sql::storage::Storage;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use sqlite::Error;
-use std::cell::RefCell;
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
+#[cfg(linux)]
+use pprof::criterion::{Output, PProfProfiler};
 
 const QUERY_CASE: &'static str = "select * from t1 where c1 = 1000";
 const QUERY_BENCH_FNCK_SQL_PATH: &'static str = "./fncksql_bench";
@@ -102,48 +99,7 @@ fn query_on_execute(c: &mut Criterion) {
             .await
             .unwrap()
     });
-
     println!("Table initialization completed");
-
-    #[cfg(feature = "codegen_execute")]
-    {
-        use kip_sql::execution::codegen;
-
-        let (codegen_transaction, plan) = rt.block_on(async {
-            let transaction = database.storage.transaction().await.unwrap();
-            let (plan, _) = Database::<KipStorage>::build_plan(QUERY_CASE, &transaction).unwrap();
-
-            (Arc::new(transaction), plan)
-        });
-
-        c.bench_function(format!("Codegen: {}", QUERY_CASE).as_str(), |b| {
-            b.to_async(&rt).iter(|| async {
-                let tuples = codegen::execute(plan.clone(), codegen_transaction.clone())
-                    .await
-                    .unwrap();
-                if tuples.len() as u64 != TABLE_ROW_NUM {
-                    panic!("{}", tuples.len());
-                }
-            })
-        });
-
-        let (volcano_transaction, plan) = rt.block_on(async {
-            let transaction = database.storage.transaction().await.unwrap();
-            let (plan, _) = Database::<KipStorage>::build_plan(QUERY_CASE, &transaction).unwrap();
-
-            (RefCell::new(transaction), plan)
-        });
-
-        c.bench_function(format!("Volcano: {}", QUERY_CASE).as_str(), |b| {
-            b.to_async(&rt).iter(|| async {
-                let mut stream = volcano::build_read(plan.clone(), &volcano_transaction);
-                let tuples = volcano::try_collect(&mut stream).await.unwrap();
-                if tuples.len() as u64 != TABLE_ROW_NUM {
-                    panic!("{}", tuples.len());
-                }
-            })
-        });
-    }
 
     c.bench_function(format!("FnckSQL: {}", QUERY_CASE).as_str(), |b| {
         b.to_async(&rt).iter(|| async {
@@ -164,6 +120,13 @@ fn query_on_execute(c: &mut Criterion) {
     });
 }
 
+#[cfg(unix)]
+criterion_group!(
+    name = query_benches;
+    config = Criterion::default().sample_size(10).with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)));
+    targets = query_on_execute
+);
+#[cfg(windows)]
 criterion_group!(
     name = query_benches;
     config = Criterion::default().sample_size(10);

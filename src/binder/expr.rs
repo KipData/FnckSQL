@@ -62,7 +62,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 list,
                 negated,
             } => self.bind_is_in(expr, list, *negated),
-            Expr::Cast { expr, data_type } => self.bind_cast(expr, data_type),
+            Expr::Cast { expr, data_type, .. } => self.bind_cast(expr, data_type),
             Expr::TypedString { data_type, value } => {
                 let logical_type = LogicalType::try_from(data_type.clone())?;
                 let value = DataValue::Utf8(Some(value.to_string())).cast(&logical_type)?;
@@ -83,7 +83,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             Expr::Substring {
                 expr,
                 substring_for,
-                substring_from,
+                substring_from, ..
             } => {
                 let mut for_expr = None;
                 let mut from_expr = None;

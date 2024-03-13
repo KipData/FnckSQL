@@ -32,49 +32,50 @@ path    = "benchmarks/query_benchmark.rs"
 harness = false
 
 [dependencies]
-ahash                 = { version = "0.8.3" }
+ahash                 = { version = "0.8.11" }
+async-trait           = { version = "0.1.77", optional = true }
 bincode               = { version = "1.3.3" }
 bytes                 = { version = "1.5.0" }
 chrono                = { version = "0.4.26" }
-clap                  = { version = "4.4.11" }
-comfy-table           = { version = "7.0.1" }
-csv                   = { version = "1" }
+clap                  = { version = "4.5.2" }
+comfy-table           = { version = "7.1.0" }
+csv                   = { version = "1.3.0" }
 dirs                  = { version = "5.0.1" }
-futures               = { version = "0.3.25" }
-futures-async-stream  = { version = "0.2.9" }
+env_logger            = { version = "0.11.3", optional = true }
+futures               = { version = "0.3.30" }
+futures-async-stream  = { version = "0.2.10" }
 integer-encoding      = { version = "3.0.4" }
-itertools             = { version = "0.10" }
+itertools             = { version = "0.12.1" }
 kip_db                = { version = "0.1.2-alpha.25.fix1" }
 lazy_static           = { version = "1.4.0" }
-ordered-float         = { version = "3.0" }
+log                   = { version = "0.4.21", optional = true }
+ordered-float         = { version = "4.2.0" }
 parking_lot           = { version = "0.12.1" }
-petgraph              = { version = "0.6.3" }
-rand                  = { version = "0.8.5" }
-regex                 = { version = "1.10.2" }
-rust_decimal          = { version = "1" }
-serde                 = { version = "1", features = ["derive", "rc"] }
-siphasher             = { version = "0.3.11", features = ["serde"] }
-sqlparser             = { version = "0.34.0" }
-strum_macros          = { version = "0.24" }
-thiserror             = { version = "1" }
-tokio                 = { version = "1.28.2", features = ["full"] }
-tracing               = { version = "0.1.37" }
-
-# Optional
-async-trait           = { version = "0.1.77", optional = true }
-env_logger            = { version = "0.10.2", optional = true }
-log                   = { version = "0.4.20", optional = true }
+petgraph              = { version = "0.6.4" }
 pgwire                = { version = "0.19.2", optional = true }
+rand                  = { version = "0.9.0-alpha.0" }
+regex                 = { version = "1.10.3" }
+rust_decimal          = { version = "1.34.3" }
+serde                 = { version = "1.0.197", features = ["derive", "rc"] }
+siphasher             = { version = "1.0.0", features = ["serde"] }
+sqlparser             = { version = "0.34.0" }
+strum_macros          = { version = "0.26.2" }
+thiserror             = { version = "1.0.58" }
+tokio                 = { version = "1.36.0", features = ["full"] }
+tracing               = { version = "0.1.40" }
 
 [dev-dependencies]
 cargo-tarpaulin       = { version = "0.27.1" }
-criterion             = { version = "0.3.5", features = ["async_tokio", "html_reports"] }
+criterion             = { version = "0.5.1", features = ["async_tokio", "html_reports"] }
+indicatif             = { version = "0.17.8" }
 rand_distr            = { version = "0.4.3" }
-tempfile              = { version = "3.0.7" }
-tokio-test            = { version = "0.4.2" }
-
+tempfile              = { version = "3.10.1" }
+tokio-test            = { version = "0.4.3" }
 # Benchmark
-sqlite                = { version = "0.32.0" }
+sqlite                = { version = "0.34.0" }
+
+[target.'cfg(linux)'.dev-dependencies]
+pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
 
 [workspace]
 members = [

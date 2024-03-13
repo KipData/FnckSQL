@@ -9,7 +9,7 @@ use crate::types::value::DataValue;
 use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 use std::slice;
 
@@ -86,23 +86,19 @@ impl StatisticsMeta {
             .write(true)
             .read(true)
             .open(path)?;
-        file.write_all(&bincode::serialize(self)?)?;
+        bincode::serialize_into(&mut file, self)?;
         file.flush()?;
 
         Ok(())
     }
 
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, DatabaseError> {
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .create(true)
             .write(true)
             .read(true)
             .open(path)?;
-
-        let mut bytes = Vec::new();
-        let _ = file.read_to_end(&mut bytes)?;
-
-        Ok(bincode::deserialize(&bytes)?)
+        Ok(bincode::deserialize_from(file)?)
     }
 }
 
