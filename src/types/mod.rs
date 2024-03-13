@@ -331,9 +331,7 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                     }
                 }
             }
-            other => Err(DatabaseError::NotImplementedSqlparserDataType(
-                other.to_string(),
-            )),
+            other => Err(DatabaseError::UnsupportedStmt(other.to_string())),
         }
     }
 }

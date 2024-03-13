@@ -3,16 +3,26 @@ use fnck_sql::db::DataBaseBuilder;
 use fnck_sql::errors::DatabaseError;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
+#[cfg(linux)]
+use pprof::criterion::{Output, PProfProfiler};
 use sqlite::Error;
 use std::fs;
 use std::path::Path;
-#[cfg(linux)]
-use pprof::criterion::{Output, PProfProfiler};
 
-const QUERY_CASE: &'static str = "select * from t1 where c1 = 1000";
 const QUERY_BENCH_FNCK_SQL_PATH: &'static str = "./fncksql_bench";
 const QUERY_BENCH_SQLITE_PATH: &'static str = "./sqlite_bench";
 const TABLE_ROW_NUM: u64 = 2_00_000;
+
+fn query_cases() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("Full  Read", "select * from t1"),
+        ("Point Read", "select * from t1 where c1 = 1000"),
+        (
+            "Range Read",
+            "select * from t1 where c1 > 500 and c1 < 1000",
+        ),
+    ]
+}
 
 async fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
     let database = DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH)
@@ -28,7 +38,6 @@ async fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
             .template("[{elapsed_precise}] {bar:40.cyan/white} {pos}/{len} {msg}")
             .unwrap(),
     );
-
     for i in 0..TABLE_ROW_NUM {
         let _ = database
             .run(format!("insert into t1 values({}, {})", i, i + 1).as_str())
@@ -53,7 +62,6 @@ fn init_sqlite_query_bench() -> Result<(), Error> {
             .template("[{elapsed_precise}] {bar:40.cyan/white} {pos}/{len} {msg}")
             .unwrap(),
     );
-
     for i in 0..TABLE_ROW_NUM {
         let _ = connection.execute(format!("insert into t1 values({}, {})", i, i + 1))?;
         pb.set_position(i + 1);
@@ -93,7 +101,6 @@ fn query_on_execute(c: &mut Criterion) {
 
             init_fncksql_query_bench().await.unwrap();
         }
-
         DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH)
             .build()
             .await
@@ -101,23 +108,25 @@ fn query_on_execute(c: &mut Criterion) {
     });
     println!("Table initialization completed");
 
-    c.bench_function(format!("FnckSQL: {}", QUERY_CASE).as_str(), |b| {
-        b.to_async(&rt).iter(|| async {
-            let _tuples = database.run(QUERY_CASE).await.unwrap();
-        })
-    });
+    for (name, case) in query_cases() {
+        c.bench_function(format!("FnckSQL: {} by '{}'", name, case).as_str(), |b| {
+            b.to_async(&rt).iter(|| async {
+                let _tuples = database.run(case).await.unwrap();
+            })
+        });
 
-    let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned()).unwrap();
-    c.bench_function(format!("SQLite: {}", QUERY_CASE).as_str(), |b| {
-        b.to_async(&rt).iter(|| async {
-            let _tuples = connection
-                .prepare(QUERY_CASE)
-                .unwrap()
-                .into_iter()
-                .map(|row| row.unwrap())
-                .collect_vec();
-        })
-    });
+        let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned()).unwrap();
+        c.bench_function(format!("SQLite: {} by '{}'", name, case).as_str(), |b| {
+            b.to_async(&rt).iter(|| async {
+                let _tuples = connection
+                    .prepare(case)
+                    .unwrap()
+                    .into_iter()
+                    .map(|row| row.unwrap())
+                    .collect_vec();
+            })
+        });
+    }
 }
 
 #[cfg(unix)]

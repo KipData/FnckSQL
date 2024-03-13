@@ -281,7 +281,10 @@ impl TableCodec {
         key_prefix.push(BOUND_MIN_TAG);
         key_prefix.append(&mut col.id().unwrap().to_be_bytes().to_vec());
 
-        Ok((Bytes::from(key_prefix), Bytes::from(bincode::serialize(col)?)))
+        Ok((
+            Bytes::from(key_prefix),
+            Bytes::from(bincode::serialize(col)?),
+        ))
     }
 
     pub fn decode_column(bytes: &[u8]) -> Result<ColumnCatalog, DatabaseError> {

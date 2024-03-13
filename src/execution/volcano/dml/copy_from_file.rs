@@ -80,10 +80,7 @@ impl CopyFromFile {
             if !(record.len() == column_count
                 || record.len() == column_count + 1 && record.get(column_count) == Some(""))
             {
-                return Err(DatabaseError::LengthMismatch {
-                    expected: column_count,
-                    actual: record.len(),
-                });
+                return Err(DatabaseError::MisMatch("columns", "values"));
             }
 
             self.size += 1;

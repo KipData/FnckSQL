@@ -122,7 +122,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         column_desc.default = Some(Arc::new(cast_value));
                     } else {
                         return Err(DatabaseError::UnsupportedStmt(
-                            "'default' only for constant".to_string(),
+                            "'DEFAULT' only with constant now".to_string(),
                         ));
                     }
                 }
