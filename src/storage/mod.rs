@@ -226,7 +226,6 @@ impl Iter for IndexIter<'_> {
         // 3. If the current expression is a Scope,
         // an iterator will be generated for reading the IndexValues of the Scope.
         if let Some(iter) = &mut self.scope_iter {
-            let mut has_next = false;
             while let Some((_, value_option)) = iter.try_next()? {
                 if let Some(value) = value_option {
                     let index = if matches!(self.index_meta.ty, IndexType::PrimaryKey) {
@@ -242,11 +241,10 @@ impl Iter for IndexIter<'_> {
                         IndexValue::Normal(TableCodec::decode_index(&value, &self.index_meta.pk_ty))
                     };
                     self.index_values.push_back(index);
-                    has_next = true;
                     break;
                 }
             }
-            if !has_next {
+            if self.index_values.is_empty() {
                 self.scope_iter = None;
             }
             return self.next_tuple();
