@@ -33,16 +33,16 @@ select (id, v1) from t1;
 (4, 4)
 
 query T
-select * from t1 where (id,v1) == (1,1);
+select * from t1 where (id,v1) = (1,1);
 ----
 1 1
 
 query T
 select * from t1 where (id,v1) != (1,1);
 ----
-(2, 2)
-(3, 3)
-(4, 4)
+2 2
+3 3
+4 4
 
 query T
 select * from t1 where (id,v1) in ((1,1), (2, 2));
@@ -57,4 +57,4 @@ select * from t1 where (id,v1) not in ((1,1), (2, 2));
 4 4
 
 statement ok
-drop t1
+drop table t1

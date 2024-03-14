@@ -7,6 +7,7 @@ use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use std::cmp;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -20,7 +21,7 @@ macro_rules! eval_to_num {
             .cast(&LogicalType::Integer)?
             .i32()
         {
-            num_i32 as usize
+            num_i32
         } else {
             return Ok(Arc::new(DataValue::Utf8(None)));
         }
@@ -156,11 +157,21 @@ impl ScalarExpression {
                     .utf8()
                 {
                     if let Some(from_expr) = from_expr {
-                        string = string
-                            .split_off(eval_to_num!(from_expr, tuple, schema).saturating_sub(1));
+                        let mut from = eval_to_num!(from_expr, tuple, schema).saturating_sub(1);
+                        let len_i = string.len() as i32;
+
+                        while from < 0 {
+                            from += len_i + 1;
+                        }
+                        if from > len_i {
+                            return Ok(Arc::new(DataValue::Utf8(None)));
+                        }
+                        string = string.split_off(from as usize);
                     }
                     if let Some(for_expr) = for_expr {
-                        let _ = string.split_off(eval_to_num!(for_expr, tuple, schema));
+                        let for_i =
+                            cmp::min(eval_to_num!(for_expr, tuple, schema) as usize, string.len());
+                        let _ = string.split_off(for_i);
                     }
 
                     Ok(Arc::new(DataValue::Utf8(Some(string))))

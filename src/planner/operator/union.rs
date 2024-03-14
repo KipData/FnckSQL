@@ -7,17 +7,23 @@ use std::fmt::Formatter;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct UnionOperator {
-    pub schema_ref: SchemaRef,
+    pub left_schema_ref: SchemaRef,
+    // mainly use `left_schema` as output and `right_schema` for `column pruning`
+    pub _right_schema_ref: SchemaRef,
 }
 
 impl UnionOperator {
     pub fn build(
-        schema_ref: SchemaRef,
+        left_schema_ref: SchemaRef,
+        right_schema_ref: SchemaRef,
         left_plan: LogicalPlan,
         right_plan: LogicalPlan,
     ) -> LogicalPlan {
         LogicalPlan::new(
-            Operator::Union(UnionOperator { schema_ref }),
+            Operator::Union(UnionOperator {
+                left_schema_ref,
+                _right_schema_ref: right_schema_ref,
+            }),
             vec![left_plan, right_plan],
         )
     }
@@ -26,7 +32,7 @@ impl UnionOperator {
 impl fmt::Display for UnionOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let schema = self
-            .schema_ref
+            .left_schema_ref
             .iter()
             .map(|column| column.name().to_string())
             .join(", ");

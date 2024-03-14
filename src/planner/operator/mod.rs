@@ -131,7 +131,10 @@ impl Operator {
             ),
             Operator::Sort(_) | Operator::Limit(_) => None,
             Operator::Values(ValuesOperator { schema_ref, .. })
-            | Operator::Union(UnionOperator { schema_ref }) => Some(
+            | Operator::Union(UnionOperator {
+                left_schema_ref: schema_ref,
+                ..
+            }) => Some(
                 schema_ref
                     .iter()
                     .cloned()
@@ -197,8 +200,15 @@ impl Operator {
                 .map(|field| &field.expr)
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
-            Operator::Values(ValuesOperator { schema_ref, .. })
-            | Operator::Union(UnionOperator { schema_ref }) => Vec::clone(schema_ref),
+            Operator::Values(ValuesOperator { schema_ref, .. }) => Vec::clone(schema_ref),
+            Operator::Union(UnionOperator {
+                left_schema_ref,
+                _right_schema_ref,
+            }) => left_schema_ref
+                .iter()
+                .chain(_right_schema_ref.iter())
+                .cloned()
+                .collect_vec(),
             Operator::Analyze(_) => vec![],
             Operator::Delete(op) => vec![op.primary_key_column.clone()],
             Operator::Dummy

@@ -13,6 +13,7 @@ update t set v2 = 9 where v1 = 1
 query IIII rowsort
 select * from t;
 ----
+0 1 9 100
 1 1 9 100
 2 2 20 200
 3 3 30 300
@@ -24,17 +25,19 @@ update t set v2 = 9
 query IIII rowsort
 select * from t
 ----
+0 1 9 100
 1 1 9 100
 2 2 9 200
 3 3 9 300
 4 4 9 400
 
 statement ok
-update t set v2 = default
+update t set v3 = default
 
 query IIII rowsort
 select * from t
 ----
+0 1 9 233
 1 1 9 233
 2 2 9 233
 3 3 9 233

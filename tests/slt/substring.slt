@@ -1,7 +1,17 @@
 query T
 select substring('pineapple' from 5 for 10 )
 ----
-app
+apple
+
+query T
+select substring('pineapple' from -5 for 10 )
+----
+apple
+
+query T
+select substring('pineapple', -15, 10 )
+----
+apple
 
 query T
 select substring('pineapple' for 4 )
@@ -16,11 +26,20 @@ apple
 query T
 select substring('pineapple' from 1 for null )
 ----
+null
 
 query T
 select substring('pineapple' from null for 4 )
 ----
+null
 
 query T
 select substring(null from 1 for 4 )
 ----
+null
+
+# issue: https://github.com/KipData/FnckSQL/issues/160
+query T
+select substring('abc', 1, 10);
+----
+abc
