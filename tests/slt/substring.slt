@@ -9,7 +9,7 @@ select substring('pineapple' from -5 for 10 )
 apple
 
 query T
-select substr('pineapple', -15, 10 )
+select substring('pineapple', -15, 10 )
 ----
 apple
 
