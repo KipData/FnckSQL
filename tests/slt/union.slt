@@ -21,7 +21,7 @@ select 1 union all select 1
 1
 1
 
-query T
+query T rowsort
 select (1, 2) union select (2, 1) union select (1, 2)
 ----
 (1, 2)
@@ -33,15 +33,17 @@ create table t1(id int primary key, v1 int unique)
 statement ok
 insert into t1 values (1,1), (2,2), (3,3), (4,4)
 
-query I
-select v1 from t1 union select * from t1
+query I rowsort
+select id from t1 union select v1 from t1
+----
 1
 2
 3
 4
 
 query I rowsort
-select v1 from t1 union all select * from t1
+select id from t1 union all select v1 from t1
+----
 1
 1
 2
@@ -52,4 +54,4 @@ select v1 from t1 union all select * from t1
 4
 
 statement ok
-drop t1
+drop table t1

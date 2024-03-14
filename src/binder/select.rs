@@ -177,6 +177,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 }
                 Ok(UnionOperator::build(
                     left_schema.clone(),
+                    right_schema.clone(),
                     left_plan,
                     right_plan,
                 ))
@@ -192,7 +193,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     ));
                 }
                 let union_op = Operator::Union(UnionOperator {
-                    schema_ref: left_schema.clone(),
+                    left_schema_ref: left_schema.clone(),
+                    _right_schema_ref: right_schema.clone(),
                 });
                 let distinct_exprs = left_schema
                     .iter()

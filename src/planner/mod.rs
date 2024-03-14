@@ -90,7 +90,10 @@ impl LogicalPlan {
                     Arc::new(out_columns)
                 }
                 Operator::Values(ValuesOperator { schema_ref, .. })
-                | Operator::Union(UnionOperator { schema_ref }) => schema_ref.clone(),
+                | Operator::Union(UnionOperator {
+                    left_schema_ref: schema_ref,
+                    ..
+                }) => schema_ref.clone(),
                 Operator::Dummy => Arc::new(vec![]),
                 Operator::Show => Arc::new(vec![
                     Arc::new(ColumnCatalog::new_dummy("TABLE".to_string())),
