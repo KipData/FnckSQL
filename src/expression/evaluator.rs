@@ -168,6 +168,19 @@ impl ScalarExpression {
                     Ok(Arc::new(DataValue::Utf8(None)))
                 }
             }
+            ScalarExpression::Position { expr, in_expr } => {
+                let unpack = |expr: &ScalarExpression| -> Result<String, DatabaseError> {
+                    Ok(DataValue::clone(expr.eval(tuple, schema)?.as_ref())
+                        .cast(&LogicalType::Varchar(None))?
+                        .utf8()
+                        .unwrap_or("".to_owned()))
+                };
+                let pattern = unpack(expr)?;
+                let str = unpack(in_expr)?;
+                Ok(Arc::new(DataValue::Int32(Some(
+                    str.find(&pattern).map(|pos| pos as i32 + 1).unwrap_or(0),
+                ))))
+            }
             ScalarExpression::Reference { pos, .. } => {
                 return Ok(tuple
                     .values

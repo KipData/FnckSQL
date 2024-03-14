@@ -84,6 +84,9 @@ impl ScalarExpression {
                         .map(|expr| expr.exist_column(table_name, col_id))
                         == Some(true)
             }
+            ScalarExpression::Position { expr, in_expr } => {
+                expr.exist_column(table_name, col_id) || in_expr.exist_column(table_name, col_id)
+            }
             ScalarExpression::Constant(_) => false,
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             ScalarExpression::If {

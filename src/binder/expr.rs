@@ -104,6 +104,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     from_expr,
                 })
             }
+            Expr::Position { expr, r#in } => Ok(ScalarExpression::Position {
+                expr: Box::new(self.bind_expr(expr)?),
+                in_expr: Box::new(self.bind_expr(r#in)?),
+            }),
             Expr::Subquery(subquery) => {
                 let (sub_query, column) = self.bind_subquery(subquery)?;
                 self.context.sub_query(SubQueryType::SubQuery(sub_query));
