@@ -74,7 +74,7 @@ tokio-test            = { version = "0.4.3" }
 # Benchmark
 sqlite                = { version = "0.34.0" }
 
-[target.'cfg(linux)'.dev-dependencies]
+[target.'cfg(unix)'.dev-dependencies]
 pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
 
 [workspace]

@@ -230,7 +230,89 @@ impl ScalarExpression {
                     expr.constant_calculation()?;
                 }
             }
-            _ => (),
+            ScalarExpression::In { expr, args, .. } => {
+                expr.constant_calculation()?;
+                for arg in args {
+                    arg.constant_calculation()?;
+                }
+            }
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                expr.constant_calculation()?;
+                left_expr.constant_calculation()?;
+                right_expr.constant_calculation()?;
+            }
+            ScalarExpression::SubString {
+                expr,
+                from_expr,
+                for_expr,
+            } => {
+                expr.constant_calculation()?;
+                if let Some(from_expr) = from_expr {
+                    from_expr.constant_calculation()?;
+                }
+                if let Some(for_expr) = for_expr {
+                    for_expr.constant_calculation()?;
+                }
+            }
+            ScalarExpression::Position { expr, in_expr } => {
+                expr.constant_calculation()?;
+                in_expr.constant_calculation()?;
+            }
+            ScalarExpression::Tuple(exprs) | ScalarExpression::Coalesce { exprs, .. } => {
+                for expr in exprs {
+                    expr.constant_calculation()?;
+                }
+            }
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                condition.constant_calculation()?;
+                left_expr.constant_calculation()?;
+                right_expr.constant_calculation()?;
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            }
+            | ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                left_expr.constant_calculation()?;
+                right_expr.constant_calculation()?;
+            }
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                if let Some(operand_expr) = operand_expr {
+                    operand_expr.constant_calculation()?;
+                }
+                for (left_expr, right_expr) in expr_pairs {
+                    left_expr.constant_calculation()?;
+                    right_expr.constant_calculation()?;
+                }
+                if let Some(else_expr) = else_expr {
+                    else_expr.constant_calculation()?;
+                }
+            }
+            ScalarExpression::Constant(_)
+            | ScalarExpression::ColumnRef(_)
+            | ScalarExpression::Empty
+            | ScalarExpression::Reference { .. }
+            | ScalarExpression::Function(_) => (),
         }
 
         Ok(())
