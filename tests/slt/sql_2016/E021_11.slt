@@ -2,10 +2,10 @@
 
 # TODO: POSITION()
 
-# query I
-# SELECT POSITION ( 'foo' IN 'bar' )
-# ----
-# 0
+query I
+SELECT POSITION ( 'foo' IN 'bar' )
+----
+0
 
 # query I
 # SELECT POSITION ( 'foo' IN 'bar' USING CHARACTERS )

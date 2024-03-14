@@ -79,6 +79,10 @@ pub enum ScalarExpression {
         for_expr: Option<Box<ScalarExpression>>,
         from_expr: Option<Box<ScalarExpression>>,
     },
+    Position {
+        expr: Box<ScalarExpression>,
+        in_expr: Box<ScalarExpression>,
+    },
     // Temporary expression used for expression substitution
     Empty,
     Reference {
@@ -201,6 +205,10 @@ impl ScalarExpression {
                     expr.try_reference(output_exprs);
                 }
             }
+            ScalarExpression::Position { expr, in_expr } => {
+                expr.try_reference(output_exprs);
+                in_expr.try_reference(output_exprs);
+            }
             ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)
@@ -294,6 +302,9 @@ impl ScalarExpression {
                         Some(true)
                     )
             }
+            ScalarExpression::Position { expr, in_expr } => {
+                expr.has_count_star() || in_expr.has_count_star()
+            }
             ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Reference { expr, .. } => expr.has_count_star(),
             ScalarExpression::Tuple(args) => args.iter().any(Self::has_count_star),
@@ -372,6 +383,7 @@ impl ScalarExpression {
             | ScalarExpression::In { .. }
             | ScalarExpression::Between { .. } => LogicalType::Boolean,
             ScalarExpression::SubString { .. } => LogicalType::Varchar(None),
+            ScalarExpression::Position { .. } => LogicalType::Integer,
             ScalarExpression::Alias { expr, .. } | ScalarExpression::Reference { expr, .. } => {
                 expr.return_type()
             }
@@ -447,6 +459,10 @@ impl ScalarExpression {
                     if let Some(from_expr) = from_expr {
                         columns_collect(from_expr, vec, only_column_ref);
                     }
+                }
+                ScalarExpression::Position { expr, in_expr } => {
+                    columns_collect(expr, vec, only_column_ref);
+                    columns_collect(in_expr, vec, only_column_ref);
                 }
                 ScalarExpression::Constant(_) => (),
                 ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
@@ -536,6 +552,9 @@ impl ScalarExpression {
                         from_expr.as_ref().map(|expr| expr.has_agg_call()),
                         Some(true)
                     )
+            }
+            ScalarExpression::Position { expr, in_expr } => {
+                expr.has_agg_call() || in_expr.has_agg_call()
             }
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Tuple(args)
@@ -669,6 +688,13 @@ impl ScalarExpression {
                     expr.output_name(),
                     op("from", from_expr),
                     op("for", for_expr),
+                )
+            }
+            ScalarExpression::Position { expr, in_expr } => {
+                format!(
+                    "position({} in {})",
+                    expr.output_name(),
+                    in_expr.output_name()
                 )
             }
             ScalarExpression::Reference { expr, .. } => expr.output_name(),
