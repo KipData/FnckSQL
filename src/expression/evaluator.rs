@@ -177,13 +177,9 @@ impl ScalarExpression {
                 };
                 let pattern = unpack(expr)?;
                 let str = unpack(in_expr)?;
-                Ok(Arc::new(DataValue::Int32(
-                    if let Some(pos) = str.find(&pattern) {
-                        Some(pos as i32 + 1)
-                    } else {
-                        Some(0)
-                    },
-                )))
+                Ok(Arc::new(DataValue::Int32(Some(
+                    str.find(&pattern).map(|pos| pos as i32 + 1).unwrap_or(0),
+                ))))
             }
             ScalarExpression::Reference { pos, .. } => {
                 return Ok(tuple

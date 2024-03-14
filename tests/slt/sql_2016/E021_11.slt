@@ -1,7 +1,5 @@
 # E021-11: POSITION function
 
-# TODO: POSITION()
-
 query I
 SELECT POSITION ( 'foo' IN 'bar' )
 ----
