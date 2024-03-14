@@ -3,7 +3,7 @@ use fnck_sql::db::DataBaseBuilder;
 use fnck_sql::errors::DatabaseError;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
-#[cfg(linux)]
+#[cfg(unix)]
 use pprof::criterion::{Output, PProfProfiler};
 use sqlite::Error;
 use std::fs;
