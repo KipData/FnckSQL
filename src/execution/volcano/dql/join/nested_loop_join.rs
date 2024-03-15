@@ -1,3 +1,7 @@
+//! Defines the nested loop join executor, it supports [`JoinType::Inner`], [`JoinType::LeftOuter`],
+//! [`JoinType::LeftSemi`], [`JoinType::LeftAnti`], [`JoinType::RightOuter`], [`JoinType::Cross`].
+//! But [`JoinType::Full`] is not supported.
+
 use std::sync::Arc;
 
 use crate::catalog::{ColumnCatalog, ColumnRef};
@@ -43,6 +47,9 @@ impl EqualCondition {
         }
     }
 
+    /// Compare left tuple and right tuple on equivalent condition
+    /// `left_tuple` must be from the [`NestedLoopJoin::left_input`]
+    /// `right_tuple` must be from the [`NestedLoopJoin::right_input`]
     fn equals(&self, left_tuple: &Tuple, right_tuple: &Tuple) -> Result<bool, DatabaseError> {
         if self.on_left_keys.is_empty() {
             return Ok(true);
@@ -66,7 +73,6 @@ impl EqualCondition {
 
 /// NestedLoopJoin using nested loop join algorithm to execute a join operation.
 /// One input will be selected to be the inner table and the other will be the outer
-/// +------------------------------------------------------------------+
 /// | JoinType                       |  Inner-table   |   Outer-table  |
 /// |--------------------------------|----------------|----------------|
 /// | Inner/Left/LeftSemi/LeftAnti   |    right       |      left      |
@@ -74,11 +80,10 @@ impl EqualCondition {
 /// | Right/RightSemi/RightAnti/Full |    left        |      right     |
 /// |--------------------------------|----------------|----------------|
 /// | Full                           |  not supported |  not supported |
-/// +------------------------------------------------------------------+
 pub struct NestedLoopJoin {
     left_input: LogicalPlan,
     right_input: LogicalPlan,
-    full_schema_ref: SchemaRef,
+    output_schema_ref: SchemaRef,
     ty: JoinType,
     filter: Option<ScalarExpression>,
     eq_cond: EqualCondition,
@@ -98,14 +103,15 @@ impl From<(JoinOperator, LogicalPlan, LogicalPlan)> for NestedLoopJoin {
         };
 
         let (mut left_input, mut right_input) = (left_input, right_input);
+        let mut left_schema = left_input.output_schema().clone();
+        let mut right_schema = right_input.output_schema().clone();
+        let output_schema_ref = Self::merge_schema(&left_schema, &right_schema, join_type);
+
         if matches!(join_type, JoinType::RightOuter) {
             std::mem::swap(&mut left_input, &mut right_input);
             std::mem::swap(&mut on_left_keys, &mut on_right_keys);
+            std::mem::swap(&mut left_schema, &mut right_schema);
         }
-
-        let left_schema = left_input.output_schema().clone();
-        let right_schema = right_input.output_schema().clone();
-        let full_schema_ref = Self::merge_schema(&left_schema, &right_schema, join_type);
 
         let eq_cond = EqualCondition::new(
             on_left_keys,
@@ -118,7 +124,7 @@ impl From<(JoinOperator, LogicalPlan, LogicalPlan)> for NestedLoopJoin {
             ty: join_type,
             left_input,
             right_input,
-            full_schema_ref,
+            output_schema_ref,
             filter,
             eq_cond,
         }
@@ -138,7 +144,7 @@ impl NestedLoopJoin {
             ty,
             left_input,
             right_input,
-            full_schema_ref,
+            output_schema_ref,
             filter,
             eq_cond,
             ..
@@ -163,16 +169,8 @@ impl NestedLoopJoin {
                     }
                     (None, true) => Self::emit_tuple(&left_tuple, &right_tuple, ty, true),
                     (Some(filter), true) => {
-                        let new_tuple = Tuple {
-                            id: None,
-                            values: left_tuple
-                                .values
-                                .iter()
-                                .cloned()
-                                .chain(right_tuple.clone().values)
-                                .collect_vec(),
-                        };
-                        let value = filter.eval(&new_tuple, &full_schema_ref)?;
+                        let new_tuple = Self::merge_tuple(&left_tuple, &right_tuple, &ty);
+                        let value = filter.eval(&new_tuple, &output_schema_ref)?;
                         match value.as_ref() {
                             DataValue::Boolean(Some(true)) => {
                                 let tuple = match ty {
@@ -223,7 +221,7 @@ impl NestedLoopJoin {
     /// `left_tuple`: left tuple to be included.
     /// `right_tuple` right tuple to be included.
     /// `ty`: the type of join
-    /// `is_match`: whether `left_tuple` and `right_tuple` are matched
+    /// `is_match`: whether [`NestedLoopJoin::left_input`] and [`NestedLoopJoin::right_input`] are matched
     fn emit_tuple(
         left_tuple: &Tuple,
         right_tuple: &Tuple,
@@ -267,6 +265,32 @@ impl NestedLoopJoin {
         }
 
         Some(Tuple { id: None, values })
+    }
+
+    /// Merge the two tuples.
+    /// `left_tuple` must be from the `NestedLoopJoin.left_input`
+    /// `right_tuple` must be from the `NestedLoopJoin.right_input`
+    fn merge_tuple(left_tuple: &Tuple, right_tuple: &Tuple, ty: &JoinType) -> Tuple {
+        match ty {
+            JoinType::RightOuter => Tuple {
+                id: None,
+                values: right_tuple
+                    .values
+                    .iter()
+                    .cloned()
+                    .chain(left_tuple.clone().values)
+                    .collect_vec(),
+            },
+            _ => Tuple {
+                id: None,
+                values: left_tuple
+                    .values
+                    .iter()
+                    .cloned()
+                    .chain(right_tuple.clone().values)
+                    .collect_vec(),
+            },
+        }
     }
 
     fn merge_schema(
