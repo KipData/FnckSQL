@@ -413,8 +413,7 @@ impl Transaction for KipTransaction {
         index_id: IndexId,
     ) -> Result<Option<String>, DatabaseError> {
         let key = TableCodec::encode_statistics_path_key(table_name, index_id);
-        self
-            .tx
+        self.tx
             .get(&key)?
             .map(|bytes| TableCodec::decode_statistics_path(&bytes))
             .transpose()
