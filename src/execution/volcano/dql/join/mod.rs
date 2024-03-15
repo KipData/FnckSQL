@@ -1,6 +1,7 @@
 use crate::planner::operator::join::JoinType;
 
 pub(crate) mod hash_join;
+pub(crate) mod nested_loop_join;
 
 pub fn joins_nullable(join_type: &JoinType) -> (bool, bool) {
     match join_type {

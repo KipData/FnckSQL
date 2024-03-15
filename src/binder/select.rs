@@ -791,7 +791,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         )?;
                     }
                     BinaryOperator::Or => {
-                        todo!("`NestLoopJoin` is not supported yet")
+                        accum_filter.push(ScalarExpression::Binary {
+                            left_expr,
+                            right_expr,
+                            op,
+                            ty,
+                        });
                     }
                     _ => {
                         if left_expr.referenced_columns(true).iter().all(|column| {
