@@ -2,10 +2,10 @@ use crate::errors::DatabaseError;
 use crate::optimizer::core::memo::{Expression, GroupExpression};
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
-use crate::optimizer::core::statistics_meta::{StatisticMetaLoader, StatisticsMeta};
+use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::storage::Transaction;
-use crate::types::index::{IndexId, IndexType};
+use crate::types::index::IndexType;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -34,14 +34,18 @@ impl<T: Transaction> ImplementationRule<T> for SeqScanImplementation {
         group_expr: &mut GroupExpression,
     ) -> Result<(), DatabaseError> {
         if let Operator::Scan(scan_op) = op {
-            let statistics_metas = loader.load(scan_op.table_name.clone())?;
-            let mut cost = None;
+            let cost = scan_op
+                .index_infos
+                .iter()
+                .find(|index_info| {
+                    let column_ids = &index_info.meta.column_ids;
 
-            if let Some(statistics_meta) =
-                find_statistics_meta(statistics_metas, &scan_op.primary_key)
-            {
-                cost = Some(statistics_meta.histogram().values_len());
-            }
+                    column_ids.len() == 1 && column_ids[0] == scan_op.primary_key
+                })
+                .map(|index_info| loader.load(&scan_op.table_name, index_info.meta.id))
+                .transpose()?
+                .flatten()
+                .map(|statistics_meta| statistics_meta.histogram().values_len());
 
             group_expr.append_expr(Expression {
                 op: PhysicalOption::SeqScan,
@@ -71,7 +75,6 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
         group_expr: &mut GroupExpression,
     ) -> Result<(), DatabaseError> {
         if let Operator::Scan(scan_op) = op {
-            let statistics_metas = loader.load(scan_op.table_name.clone())?;
             for index_info in scan_op.index_infos.iter() {
                 if index_info.range.is_none() {
                     continue;
@@ -79,9 +82,8 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
                 let mut cost = None;
 
                 if let Some(range) = &index_info.range {
-                    // FIXME: Only UniqueIndex
                     if let Some(statistics_meta) =
-                        find_statistics_meta(statistics_metas, &index_info.meta.id)
+                        loader.load(&scan_op.table_name, index_info.meta.id)?
                     {
                         let mut row_count = statistics_meta.collect_count(range)?;
 
@@ -104,15 +106,4 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
             unreachable!("invalid operator!")
         }
     }
-}
-
-fn find_statistics_meta<'a>(
-    statistics_metas: &'a [StatisticsMeta],
-    index_id: &IndexId,
-) -> Option<&'a StatisticsMeta> {
-    assert!(statistics_metas.is_sorted_by_key(StatisticsMeta::index_id));
-    statistics_metas
-        .binary_search_by(|statistics_meta| statistics_meta.index_id().cmp(index_id))
-        .ok()
-        .map(|i| &statistics_metas[i])
 }

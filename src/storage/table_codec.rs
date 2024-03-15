@@ -5,6 +5,7 @@ use crate::types::tuple::{Schema, Tuple, TupleId};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use bytes::Bytes;
+use integer_encoding::FixedInt;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 
@@ -23,6 +24,7 @@ enum CodecType {
     Column,
     IndexMeta,
     Index,
+    Statistics,
     Tuple,
     Root,
 }
@@ -44,6 +46,9 @@ impl TableCodec {
             CodecType::Index => {
                 table_bytes.push(b'3');
             }
+            CodecType::Statistics => {
+                table_bytes.push(b'4');
+            }
             CodecType::Tuple => {
                 table_bytes.push(b'8');
             }
@@ -52,7 +57,7 @@ impl TableCodec {
                 bytes.push(BOUND_MIN_TAG);
                 bytes.append(&mut table_bytes);
 
-                table_bytes = bytes
+                return bytes;
             }
         }
 
@@ -291,8 +296,32 @@ impl TableCodec {
         Ok(bincode::deserialize::<ColumnCatalog>(bytes)?)
     }
 
+    /// Key: {TableName}{STATISTICS_TAG}{BOUND_MIN_TAG}{INDEX_ID}
+    /// Value: StatisticsMeta Path
+    pub fn encode_statistics_path(
+        table_name: &str,
+        index_id: IndexId,
+        path: String,
+    ) -> (Bytes, Bytes) {
+        let key = Self::encode_statistics_path_key(table_name, index_id);
+
+        (Bytes::from(key), Bytes::from(path))
+    }
+
+    pub fn encode_statistics_path_key(table_name: &str, index_id: IndexId) -> Vec<u8> {
+        let mut key_prefix = Self::key_prefix(CodecType::Statistics, table_name);
+
+        key_prefix.push(BOUND_MIN_TAG);
+        key_prefix.extend_from_slice(index_id.encode_fixed_light());
+        key_prefix
+    }
+
+    pub fn decode_statistics_path(bytes: &[u8]) -> Result<String, DatabaseError> {
+        Ok(String::from_utf8(bytes.to_vec())?)
+    }
+
     /// Key: Root{BOUND_MIN_TAG}{TableName}
-    /// Value: TableName
+    /// Value: TableMeta
     pub fn encode_root_table(meta: &TableMeta) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = Self::encode_root_table_key(&meta.table_name);
 
@@ -367,7 +396,6 @@ mod tests {
     fn test_root_catalog() {
         let table_catalog = build_table_codec();
         let (_, bytes) = TableCodec::encode_root_table(&TableMeta {
-            colum_meta_paths: vec![],
             table_name: table_catalog.name.clone(),
         })
         .unwrap();
@@ -375,7 +403,15 @@ mod tests {
         let table_meta = TableCodec::decode_root_table(&bytes).unwrap();
 
         assert_eq!(table_meta.table_name.as_str(), table_catalog.name.as_str());
-        assert!(table_meta.colum_meta_paths.is_empty());
+    }
+
+    #[test]
+    fn test_table_codec_statistics_meta_path() {
+        let path = String::from("./lol");
+        let (_, bytes) = TableCodec::encode_statistics_path("t1", 0, path.clone());
+        let decode_path = TableCodec::decode_statistics_path(&bytes).unwrap();
+
+        assert_eq!(path, decode_path);
     }
 
     #[test]

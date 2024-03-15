@@ -3,10 +3,10 @@ use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
 use crate::optimizer::core::histogram::Histogram;
+use crate::storage::kip::StatisticsMetaCache;
 use crate::storage::Transaction;
 use crate::types::index::IndexId;
 use crate::types::value::DataValue;
-use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -14,34 +14,34 @@ use std::path::Path;
 use std::slice;
 
 pub struct StatisticMetaLoader<'a, T: Transaction> {
-    cache: &'a ShardingLruCache<TableName, Vec<StatisticsMeta>>,
+    cache: &'a StatisticsMetaCache,
     tx: &'a T,
 }
 
 impl<'a, T: Transaction> StatisticMetaLoader<'a, T> {
-    pub fn new(
-        tx: &'a T,
-        cache: &'a ShardingLruCache<TableName, Vec<StatisticsMeta>>,
-    ) -> StatisticMetaLoader<'a, T> {
+    pub fn new(tx: &'a T, cache: &'a StatisticsMetaCache) -> StatisticMetaLoader<'a, T> {
         StatisticMetaLoader { cache, tx }
     }
 
-    pub fn load(&self, table_name: TableName) -> Result<&Vec<StatisticsMeta>, DatabaseError> {
-        let option = self.cache.get(&table_name);
+    pub fn load(
+        &self,
+        table_name: &TableName,
+        index_id: IndexId,
+    ) -> Result<Option<&StatisticsMeta>, DatabaseError> {
+        let key = (table_name.clone(), index_id);
+        let option = self.cache.get(&key);
 
-        if let Some(statistics_metas) = option {
-            Ok(statistics_metas)
+        if let Some(statistics_meta) = option {
+            return Ok(Some(statistics_meta));
+        }
+        if let Some(path) = self.tx.table_meta_path(table_name.as_str(), index_id)? {
+            let statistics_meta = StatisticsMeta::from_file(path)?;
+
+            Ok(Some(
+                self.cache.get_or_insert(key, |_| Ok(statistics_meta))?,
+            ))
         } else {
-            let paths = self.tx.statistics_meta_paths(&table_name)?;
-            let mut statistics_metas = Vec::with_capacity(paths.len());
-
-            for path in paths {
-                statistics_metas.push(StatisticsMeta::from_file(path)?);
-            }
-
-            Ok(self
-                .cache
-                .get_or_insert(table_name, |_| Ok(statistics_metas))?)
+            Ok(None)
         }
     }
 }

@@ -23,9 +23,9 @@ pub struct TableCatalog {
     schema_ref: SchemaRef,
 }
 
+//TODO: can add some like Table description and other information as attributes
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TableMeta {
-    pub(crate) colum_meta_paths: Vec<String>,
     pub(crate) table_name: TableName,
 }
 
@@ -174,10 +174,7 @@ impl TableCatalog {
 
 impl TableMeta {
     pub(crate) fn empty(table_name: TableName) -> Self {
-        TableMeta {
-            colum_meta_paths: vec![],
-            table_name,
-        }
+        TableMeta { table_name }
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::catalog::{TableMeta, TableName};
+use crate::catalog::TableName;
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::projection::Projection;
 use crate::execution::volcano::{build_read, BoxedExecutor, WriteExecutor};
@@ -88,6 +88,7 @@ impl Analyze {
                 }
             }
         }
+        let mut values = Vec::with_capacity(builders.len());
         let ts = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("It's the end of the world!")
@@ -99,23 +100,15 @@ impl Analyze {
             .join(ts.to_string());
         fs::create_dir_all(&dir_path)?;
 
-        let mut meta = TableMeta::empty(table_name.clone());
-
         for (index_id, _, builder) in builders {
-            let path = dir_path.join(index_id.to_string());
+            let path: String = dir_path.join(index_id.to_string()).to_string_lossy().into();
             let (histogram, sketch) = builder.build(DEFAULT_NUM_OF_BUCKETS)?;
+            let meta = StatisticsMeta::new(histogram, sketch);
 
-            StatisticsMeta::new(histogram, sketch).to_file(&path)?;
-            meta.colum_meta_paths.push(path.to_string_lossy().into());
+            meta.to_file(&path)?;
+            values.push(Arc::new(DataValue::Utf8(Some(path.clone()))));
+            transaction.save_table_meta(&table_name, path, meta)?;
         }
-        transaction.save_table_meta(&meta)?;
-
-        let values = meta
-            .colum_meta_paths
-            .into_iter()
-            .map(|path| Arc::new(DataValue::Utf8(Some(path))))
-            .collect_vec();
-
         yield Tuple { id: None, values };
     }
 }

@@ -22,7 +22,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct KipStorage {
     pub inner: Arc<storage::KipStorage>,
-    pub(crate) meta_cache: Arc<ShardingLruCache<TableName, Vec<StatisticsMeta>>>,
+    pub(crate) meta_cache: Arc<StatisticsMetaCache>,
 }
 
 impl KipStorage {
@@ -53,10 +53,12 @@ impl Storage for KipStorage {
     }
 }
 
+pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), StatisticsMeta>;
+
 pub struct KipTransaction {
     tx: mvcc::Transaction,
     table_cache: ShardingLruCache<String, TableCatalog>,
-    meta_cache: Arc<ShardingLruCache<TableName, Vec<StatisticsMeta>>>,
+    meta_cache: Arc<StatisticsMetaCache>,
 }
 
 impl Transaction for KipTransaction {
@@ -388,26 +390,34 @@ impl Transaction for KipTransaction {
         Ok(metas)
     }
 
-    fn save_table_meta(&mut self, table_meta: &TableMeta) -> Result<(), DatabaseError> {
+    fn save_table_meta(
+        &mut self,
+        table_name: &TableName,
+        path: String,
+        statistics_meta: StatisticsMeta,
+    ) -> Result<(), DatabaseError> {
         // TODO: clean old meta file
-        let _ = self.meta_cache.remove(&table_meta.table_name);
-        let (key, value) = TableCodec::encode_root_table(table_meta)?;
+        let index_id = statistics_meta.index_id();
+        let _ = self
+            .meta_cache
+            .put((table_name.clone(), index_id), statistics_meta);
+        let (key, value) = TableCodec::encode_statistics_path(table_name.as_str(), index_id, path);
         self.tx.set(key, value);
 
         Ok(())
     }
 
-    fn statistics_meta_paths(&self, table_name: &str) -> Result<Vec<String>, DatabaseError> {
-        if let Some(bytes) = self
+    fn table_meta_path(
+        &self,
+        table_name: &str,
+        index_id: IndexId,
+    ) -> Result<Option<String>, DatabaseError> {
+        let key = TableCodec::encode_statistics_path_key(table_name, index_id);
+        self
             .tx
-            .get(&TableCodec::encode_root_table_key(table_name))?
-        {
-            let meta = TableCodec::decode_root_table(&bytes)?;
-
-            return Ok(meta.colum_meta_paths);
-        }
-
-        Ok(vec![])
+            .get(&key)?
+            .map(|bytes| TableCodec::decode_statistics_path(&bytes))
+            .transpose()
     }
 
     fn meta_loader(&self) -> StatisticMetaLoader<Self>
