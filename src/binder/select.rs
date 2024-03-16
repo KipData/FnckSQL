@@ -510,7 +510,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(FilterOperator::build(having, children, true))
     }
 
-    fn bind_project(
+    pub(crate) fn bind_project(
         &mut self,
         children: LogicalPlan,
         select_list: Vec<ScalarExpression>,
@@ -722,7 +722,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
             } => {
                 match op {
                     BinaryOperator::Eq => {
-                        match (left_expr.unpack_alias_ref(), right_expr.unpack_alias_ref()) {
+                        match (
+                            left_expr.unpack_alias_inner_ref().unpack_alias_ref(),
+                            right_expr.unpack_alias_inner_ref().unpack_alias_ref(),
+                        ) {
                             // example: foo = bar
                             (ScalarExpression::ColumnRef(l), ScalarExpression::ColumnRef(r)) => {
                                 // reorder left and right joins keys to pattern: (left, right)

@@ -136,6 +136,18 @@ impl ScalarExpression {
         }
     }
 
+    pub fn unpack_alias_inner_ref(&self) -> &ScalarExpression {
+        if let ScalarExpression::Alias {
+            alias: AliasType::Expr(expr),
+            ..
+        } = self
+        {
+            expr.unpack_alias_inner_ref()
+        } else {
+            self
+        }
+    }
+
     pub fn try_reference(&mut self, output_exprs: &[ScalarExpression]) {
         let fn_output_column = |expr: &ScalarExpression| expr.unpack_alias_ref().output_column();
         let self_column = fn_output_column(self);
