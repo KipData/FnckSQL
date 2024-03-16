@@ -123,6 +123,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 subquery,
                 negated,
             } => {
+                let left_expr = Box::new(self.bind_expr(expr)?);
                 let (sub_query, column) = self.bind_subquery(subquery)?;
 
                 if !self.context.is_step(&QueryBindStep::Where) {
@@ -137,7 +138,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
                 Ok(ScalarExpression::Binary {
                     op: expression::BinaryOperator::Eq,
-                    left_expr: Box::new(self.bind_expr(expr)?),
+                    left_expr,
                     right_expr: Box::new(alias_expr),
                     ty: LogicalType::Boolean,
                 })
@@ -295,7 +296,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         } else {
             // handle col syntax
             let mut got_column = None;
-            for table_catalog in self.context.bind_table.values() {
+            for table_catalog in self.context.bind_table.values().rev() {
                 if let Some(column_catalog) = table_catalog.get_column_by_name(&column_name) {
                     got_column = Some(column_catalog);
                 }
