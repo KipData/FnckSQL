@@ -61,8 +61,6 @@ impl NormalizationRule for CollapseProject {
                 if let Operator::Project(child_op) = graph.operator(child_id) {
                     if is_subset_exprs(&op.exprs, &child_op.exprs) {
                         graph.remove_node(child_id, false);
-                    } else {
-                        graph.remove_node(node_id, false);
                     }
                 }
             }
