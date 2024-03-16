@@ -6,13 +6,14 @@ use std::sync::Arc;
 
 use crate::catalog::{ColumnCatalog, ColumnRef};
 use crate::errors::DatabaseError;
+use crate::execution::volcano::dql::projection::Projection;
 use crate::execution::volcano::{build_read, BoxedExecutor, ReadExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::{Schema, SchemaRef, Tuple};
-use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
+use crate::types::value::{DataValue, NULL_VALUE};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 
@@ -54,19 +55,11 @@ impl EqualCondition {
         if self.on_left_keys.is_empty() {
             return Ok(true);
         }
-        let eval_keys = |on_keys: &[ScalarExpression],
-                         tuple: &Tuple,
-                         schema: &SchemaRef|
-         -> Result<Vec<ValueRef>, DatabaseError> {
-            let mut values = Vec::with_capacity(on_keys.len());
-            for expr in on_keys {
-                values.push(expr.eval(tuple, schema)?);
-            }
-            Ok(values)
-        };
+        let left_values =
+            Projection::projection(left_tuple, &self.on_left_keys, &self.left_schema)?;
+        let right_values =
+            Projection::projection(right_tuple, &self.on_right_keys, &self.right_schema)?;
 
-        let left_values = eval_keys(&self.on_left_keys, left_tuple, &self.left_schema)?;
-        let right_values = eval_keys(&self.on_right_keys, right_tuple, &self.right_schema)?;
         Ok(left_values == right_values)
     }
 }
@@ -154,6 +147,8 @@ impl NestedLoopJoin {
             unreachable!("{} cannot be handled in nested loop join", self.ty)
         }
 
+        let right_schema_len = eq_cond.right_schema.len();
+
         #[for_await]
         for tuple in build_read(left_input, transaction) {
             let left_tuple: Tuple = tuple?;
@@ -185,7 +180,7 @@ impl NestedLoopJoin {
                                 tuple
                             }
                             DataValue::Boolean(Some(_) | None) => None,
-                            _ => unreachable!(),
+                            _ => return Err(DatabaseError::InvalidType),
                         }
                     }
                     _ => None,
@@ -206,7 +201,15 @@ impl NestedLoopJoin {
             let tuple = match ty {
                 JoinType::LeftAnti if !has_matched => Some(left_tuple.clone()),
                 JoinType::LeftOuter | JoinType::LeftSemi | JoinType::RightOuter if !has_matched => {
-                    Self::emit_tuple(&left_tuple, &left_tuple, ty, false)
+                    let right_tuple = Tuple {
+                        id: None,
+                        values: vec![NULL_VALUE.clone(); right_schema_len],
+                    };
+                    if matches!(ty, JoinType::RightOuter) {
+                        Self::emit_tuple(&right_tuple, &left_tuple, ty, false)
+                    } else {
+                        Self::emit_tuple(&left_tuple, &right_tuple, ty, false)
+                    }
                 }
                 _ => None,
             };
