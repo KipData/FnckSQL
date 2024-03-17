@@ -111,7 +111,10 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - [not] like
   - [not] in
 - Supports index type
-  - Unique Index
+  - PrimaryKey
+  - Unique
+  - Normal
+  - Composite
 - Supports multiple primary key types
   - Tinyint
   - UTinyint
