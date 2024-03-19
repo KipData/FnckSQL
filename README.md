@@ -148,7 +148,7 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - [x] Alias
   - [x] Aggregation: count()/sum()/avg()/min()/max()
   - [x] SubQuery[select/from/where]
-  - [x] Join: Inner/Left/Right/Full Cross(x)
+  - [x] Join: Inner/Left/Right/Full/Cross
   - [x] Group By
   - [x] Having
   - [x] Order By
@@ -192,7 +192,10 @@ open contributions and allowing you to use the software however you want.
 
 [1]: <https://github.com/KipData/KipSQL/blob/main/LICENSE>
 
-### Thanks For
+## Contributors
+[![](https://opencollective.com/fncksql/contributors.svg?width=890&button=false)](https://github.com/KipData/FnckSQL/graphs/contributors)
+
+## Thanks For
 - [Fedomn/sqlrs](https://github.com/Fedomn/sqlrs): Main reference materials, Optimizer and Executor all refer to the design of sqlrs
 - [systemxlabs/bustubx](https://github.com/systemxlabs/bustubx)
 - [duckdb/duckdb](https://github.com/duckdb/duckdb)
