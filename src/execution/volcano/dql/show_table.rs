@@ -20,15 +20,8 @@ impl ShowTables {
     pub async fn _execute<T: Transaction>(self, transaction: &T) {
         let metas = transaction.table_metas()?;
 
-        for TableMeta {
-            table_name,
-            colum_meta_paths: histogram_paths,
-        } in metas
-        {
-            let values = vec![
-                Arc::new(DataValue::Utf8(Some(table_name.to_string()))),
-                Arc::new(DataValue::UInt32(Some(histogram_paths.len() as u32))),
-            ];
+        for TableMeta { table_name } in metas {
+            let values = vec![Arc::new(DataValue::Utf8(Some(table_name.to_string())))];
 
             yield Tuple { id: None, values };
         }

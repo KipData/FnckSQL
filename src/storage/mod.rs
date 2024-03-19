@@ -4,7 +4,7 @@ mod table_codec;
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
-use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
+use crate::optimizer::core::statistics_meta::{StatisticMetaLoader, StatisticsMeta};
 use crate::storage::table_codec::TableCodec;
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
@@ -100,8 +100,17 @@ pub trait Transaction: Sync + Send + 'static {
     fn drop_data(&mut self, table_name: &str) -> Result<(), DatabaseError>;
     fn table(&self, table_name: TableName) -> Option<&TableCatalog>;
     fn table_metas(&self) -> Result<Vec<TableMeta>, DatabaseError>;
-    fn save_table_meta(&mut self, table_meta: &TableMeta) -> Result<(), DatabaseError>;
-    fn statistics_meta_paths(&self, table_name: &str) -> Result<Vec<String>, DatabaseError>;
+    fn save_table_meta(
+        &mut self,
+        table_name: &TableName,
+        path: String,
+        statistics_meta: StatisticsMeta,
+    ) -> Result<(), DatabaseError>;
+    fn table_meta_path(
+        &self,
+        table_name: &str,
+        index_id: IndexId,
+    ) -> Result<Option<String>, DatabaseError>;
     fn meta_loader(&self) -> StatisticMetaLoader<Self>
     where
         Self: Sized;

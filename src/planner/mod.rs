@@ -95,10 +95,9 @@ impl LogicalPlan {
                     ..
                 }) => schema_ref.clone(),
                 Operator::Dummy => Arc::new(vec![]),
-                Operator::Show => Arc::new(vec![
-                    Arc::new(ColumnCatalog::new_dummy("TABLE".to_string())),
-                    Arc::new(ColumnCatalog::new_dummy("STATISTICS_METAS_LEN".to_string())),
-                ]),
+                Operator::Show => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
+                    "TABLE".to_string(),
+                ))]),
                 Operator::Explain => {
                     Arc::new(vec![Arc::new(ColumnCatalog::new_dummy("PLAN".to_string()))])
                 }
