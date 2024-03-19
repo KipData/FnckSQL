@@ -24,7 +24,7 @@ use crate::optimizer::rule::implementation::dql::aggregate::{
 };
 use crate::optimizer::rule::implementation::dql::dummy::DummyImplementation;
 use crate::optimizer::rule::implementation::dql::filter::FilterImplementation;
-use crate::optimizer::rule::implementation::dql::join::HashJoinImplementation;
+use crate::optimizer::rule::implementation::dql::join::JoinImplementation;
 use crate::optimizer::rule::implementation::dql::limit::LimitImplementation;
 use crate::optimizer::rule::implementation::dql::projection::ProjectionImplementation;
 use crate::optimizer::rule::implementation::dql::scan::{
@@ -71,7 +71,7 @@ impl MatchPattern for ImplementationRuleImpl {
             ImplementationRuleImpl::SimpleAggregate => SimpleAggregateImplementation.pattern(),
             ImplementationRuleImpl::Dummy => DummyImplementation.pattern(),
             ImplementationRuleImpl::Filter => FilterImplementation.pattern(),
-            ImplementationRuleImpl::HashJoin => HashJoinImplementation.pattern(),
+            ImplementationRuleImpl::HashJoin => JoinImplementation.pattern(),
             ImplementationRuleImpl::Limit => LimitImplementation.pattern(),
             ImplementationRuleImpl::Projection => ProjectionImplementation.pattern(),
             ImplementationRuleImpl::SeqScan => SeqScanImplementation.pattern(),
@@ -114,7 +114,7 @@ impl<T: Transaction> ImplementationRule<T> for ImplementationRuleImpl {
                 FilterImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::HashJoin => {
-                HashJoinImplementation.to_expression(operator, loader, group_expr)?
+                JoinImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Limit => {
                 LimitImplementation.to_expression(operator, loader, group_expr)?

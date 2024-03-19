@@ -78,7 +78,9 @@ pub fn build_read<T: Transaction>(plan: LogicalPlan, transaction: &T) -> BoxedEx
             let left_input = childrens.pop().unwrap();
 
             match &op.on {
-                JoinCondition::On { on, .. } if !on.is_empty() => {
+                JoinCondition::On { on, .. }
+                    if !on.is_empty() && plan.physical_option == Some(PhysicalOption::HashJoin) =>
+                {
                     HashJoin::from((op, left_input, right_input)).execute(transaction)
                 }
                 _ => NestedLoopJoin::from((op, left_input, right_input)).execute(transaction),
