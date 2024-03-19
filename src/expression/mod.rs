@@ -121,7 +121,13 @@ pub enum ScalarExpression {
 
 impl ScalarExpression {
     pub fn unpack_alias(self) -> ScalarExpression {
-        if let ScalarExpression::Alias { expr, .. } = self {
+        if let ScalarExpression::Alias {
+            alias: AliasType::Expr(expr),
+            ..
+        } = self
+        {
+            expr.unpack_alias()
+        } else if let ScalarExpression::Alias { expr, .. } = self {
             expr.unpack_alias()
         } else {
             self
@@ -129,7 +135,13 @@ impl ScalarExpression {
     }
 
     pub fn unpack_alias_ref(&self) -> &ScalarExpression {
-        if let ScalarExpression::Alias { expr, .. } = self {
+        if let ScalarExpression::Alias {
+            alias: AliasType::Expr(expr),
+            ..
+        } = self
+        {
+            expr.unpack_alias_ref()
+        } else if let ScalarExpression::Alias { expr, .. } = self {
             expr.unpack_alias_ref()
         } else {
             self
@@ -137,7 +149,7 @@ impl ScalarExpression {
     }
 
     pub fn try_reference(&mut self, output_exprs: &[ScalarExpression]) {
-        let fn_output_column = |expr: &ScalarExpression| expr.unpack_alias_ref().output_column();
+        let fn_output_column = |expr: &ScalarExpression| expr.output_column();
         let self_column = fn_output_column(self);
         if let Some((pos, _)) = output_exprs
             .iter()

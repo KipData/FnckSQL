@@ -28,6 +28,7 @@ use crate::execution::volcano::dql::show_table::ShowTables;
 use crate::execution::volcano::dql::sort::Sort;
 use crate::execution::volcano::dql::union::Union;
 use crate::execution::volcano::dql::values::Values;
+use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -37,6 +38,7 @@ use futures::stream::BoxStream;
 use futures::TryStreamExt;
 
 use self::ddl::add_column::AddColumn;
+use self::dql::join::nested_loop_join::NestedLoopJoin;
 
 pub type BoxedExecutor<'a> = BoxStream<'a, Result<Tuple, DatabaseError>>;
 
@@ -75,7 +77,14 @@ pub fn build_read<T: Transaction>(plan: LogicalPlan, transaction: &T) -> BoxedEx
             let right_input = childrens.pop().unwrap();
             let left_input = childrens.pop().unwrap();
 
-            HashJoin::from((op, left_input, right_input)).execute(transaction)
+            match &op.on {
+                JoinCondition::On { on, .. }
+                    if !on.is_empty() && plan.physical_option == Some(PhysicalOption::HashJoin) =>
+                {
+                    HashJoin::from((op, left_input, right_input)).execute(transaction)
+                }
+                _ => NestedLoopJoin::from((op, left_input, right_input)).execute(transaction),
+            }
         }
         Operator::Project(op) => {
             let input = childrens.pop().unwrap();

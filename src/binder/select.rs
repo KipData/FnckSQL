@@ -76,7 +76,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         // Resolve scalar function call.
         // TODO support SRF(Set-Returning Function).
 
-        let mut select_list = self.normalize_select_item(&select.projection)?;
+        let mut select_list = self.normalize_select_item(&select.projection, &plan)?;
 
         if let Some(predicate) = &select.selection {
             plan = self.bind_where(plan, predicate)?;
@@ -341,6 +341,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
     fn normalize_select_item(
         &mut self,
         items: &[SelectItem],
+        plan: &LogicalPlan,
     ) -> Result<Vec<ScalarExpression>, DatabaseError> {
         let mut select_items = vec![];
 
@@ -359,6 +360,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     });
                 }
                 SelectItem::Wildcard(_) => {
+                    if let Operator::Project(op) = &plan.operator {
+                        return Ok(op.exprs.clone());
+                    }
                     for (table_name, _) in self.context.bind_table.keys() {
                         self.bind_table_column_refs(&mut select_items, table_name.clone())?;
                     }
@@ -510,7 +514,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(FilterOperator::build(having, children, true))
     }
 
-    fn bind_project(
+    pub(crate) fn bind_project(
         &mut self,
         children: LogicalPlan,
         select_list: Vec<ScalarExpression>,
@@ -791,7 +795,12 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         )?;
                     }
                     BinaryOperator::Or => {
-                        todo!("`NestLoopJoin` is not supported yet")
+                        accum_filter.push(ScalarExpression::Binary {
+                            left_expr,
+                            right_expr,
+                            op,
+                            ty,
+                        });
                     }
                     _ => {
                         if left_expr.referenced_columns(true).iter().all(|column| {

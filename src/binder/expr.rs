@@ -110,22 +110,21 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }),
             Expr::Subquery(subquery) => {
                 let (sub_query, column) = self.bind_subquery(subquery)?;
-                self.context.sub_query(SubQueryType::SubQuery(sub_query));
-
-                if self.context.is_step(&QueryBindStep::Where) {
-                    Ok(self.bind_temp_column(column))
+                let (expr, sub_query) = if !self.context.is_step(&QueryBindStep::Where) {
+                    self.bind_temp_table(column, sub_query)?
                 } else {
-                    Ok(ScalarExpression::ColumnRef(column))
-                }
+                    (ScalarExpression::ColumnRef(column), sub_query)
+                };
+                self.context.sub_query(SubQueryType::SubQuery(sub_query));
+                Ok(expr)
             }
             Expr::InSubquery {
                 expr,
                 subquery,
                 negated,
             } => {
+                let left_expr = Box::new(self.bind_expr(expr)?);
                 let (sub_query, column) = self.bind_subquery(subquery)?;
-                self.context
-                    .sub_query(SubQueryType::InSubQuery(*negated, sub_query));
 
                 if !self.context.is_step(&QueryBindStep::Where) {
                     return Err(DatabaseError::UnsupportedStmt(
@@ -133,11 +132,13 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     ));
                 }
 
-                let alias_expr = self.bind_temp_column(column);
+                let (alias_expr, sub_query) = self.bind_temp_table(column, sub_query)?;
+                self.context
+                    .sub_query(SubQueryType::InSubQuery(*negated, sub_query));
 
                 Ok(ScalarExpression::Binary {
                     op: expression::BinaryOperator::Eq,
-                    left_expr: Box::new(self.bind_expr(expr)?),
+                    left_expr,
                     right_expr: Box::new(alias_expr),
                     ty: LogicalType::Boolean,
                 })
@@ -203,16 +204,22 @@ impl<'a, T: Transaction> Binder<'a, T> {
         }
     }
 
-    fn bind_temp_column(&mut self, column: ColumnRef) -> ScalarExpression {
+    fn bind_temp_table(
+        &mut self,
+        column: ColumnRef,
+        sub_query: LogicalPlan,
+    ) -> Result<(ScalarExpression, LogicalPlan), DatabaseError> {
         let mut alias_column = ColumnCatalog::clone(&column);
         alias_column.set_table_name(self.context.temp_table());
 
-        ScalarExpression::Alias {
+        let alias_expr = ScalarExpression::Alias {
             expr: Box::new(ScalarExpression::ColumnRef(column)),
             alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
                 alias_column,
             )))),
-        }
+        };
+        let alias_plan = self.bind_project(sub_query, vec![alias_expr.clone()])?;
+        Ok((alias_expr, alias_plan))
     }
 
     fn bind_subquery(
@@ -289,7 +296,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         } else {
             // handle col syntax
             let mut got_column = None;
-            for table_catalog in self.context.bind_table.values() {
+            for table_catalog in self.context.bind_table.values().rev() {
                 if let Some(column_catalog) = table_catalog.get_column_by_name(&column_name) {
                     got_column = Some(column_catalog);
                 }
