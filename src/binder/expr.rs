@@ -10,7 +10,7 @@ use sqlparser::ast::{
 use std::slice;
 use std::sync::Arc;
 
-use super::{lower_ident, Binder, QueryBindStep, SubQueryType};
+use super::{lower_ident, Binder, BinderContext, QueryBindStep, SubQueryType};
 use crate::expression::function::{FunctionSummary, ScalarFunction};
 use crate::expression::{AliasType, ScalarExpression};
 use crate::planner::LogicalPlan;
@@ -226,7 +226,19 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         subquery: &Query,
     ) -> Result<(LogicalPlan, Arc<ColumnCatalog>), DatabaseError> {
-        let mut sub_query = self.bind_query(subquery)?;
+        let BinderContext {
+            transaction,
+            functions,
+            temp_table_id,
+            ..
+        } = &self.context;
+        let mut binder = Binder::new(BinderContext::new(
+            *transaction,
+            functions,
+            temp_table_id.clone(),
+        ));
+
+        let mut sub_query = binder.bind_query(subquery)?;
         let sub_query_schema = sub_query.output_schema();
 
         if sub_query_schema.len() != 1 {
@@ -236,6 +248,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             ));
         }
         let column = sub_query_schema[0].clone();
+        self.context.merge_context(binder.context)?;
         Ok((sub_query, column))
     }
 
