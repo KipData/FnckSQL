@@ -440,7 +440,18 @@ impl DataValue {
                 buf.copy_from_slice(bytes);
                 f64::from_ne_bytes(buf)
             })),
-            LogicalType::Char(_) | LogicalType::Varchar(_) => DataValue::Utf8(
+            LogicalType::Char(_) => {
+                // https://dev.mysql.com/doc/refman/8.0/en/char.html#:~:text=If%20a%20given%20value%20is%20stored%20into%20the%20CHAR(4)%20and%20VARCHAR(4)%20columns%2C%20the%20values%20retrieved%20from%20the%20columns%20are%20not%20always%20the%20same%20because%20trailing%20spaces%20are%20removed%20from%20CHAR%20columns%20upon%20retrieval.%20The%20following%20example%20illustrates%20this%20difference%3A
+                let value = (!bytes.is_empty()).then(|| {
+                    let last_non_zero_index = match bytes.iter().rposition(|&x| x != 0) {
+                        Some(index) => index + 1,
+                        None => 0,
+                    };
+                    String::from_utf8(bytes[0..last_non_zero_index].to_owned()).unwrap()
+                });
+                DataValue::Utf8(value)
+            }
+            LogicalType::Varchar(_) => DataValue::Utf8(
                 (!bytes.is_empty()).then(|| String::from_utf8(bytes.to_owned()).unwrap()),
             ),
             LogicalType::Date => {

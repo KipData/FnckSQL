@@ -59,7 +59,7 @@ impl Describe {
                     datatype
                         .raw_len()
                         .map(|len| len.to_string())
-                        .unwrap_or_default(),
+                        .unwrap_or_else(|| "DYNAMIC".to_string()),
                 ))),
                 Arc::new(DataValue::Utf8(Some(column.nullable.to_string()))),
                 key_fn(column),

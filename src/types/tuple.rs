@@ -115,10 +115,15 @@ impl Tuple {
             } else {
                 let mut value_bytes = value.to_raw();
 
-                if types[i].raw_len().is_none() {
+                if let Some(len) = types[i].raw_len() {
+                    let difference = len.saturating_sub(value_bytes.len());
+
+                    bytes.append(&mut value_bytes);
+                    bytes.append(&mut vec![0; difference]);
+                } else {
                     bytes.append(&mut (value_bytes.len() as u32).encode_fixed_vec());
+                    bytes.append(&mut value_bytes);
                 }
-                bytes.append(&mut value_bytes);
             }
         }
 

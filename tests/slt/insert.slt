@@ -45,6 +45,9 @@ select * from t
 8 null null null
 
 statement ok
+drop table t;
+
+statement ok
 create table t1(id int primary key, v1 bigint default 233)
 
 statement ok
@@ -74,3 +77,27 @@ select * from t1
 3 233
 4 0
 5 233
+
+statement ok
+drop table t1;
+
+statement ok
+create table t2(id int primary key, v1 char(10), v2 varchar);
+
+statement ok
+insert into t2 (id, v1, v2) values (0, 'foo', 'foo');
+
+query ITT
+select * from t2;
+----
+0 foo foo
+
+query B
+select v1 = v2 from t2;
+----
+true
+
+statement ok
+drop table t2;
+
+
