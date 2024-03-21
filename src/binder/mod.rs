@@ -151,6 +151,17 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         Ok(table)
     }
 
+    /// get table from bindings
+    pub fn bind_table(&self, table_name: &str) -> Result<&TableCatalog, DatabaseError> {
+        let default_name = Arc::new(table_name.to_owned());
+        let real_name = self.table_aliases.get(table_name).unwrap_or(&default_name);
+        self.bind_table
+            .iter()
+            .find(|((t, _), _)| t == real_name)
+            .ok_or(DatabaseError::InvalidTable(table_name.into()))
+            .map(|v| *v.1)
+    }
+
     // Tips: The order of this index is based on Aggregate being bound first.
     pub fn input_ref_index(&self, ty: InputRefType) -> usize {
         match ty {
