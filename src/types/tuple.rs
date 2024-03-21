@@ -119,7 +119,7 @@ impl Tuple {
                     let difference = len.saturating_sub(value_bytes.len());
 
                     bytes.append(&mut value_bytes);
-                    bytes.append(&mut vec![0; difference]);
+                    bytes.append(&mut vec![b' '; difference]);
                 } else {
                     bytes.append(&mut (value_bytes.len() as u32).encode_fixed_vec());
                     bytes.append(&mut value_bytes);
