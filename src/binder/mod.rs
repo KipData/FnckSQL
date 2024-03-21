@@ -170,42 +170,16 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
     pub fn has_agg_call(&self, expr: &ScalarExpression) -> bool {
         self.group_by_exprs.contains(expr)
     }
-
-    pub fn merge_context(&mut self, context: BinderContext<'a, T>) -> Result<(), DatabaseError> {
-        let BinderContext {
-            expr_aliases,
-            table_aliases,
-            bind_table,
-            ..
-        } = context;
-
-        for (alias, expr) in expr_aliases {
-            if self.expr_aliases.contains_key(&alias) {
-                return Err(DatabaseError::DuplicateAliasExpr(alias));
-            }
-            self.expr_aliases.insert(alias, expr);
-        }
-        for (alias, table_name) in table_aliases {
-            if self.table_aliases.contains_key(&alias) {
-                return Err(DatabaseError::DuplicateAliasTable(alias));
-            }
-            self.table_aliases.insert(alias, table_name);
-        }
-        for (key, table) in bind_table {
-            self.bind_table.insert(key, table);
-        }
-
-        Ok(())
-    }
 }
 
 pub struct Binder<'a, T: Transaction> {
     context: BinderContext<'a, T>,
+    pub(crate) parent: Option<&'a Binder<'a, T>>,
 }
 
 impl<'a, T: Transaction> Binder<'a, T> {
-    pub fn new(context: BinderContext<'a, T>) -> Self {
-        Binder { context }
+    pub fn new(context: BinderContext<'a, T>, parent: Option<&'a Binder<'a, T>>) -> Self {
+        Binder { context, parent }
     }
 
     pub fn bind(&mut self, stmt: &Statement) -> Result<LogicalPlan, DatabaseError> {
@@ -393,11 +367,10 @@ pub mod test {
         let storage = build_test_catalog(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;
         let functions = Default::default();
-        let mut binder = Binder::new(BinderContext::new(
-            &transaction,
-            &functions,
-            Arc::new(AtomicUsize::new(0)),
-        ));
+        let mut binder = Binder::new(
+            BinderContext::new(&transaction, &functions, Arc::new(AtomicUsize::new(0))),
+            None,
+        );
         let stmt = crate::parser::parse_sql(sql)?;
 
         Ok(binder.bind(&stmt[0])?)

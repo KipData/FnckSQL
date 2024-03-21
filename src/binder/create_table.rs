@@ -153,11 +153,10 @@ mod tests {
         let functions = Default::default();
 
         let sql = "create table t1 (id int primary key, name varchar(10) null)";
-        let mut binder = Binder::new(BinderContext::new(
-            &transaction,
-            &functions,
-            Arc::new(AtomicUsize::new(0)),
-        ));
+        let mut binder = Binder::new(
+            BinderContext::new(&transaction, &functions, Arc::new(AtomicUsize::new(0))),
+            None,
+        );
         let stmt = crate::parser::parse_sql(sql).unwrap();
         let plan1 = binder.bind(&stmt[0]).unwrap();
 

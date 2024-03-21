@@ -122,11 +122,10 @@ mod tests {
 
         let transaction = database.storage.transaction().await?;
         let functions = Default::default();
-        let mut binder = Binder::new(BinderContext::new(
-            &transaction,
-            &functions,
-            Arc::new(AtomicUsize::new(0)),
-        ));
+        let mut binder = Binder::new(
+            BinderContext::new(&transaction, &functions, Arc::new(AtomicUsize::new(0))),
+            None,
+        );
         let stmt = crate::parser::parse_sql(
             // FIXME: Only by bracketing (c1 > 40 or c1 = 2) can the filter be pushed down below the join
             "select c1, c3 from t1 inner join t2 on c1 = c3 where (c1 > 40 or c1 = 2) and c3 > 22",
