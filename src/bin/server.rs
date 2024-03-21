@@ -198,7 +198,9 @@ fn encode_tuples<'a>(schema: &Schema, tuples: Vec<Tuple>) -> PgWireResult<QueryR
                 LogicalType::UBigint => encoder.encode_field(&value.u64().map(|v| v as i64)),
                 LogicalType::Float => encoder.encode_field(&value.float()),
                 LogicalType::Double => encoder.encode_field(&value.double()),
-                LogicalType::Char(_) | LogicalType::Varchar(_) => encoder.encode_field(&value.utf8()),
+                LogicalType::Char(_) | LogicalType::Varchar(_) => {
+                    encoder.encode_field(&value.utf8())
+                }
                 LogicalType::Date => encoder.encode_field(&value.date()),
                 LogicalType::DateTime => encoder.encode_field(&value.datetime()),
                 LogicalType::Decimal(_, _) => todo!(),
@@ -224,6 +226,7 @@ fn into_pg_type(data_type: &LogicalType) -> PgWireResult<Type> {
         LogicalType::Double => Type::FLOAT8,
         LogicalType::Varchar(_) => Type::VARCHAR,
         LogicalType::Date | LogicalType::DateTime => Type::DATE,
+        LogicalType::Char(_) => Type::CHAR,
         LogicalType::Decimal(_, _) => todo!(),
         _ => {
             return Err(PgWireError::UserError(Box::new(ErrorInfo::new(
