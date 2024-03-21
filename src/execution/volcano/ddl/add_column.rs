@@ -30,7 +30,7 @@ impl<T: Transaction> WriteExecutor<T> for AddColumn {
 
 impl AddColumn {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
-    async fn _execute<T: Transaction>(self, transaction: &mut T) {
+    async fn _execute<T: Transaction>(mut self, transaction: &mut T) {
         let AddColumnOperator {
             table_name,
             column,
@@ -38,6 +38,13 @@ impl AddColumn {
         } = &self.op;
         let mut unique_values = column.desc().is_unique.then(Vec::new);
         let mut tuples = Vec::new();
+        let schema = self.input.output_schema();
+        let mut types = Vec::with_capacity(schema.len() + 1);
+
+        for column_ref in schema.iter() {
+            types.push(*column_ref.datatype());
+        }
+        types.push(*column.datatype());
 
         #[for_await]
         for tuple in build_read(self.input, transaction) {
@@ -54,7 +61,7 @@ impl AddColumn {
             tuples.push(tuple);
         }
         for tuple in tuples {
-            transaction.append(table_name, tuple, true)?;
+            transaction.append(table_name, tuple, &types, true)?;
         }
         let col_id = transaction.add_column(table_name, column, *if_not_exists)?;
 

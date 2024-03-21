@@ -60,6 +60,7 @@ impl Insert {
             .ok_or_else(|| DatabaseError::NotNull)?;
 
         if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
+            let types = table_catalog.types();
             #[for_await]
             for tuple in build_read(input, transaction) {
                 let Tuple { values, .. } = tuple?;
@@ -99,7 +100,7 @@ impl Insert {
                 }
             }
             for tuple in tuples {
-                transaction.append(&table_name, tuple, is_overwrite)?;
+                transaction.append(&table_name, tuple, &types, is_overwrite)?;
             }
         }
     }
