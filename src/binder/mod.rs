@@ -18,6 +18,7 @@ mod update;
 
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
 use std::collections::{BTreeMap, HashMap};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::catalog::{TableCatalog, TableName};
@@ -55,7 +56,7 @@ pub enum SubQueryType {
 
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
-    functions: &'a Functions,
+    pub(crate) functions: &'a Functions,
     pub(crate) transaction: &'a T,
     // Tips: When there are multiple tables and Wildcard, use BTreeMap to ensure that the order of the output tables is certain.
     pub(crate) bind_table: BTreeMap<(TableName, Option<JoinType>), &'a TableCatalog>,
@@ -69,12 +70,16 @@ pub struct BinderContext<'a, T: Transaction> {
     bind_step: QueryBindStep,
     sub_queries: HashMap<QueryBindStep, Vec<SubQueryType>>,
 
-    temp_table_id: usize,
+    temp_table_id: Arc<AtomicUsize>,
     pub(crate) allow_default: bool,
 }
 
 impl<'a, T: Transaction> BinderContext<'a, T> {
-    pub fn new(transaction: &'a T, functions: &'a Functions) -> Self {
+    pub fn new(
+        transaction: &'a T,
+        functions: &'a Functions,
+        temp_table_id: Arc<AtomicUsize>,
+    ) -> Self {
         BinderContext {
             functions,
             transaction,
@@ -85,14 +90,16 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             agg_calls: Default::default(),
             bind_step: QueryBindStep::From,
             sub_queries: Default::default(),
-            temp_table_id: 0,
+            temp_table_id,
             allow_default: false,
         }
     }
 
     pub fn temp_table(&mut self) -> TableName {
-        self.temp_table_id += 1;
-        Arc::new(format!("_temp_table_{}_", self.temp_table_id))
+        Arc::new(format!(
+            "_temp_table_{}_",
+            self.temp_table_id.fetch_add(1, Ordering::SeqCst)
+        ))
     }
 
     pub fn step(&mut self, bind_step: QueryBindStep) {
@@ -167,11 +174,12 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
 
 pub struct Binder<'a, T: Transaction> {
     context: BinderContext<'a, T>,
+    pub(crate) parent: Option<&'a Binder<'a, T>>,
 }
 
 impl<'a, T: Transaction> Binder<'a, T> {
-    pub fn new(context: BinderContext<'a, T>) -> Self {
-        Binder { context }
+    pub fn new(context: BinderContext<'a, T>, parent: Option<&'a Binder<'a, T>>) -> Self {
+        Binder { context, parent }
     }
 
     pub fn bind(&mut self, stmt: &Statement) -> Result<LogicalPlan, DatabaseError> {
@@ -305,6 +313,7 @@ pub mod test {
     use crate::storage::{Storage, Transaction};
     use crate::types::LogicalType::Integer;
     use std::path::PathBuf;
+    use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -358,7 +367,10 @@ pub mod test {
         let storage = build_test_catalog(temp_dir.path()).await?;
         let transaction = storage.transaction().await?;
         let functions = Default::default();
-        let mut binder = Binder::new(BinderContext::new(&transaction, &functions));
+        let mut binder = Binder::new(
+            BinderContext::new(&transaction, &functions, Arc::new(AtomicUsize::new(0))),
+            None,
+        );
         let stmt = crate::parser::parse_sql(sql)?;
 
         Ok(binder.bind(&stmt[0])?)

@@ -1,5 +1,6 @@
 use ahash::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
 use crate::binder::{Binder, BinderContext};
@@ -98,7 +99,10 @@ impl<S: Storage> Database<S> {
         if stmts.is_empty() {
             return Err(DatabaseError::EmptyStatement);
         }
-        let mut binder = Binder::new(BinderContext::new(transaction, functions));
+        let mut binder = Binder::new(
+            BinderContext::new(transaction, functions, Arc::new(AtomicUsize::new(0))),
+            None,
+        );
         /// Build a logical plan.
         ///
         /// SELECT a,b FROM t1 ORDER BY a LIMIT 1;

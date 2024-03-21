@@ -10,7 +10,7 @@ use sqlparser::ast::{
 use std::slice;
 use std::sync::Arc;
 
-use super::{lower_ident, Binder, QueryBindStep, SubQueryType};
+use super::{lower_ident, Binder, BinderContext, QueryBindStep, SubQueryType};
 use crate::expression::function::{FunctionSummary, ScalarFunction};
 use crate::expression::{AliasType, ScalarExpression};
 use crate::planner::LogicalPlan;
@@ -226,7 +226,17 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &mut self,
         subquery: &Query,
     ) -> Result<(LogicalPlan, Arc<ColumnCatalog>), DatabaseError> {
-        let mut sub_query = self.bind_query(subquery)?;
+        let BinderContext {
+            transaction,
+            functions,
+            temp_table_id,
+            ..
+        } = &self.context;
+        let mut binder = Binder::new(
+            BinderContext::new(*transaction, functions, temp_table_id.clone()),
+            Some(self),
+        );
+        let mut sub_query = binder.bind_query(subquery)?;
         let sub_query_schema = sub_query.output_schema();
 
         if sub_query_schema.len() != 1 {
@@ -294,15 +304,22 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 .ok_or_else(|| DatabaseError::NotFound("column", column_name))?;
             Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
         } else {
+            let op = |got_column: &mut Option<&'a ColumnRef>, context: &BinderContext<'a, T>| {
+                for table_catalog in context.bind_table.values() {
+                    if got_column.is_some() {
+                        break;
+                    }
+                    if let Some(column_catalog) = table_catalog.get_column_by_name(&column_name) {
+                        *got_column = Some(column_catalog);
+                    }
+                }
+            };
             // handle col syntax
             let mut got_column = None;
-            for table_catalog in self.context.bind_table.values().rev() {
-                if let Some(column_catalog) = table_catalog.get_column_by_name(&column_name) {
-                    got_column = Some(column_catalog);
-                }
-                if got_column.is_some() {
-                    break;
-                }
+
+            op(&mut got_column, &self.context);
+            if let Some(parent) = self.parent {
+                op(&mut got_column, &parent.context);
             }
             let column_catalog =
                 got_column.ok_or_else(|| DatabaseError::NotFound("column", column_name))?;

@@ -29,12 +29,12 @@ pub enum DatabaseError {
         #[source]
         csv::Error,
     ),
-    #[error("duplicate primary key")]
-    DuplicatePrimaryKey,
     #[error("column: {0} already exists")]
     DuplicateColumn(String),
     #[error("index: {0} already exists")]
     DuplicateIndex(String),
+    #[error("duplicate primary key")]
+    DuplicatePrimaryKey,
     #[error("the column has been declared unique and the value already exists")]
     DuplicateUniqueValue,
     #[error("empty plan")]
