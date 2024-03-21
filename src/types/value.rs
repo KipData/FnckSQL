@@ -936,6 +936,7 @@ impl DataValue {
             },
             DataValue::Date32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Char(len) => varchar_cast!(Self::format_date(value), Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(Self::format_date(value), len),
                 LogicalType::Date => Ok(DataValue::Date32(value)),
                 LogicalType::DateTime => {
@@ -951,6 +952,9 @@ impl DataValue {
             },
             DataValue::Date64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Char(len) => {
+                    varchar_cast!(Self::format_datetime(value), Some(len))
+                }
                 LogicalType::Varchar(len) => varchar_cast!(Self::format_datetime(value), len),
                 LogicalType::Date => {
                     let option = value.and_then(|v| {
@@ -968,6 +972,7 @@ impl DataValue {
                 LogicalType::Float => Ok(DataValue::Float32(value.and_then(|v| v.to_f32()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.and_then(|v| v.to_f64()))),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(value)),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 _ => Err(DatabaseError::CastFail),
             },
