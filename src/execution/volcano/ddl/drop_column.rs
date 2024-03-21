@@ -46,7 +46,14 @@ impl DropColumn {
                 ))?;
             }
             let mut tuples = Vec::new();
+            let mut types = Vec::with_capacity(tuple_columns.len() - 1);
 
+            for (i, column_ref) in tuple_columns.iter().enumerate() {
+                if i == column_index {
+                    continue;
+                }
+                types.push(*column_ref.datatype());
+            }
             #[for_await]
             for tuple in build_read(self.input, transaction) {
                 let mut tuple: Tuple = tuple?;
@@ -55,7 +62,7 @@ impl DropColumn {
                 tuples.push(tuple);
             }
             for tuple in tuples {
-                transaction.append(&table_name, tuple, true)?;
+                transaction.append(&table_name, tuple, &types, true)?;
             }
             transaction.drop_column(&table_name, &column_name)?;
 

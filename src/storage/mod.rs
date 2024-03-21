@@ -9,7 +9,7 @@ use crate::storage::table_codec::TableCodec;
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::value::{DataValue, ValueRef};
-use crate::types::ColumnId;
+use crate::types::{ColumnId, LogicalType};
 use kip_db::kernel::lsm::iterator::Iter as DBIter;
 use kip_db::kernel::lsm::mvcc;
 use std::collections::{Bound, VecDeque};
@@ -75,6 +75,7 @@ pub trait Transaction: Sync + Send + 'static {
         &mut self,
         table_name: &str,
         tuple: Tuple,
+        types: &[LogicalType],
         is_overwrite: bool,
     ) -> Result<(), DatabaseError>;
 

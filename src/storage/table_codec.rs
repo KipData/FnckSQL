@@ -144,11 +144,15 @@ impl TableCodec {
 
     /// Key: {TableName}{TUPLE_TAG}{BOUND_MIN_TAG}{RowID}(Sorted)
     /// Value: Tuple
-    pub fn encode_tuple(table_name: &str, tuple: &Tuple) -> Result<(Bytes, Bytes), DatabaseError> {
+    pub fn encode_tuple(
+        table_name: &str,
+        tuple: &Tuple,
+        types: &[LogicalType],
+    ) -> Result<(Bytes, Bytes), DatabaseError> {
         let tuple_id = tuple.id.clone().ok_or(DatabaseError::PrimaryKeyNotFound)?;
         let key = Self::encode_tuple_key(table_name, &tuple_id)?;
 
-        Ok((Bytes::from(key), Bytes::from(tuple.serialize_to())))
+        Ok((Bytes::from(key), Bytes::from(tuple.serialize_to(types))))
     }
 
     pub fn encode_tuple_key(
@@ -223,7 +227,7 @@ impl TableCodec {
     ) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = TableCodec::encode_index_key(name, index, Some(tuple_id))?;
 
-        Ok((Bytes::from(key), Bytes::from(tuple_id.to_raw())))
+        Ok((Bytes::from(key), Bytes::from(tuple_id.to_raw(None))))
     }
 
     fn _encode_index_key(name: &str, index: &Index) -> Result<Vec<u8>, DatabaseError> {
@@ -263,7 +267,7 @@ impl TableCodec {
 
         if let Some(tuple_id) = tuple_id {
             if matches!(index.ty, IndexType::Normal | IndexType::Composite) {
-                key_prefix.append(&mut tuple_id.to_raw());
+                key_prefix.append(&mut tuple_id.to_raw(None));
             }
         }
         Ok(key_prefix)
@@ -381,7 +385,11 @@ mod tests {
                 Arc::new(DataValue::Decimal(Some(Decimal::new(1, 0)))),
             ],
         };
-        let (_, bytes) = TableCodec::encode_tuple(&table_catalog.name, &tuple)?;
+        let (_, bytes) = TableCodec::encode_tuple(
+            &table_catalog.name,
+            &tuple,
+            &[LogicalType::Integer, LogicalType::Decimal(None, None)],
+        )?;
         let schema = table_catalog.schema_ref();
 
         assert_eq!(

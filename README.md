@@ -124,6 +124,7 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - UInteger
   - Bigint
   - UBigint
+  - Char
   - Varchar
 - DDL
   - Begin (Server only)
@@ -177,6 +178,7 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - UBigint
   - Float
   - Double
+  - Char
   - Varchar
   - Date
   - DateTime

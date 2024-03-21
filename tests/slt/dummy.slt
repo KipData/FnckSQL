@@ -37,6 +37,16 @@ SELECT (0, 1, 2) >= (0, 1)
 true
 
 query B
+SELECT 1::CHAR = 1::VARCHAR
+----
+true
+
+query B
+SELECT 1::CHAR = 2::VARCHAR
+----
+false
+
+query B
 SELECT NULL=NULL
 ----
 null

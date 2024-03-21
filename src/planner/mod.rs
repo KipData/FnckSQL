@@ -104,6 +104,7 @@ impl LogicalPlan {
                 Operator::Describe(_) => Arc::new(vec![
                     Arc::new(ColumnCatalog::new_dummy("FIELD".to_string())),
                     Arc::new(ColumnCatalog::new_dummy("TYPE".to_string())),
+                    Arc::new(ColumnCatalog::new_dummy("LEN".to_string())),
                     Arc::new(ColumnCatalog::new_dummy("NULL".to_string())),
                     Arc::new(ColumnCatalog::new_dummy("Key".to_string())),
                     Arc::new(ColumnCatalog::new_dummy("DEFAULT".to_string())),

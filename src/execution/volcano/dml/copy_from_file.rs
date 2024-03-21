@@ -3,7 +3,7 @@ use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, WriteExecutor};
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::storage::Transaction;
-use crate::types::tuple::Tuple;
+use crate::types::tuple::{types, Tuple};
 use crate::types::tuple_builder::TupleBuilder;
 use futures_async_stream::try_stream;
 use std::fs::File;
@@ -30,6 +30,7 @@ impl<T: Transaction> WriteExecutor<T> for CopyFromFile {
 impl CopyFromFile {
     #[try_stream(boxed, ok = Tuple, error = DatabaseError)]
     pub async fn _execute<T: Transaction>(self, transaction: &mut T) {
+        let types = types(&self.op.schema_ref);
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
         let (tx1, mut rx1) = tokio::sync::mpsc::channel(1);
         // # Cancellation
@@ -39,7 +40,7 @@ impl CopyFromFile {
         let handle = tokio::task::spawn_blocking(|| self.read_file_blocking(tx));
         let mut size = 0_usize;
         while let Some(chunk) = rx.recv().await {
-            transaction.append(&table_name, chunk, false)?;
+            transaction.append(&table_name, chunk, &types, false)?;
             size += 1;
         }
         handle.await??;

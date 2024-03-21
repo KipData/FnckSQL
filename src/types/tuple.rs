@@ -12,6 +12,10 @@ pub type TupleId = ValueRef;
 pub type Schema = Vec<ColumnRef>;
 pub type SchemaRef = Arc<Schema>;
 
+pub fn types(schema: &Schema) -> Vec<LogicalType> {
+    schema.iter().map(|column| *column.datatype()).collect_vec()
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
     pub id: Option<TupleId>,
@@ -94,7 +98,9 @@ impl Tuple {
 
     /// e.g.: bits(u8)..|data_0(len for utf8_1)|utf8_0|data_1|
     /// Tips: all len is u32
-    pub fn serialize_to(&self) -> Vec<u8> {
+    pub fn serialize_to(&self, types: &[LogicalType]) -> Vec<u8> {
+        assert_eq!(self.values.len(), types.len());
+
         fn flip_bit(bits: u8, i: usize) -> u8 {
             bits | (1 << (7 - i))
         }
@@ -107,9 +113,10 @@ impl Tuple {
             if value.is_null() {
                 bytes[i / BITS_MAX_INDEX] = flip_bit(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX);
             } else {
-                let mut value_bytes = value.to_raw();
+                let logical_type = types[i];
+                let mut value_bytes = value.to_raw(Some(logical_type));
 
-                if value.is_variable() {
+                if logical_type.raw_len().is_none() {
                     bytes.append(&mut (value_bytes.len() as u32).encode_fixed_vec());
                 }
                 bytes.append(&mut value_bytes);
@@ -226,6 +233,11 @@ mod tests {
                 false,
                 ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None),
             )),
+            Arc::new(ColumnCatalog::new(
+                "c14".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Char(1), false, false, None),
+            )),
         ]);
 
         let tuples = vec![
@@ -245,6 +257,7 @@ mod tests {
                     Arc::new(DataValue::Date64(Some(0))),
                     Arc::new(DataValue::Date32(Some(0))),
                     Arc::new(DataValue::Decimal(Some(Decimal::new(0, 3)))),
+                    Arc::new(DataValue::Utf8(Some("K".to_string()))),
                 ],
             },
             Tuple {
@@ -263,6 +276,7 @@ mod tests {
                     Arc::new(DataValue::Date64(None)),
                     Arc::new(DataValue::Date32(None)),
                     Arc::new(DataValue::Decimal(None)),
+                    Arc::new(DataValue::Utf8(None)),
                 ],
             },
         ];
@@ -274,15 +288,15 @@ mod tests {
 
         let tuple_0 = Tuple::deserialize_from(
             &types,
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
             &columns,
-            &tuples[0].serialize_to(),
+            &tuples[0].serialize_to(&types),
         );
         let tuple_1 = Tuple::deserialize_from(
             &types,
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
             &columns,
-            &tuples[1].serialize_to(),
+            &tuples[1].serialize_to(&types),
         );
 
         assert_eq!(tuples[0], tuple_0);

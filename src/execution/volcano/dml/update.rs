@@ -6,6 +6,7 @@ use crate::planner::operator::update::UpdateOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::index::Index;
+use crate::types::tuple::types;
 use crate::types::tuple::Tuple;
 use futures_async_stream::try_stream;
 use std::collections::HashMap;
@@ -44,6 +45,7 @@ impl Update {
         } = self;
         let values_schema = values.output_schema().clone();
         let input_schema = input.output_schema().clone();
+        let types = types(&input_schema);
 
         if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
             let mut value_map = HashMap::new();
@@ -94,7 +96,7 @@ impl Update {
                     transaction.add_index(&table_name, index, tuple.id.as_ref().unwrap())?;
                 }
 
-                transaction.append(&table_name, tuple, is_overwrite)?;
+                transaction.append(&table_name, tuple, &types, is_overwrite)?;
             }
         }
     }

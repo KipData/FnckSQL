@@ -7,9 +7,10 @@ use chrono::{NaiveDate, NaiveDateTime};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::any::TypeId;
+use std::cmp;
 
 use crate::errors::DatabaseError;
-use sqlparser::ast::ExactNumberInfo;
+use sqlparser::ast::{CharLengthUnits, CharacterLength, ExactNumberInfo};
 use strum_macros::AsRefStr;
 
 pub type ColumnId = u32;
@@ -33,6 +34,7 @@ pub enum LogicalType {
     UBigint,
     Float,
     Double,
+    Char(u32),
     Varchar(Option<u32>),
     Date,
     DateTime,
@@ -80,7 +82,6 @@ impl LogicalType {
 
     pub fn raw_len(&self) -> Option<usize> {
         match self {
-            LogicalType::Invalid => Some(0),
             LogicalType::SqlNull => Some(0),
             LogicalType::Boolean => Some(1),
             LogicalType::Tinyint => Some(1),
@@ -95,10 +96,11 @@ impl LogicalType {
             LogicalType::Double => Some(8),
             /// Note: The non-fixed length type's raw_len is None e.g. Varchar
             LogicalType::Varchar(_) => None,
+            LogicalType::Char(len) => Some(*len as usize),
             LogicalType::Decimal(_, _) => Some(16),
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
-            LogicalType::Tuple => unreachable!(),
+            LogicalType::Invalid | LogicalType::Tuple => unreachable!(),
         }
     }
 
@@ -287,9 +289,16 @@ impl LogicalType {
             LogicalType::UBigint => matches!(to, LogicalType::Float | LogicalType::Double),
             LogicalType::Float => matches!(to, LogicalType::Double),
             LogicalType::Double => false,
+            LogicalType::Char(_) => false,
             LogicalType::Varchar(_) => false,
-            LogicalType::Date => matches!(to, LogicalType::DateTime | LogicalType::Varchar(_)),
-            LogicalType::DateTime => matches!(to, LogicalType::Date | LogicalType::Varchar(_)),
+            LogicalType::Date => matches!(
+                to,
+                LogicalType::DateTime | LogicalType::Varchar(_) | LogicalType::Char(_)
+            ),
+            LogicalType::DateTime => matches!(
+                to,
+                LogicalType::Date | LogicalType::Varchar(_) | LogicalType::Char(_)
+            ),
             LogicalType::Decimal(_, _) | LogicalType::Tuple => false,
         }
     }
@@ -301,8 +310,34 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
 
     fn try_from(value: sqlparser::ast::DataType) -> Result<Self, Self::Error> {
         match value {
-            sqlparser::ast::DataType::Char(len) | sqlparser::ast::DataType::Varchar(len) => {
-                Ok(LogicalType::Varchar(len.map(|len| len.length as u32)))
+            sqlparser::ast::DataType::Char(char_len)
+            | sqlparser::ast::DataType::Character(char_len) => {
+                let mut len = 1;
+                if let Some(CharacterLength { length, unit }) = char_len {
+                    if matches!(unit, Some(CharLengthUnits::Octets)) {
+                        return Err(DatabaseError::UnsupportedStmt(format!(
+                            "char unit: {:?}",
+                            unit
+                        )));
+                    }
+                    len = cmp::max(len, length)
+                }
+                Ok(LogicalType::Char(len as u32))
+            }
+            sqlparser::ast::DataType::CharVarying(varchar_len)
+            | sqlparser::ast::DataType::CharacterVarying(varchar_len)
+            | sqlparser::ast::DataType::Varchar(varchar_len) => {
+                let mut len = None;
+                if let Some(CharacterLength { length, unit }) = varchar_len {
+                    if matches!(unit, Some(CharLengthUnits::Octets)) {
+                        return Err(DatabaseError::UnsupportedStmt(format!(
+                            "char unit: {:?}",
+                            unit
+                        )));
+                    }
+                    len = Some(length as u32)
+                }
+                Ok(LogicalType::Varchar(len))
             }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
             sqlparser::ast::DataType::Double | sqlparser::ast::DataType::DoublePrecision => {

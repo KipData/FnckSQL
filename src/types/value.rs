@@ -310,10 +310,6 @@ impl DataValue {
         value.and_then(|v| Self::date_time_format(v).map(|fmt| format!("{}", fmt)))
     }
 
-    pub fn is_variable(&self) -> bool {
-        matches!(self, DataValue::Utf8(_))
-    }
-
     pub fn is_null(&self) -> bool {
         match self {
             DataValue::Null => true,
@@ -351,7 +347,7 @@ impl DataValue {
             LogicalType::UBigint => DataValue::UInt64(None),
             LogicalType::Float => DataValue::Float32(None),
             LogicalType::Double => DataValue::Float64(None),
-            LogicalType::Varchar(_) => DataValue::Utf8(None),
+            LogicalType::Char(_) | LogicalType::Varchar(_) => DataValue::Utf8(None),
             LogicalType::Date => DataValue::Date32(None),
             LogicalType::DateTime => DataValue::Date64(None),
             LogicalType::Decimal(_, _) => DataValue::Decimal(None),
@@ -374,7 +370,7 @@ impl DataValue {
             LogicalType::UBigint => DataValue::UInt64(Some(0)),
             LogicalType::Float => DataValue::Float32(Some(0.0)),
             LogicalType::Double => DataValue::Float64(Some(0.0)),
-            LogicalType::Varchar(_) => DataValue::Utf8(Some("".to_string())),
+            LogicalType::Char(_) | LogicalType::Varchar(_) => DataValue::Utf8(Some("".to_string())),
             LogicalType::Date => DataValue::Date32(Some(UNIX_DATETIME.num_days_from_ce())),
             LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.timestamp())),
             LogicalType::Decimal(_, _) => DataValue::Decimal(Some(Decimal::new(0, 0))),
@@ -382,7 +378,7 @@ impl DataValue {
         }
     }
 
-    pub fn to_raw(&self) -> Vec<u8> {
+    pub fn to_raw(&self, logical_type: Option<LogicalType>) -> Vec<u8> {
         match self {
             DataValue::Null => None,
             DataValue::Boolean(v) => v.map(|v| vec![v as u8]),
@@ -396,7 +392,12 @@ impl DataValue {
             DataValue::UInt16(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::UInt32(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::UInt64(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::Utf8(v) => v.clone().map(|v| v.into_bytes()),
+            DataValue::Utf8(v) => v.clone().map(|mut v| {
+                if let Some(LogicalType::Char(len)) = logical_type {
+                    v = format!("{:len$}", v, len = len as usize);
+                }
+                v.into_bytes()
+            }),
             DataValue::Date32(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::Date64(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::Decimal(v) => v.map(|v| v.serialize().to_vec()),
@@ -444,6 +445,17 @@ impl DataValue {
                 buf.copy_from_slice(bytes);
                 f64::from_ne_bytes(buf)
             })),
+            LogicalType::Char(_) => {
+                // https://dev.mysql.com/doc/refman/8.0/en/char.html#:~:text=If%20a%20given%20value%20is%20stored%20into%20the%20CHAR(4)%20and%20VARCHAR(4)%20columns%2C%20the%20values%20retrieved%20from%20the%20columns%20are%20not%20always%20the%20same%20because%20trailing%20spaces%20are%20removed%20from%20CHAR%20columns%20upon%20retrieval.%20The%20following%20example%20illustrates%20this%20difference%3A
+                let value = (!bytes.is_empty()).then(|| {
+                    let last_non_zero_index = match bytes.iter().rposition(|&x| x != b' ') {
+                        Some(index) => index + 1,
+                        None => 0,
+                    };
+                    String::from_utf8(bytes[0..last_non_zero_index].to_owned()).unwrap()
+                });
+                DataValue::Utf8(value)
+            }
             LogicalType::Varchar(_) => DataValue::Utf8(
                 (!bytes.is_empty()).then(|| String::from_utf8(bytes.to_owned()).unwrap()),
             ),
@@ -613,7 +625,7 @@ impl DataValue {
                 LogicalType::UBigint => Ok(DataValue::UInt64(None)),
                 LogicalType::Float => Ok(DataValue::Float32(None)),
                 LogicalType::Double => Ok(DataValue::Float64(None)),
-                LogicalType::Varchar(_) => Ok(DataValue::Utf8(None)),
+                LogicalType::Char(_) | LogicalType::Varchar(_) => Ok(DataValue::Utf8(None)),
                 LogicalType::Date => Ok(DataValue::Date32(None)),
                 LogicalType::DateTime => Ok(DataValue::Date64(None)),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(None)),
@@ -632,6 +644,7 @@ impl DataValue {
                 LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 _ => Err(DatabaseError::CastFail),
             },
@@ -639,6 +652,7 @@ impl DataValue {
                 LogicalType::SqlNull => Ok(DataValue::Null),
                 LogicalType::Float => Ok(DataValue::Float32(value)),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(
                     value
@@ -657,6 +671,7 @@ impl DataValue {
                 LogicalType::SqlNull => Ok(DataValue::Null),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value)),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(
                     value
@@ -689,6 +704,7 @@ impl DataValue {
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -716,6 +732,7 @@ impl DataValue {
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -742,6 +759,7 @@ impl DataValue {
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -767,6 +785,7 @@ impl DataValue {
                 LogicalType::Bigint => Ok(DataValue::Int64(value)),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v as f64))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -788,6 +807,7 @@ impl DataValue {
                 LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -807,6 +827,7 @@ impl DataValue {
                 LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v.into()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -824,6 +845,7 @@ impl DataValue {
                 LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v.into()))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -839,6 +861,7 @@ impl DataValue {
                 LogicalType::UBigint => Ok(DataValue::UInt64(value)),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v as f64))),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Decimal(_, option) => Ok(DataValue::Decimal(value.map(|v| {
                     let mut decimal = Decimal::from(v);
@@ -885,6 +908,7 @@ impl DataValue {
                 LogicalType::Double => Ok(DataValue::Float64(
                     value.map(|v| f64::from_str(&v)).transpose()?,
                 )),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 LogicalType::Date => {
                     let option = value
@@ -917,6 +941,7 @@ impl DataValue {
             },
             DataValue::Date32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Char(len) => varchar_cast!(Self::format_date(value), Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(Self::format_date(value), len),
                 LogicalType::Date => Ok(DataValue::Date32(value)),
                 LogicalType::DateTime => {
@@ -932,6 +957,9 @@ impl DataValue {
             },
             DataValue::Date64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Char(len) => {
+                    varchar_cast!(Self::format_datetime(value), Some(len))
+                }
                 LogicalType::Varchar(len) => varchar_cast!(Self::format_datetime(value), len),
                 LogicalType::Date => {
                     let option = value.and_then(|v| {
@@ -949,6 +977,7 @@ impl DataValue {
                 LogicalType::Float => Ok(DataValue::Float32(value.and_then(|v| v.to_f32()))),
                 LogicalType::Double => Ok(DataValue::Float64(value.and_then(|v| v.to_f64()))),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(value)),
+                LogicalType::Char(len) => varchar_cast!(value, Some(len)),
                 LogicalType::Varchar(len) => varchar_cast!(value, len),
                 _ => Err(DatabaseError::CastFail),
             },

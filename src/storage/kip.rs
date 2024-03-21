@@ -202,9 +202,10 @@ impl Transaction for KipTransaction {
         &mut self,
         table_name: &str,
         tuple: Tuple,
+        types: &[LogicalType],
         is_overwrite: bool,
     ) -> Result<(), DatabaseError> {
-        let (key, value) = TableCodec::encode_tuple(table_name, &tuple)?;
+        let (key, value) = TableCodec::encode_tuple(table_name, &tuple, types)?;
 
         if !is_overwrite && self.tx.get(&key)?.is_some() {
             return Err(DatabaseError::DuplicatePrimaryKey);
@@ -611,6 +612,7 @@ mod test {
                     Arc::new(DataValue::Boolean(Some(true))),
                 ],
             },
+            &[LogicalType::Integer, LogicalType::Boolean],
             false,
         )?;
         transaction.append(
@@ -622,6 +624,7 @@ mod test {
                     Arc::new(DataValue::Boolean(Some(false))),
                 ],
             },
+            &[LogicalType::Integer, LogicalType::Boolean],
             false,
         )?;
 

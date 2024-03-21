@@ -502,7 +502,7 @@ impl DataValue {
                     _ => return Err(DatabaseError::UnsupportedBinaryOperator(unified_type, *op)),
                 }
             }
-            LogicalType::Varchar(_) => {
+            LogicalType::Varchar(_) | LogicalType::Char(_) => {
                 let left_value = unpack_utf8(self.clone().cast(&unified_type)?);
                 let right_value = unpack_utf8(right.clone().cast(&unified_type)?);
 

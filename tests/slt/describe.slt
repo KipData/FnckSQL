@@ -4,9 +4,9 @@ create table t9 (c1 int primary key, c2 int default 0, c3 varchar unique);
 query TTTTI
 describe t9;
 ----
-c1 INTEGER false PRIMARY null
-c2 INTEGER true EMPTY 0
-c3 VARCHAR true UNIQUE null
+c1 INTEGER 4 false PRIMARY null
+c2 INTEGER 4 true EMPTY 0
+c3 VARCHAR DYNAMIC true UNIQUE null
 
 statement ok
 drop table t9;
