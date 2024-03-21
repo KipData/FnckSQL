@@ -29,10 +29,6 @@ pub enum DatabaseError {
         #[source]
         csv::Error,
     ),
-    #[error("alias expr: {0} already exists")]
-    DuplicateAliasExpr(String),
-    #[error("alias table: {0} already exists")]
-    DuplicateAliasTable(String),
     #[error("column: {0} already exists")]
     DuplicateColumn(String),
     #[error("index: {0} already exists")]
