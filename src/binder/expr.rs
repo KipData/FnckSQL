@@ -306,22 +306,20 @@ impl<'a, T: Transaction> Binder<'a, T> {
         } else {
             let op = |got_column: &mut Option<&'a ColumnRef>, context: &BinderContext<'a, T>| {
                 for table_catalog in context.bind_table.values() {
-                    if let Some(column_catalog) = table_catalog.get_column_by_name(&column_name) {
-                        *got_column = Some(column_catalog);
-                    }
                     if got_column.is_some() {
                         break;
+                    }
+                    if let Some(column_catalog) = table_catalog.get_column_by_name(&column_name) {
+                        *got_column = Some(column_catalog);
                     }
                 }
             };
             // handle col syntax
             let mut got_column = None;
-            op(&mut got_column, &self.context);
 
-            if got_column.is_none() {
-                if let Some(parent) = self.parent {
-                    op(&mut got_column, &parent.context);
-                }
+            op(&mut got_column, &self.context);
+            if let Some(parent) = self.parent {
+                op(&mut got_column, &parent.context);
             }
             let column_catalog =
                 got_column.ok_or_else(|| DatabaseError::NotFound("column", column_name))?;
