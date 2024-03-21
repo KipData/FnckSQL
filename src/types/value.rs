@@ -394,11 +394,7 @@ impl DataValue {
             DataValue::UInt64(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::Utf8(v) => v.clone().map(|mut v| {
                 if let Some(LogicalType::Char(len)) = logical_type {
-                    let difference = (len as usize).saturating_sub(v.len());
-
-                    for _ in 0..difference {
-                        v.push(' ')
-                    }
+                    v = format!("{:len$}", v, len = len as usize);
                 }
                 v.into_bytes()
             }),
