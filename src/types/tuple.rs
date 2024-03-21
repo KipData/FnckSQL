@@ -113,17 +113,13 @@ impl Tuple {
             if value.is_null() {
                 bytes[i / BITS_MAX_INDEX] = flip_bit(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX);
             } else {
-                let mut value_bytes = value.to_raw();
+                let logical_type = types[i];
+                let mut value_bytes = value.to_raw(Some(logical_type));
 
-                if let Some(len) = types[i].raw_len() {
-                    let difference = len.saturating_sub(value_bytes.len());
-
-                    bytes.append(&mut value_bytes);
-                    bytes.append(&mut vec![b' '; difference]);
-                } else {
+                if logical_type.raw_len().is_none() {
                     bytes.append(&mut (value_bytes.len() as u32).encode_fixed_vec());
-                    bytes.append(&mut value_bytes);
                 }
+                bytes.append(&mut value_bytes);
             }
         }
 

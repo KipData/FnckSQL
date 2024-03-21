@@ -378,7 +378,7 @@ impl DataValue {
         }
     }
 
-    pub fn to_raw(&self) -> Vec<u8> {
+    pub fn to_raw(&self, logical_type: Option<LogicalType>) -> Vec<u8> {
         match self {
             DataValue::Null => None,
             DataValue::Boolean(v) => v.map(|v| vec![v as u8]),
@@ -392,7 +392,16 @@ impl DataValue {
             DataValue::UInt16(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::UInt32(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::UInt64(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::Utf8(v) => v.clone().map(|v| v.into_bytes()),
+            DataValue::Utf8(v) => v.clone().map(|mut v| {
+                if let Some(LogicalType::Char(len)) = logical_type {
+                    let difference = (len as usize).saturating_sub(v.len());
+
+                    for _ in 0..difference {
+                        v.push(' ')
+                    }
+                }
+                v.into_bytes()
+            }),
             DataValue::Date32(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::Date64(v) => v.map(|v| v.encode_fixed_vec()),
             DataValue::Decimal(v) => v.map(|v| v.serialize().to_vec()),

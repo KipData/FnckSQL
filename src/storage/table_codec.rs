@@ -227,7 +227,7 @@ impl TableCodec {
     ) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = TableCodec::encode_index_key(name, index, Some(tuple_id))?;
 
-        Ok((Bytes::from(key), Bytes::from(tuple_id.to_raw())))
+        Ok((Bytes::from(key), Bytes::from(tuple_id.to_raw(None))))
     }
 
     fn _encode_index_key(name: &str, index: &Index) -> Result<Vec<u8>, DatabaseError> {
@@ -267,7 +267,7 @@ impl TableCodec {
 
         if let Some(tuple_id) = tuple_id {
             if matches!(index.ty, IndexType::Normal | IndexType::Composite) {
-                key_prefix.append(&mut tuple_id.to_raw());
+                key_prefix.append(&mut tuple_id.to_raw(None));
             }
         }
         Ok(key_prefix)
