@@ -103,9 +103,10 @@ impl<S: Storage> Database<S> {
 
     pub async fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
         let guard = self.mdl.read_arc().await;
+        let transaction = self.storage.transaction().await?;
 
         Ok(DBTransaction {
-            inner: self.storage.transaction().await?,
+            inner: transaction,
             functions: self.functions.clone(),
             _guard: guard,
         })
