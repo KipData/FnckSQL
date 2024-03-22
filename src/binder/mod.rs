@@ -34,6 +34,32 @@ pub enum InputRefType {
     GroupBy,
 }
 
+pub enum CommandType {
+    DQL,
+    DML,
+    DDL,
+}
+
+pub fn command_type(stmt: &Statement) -> Result<CommandType, DatabaseError> {
+    match stmt {
+        Statement::Analyze { .. }
+        | Statement::CreateTable { .. }
+        | Statement::CreateIndex { .. }
+        | Statement::AlterTable { .. }
+        | Statement::Drop { .. } => Ok(CommandType::DDL),
+        Statement::Query(_)
+        | Statement::Explain { .. }
+        | Statement::ExplainTable { .. }
+        | Statement::ShowTables { .. } => Ok(CommandType::DQL),
+        Statement::Truncate { .. }
+        | Statement::Update { .. }
+        | Statement::Delete { .. }
+        | Statement::Insert { .. }
+        | Statement::Copy { .. } => Ok(CommandType::DML),
+        stmt => Err(DatabaseError::UnsupportedStmt(stmt.to_string())),
+    }
+}
+
 // Tips: only query now!
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum QueryBindStep {

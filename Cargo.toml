@@ -33,6 +33,7 @@ harness = false
 
 [dependencies]
 ahash                 = { version = "0.8.11" }
+async-lock            = { version = "3.3.0" }
 async-trait           = { version = "0.1.77", optional = true }
 bincode               = { version = "1.3.3" }
 bytes                 = { version = "1.5.0" }
@@ -50,7 +51,6 @@ kip_db                = { version = "0.1.2-alpha.25.fix2" }
 lazy_static           = { version = "1.4.0" }
 log                   = { version = "0.4.21", optional = true }
 ordered-float         = { version = "4.2.0" }
-parking_lot           = { version = "0.12.1" }
 petgraph              = { version = "0.6.4" }
 pgwire                = { version = "0.19.2", optional = true }
 rand                  = { version = "0.9.0-alpha.0" }
