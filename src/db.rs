@@ -235,8 +235,7 @@ impl<S: Storage> DBTransaction<S> {
                 "`DDL` is not allowed to execute within a transaction".to_string(),
             ));
         }
-        let mut plan =
-            Database::<S>::build_plan(stmt, &self.inner, &self.functions)?;
+        let mut plan = Database::<S>::build_plan(stmt, &self.inner, &self.functions)?;
 
         let schema = plan.output_schema().clone();
         let mut stream = build_write(plan, &mut self.inner);

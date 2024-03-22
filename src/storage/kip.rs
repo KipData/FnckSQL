@@ -61,7 +61,7 @@ pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), Sta
 pub struct KipTransaction {
     tx: mvcc::Transaction,
     table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
-    meta_cache: Arc<ShardingLruCache<TableName, Vec<StatisticsMeta>>>,
+    meta_cache: Arc<StatisticsMetaCache>,
 }
 
 impl Transaction for KipTransaction {
