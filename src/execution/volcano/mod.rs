@@ -3,12 +3,12 @@ pub(crate) mod dml;
 pub(crate) mod dql;
 
 use crate::errors::DatabaseError;
-use crate::execution::volcano::ddl::analyze::Analyze;
 use crate::execution::volcano::ddl::create_index::CreateIndex;
 use crate::execution::volcano::ddl::create_table::CreateTable;
 use crate::execution::volcano::ddl::drop_column::DropColumn;
 use crate::execution::volcano::ddl::drop_table::DropTable;
 use crate::execution::volcano::ddl::truncate::Truncate;
+use crate::execution::volcano::dml::analyze::Analyze;
 use crate::execution::volcano::dml::copy_from_file::CopyFromFile;
 use crate::execution::volcano::dml::delete::Delete;
 use crate::execution::volcano::dml::insert::Insert;

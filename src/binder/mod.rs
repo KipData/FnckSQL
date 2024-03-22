@@ -42,8 +42,7 @@ pub enum CommandType {
 
 pub fn command_type(stmt: &Statement) -> Result<CommandType, DatabaseError> {
     match stmt {
-        Statement::Analyze { .. }
-        | Statement::CreateTable { .. }
+        Statement::CreateTable { .. }
         | Statement::CreateIndex { .. }
         | Statement::AlterTable { .. }
         | Statement::Drop { .. } => Ok(CommandType::DDL),
@@ -51,7 +50,8 @@ pub fn command_type(stmt: &Statement) -> Result<CommandType, DatabaseError> {
         | Statement::Explain { .. }
         | Statement::ExplainTable { .. }
         | Statement::ShowTables { .. } => Ok(CommandType::DQL),
-        Statement::Truncate { .. }
+        Statement::Analyze { .. }
+        | Statement::Truncate { .. }
         | Statement::Update { .. }
         | Statement::Delete { .. }
         | Statement::Insert { .. }
