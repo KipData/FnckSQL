@@ -227,6 +227,7 @@ fn into_pg_type(data_type: &LogicalType) -> PgWireResult<Type> {
         LogicalType::Varchar(_) => Type::VARCHAR,
         LogicalType::Date | LogicalType::DateTime => Type::DATE,
         LogicalType::Char(_) => Type::CHAR,
+        LogicalType::Time => Type::TIME,
         LogicalType::Decimal(_, _) => todo!(),
         _ => {
             return Err(PgWireError::UserError(Box::new(ErrorInfo::new(
