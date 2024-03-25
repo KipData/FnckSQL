@@ -63,6 +63,7 @@ strum_macros          = { version = "0.26.2" }
 thiserror             = { version = "1.0.58" }
 tokio                 = { version = "1.36.0", features = ["full"] }
 tracing               = { version = "0.1.40" }
+typetag               = { version = "0.2" }
 
 [dev-dependencies]
 cargo-tarpaulin       = { version = "0.27.1" }

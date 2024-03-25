@@ -78,11 +78,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         row.push(value);
                     }
                     ScalarExpression::Empty => {
-                        row.push(schema_ref[i].default_value().ok_or_else(|| {
-                            DatabaseError::InvalidColumn(
-                                "column does not exist default".to_string(),
-                            )
-                        })?);
+                        let default_value = schema_ref[i]
+                            .default_value()?
+                            .ok_or(DatabaseError::DefaultNotExist)?;
+                        row.push(default_value);
                     }
                     _ => return Err(DatabaseError::UnsupportedStmt(expr.to_string())),
                 }

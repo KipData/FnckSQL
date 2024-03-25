@@ -1,8 +1,11 @@
 use crate::catalog::TableName;
+use crate::errors::DatabaseError;
+use crate::expression::ScalarExpression;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::sync::Arc;
 
+use crate::types::tuple::EMPTY_TUPLE;
 use crate::types::value::ValueRef;
 use crate::types::{ColumnId, LogicalType};
 
@@ -82,8 +85,12 @@ impl ColumnCatalog {
         &self.desc.column_datatype
     }
 
-    pub(crate) fn default_value(&self) -> Option<ValueRef> {
-        self.desc.default.clone()
+    pub(crate) fn default_value(&self) -> Result<Option<ValueRef>, DatabaseError> {
+        self.desc
+            .default
+            .as_ref()
+            .map(|expr| expr.eval(&EMPTY_TUPLE, &[]))
+            .transpose()
     }
 
     #[allow(dead_code)]
@@ -98,7 +105,7 @@ pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
     pub(crate) is_primary: bool,
     pub(crate) is_unique: bool,
-    pub(crate) default: Option<ValueRef>,
+    pub(crate) default: Option<ScalarExpression>,
 }
 
 impl ColumnDesc {
@@ -106,7 +113,7 @@ impl ColumnDesc {
         column_datatype: LogicalType,
         is_primary: bool,
         is_unique: bool,
-        default: Option<ValueRef>,
+        default: Option<ScalarExpression>,
     ) -> ColumnDesc {
         ColumnDesc {
             column_datatype,

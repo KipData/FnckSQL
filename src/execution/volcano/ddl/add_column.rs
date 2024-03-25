@@ -50,7 +50,7 @@ impl AddColumn {
         for tuple in build_read(self.input, transaction) {
             let mut tuple: Tuple = tuple?;
 
-            if let Some(value) = column.default_value() {
+            if let Some(value) = column.default_value()? {
                 if let Some(unique_values) = &mut unique_values {
                     unique_values.push((tuple.id.clone().unwrap(), value.clone()));
                 }

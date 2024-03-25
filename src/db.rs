@@ -263,6 +263,8 @@ mod test {
     use crate::types::tuple::{create_table, Tuple};
     use crate::types::value::{DataValue, ValueRef};
     use crate::types::LogicalType;
+    use serde::Deserialize;
+    use serde::Serialize;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -298,10 +300,10 @@ mod test {
         Ok(())
     }
 
-    function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+    function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: ValueRef, v2: ValueRef| {
         let value = DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)?;
         DataValue::unary_op(&value, &UnaryOperator::Minus)
-    });
+    }));
 
     #[tokio::test]
     async fn test_udf() -> Result<(), DatabaseError> {
@@ -311,12 +313,12 @@ mod test {
             .build()
             .await?;
         let _ = fnck_sql
-            .run("CREATE TABLE test (id int primary key, c1 int, c2 int);")
+            .run("CREATE TABLE test (id int primary key, c1 int, c2 int default test(1, 2));")
             .await?;
         let _ = fnck_sql
-            .run("INSERT INTO test VALUES (1, 2, 2), (0, 1, 1), (2, 1, 1), (3, 3, 3);")
+            .run("INSERT INTO test VALUES (1, 2, 2), (0, 1, 1), (2, 1, 1), (3, 3, default);")
             .await?;
-        let (schema, tuples) = fnck_sql.run("select test(c1, 1) from test").await?;
+        let (schema, tuples) = fnck_sql.run("select test(c1, 1), c2 from test").await?;
         println!("{}", create_table(&schema, &tuples));
 
         Ok(())

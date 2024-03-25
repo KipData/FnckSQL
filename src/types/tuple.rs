@@ -4,7 +4,17 @@ use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
 use integer_encoding::FixedInt;
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use std::sync::Arc;
+
+lazy_static! {
+    pub static ref EMPTY_TUPLE: Tuple = {
+        Tuple {
+            id: None,
+            values: vec![],
+        }
+    };
+}
 
 const BITS_MAX_INDEX: usize = 8;
 

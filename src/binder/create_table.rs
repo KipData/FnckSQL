@@ -12,7 +12,6 @@ use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::value::DataValue;
 use crate::types::LogicalType;
 
 impl<'a, T: Transaction> Binder<'a, T> {
@@ -116,15 +115,20 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     }
                 }
                 ColumnOption::Default(expr) => {
-                    if let ScalarExpression::Constant(value) = self.bind_expr(expr)? {
-                        let cast_value =
-                            DataValue::clone(&value).cast(&column_desc.column_datatype)?;
-                        column_desc.default = Some(Arc::new(cast_value));
-                    } else {
+                    let mut expr = self.bind_expr(expr)?;
+
+                    if !expr.referenced_columns(true).is_empty() {
                         return Err(DatabaseError::UnsupportedStmt(
-                            "'DEFAULT' only with constant now".to_string(),
+                            "column is not allowed to exist in `default`".to_string(),
                         ));
                     }
+                    if expr.return_type() != column_desc.column_datatype {
+                        expr = ScalarExpression::TypeCast {
+                            expr: Box::new(expr),
+                            ty: column_desc.column_datatype,
+                        }
+                    }
+                    column_desc.default = Some(expr);
                 }
                 _ => todo!(),
             }
