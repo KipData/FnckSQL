@@ -23,6 +23,7 @@ use std::sync::Arc;
 pub struct KipStorage {
     pub inner: Arc<storage::KipStorage>,
     pub(crate) meta_cache: Arc<StatisticsMetaCache>,
+    pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
 }
 
 impl KipStorage {
@@ -31,10 +32,12 @@ impl KipStorage {
             storage::KipStorage::open_with_config(Config::new(path).enable_level_0_memorization())
                 .await?;
         let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new()).unwrap());
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new()).unwrap());
 
         Ok(KipStorage {
             inner: Arc::new(storage),
             meta_cache,
+            table_cache,
         })
     }
 }
@@ -47,7 +50,7 @@ impl Storage for KipStorage {
 
         Ok(KipTransaction {
             tx,
-            table_cache: ShardingLruCache::new(8, 2, RandomState::default())?,
+            table_cache: Arc::clone(&self.table_cache),
             meta_cache: self.meta_cache.clone(),
         })
     }
@@ -57,7 +60,7 @@ pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), Sta
 
 pub struct KipTransaction {
     tx: mvcc::Transaction,
-    table_cache: ShardingLruCache<String, TableCatalog>,
+    table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
     meta_cache: Arc<StatisticsMetaCache>,
 }
 

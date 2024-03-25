@@ -1,9 +1,11 @@
 use ahash::HashMap;
+use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
+use sqlparser::ast::Statement;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
-use crate::binder::{Binder, BinderContext};
+use crate::binder::{command_type, Binder, BinderContext, CommandType};
 use crate::errors::DatabaseError;
 use crate::execution::volcano::{build_write, try_collect};
 use crate::expression::function::{FunctionSummary, ScalarFunctionImpl};
@@ -18,6 +20,12 @@ use crate::storage::{Storage, Transaction};
 use crate::types::tuple::{SchemaRef, Tuple};
 
 pub(crate) type Functions = HashMap<FunctionSummary, Arc<dyn ScalarFunctionImpl>>;
+
+#[allow(dead_code)]
+pub(crate) enum MetaDataLock {
+    Read(RwLockReadGuardArc<()>),
+    Write(RwLockWriteGuardArc<()>),
+}
 
 pub struct DataBaseBuilder {
     path: PathBuf,
@@ -45,6 +53,7 @@ impl DataBaseBuilder {
         Ok(Database {
             storage,
             functions: Arc::new(self.functions),
+            mdl: Arc::new(RwLock::new(())),
         })
     }
 }
@@ -52,6 +61,7 @@ impl DataBaseBuilder {
 pub struct Database<S: Storage> {
     pub storage: S,
     functions: Arc<Functions>,
+    mdl: Arc<RwLock<()>>,
 }
 
 impl<S: Storage> Database<S> {
@@ -60,8 +70,19 @@ impl<S: Storage> Database<S> {
         &self,
         sql: T,
     ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+        // parse
+        let stmts = parse_sql(sql)?;
+        if stmts.is_empty() {
+            return Err(DatabaseError::EmptyStatement);
+        }
+        let stmt = &stmts[0];
+        let _guard = if matches!(command_type(stmt)?, CommandType::DDL) {
+            MetaDataLock::Write(self.mdl.write_arc().await)
+        } else {
+            MetaDataLock::Read(self.mdl.read_arc().await)
+        };
         let transaction = self.storage.transaction().await?;
-        let plan = Self::build_plan::<T, S::TransactionType>(sql, &transaction, &self.functions)?;
+        let plan = Self::build_plan(stmt, &transaction, &self.functions)?;
 
         Self::run_volcano(transaction, plan).await
     }
@@ -81,24 +102,21 @@ impl<S: Storage> Database<S> {
     }
 
     pub async fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
+        let guard = self.mdl.read_arc().await;
         let transaction = self.storage.transaction().await?;
 
         Ok(DBTransaction {
             inner: transaction,
             functions: self.functions.clone(),
+            _guard: guard,
         })
     }
 
-    pub fn build_plan<V: AsRef<str>, T: Transaction>(
-        sql: V,
+    pub(crate) fn build_plan(
+        stmt: &Statement,
         transaction: &<S as Storage>::TransactionType,
         functions: &Functions,
     ) -> Result<LogicalPlan, DatabaseError> {
-        // parse
-        let stmts = parse_sql(sql)?;
-        if stmts.is_empty() {
-            return Err(DatabaseError::EmptyStatement);
-        }
         let mut binder = Binder::new(
             BinderContext::new(transaction, functions, Arc::new(AtomicUsize::new(0))),
             None,
@@ -110,7 +128,7 @@ impl<S: Storage> Database<S> {
         ///   Sort(a)
         ///     Limit(1)
         ///       Project(a,b)
-        let source_plan = binder.bind(&stmts[0])?;
+        let source_plan = binder.bind(stmt)?;
         // println!("source_plan plan: {:#?}", source_plan);
 
         let best_plan =
@@ -200,6 +218,7 @@ impl<S: Storage> Database<S> {
 pub struct DBTransaction<S: Storage> {
     inner: S::TransactionType,
     functions: Arc<Functions>,
+    _guard: RwLockReadGuardArc<()>,
 }
 
 impl<S: Storage> DBTransaction<S> {
@@ -207,8 +226,18 @@ impl<S: Storage> DBTransaction<S> {
         &mut self,
         sql: T,
     ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
-        let mut plan =
-            Database::<S>::build_plan::<T, S::TransactionType>(sql, &self.inner, &self.functions)?;
+        let stmts = parse_sql(sql)?;
+        if stmts.is_empty() {
+            return Err(DatabaseError::EmptyStatement);
+        }
+        let stmt = &stmts[0];
+        if matches!(command_type(stmt)?, CommandType::DDL) {
+            return Err(DatabaseError::UnsupportedStmt(
+                "`DDL` is not allowed to execute within a transaction".to_string(),
+            ));
+        }
+        let mut plan = Database::<S>::build_plan(stmt, &self.inner, &self.functions)?;
+
         let schema = plan.output_schema().clone();
         let mut stream = build_write(plan, &mut self.inner);
 
@@ -298,20 +327,17 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build().await?;
 
-        let mut tx_1 = fnck_sql.new_transaction().await?;
-        let mut tx_2 = fnck_sql.new_transaction().await?;
-
-        let _ = tx_1
+        let _ = fnck_sql
             .run("create table t1 (a int primary key, b int)")
             .await?;
-        let _ = tx_2
-            .run("create table t1 (c int primary key, d int)")
-            .await?;
+
+        let mut tx_1 = fnck_sql.new_transaction().await?;
+        let mut tx_2 = fnck_sql.new_transaction().await?;
 
         let _ = tx_1.run("insert into t1 values(0, 0)").await?;
         let _ = tx_1.run("insert into t1 values(1, 1)").await?;
 
-        let _ = tx_2.run("insert into t1 values(2, 2)").await?;
+        let _ = tx_2.run("insert into t1 values(0, 0)").await?;
         let _ = tx_2.run("insert into t1 values(3, 3)").await?;
 
         let (_, tuples_1) = tx_1.run("select * from t1").await?;
@@ -338,8 +364,8 @@ mod test {
         assert_eq!(
             tuples_2[0].values,
             vec![
-                Arc::new(DataValue::Int32(Some(2))),
-                Arc::new(DataValue::Int32(Some(2)))
+                Arc::new(DataValue::Int32(Some(0))),
+                Arc::new(DataValue::Int32(Some(0)))
             ]
         );
         assert_eq!(
@@ -353,6 +379,10 @@ mod test {
         tx_1.commit().await?;
 
         assert!(tx_2.commit().await.is_err());
+
+        let mut tx_3 = fnck_sql.new_transaction().await?;
+        let res = tx_3.run("create table t2 (a int primary key, b int)").await;
+        assert!(res.is_err());
 
         Ok(())
     }

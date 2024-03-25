@@ -87,6 +87,16 @@ statement ok
 select CAST(id AS VARCHAR) from t
 
 statement ok
+create table t1 (id int primary key, name VARCHAR NOT NULL)
+
+# issue: https://github.com/KipData/FnckSQL/issues/175
+statement error
+select t.name from t1;
+
+statement ok
+drop table t1
+
+statement ok
 drop table if exists t
 
 statement ok

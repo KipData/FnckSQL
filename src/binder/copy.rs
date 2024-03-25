@@ -97,10 +97,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ))
             }
         } else {
-            Err(DatabaseError::InvalidTable(format!(
-                "not found table {}",
-                table_name
-            )))
+            Err(DatabaseError::TableNotFound)
         }
     }
 }
