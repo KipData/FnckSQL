@@ -74,6 +74,7 @@ macro_rules! function {
         }
 
         impl $struct_name {
+            #[allow(unused_mut)]
             pub(crate) fn new() -> Arc<Self> {
                 let function_name = stringify!($function_name).to_lowercase();
 
@@ -93,6 +94,7 @@ macro_rules! function {
 
         #[typetag::serde]
         impl ScalarFunctionImpl for $struct_name {
+            #[allow(unused_variables)]
             fn eval(&self, args: &[ScalarExpression], tuple: &Tuple, schema: &[ColumnRef]) -> Result<DataValue, DatabaseError> {
                 let mut _index = 0;
 

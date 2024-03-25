@@ -18,6 +18,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::kip::KipStorage;
 use crate::storage::{Storage, Transaction};
 use crate::types::tuple::{SchemaRef, Tuple};
+use crate::udf::current_date::CurrentDate;
 
 pub(crate) type Functions = HashMap<FunctionSummary, Arc<dyn ScalarFunctionImpl>>;
 
@@ -47,7 +48,9 @@ impl DataBaseBuilder {
         self
     }
 
-    pub async fn build(self) -> Result<Database<KipStorage>, DatabaseError> {
+    pub async fn build(mut self) -> Result<Database<KipStorage>, DatabaseError> {
+        self = self.register_function(CurrentDate::new());
+
         let storage = KipStorage::new(self.path).await?;
 
         Ok(Database {
