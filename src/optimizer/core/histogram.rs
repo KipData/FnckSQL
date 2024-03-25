@@ -279,11 +279,14 @@ impl Histogram {
                     }),
                     _ => unreachable!(),
                 },
-                LogicalType::Date | LogicalType::DateTime => match value {
+                LogicalType::Date | LogicalType::DateTime | LogicalType::Time => match value {
                     DataValue::Date32(value) => DataValue::Int32(*value)
                         .cast(&LogicalType::Double)?
                         .double(),
                     DataValue::Date64(value) => DataValue::Int64(*value)
+                        .cast(&LogicalType::Double)?
+                        .double(),
+                    DataValue::Time(value) => DataValue::UInt32(*value)
                         .cast(&LogicalType::Double)?
                         .double(),
                     _ => unreachable!(),

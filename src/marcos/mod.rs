@@ -94,7 +94,7 @@ macro_rules! function {
 
         #[typetag::serde]
         impl ScalarFunctionImpl for $struct_name {
-            #[allow(unused_variables)]
+            #[allow(unused_variables, clippy::redundant_closure_call)]
             fn eval(&self, args: &[ScalarExpression], tuple: &Tuple, schema: &[ColumnRef]) -> Result<DataValue, DatabaseError> {
                 let mut _index = 0;
 

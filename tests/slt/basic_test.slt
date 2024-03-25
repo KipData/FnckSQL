@@ -28,6 +28,21 @@ select DATE '2001-02-16'
 ----
 2001-02-16
 
+query T
+select DATETIME '2001-02-16 01:02:03'
+----
+2001-02-16 01:02:03
+
+query T
+select TIME '01:02:03'
+----
+01:02:03
+
+query T
+select cast(DATETIME '2001-02-16 02:03:03' as TIME)
+----
+02:03:03
+
 subtest NullType
 
 statement ok

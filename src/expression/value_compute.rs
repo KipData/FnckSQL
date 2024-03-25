@@ -335,6 +335,15 @@ impl DataValue {
                     &unified_type
                 )
             }
+            LogicalType::Time => {
+                numeric_binary_compute!(
+                    DataValue::Time,
+                    self.clone(),
+                    right.clone(),
+                    op,
+                    &unified_type
+                )
+            }
             LogicalType::Decimal(_, _) => {
                 let left_value = self.clone().cast(&unified_type)?;
                 let right_value = right.clone().cast(&unified_type)?;
