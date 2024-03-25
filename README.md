@@ -182,6 +182,7 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - Varchar
   - Date
   - DateTime
+  - Time
   - Tuple
 
 ## Roadmap

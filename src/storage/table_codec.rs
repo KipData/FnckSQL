@@ -152,7 +152,7 @@ impl TableCodec {
         let tuple_id = tuple.id.clone().ok_or(DatabaseError::PrimaryKeyNotFound)?;
         let key = Self::encode_tuple_key(table_name, &tuple_id)?;
 
-        Ok((Bytes::from(key), Bytes::from(tuple.serialize_to(types))))
+        Ok((Bytes::from(key), Bytes::from(tuple.serialize_to(types)?)))
     }
 
     pub fn encode_tuple_key(
@@ -226,8 +226,10 @@ impl TableCodec {
         tuple_id: &TupleId,
     ) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = TableCodec::encode_index_key(name, index, Some(tuple_id))?;
+        let mut bytes = Vec::new();
+        tuple_id.to_raw(&mut bytes, None)?;
 
-        Ok((Bytes::from(key), Bytes::from(tuple_id.to_raw(None))))
+        Ok((Bytes::from(key), Bytes::from(bytes)))
     }
 
     fn _encode_index_key(name: &str, index: &Index) -> Result<Vec<u8>, DatabaseError> {
@@ -267,7 +269,7 @@ impl TableCodec {
 
         if let Some(tuple_id) = tuple_id {
             if matches!(index.ty, IndexType::Normal | IndexType::Composite) {
-                key_prefix.append(&mut tuple_id.to_raw(None));
+                tuple_id.to_raw(&mut key_prefix, None)?;
             }
         }
         Ok(key_prefix)

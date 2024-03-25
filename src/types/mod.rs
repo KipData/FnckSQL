@@ -10,7 +10,7 @@ use std::any::TypeId;
 use std::cmp;
 
 use crate::errors::DatabaseError;
-use sqlparser::ast::{CharLengthUnits, CharacterLength, ExactNumberInfo};
+use sqlparser::ast::{CharLengthUnits, CharacterLength, ExactNumberInfo, TimezoneInfo};
 use strum_macros::AsRefStr;
 
 pub type ColumnId = u32;
@@ -38,6 +38,7 @@ pub enum LogicalType {
     Varchar(Option<u32>),
     Date,
     DateTime,
+    Time,
     // decimal (precision, scale)
     Decimal(Option<u8>, Option<u8>),
     Tuple,
@@ -100,6 +101,7 @@ impl LogicalType {
             LogicalType::Decimal(_, _) => Some(16),
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
+            LogicalType::Time => Some(4),
             LogicalType::Invalid | LogicalType::Tuple => unreachable!(),
         }
     }
@@ -297,8 +299,12 @@ impl LogicalType {
             ),
             LogicalType::DateTime => matches!(
                 to,
-                LogicalType::Date | LogicalType::Varchar(_) | LogicalType::Char(_)
+                LogicalType::Date
+                    | LogicalType::Time
+                    | LogicalType::Varchar(_)
+                    | LogicalType::Char(_)
             ),
+            LogicalType::Time => matches!(to, LogicalType::Varchar(_) | LogicalType::Char(_)),
             LogicalType::Decimal(_, _) | LogicalType::Tuple => false,
         }
     }
@@ -356,7 +362,27 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
             sqlparser::ast::DataType::UnsignedBigInt(_) => Ok(LogicalType::UBigint),
             sqlparser::ast::DataType::Boolean => Ok(LogicalType::Boolean),
             sqlparser::ast::DataType::Date => Ok(LogicalType::Date),
-            sqlparser::ast::DataType::Datetime(_) => Ok(LogicalType::DateTime),
+            sqlparser::ast::DataType::Datetime(precision) => {
+                if precision.is_some() {
+                    return Err(DatabaseError::UnsupportedStmt(
+                        "time's precision".to_string(),
+                    ));
+                }
+                Ok(LogicalType::DateTime)
+            }
+            sqlparser::ast::DataType::Time(precision, info) => {
+                if precision.is_some() {
+                    return Err(DatabaseError::UnsupportedStmt(
+                        "time's precision".to_string(),
+                    ));
+                }
+                if !matches!(info, TimezoneInfo::None) {
+                    return Err(DatabaseError::UnsupportedStmt(
+                        "time's time zone".to_string(),
+                    ));
+                }
+                Ok(LogicalType::Time)
+            }
             sqlparser::ast::DataType::Decimal(info) | sqlparser::ast::DataType::Dec(info) => {
                 match info {
                     ExactNumberInfo::None => Ok(Self::Decimal(None, None)),

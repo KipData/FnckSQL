@@ -1,6 +1,6 @@
 use chrono::format::{DelayedFormat, StrftimeItems};
-use chrono::{Datelike, NaiveDate, NaiveDateTime};
-use integer_encoding::FixedInt;
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use integer_encoding::{FixedInt, FixedIntWriter};
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
 use std::cmp::Ordering;
@@ -20,10 +20,12 @@ use super::LogicalType;
 lazy_static! {
     pub static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
     static ref UNIX_DATETIME: NaiveDateTime = NaiveDateTime::from_timestamp_opt(0, 0).unwrap();
+    static ref UNIX_TIME: NaiveTime = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
 }
 
 pub const DATE_FMT: &str = "%Y-%m-%d";
 pub const DATE_TIME_FMT: &str = "%Y-%m-%d %H:%M:%S";
+pub const TIME_FMT: &str = "%H:%M:%S";
 
 const ENCODE_GROUP_SIZE: usize = 8;
 const ENCODE_MARKER: u8 = 0xFF;
@@ -49,6 +51,7 @@ pub enum DataValue {
     Date32(Option<i32>),
     /// Date stored as a signed 64bit int timestamp since UNIX epoch 1970-01-01
     Date64(Option<i64>),
+    Time(Option<u32>),
     Decimal(Option<Decimal>),
     Tuple(Option<Vec<ValueRef>>),
 }
@@ -132,6 +135,8 @@ impl PartialEq for DataValue {
             (Date32(_), _) => false,
             (Date64(v1), Date64(v2)) => v1.eq(v2),
             (Date64(_), _) => false,
+            (Time(v1), Time(v2)) => v1.eq(v2),
+            (Time(_), _) => false,
             (Decimal(v1), Decimal(v2)) => v1.eq(v2),
             (Decimal(_), _) => false,
             (Tuple(values_1), Tuple(values_2)) => values_1.eq(values_2),
@@ -182,6 +187,8 @@ impl PartialOrd for DataValue {
             (Date32(_), _) => None,
             (Date64(v1), Date64(v2)) => v1.partial_cmp(v2),
             (Date64(_), _) => None,
+            (Time(v1), Time(v2)) => v1.partial_cmp(v2),
+            (Time(_), _) => None,
             (Decimal(v1), Decimal(v2)) => v1.partial_cmp(v2),
             (Decimal(_), _) => None,
             (Tuple(_), _) => None,
@@ -222,6 +229,7 @@ impl Hash for DataValue {
             Null => 1.hash(state),
             Date32(v) => v.hash(state),
             Date64(v) => v.hash(state),
+            Time(v) => v.hash(state),
             Decimal(v) => v.hash(state),
             Tuple(values) => {
                 for v in values {
@@ -274,6 +282,14 @@ impl DataValue {
         }
     }
 
+    pub fn time(&self) -> Option<NaiveTime> {
+        if let DataValue::Time(Some(val)) = self {
+            NaiveTime::from_num_seconds_from_midnight_opt(*val, 0)
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn check_len(&self, logic_type: &LogicalType) -> Result<(), DatabaseError> {
         let is_over_len = match (logic_type, self) {
             (LogicalType::Varchar(Some(len)), DataValue::Utf8(Some(val))) => {
@@ -310,6 +326,10 @@ impl DataValue {
         value.and_then(|v| Self::date_time_format(v).map(|fmt| format!("{}", fmt)))
     }
 
+    fn format_time(value: Option<u32>) -> Option<String> {
+        value.and_then(|v| Self::time_format(v).map(|fmt| format!("{}", fmt)))
+    }
+
     pub fn is_null(&self) -> bool {
         match self {
             DataValue::Null => true,
@@ -327,6 +347,7 @@ impl DataValue {
             DataValue::Utf8(value) => value.is_none(),
             DataValue::Date32(value) => value.is_none(),
             DataValue::Date64(value) => value.is_none(),
+            DataValue::Time(value) => value.is_none(),
             DataValue::Decimal(value) => value.is_none(),
             DataValue::Tuple(value) => value.is_none(),
         }
@@ -350,6 +371,7 @@ impl DataValue {
             LogicalType::Char(_) | LogicalType::Varchar(_) => DataValue::Utf8(None),
             LogicalType::Date => DataValue::Date32(None),
             LogicalType::DateTime => DataValue::Date64(None),
+            LogicalType::Time => DataValue::Time(None),
             LogicalType::Decimal(_, _) => DataValue::Decimal(None),
             LogicalType::Tuple => DataValue::Tuple(None),
         }
@@ -373,37 +395,118 @@ impl DataValue {
             LogicalType::Char(_) | LogicalType::Varchar(_) => DataValue::Utf8(Some("".to_string())),
             LogicalType::Date => DataValue::Date32(Some(UNIX_DATETIME.num_days_from_ce())),
             LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.timestamp())),
+            LogicalType::Time => DataValue::Time(Some(UNIX_TIME.num_seconds_from_midnight())),
             LogicalType::Decimal(_, _) => DataValue::Decimal(Some(Decimal::new(0, 0))),
             LogicalType::Tuple => DataValue::Tuple(Some(vec![])),
         }
     }
 
-    pub fn to_raw(&self, logical_type: Option<LogicalType>) -> Vec<u8> {
+    pub fn to_raw(
+        &self,
+        bytes: &mut Vec<u8>,
+        logical_type: Option<LogicalType>,
+    ) -> Result<usize, DatabaseError> {
         match self {
-            DataValue::Null => None,
-            DataValue::Boolean(v) => v.map(|v| vec![v as u8]),
-            DataValue::Float32(v) => v.map(|v| v.to_ne_bytes().to_vec()),
-            DataValue::Float64(v) => v.map(|v| v.to_ne_bytes().to_vec()),
-            DataValue::Int8(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::Int16(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::Int32(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::Int64(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::UInt8(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::UInt16(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::UInt32(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::UInt64(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::Utf8(v) => v.clone().map(|mut v| {
-                if let Some(LogicalType::Char(len)) = logical_type {
-                    v = format!("{:len$}", v, len = len as usize);
+            DataValue::Null => (),
+            DataValue::Boolean(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v as u8)?);
                 }
-                v.into_bytes()
-            }),
-            DataValue::Date32(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::Date64(v) => v.map(|v| v.encode_fixed_vec()),
-            DataValue::Decimal(v) => v.map(|v| v.serialize().to_vec()),
+            }
+            DataValue::Float32(v) => {
+                if let Some(v) = v {
+                    bytes.extend_from_slice(&v.to_ne_bytes());
+                    return Ok(4);
+                }
+            }
+            DataValue::Float64(v) => {
+                if let Some(v) = v {
+                    bytes.extend_from_slice(&v.to_ne_bytes());
+                    return Ok(8);
+                }
+            }
+            DataValue::Int8(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::Int16(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::Int32(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::Int64(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::UInt8(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::UInt16(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::UInt32(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::UInt64(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::Utf8(v) => {
+                if let Some(v) = v {
+                    if let Some(LogicalType::Char(len)) = logical_type {
+                        let mut string_bytes =
+                            format!("{:len$}", v, len = len as usize).into_bytes();
+                        let len = string_bytes.len();
+
+                        bytes.append(&mut string_bytes);
+                        return Ok(len);
+                    } else {
+                        let string_bytes = v.as_bytes();
+                        let len = string_bytes.len();
+
+                        bytes.extend_from_slice(string_bytes);
+                        return Ok(len);
+                    }
+                }
+            }
+            DataValue::Date32(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::Date64(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::Time(v) => {
+                if let Some(v) = v {
+                    return Ok(bytes.write_fixedint(*v)?);
+                }
+            }
+            DataValue::Decimal(v) => {
+                if let Some(v) = v {
+                    bytes.extend_from_slice(&v.serialize());
+                    return Ok(16);
+                }
+            }
             DataValue::Tuple(_) => unreachable!(),
         }
-        .unwrap_or(vec![])
+        Ok(0)
     }
 
     pub fn from_raw(bytes: &[u8], ty: &LogicalType) -> Self {
@@ -465,6 +568,9 @@ impl DataValue {
             LogicalType::DateTime => {
                 DataValue::Date64((!bytes.is_empty()).then(|| i64::decode_fixed(bytes)))
             }
+            LogicalType::Time => {
+                DataValue::Time((!bytes.is_empty()).then(|| u32::decode_fixed(bytes)))
+            }
             LogicalType::Decimal(_, _) => DataValue::Decimal(
                 (!bytes.is_empty())
                     .then(|| Decimal::deserialize(<[u8; 16]>::try_from(bytes).unwrap())),
@@ -490,6 +596,7 @@ impl DataValue {
             DataValue::Utf8(_) => LogicalType::Varchar(None),
             DataValue::Date32(_) => LogicalType::Date,
             DataValue::Date64(_) => LogicalType::DateTime,
+            DataValue::Time(_) => LogicalType::Time,
             DataValue::Decimal(_) => LogicalType::Decimal(None, None),
             DataValue::Tuple(_) => LogicalType::Tuple,
         }
@@ -555,7 +662,7 @@ impl DataValue {
             }
             DataValue::UInt8(Some(v)) => encode_u!(b, v),
             DataValue::UInt16(Some(v)) => encode_u!(b, v),
-            DataValue::UInt32(Some(v)) => encode_u!(b, v),
+            DataValue::UInt32(Some(v)) | DataValue::Time(Some(v)) => encode_u!(b, v),
             DataValue::UInt64(Some(v)) => encode_u!(b, v),
             DataValue::Utf8(Some(v)) => Self::encode_bytes(b, v.as_bytes()),
             DataValue::Boolean(Some(v)) => b.push(if *v { b'1' } else { b'0' }),
@@ -628,6 +735,7 @@ impl DataValue {
                 LogicalType::Char(_) | LogicalType::Varchar(_) => Ok(DataValue::Utf8(None)),
                 LogicalType::Date => Ok(DataValue::Date32(None)),
                 LogicalType::DateTime => Ok(DataValue::Date64(None)),
+                LogicalType::Time => Ok(DataValue::Time(None)),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(None)),
                 LogicalType::Tuple => Ok(DataValue::Tuple(None)),
             },
@@ -934,6 +1042,16 @@ impl DataValue {
 
                     Ok(DataValue::Date64(option))
                 }
+                LogicalType::Time => {
+                    let option = value
+                        .map(|v| {
+                            NaiveTime::parse_from_str(&v, TIME_FMT)
+                                .map(|time| time.num_seconds_from_midnight())
+                        })
+                        .transpose()?;
+
+                    Ok(DataValue::Time(option))
+                }
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(
                     value.map(|v| Decimal::from_str(&v)).transpose()?,
                 )),
@@ -970,6 +1088,22 @@ impl DataValue {
                     Ok(DataValue::Date32(option))
                 }
                 LogicalType::DateTime => Ok(DataValue::Date64(value)),
+                LogicalType::Time => {
+                    let option = value.and_then(|v| {
+                        NaiveDateTime::from_timestamp_opt(v, 0)
+                            .map(|date_time| date_time.time().num_seconds_from_midnight())
+                    });
+
+                    Ok(DataValue::Time(option))
+                }
+                _ => Err(DatabaseError::CastFail),
+            },
+            DataValue::Time(value) => match to {
+                LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Char(len) => {
+                    varchar_cast!(Self::format_time(value), Some(len))
+                }
+                LogicalType::Varchar(len) => varchar_cast!(Self::format_time(value), len),
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::Decimal(value) => match to {
@@ -1038,6 +1172,10 @@ impl DataValue {
 
     fn date_time_format<'a>(v: i64) -> Option<DelayedFormat<StrftimeItems<'a>>> {
         NaiveDateTime::from_timestamp_opt(v, 0).map(|date_time| date_time.format(DATE_TIME_FMT))
+    }
+
+    fn time_format<'a>(v: u32) -> Option<DelayedFormat<StrftimeItems<'a>>> {
+        NaiveTime::from_num_seconds_from_midnight_opt(v, 0).map(|time| time.format(TIME_FMT))
     }
 
     fn decimal_format(v: &Decimal) -> String {
@@ -1144,6 +1282,7 @@ impl fmt::Display for DataValue {
             DataValue::Null => write!(f, "null")?,
             DataValue::Date32(e) => format_option!(f, e.and_then(DataValue::date_format))?,
             DataValue::Date64(e) => format_option!(f, e.and_then(DataValue::date_time_format))?,
+            DataValue::Time(e) => format_option!(f, e.and_then(DataValue::time_format))?,
             DataValue::Decimal(e) => format_option!(f, e.as_ref().map(DataValue::decimal_format))?,
             DataValue::Tuple(e) => {
                 write!(f, "(")?;
@@ -1183,6 +1322,7 @@ impl fmt::Debug for DataValue {
             DataValue::Null => write!(f, "null"),
             DataValue::Date32(_) => write!(f, "Date32({})", self),
             DataValue::Date64(_) => write!(f, "Date64({})", self),
+            DataValue::Time(_) => write!(f, "Time({})", self),
             DataValue::Decimal(_) => write!(f, "Decimal({})", self),
             DataValue::Tuple(_) => write!(f, "Tuple({})", self),
         }

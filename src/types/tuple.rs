@@ -1,4 +1,5 @@
 use crate::catalog::ColumnRef;
+use crate::errors::DatabaseError;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
@@ -108,7 +109,7 @@ impl Tuple {
 
     /// e.g.: bits(u8)..|data_0(len for utf8_1)|utf8_0|data_1|
     /// Tips: all len is u32
-    pub fn serialize_to(&self, types: &[LogicalType]) -> Vec<u8> {
+    pub fn serialize_to(&self, types: &[LogicalType]) -> Result<Vec<u8>, DatabaseError> {
         assert_eq!(self.values.len(), types.len());
 
         fn flip_bit(bits: u8, i: usize) -> u8 {
@@ -124,16 +125,17 @@ impl Tuple {
                 bytes[i / BITS_MAX_INDEX] = flip_bit(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX);
             } else {
                 let logical_type = types[i];
-                let mut value_bytes = value.to_raw(Some(logical_type));
+                let value_len = value.to_raw(&mut bytes, Some(logical_type))?;
 
                 if logical_type.raw_len().is_none() {
-                    bytes.append(&mut (value_bytes.len() as u32).encode_fixed_vec());
+                    let index = bytes.len() - value_len;
+
+                    bytes.splice(index..index, (value_len as u32).encode_fixed_vec());
                 }
-                bytes.append(&mut value_bytes);
             }
         }
 
-        bytes
+        Ok(bytes)
     }
 }
 
@@ -300,13 +302,13 @@ mod tests {
             &types,
             &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
             &columns,
-            &tuples[0].serialize_to(&types),
+            &tuples[0].serialize_to(&types).unwrap(),
         );
         let tuple_1 = Tuple::deserialize_from(
             &types,
             &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
             &columns,
-            &tuples[1].serialize_to(&types),
+            &tuples[1].serialize_to(&types).unwrap(),
         );
 
         assert_eq!(tuples[0], tuple_0);
