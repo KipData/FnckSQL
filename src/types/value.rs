@@ -282,6 +282,14 @@ impl DataValue {
         }
     }
 
+    pub fn time(&self) -> Option<NaiveTime> {
+        if let DataValue::Time(Some(val)) = self {
+            NaiveTime::from_num_seconds_from_midnight_opt(*val, 0)
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn check_len(&self, logic_type: &LogicalType) -> Result<(), DatabaseError> {
         let is_over_len = match (logic_type, self) {
             (LogicalType::Varchar(Some(len)), DataValue::Utf8(Some(val))) => {

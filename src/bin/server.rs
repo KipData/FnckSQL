@@ -203,6 +203,7 @@ fn encode_tuples<'a>(schema: &Schema, tuples: Vec<Tuple>) -> PgWireResult<QueryR
                 }
                 LogicalType::Date => encoder.encode_field(&value.date()),
                 LogicalType::DateTime => encoder.encode_field(&value.datetime()),
+                LogicalType::Time => encoder.encode_field(&value.time()),
                 LogicalType::Decimal(_, _) => todo!(),
                 _ => unreachable!(),
             }?;
