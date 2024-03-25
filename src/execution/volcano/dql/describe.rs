@@ -52,6 +52,12 @@ impl Describe {
 
         for column in table.columns() {
             let datatype = column.datatype();
+            let default = column
+                .desc
+                .default
+                .as_ref()
+                .map(|expr| format!("{}", expr))
+                .unwrap_or_else(|| "null".to_string());
             let values = vec![
                 Arc::new(DataValue::Utf8(Some(column.name().to_string()))),
                 Arc::new(DataValue::Utf8(Some(datatype.to_string()))),
@@ -63,9 +69,7 @@ impl Describe {
                 ))),
                 Arc::new(DataValue::Utf8(Some(column.nullable.to_string()))),
                 key_fn(column),
-                column
-                    .default_value()
-                    .unwrap_or_else(|| Arc::new(DataValue::none(datatype))),
+                Arc::new(DataValue::Utf8(Some(default))),
             ];
             yield Tuple { id: None, values };
         }

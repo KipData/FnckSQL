@@ -53,11 +53,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
                                     row.push(value.clone());
                                 }
                                 ScalarExpression::Empty => {
-                                    row.push(column.default_value().ok_or_else(|| {
-                                        DatabaseError::InvalidColumn(
-                                            "column does not exist default".to_string(),
-                                        )
-                                    })?);
+                                    let default_value = column
+                                        .default_value()?
+                                        .ok_or(DatabaseError::DefaultNotExist)?;
+                                    row.push(default_value);
                                 }
                                 _ => return Err(DatabaseError::UnsupportedStmt(value.to_string())),
                             }

@@ -4,6 +4,7 @@ use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -14,7 +15,7 @@ use std::sync::Arc;
 /// - `Some(false)` monotonically decreasing
 pub type FuncMonotonicity = Vec<Option<bool>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScalarFunction {
     pub(crate) args: Vec<ScalarExpression>,
     pub(crate) inner: Arc<dyn ScalarFunctionImpl>,
@@ -34,12 +35,13 @@ impl Hash for ScalarFunction {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 pub struct FunctionSummary {
     pub(crate) name: String,
     pub(crate) arg_types: Vec<LogicalType>,
 }
 
+#[typetag::serde(tag = "type")]
 pub trait ScalarFunctionImpl: Debug + Send + Sync {
     fn eval(
         &self,

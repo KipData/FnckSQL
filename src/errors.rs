@@ -29,6 +29,8 @@ pub enum DatabaseError {
         #[source]
         csv::Error,
     ),
+    #[error("default does not exist")]
+    DefaultNotExist,
     #[error("column: {0} already exists")]
     DuplicateColumn(String),
     #[error("index: {0} already exists")]

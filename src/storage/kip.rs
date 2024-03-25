@@ -232,7 +232,7 @@ impl Transaction for KipTransaction {
         if_not_exists: bool,
     ) -> Result<ColumnId, DatabaseError> {
         if let Some(mut table) = self.table(table_name.clone()).cloned() {
-            if !column.nullable && column.default_value().is_none() {
+            if !column.nullable && column.default_value()?.is_none() {
                 return Err(DatabaseError::NeedNullAbleOrDefault);
             }
 

@@ -76,10 +76,14 @@ impl Insert {
                 let mut values = Vec::with_capacity(table_catalog.columns_len());
 
                 for col in table_catalog.columns() {
-                    let value = tuple_map
-                        .remove(&col.id())
-                        .or_else(|| col.default_value())
-                        .unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())));
+                    let value = {
+                        let mut value = tuple_map.remove(&col.id());
+
+                        if value.is_none() {
+                            value = col.default_value()?;
+                        }
+                        value.unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())))
+                    };
                     if value.is_null() && !col.nullable {
                         return Err(DatabaseError::NotNull);
                     }

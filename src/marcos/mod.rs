@@ -68,7 +68,7 @@ macro_rules! implement_from_tuple {
 #[macro_export]
 macro_rules! function {
     ($struct_name:ident::$function_name:ident($($arg_ty:expr),*) -> $return_ty:expr => $closure:expr) => {
-        #[derive(Debug)]
+        #[derive(Debug, Serialize, Deserialize)]
         pub(crate) struct $struct_name {
             summary: FunctionSummary
         }
@@ -91,6 +91,7 @@ macro_rules! function {
             }
         }
 
+        #[typetag::serde]
         impl ScalarFunctionImpl for $struct_name {
             fn eval(&self, args: &[ScalarExpression], tuple: &Tuple, schema: &[ColumnRef]) -> Result<DataValue, DatabaseError> {
                 let mut _index = 0;
@@ -132,6 +133,8 @@ mod test {
     use crate::types::tuple::{SchemaRef, Tuple};
     use crate::types::value::{DataValue, ValueRef};
     use crate::types::LogicalType;
+    use serde::Deserialize;
+    use serde::Serialize;
     use std::sync::Arc;
 
     fn build_tuple() -> (Tuple, SchemaRef) {
@@ -187,9 +190,9 @@ mod test {
         assert_eq!(my_struct.c2, "LOL");
     }
 
-    function!(MyFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+    function!(MyFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: ValueRef, v2: ValueRef| {
         DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)
-    });
+    }));
 
     #[test]
     fn test_function() -> Result<(), DatabaseError> {
