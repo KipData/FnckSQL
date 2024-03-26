@@ -651,7 +651,7 @@ impl DataValue {
 mod test {
     use crate::errors::DatabaseError;
     use crate::expression::BinaryOperator;
-    use crate::types::value::DataValue;
+    use crate::types::value::{DataValue, Utf8Type};
 
     #[test]
     fn test_binary_op_arithmetic_plus() -> Result<(), DatabaseError> {
@@ -1542,48 +1542,84 @@ mod test {
     fn test_binary_op_utf8_compare() -> Result<(), DatabaseError> {
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(Some("a".to_string())),
-                &DataValue::Utf8(Some("b".to_string())),
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("b".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::Gt
             )?,
             DataValue::Boolean(Some(false))
         );
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(Some("a".to_string())),
-                &DataValue::Utf8(Some("b".to_string())),
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("b".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::Lt
             )?,
             DataValue::Boolean(Some(true))
         );
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(Some("a".to_string())),
-                &DataValue::Utf8(Some("a".to_string())),
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::GtEq
             )?,
             DataValue::Boolean(Some(true))
         );
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(Some("a".to_string())),
-                &DataValue::Utf8(Some("a".to_string())),
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::LtEq
             )?,
             DataValue::Boolean(Some(true))
         );
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(Some("a".to_string())),
-                &DataValue::Utf8(Some("a".to_string())),
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::NotEq
             )?,
             DataValue::Boolean(Some(false))
         );
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(Some("a".to_string())),
-                &DataValue::Utf8(Some("a".to_string())),
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::Eq
             )?,
             DataValue::Boolean(Some(true))
@@ -1591,40 +1627,70 @@ mod test {
 
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(None),
-                &DataValue::Utf8(Some("a".to_string())),
+                &DataValue::Utf8 {
+                    value: None,
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::Gt
             )?,
             DataValue::Boolean(None)
         );
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(None),
-                &DataValue::Utf8(Some("a".to_string())),
+                &DataValue::Utf8 {
+                    value: None,
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::Lt
             )?,
             DataValue::Boolean(None)
         );
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(None),
-                &DataValue::Utf8(Some("a".to_string())),
+                &DataValue::Utf8 {
+                    value: None,
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::GtEq
             )?,
             DataValue::Boolean(None)
         );
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(None),
-                &DataValue::Utf8(Some("a".to_string())),
+                &DataValue::Utf8 {
+                    value: None,
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::LtEq
             )?,
             DataValue::Boolean(None)
         );
         assert_eq!(
             DataValue::binary_op(
-                &DataValue::Utf8(None),
-                &DataValue::Utf8(Some("a".to_string())),
+                &DataValue::Utf8 {
+                    value: None,
+                    ty: Utf8Type::Variable
+                },
+                &DataValue::Utf8 {
+                    value: Some("a".to_string()),
+                    ty: Utf8Type::Variable
+                },
                 &BinaryOperator::NotEq
             )?,
             DataValue::Boolean(None)

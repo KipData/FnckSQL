@@ -171,7 +171,7 @@ pub fn create_table(schema: &Schema, tuples: &[Tuple]) -> Table {
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::types::tuple::Tuple;
-    use crate::types::value::DataValue;
+    use crate::types::value::{DataValue, Utf8Type};
     use crate::types::LogicalType;
     use itertools::Itertools;
     use rust_decimal::Decimal;
@@ -258,7 +258,10 @@ mod tests {
                 values: vec![
                     Arc::new(DataValue::Int32(Some(0))),
                     Arc::new(DataValue::UInt32(Some(1))),
-                    Arc::new(DataValue::Utf8(Some("LOL".to_string()))),
+                    Arc::new(DataValue::Utf8 {
+                        value: Some("LOL".to_string()),
+                        ty: Utf8Type::Variable,
+                    }),
                     Arc::new(DataValue::Int16(Some(1))),
                     Arc::new(DataValue::UInt16(Some(1))),
                     Arc::new(DataValue::Float32(Some(0.1))),
@@ -269,7 +272,10 @@ mod tests {
                     Arc::new(DataValue::Date64(Some(0))),
                     Arc::new(DataValue::Date32(Some(0))),
                     Arc::new(DataValue::Decimal(Some(Decimal::new(0, 3)))),
-                    Arc::new(DataValue::Utf8(Some("K".to_string()))),
+                    Arc::new(DataValue::Utf8 {
+                        value: Some("K".to_string()),
+                        ty: Utf8Type::Fixed(1),
+                    }),
                 ],
             },
             Tuple {
@@ -277,7 +283,10 @@ mod tests {
                 values: vec![
                     Arc::new(DataValue::Int32(Some(1))),
                     Arc::new(DataValue::UInt32(None)),
-                    Arc::new(DataValue::Utf8(None)),
+                    Arc::new(DataValue::Utf8 {
+                        value: None,
+                        ty: Utf8Type::Variable,
+                    }),
                     Arc::new(DataValue::Int16(None)),
                     Arc::new(DataValue::UInt16(None)),
                     Arc::new(DataValue::Float32(None)),
@@ -288,7 +297,10 @@ mod tests {
                     Arc::new(DataValue::Date64(None)),
                     Arc::new(DataValue::Date32(None)),
                     Arc::new(DataValue::Decimal(None)),
-                    Arc::new(DataValue::Utf8(None)),
+                    Arc::new(DataValue::Utf8 {
+                        value: None,
+                        ty: Utf8Type::Fixed(1),
+                    }),
                 ],
             },
         ];

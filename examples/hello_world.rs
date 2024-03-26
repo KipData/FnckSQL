@@ -20,7 +20,7 @@ implement_from_tuple!(
             }
         },
         c2: String => |inner: &mut MyStruct, value| {
-            if let DataValue::Utf8(Some(val)) = value {
+            if let DataValue::Utf8 { value: Some(val), .. } = value {
                 inner.c2 = val;
             }
         }
