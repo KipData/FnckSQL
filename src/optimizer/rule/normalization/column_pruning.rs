@@ -6,7 +6,7 @@ use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate};
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::planner::operator::Operator;
-use crate::types::value::DataValue;
+use crate::types::value::{DataValue, Utf8Type};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -61,7 +61,10 @@ impl ColumnPruning {
                     Self::clear_exprs(&column_references, &mut op.agg_calls);
 
                     if op.agg_calls.is_empty() && op.groupby_exprs.is_empty() {
-                        let value = Arc::new(DataValue::Utf8(Some("*".to_string())));
+                        let value = Arc::new(DataValue::Utf8 {
+                            value: Some("*".to_string()),
+                            ty: Utf8Type::Variable,
+                        });
                         // only single COUNT(*) is not depend on any column
                         // removed all expressions from the aggregate: push a COUNT(*)
                         op.agg_calls.push(ScalarExpression::AggCall {

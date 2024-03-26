@@ -9,7 +9,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::index::IndexMetaRef;
 use crate::types::tuple::Tuple;
-use crate::types::value::DataValue;
+use crate::types::value::{DataValue, Utf8Type};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
 use std::fmt::Formatter;
@@ -106,7 +106,10 @@ impl Analyze {
             let meta = StatisticsMeta::new(histogram, sketch);
 
             meta.to_file(&path)?;
-            values.push(Arc::new(DataValue::Utf8(Some(path.clone()))));
+            values.push(Arc::new(DataValue::Utf8 {
+                value: Some(path.clone()),
+                ty: Utf8Type::Variable,
+            }));
             transaction.save_table_meta(&table_name, path, meta)?;
         }
         yield Tuple { id: None, values };

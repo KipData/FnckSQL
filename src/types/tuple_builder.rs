@@ -1,6 +1,6 @@
 use crate::errors::DatabaseError;
 use crate::types::tuple::{Schema, Tuple};
-use crate::types::value::DataValue;
+use crate::types::value::{DataValue, Utf8Type};
 use std::sync::Arc;
 
 pub struct TupleBuilder<'a> {
@@ -13,7 +13,10 @@ impl<'a> TupleBuilder<'a> {
     }
 
     pub fn build_result(message: String) -> Tuple {
-        let values = vec![Arc::new(DataValue::Utf8(Some(message)))];
+        let values = vec![Arc::new(DataValue::Utf8 {
+            value: Some(message),
+            ty: Utf8Type::Variable,
+        })];
 
         Tuple { id: None, values }
     }
@@ -26,8 +29,13 @@ impl<'a> TupleBuilder<'a> {
         let mut primary_key = None;
 
         for (i, value) in row.into_iter().enumerate() {
-            let data_value =
-                Arc::new(DataValue::Utf8(Some(value.to_string())).cast(self.schema[i].datatype())?);
+            let data_value = Arc::new(
+                DataValue::Utf8 {
+                    value: Some(value.to_string()),
+                    ty: Utf8Type::Variable,
+                }
+                .cast(self.schema[i].datatype())?,
+            );
 
             if primary_key.is_none() && self.schema[i].desc.is_primary {
                 primary_key = Some(data_value.clone());

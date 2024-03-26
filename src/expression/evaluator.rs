@@ -3,7 +3,7 @@ use crate::errors::DatabaseError;
 use crate::expression::function::ScalarFunction;
 use crate::expression::{AliasType, BinaryOperator, ScalarExpression};
 use crate::types::tuple::Tuple;
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -23,7 +23,10 @@ macro_rules! eval_to_num {
         {
             num_i32
         } else {
-            return Ok(Arc::new(DataValue::Utf8(None)));
+            return Ok(Arc::new(DataValue::Utf8 {
+                value: None,
+                ty: Utf8Type::Variable,
+            }));
         }
     };
 }
@@ -164,7 +167,10 @@ impl ScalarExpression {
                             from += len_i + 1;
                         }
                         if from > len_i {
-                            return Ok(Arc::new(DataValue::Utf8(None)));
+                            return Ok(Arc::new(DataValue::Utf8 {
+                                value: None,
+                                ty: Utf8Type::Variable,
+                            }));
                         }
                         string = string.split_off(from as usize);
                     }
@@ -174,9 +180,15 @@ impl ScalarExpression {
                         let _ = string.split_off(for_i);
                     }
 
-                    Ok(Arc::new(DataValue::Utf8(Some(string))))
+                    Ok(Arc::new(DataValue::Utf8 {
+                        value: Some(string),
+                        ty: Utf8Type::Variable,
+                    }))
                 } else {
-                    Ok(Arc::new(DataValue::Utf8(None)))
+                    Ok(Arc::new(DataValue::Utf8 {
+                        value: None,
+                        ty: Utf8Type::Variable,
+                    }))
                 }
             }
             ScalarExpression::Position { expr, in_expr } => {

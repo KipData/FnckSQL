@@ -227,7 +227,7 @@ impl TableCodec {
     ) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = TableCodec::encode_index_key(name, index, Some(tuple_id))?;
         let mut bytes = Vec::new();
-        tuple_id.to_raw(&mut bytes, None)?;
+        tuple_id.to_raw(&mut bytes)?;
 
         Ok((Bytes::from(key), Bytes::from(bytes)))
     }
@@ -269,7 +269,7 @@ impl TableCodec {
 
         if let Some(tuple_id) = tuple_id {
             if matches!(index.ty, IndexType::Normal | IndexType::Composite) {
-                tuple_id.to_raw(&mut key_prefix, None)?;
+                tuple_id.to_raw(&mut key_prefix)?;
             }
         }
         Ok(key_prefix)

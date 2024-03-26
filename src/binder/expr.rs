@@ -15,7 +15,7 @@ use crate::expression::function::{FunctionSummary, ScalarFunction};
 use crate::expression::{AliasType, ScalarExpression};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::value::DataValue;
+use crate::types::value::{DataValue, Utf8Type};
 use crate::types::LogicalType;
 
 macro_rules! try_alias {
@@ -67,7 +67,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
             } => self.bind_cast(expr, data_type),
             Expr::TypedString { data_type, value } => {
                 let logical_type = LogicalType::try_from(data_type.clone())?;
-                let value = DataValue::Utf8(Some(value.to_string())).cast(&logical_type)?;
+                let value = DataValue::Utf8 {
+                    value: Some(value.to_string()),
+                    ty: Utf8Type::Variable,
+                }
+                .cast(&logical_type)?;
 
                 Ok(ScalarExpression::Constant(Arc::new(value)))
             }
@@ -597,6 +601,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
     }
 
     fn wildcard_expr() -> ScalarExpression {
-        ScalarExpression::Constant(Arc::new(DataValue::Utf8(Some("*".to_string()))))
+        ScalarExpression::Constant(Arc::new(DataValue::Utf8 {
+            value: Some("*".to_string()),
+            ty: Utf8Type::Variable,
+        }))
     }
 }

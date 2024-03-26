@@ -4,16 +4,24 @@ use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::planner::operator::describe::DescribeOperator;
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use futures_async_stream::try_stream;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 
 lazy_static! {
-    static ref PRIMARY_KEY_TYPE: ValueRef =
-        Arc::new(DataValue::Utf8(Some(String::from("PRIMARY"))));
-    static ref UNIQUE_KEY_TYPE: ValueRef = Arc::new(DataValue::Utf8(Some(String::from("UNIQUE"))));
-    static ref EMPTY_KEY_TYPE: ValueRef = Arc::new(DataValue::Utf8(Some(String::from("EMPTY"))));
+    static ref PRIMARY_KEY_TYPE: ValueRef = Arc::new(DataValue::Utf8 {
+        value: Some(String::from("PRIMARY")),
+        ty: Utf8Type::Variable
+    });
+    static ref UNIQUE_KEY_TYPE: ValueRef = Arc::new(DataValue::Utf8 {
+        value: Some(String::from("UNIQUE")),
+        ty: Utf8Type::Variable
+    });
+    static ref EMPTY_KEY_TYPE: ValueRef = Arc::new(DataValue::Utf8 {
+        value: Some(String::from("EMPTY")),
+        ty: Utf8Type::Variable
+    });
 }
 
 pub struct Describe {
@@ -59,17 +67,27 @@ impl Describe {
                 .map(|expr| format!("{}", expr))
                 .unwrap_or_else(|| "null".to_string());
             let values = vec![
-                Arc::new(DataValue::Utf8(Some(column.name().to_string()))),
-                Arc::new(DataValue::Utf8(Some(datatype.to_string()))),
-                Arc::new(DataValue::Utf8(Some(
-                    datatype
-                        .raw_len()
-                        .map(|len| len.to_string())
-                        .unwrap_or_else(|| "DYNAMIC".to_string()),
-                ))),
-                Arc::new(DataValue::Utf8(Some(column.nullable.to_string()))),
+                Arc::new(DataValue::Utf8 {
+                    value: Some(column.name().to_string()),
+                    ty: Utf8Type::Variable,
+                }),
+                Arc::new(DataValue::Utf8 {
+                    value: Some(datatype.to_string()),
+                    ty: Utf8Type::Variable,
+                }),
+                Arc::new(DataValue::Utf8 {
+                    value: datatype.raw_len().map(|len| len.to_string()),
+                    ty: Utf8Type::Variable,
+                }),
+                Arc::new(DataValue::Utf8 {
+                    value: Some(column.nullable.to_string()),
+                    ty: Utf8Type::Variable,
+                }),
                 key_fn(column),
-                Arc::new(DataValue::Utf8(Some(default))),
+                Arc::new(DataValue::Utf8 {
+                    value: Some(default),
+                    ty: Utf8Type::Variable,
+                }),
             ];
             yield Tuple { id: None, values };
         }

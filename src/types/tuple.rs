@@ -125,7 +125,7 @@ impl Tuple {
                 bytes[i / BITS_MAX_INDEX] = flip_bit(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX);
             } else {
                 let logical_type = types[i];
-                let value_len = value.to_raw(&mut bytes, Some(logical_type))?;
+                let value_len = value.to_raw(&mut bytes)?;
 
                 if logical_type.raw_len().is_none() {
                     let index = bytes.len() - value_len;

@@ -1,6 +1,6 @@
 use crate::errors::DatabaseError;
 use crate::expression::{BinaryOperator, UnaryOperator};
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use crate::types::LogicalType;
 use regex::Regex;
 use std::cmp::Ordering;
@@ -14,7 +14,7 @@ fn unpack_bool(value: DataValue) -> Option<bool> {
 
 fn unpack_utf8(value: DataValue) -> Option<String> {
     match value {
-        DataValue::Utf8(inner) => inner,
+        DataValue::Utf8 { value: inner, .. } => inner,
         _ => None,
     }
 }
@@ -574,7 +574,10 @@ impl DataValue {
                             _ => None,
                         };
 
-                        DataValue::Utf8(value)
+                        DataValue::Utf8 {
+                            value,
+                            ty: Utf8Type::Variable,
+                        }
                     }
                     _ => return Err(DatabaseError::UnsupportedBinaryOperator(unified_type, *op)),
                 }
