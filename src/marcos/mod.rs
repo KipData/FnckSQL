@@ -133,7 +133,7 @@ mod test {
     use crate::expression::BinaryOperator;
     use crate::expression::ScalarExpression;
     use crate::types::tuple::{SchemaRef, Tuple};
-    use crate::types::value::{DataValue, ValueRef};
+    use crate::types::value::{DataValue, Utf8Type, ValueRef};
     use crate::types::LogicalType;
     use serde::Deserialize;
     use serde::Serialize;
@@ -154,7 +154,10 @@ mod test {
         ]);
         let values = vec![
             Arc::new(DataValue::Int32(Some(9))),
-            Arc::new(DataValue::Utf8(Some("LOL".to_string()))),
+            Arc::new(DataValue::Utf8 {
+                value: Some("LOL".to_string()),
+                ty: Utf8Type::Variable,
+            }),
         ];
 
         (Tuple { id: None, values }, schema_ref)
@@ -174,7 +177,7 @@ mod test {
                 }
             },
             c2: String => |inner: &mut MyStruct, value| {
-                if let DataValue::Utf8(Some(val)) = value {
+                if let DataValue::Utf8 { value: Some(val), .. } = value {
                     inner.c2 = val;
                 }
             }
@@ -202,7 +205,10 @@ mod test {
         let sum = function.eval(
             &[
                 ScalarExpression::Constant(Arc::new(DataValue::Int8(Some(1)))),
-                ScalarExpression::Constant(Arc::new(DataValue::Utf8(Some("1".to_string())))),
+                ScalarExpression::Constant(Arc::new(DataValue::Utf8 {
+                    value: Some("1".to_string()),
+                    ty: Utf8Type::Variable,
+                })),
             ],
             &Tuple {
                 id: None,

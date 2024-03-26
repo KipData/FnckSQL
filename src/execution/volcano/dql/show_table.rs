@@ -3,7 +3,7 @@ use crate::errors::DatabaseError;
 use crate::execution::volcano::{BoxedExecutor, ReadExecutor};
 use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
-use crate::types::value::DataValue;
+use crate::types::value::{DataValue, Utf8Type};
 use futures_async_stream::try_stream;
 use std::sync::Arc;
 
@@ -21,7 +21,10 @@ impl ShowTables {
         let metas = transaction.table_metas()?;
 
         for TableMeta { table_name } in metas {
-            let values = vec![Arc::new(DataValue::Utf8(Some(table_name.to_string())))];
+            let values = vec![Arc::new(DataValue::Utf8 {
+                value: Some(table_name.to_string()),
+                ty: Utf8Type::Variable,
+            })];
 
             yield Tuple { id: None, values };
         }

@@ -6,7 +6,7 @@ describe t9;
 ----
 c1 INTEGER 4 false PRIMARY null
 c2 INTEGER 4 true EMPTY 0
-c3 VARCHAR DYNAMIC true UNIQUE null
+c3 VARCHAR null true UNIQUE null
 
 statement ok
 drop table t9;

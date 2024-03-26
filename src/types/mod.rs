@@ -197,6 +197,11 @@ impl LogicalType {
         ) {
             return Ok(LogicalType::DateTime);
         }
+        if let (LogicalType::Char(_), LogicalType::Varchar(len))
+        | (LogicalType::Varchar(len), LogicalType::Char(_)) = (left, right)
+        {
+            return Ok(LogicalType::Varchar(*len));
+        }
         Err(DatabaseError::Incomparable(*left, *right))
     }
 
