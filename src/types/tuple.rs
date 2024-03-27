@@ -175,8 +175,8 @@ mod tests {
     use crate::types::LogicalType;
     use itertools::Itertools;
     use rust_decimal::Decimal;
-    use std::sync::Arc;
     use sqlparser::ast::CharLengthUnits;
+    use std::sync::Arc;
 
     #[test]
     fn test_tuple_serialize_to_and_deserialize_from() {
@@ -194,7 +194,12 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c3".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Varchar(Some(2), CharLengthUnits::Characters), false, false, None),
+                ColumnDesc::new(
+                    LogicalType::Varchar(Some(2), CharLengthUnits::Characters),
+                    false,
+                    false,
+                    None,
+                ),
             )),
             Arc::new(ColumnCatalog::new(
                 "c4".to_string(),
@@ -249,17 +254,32 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c14".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Char(1, CharLengthUnits::Characters), false, false, None),
+                ColumnDesc::new(
+                    LogicalType::Char(1, CharLengthUnits::Characters),
+                    false,
+                    false,
+                    None,
+                ),
             )),
             Arc::new(ColumnCatalog::new(
                 "c15".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Varchar(Some(2), CharLengthUnits::Octets), false, false, None),
+                ColumnDesc::new(
+                    LogicalType::Varchar(Some(2), CharLengthUnits::Octets),
+                    false,
+                    false,
+                    None,
+                ),
             )),
             Arc::new(ColumnCatalog::new(
                 "c16".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Char(1, CharLengthUnits::Octets), false, false, None),
+                ColumnDesc::new(
+                    LogicalType::Char(1, CharLengthUnits::Octets),
+                    false,
+                    false,
+                    None,
+                ),
             )),
         ]);
 

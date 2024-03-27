@@ -137,8 +137,8 @@ mod test {
     use crate::types::LogicalType;
     use serde::Deserialize;
     use serde::Serialize;
-    use std::sync::Arc;
     use sqlparser::ast::CharLengthUnits;
+    use std::sync::Arc;
 
     fn build_tuple() -> (Tuple, SchemaRef) {
         let schema_ref = Arc::new(vec![
@@ -150,7 +150,12 @@ mod test {
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Varchar(None, CharLengthUnits::Characters), false, false, None),
+                ColumnDesc::new(
+                    LogicalType::Varchar(None, CharLengthUnits::Characters),
+                    false,
+                    false,
+                    None,
+                ),
             )),
         ]);
         let values = vec![

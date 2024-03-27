@@ -3,8 +3,8 @@ use crate::expression::{BinaryOperator, UnaryOperator};
 use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use crate::types::LogicalType;
 use regex::Regex;
-use std::cmp::Ordering;
 use sqlparser::ast::CharLengthUnits;
+use std::cmp::Ordering;
 
 fn unpack_bool(value: DataValue) -> Option<bool> {
     match value {
@@ -194,8 +194,15 @@ impl DataValue {
         op: &BinaryOperator,
     ) -> Result<DataValue, DatabaseError> {
         if let BinaryOperator::Like(escape_char) | BinaryOperator::NotLike(escape_char) = op {
-            let value_option = unpack_utf8(self.clone().cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?);
-            let pattern_option = unpack_utf8(right.clone().cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?);
+            let value_option = unpack_utf8(
+                self.clone()
+                    .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?,
+            );
+            let pattern_option = unpack_utf8(
+                right
+                    .clone()
+                    .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?,
+            );
 
             let mut is_match = if let (Some(value), Some(pattern)) = (value_option, pattern_option)
             {
@@ -651,10 +658,10 @@ impl DataValue {
 
 #[cfg(test)]
 mod test {
-    use sqlparser::ast::CharLengthUnits;
     use crate::errors::DatabaseError;
     use crate::expression::BinaryOperator;
     use crate::types::value::{DataValue, Utf8Type};
+    use sqlparser::ast::CharLengthUnits;
 
     #[test]
     fn test_binary_op_arithmetic_plus() -> Result<(), DatabaseError> {

@@ -12,11 +12,11 @@ use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type};
 use futures_async_stream::try_stream;
 use itertools::Itertools;
+use sqlparser::ast::CharLengthUnits;
 use std::fmt::Formatter;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fmt, fs};
-use sqlparser::ast::CharLengthUnits;
 
 const DEFAULT_NUM_OF_BUCKETS: usize = 100;
 const DEFAULT_STATISTICS_META_PATH: &str = "fnck_sql_statistics_metas";
@@ -110,7 +110,7 @@ impl Analyze {
             values.push(Arc::new(DataValue::Utf8 {
                 value: Some(path.clone()),
                 ty: Utf8Type::Variable(None),
-                unit: CharLengthUnits::Characters
+                unit: CharLengthUnits::Characters,
             }));
             transaction.save_table_meta(&table_name, path, meta)?;
         }

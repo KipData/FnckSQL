@@ -172,7 +172,7 @@ impl TableCodec {
                 | LogicalType::USmallint
                 | LogicalType::UInteger
                 | LogicalType::UBigint
-                | LogicalType::Varchar(_, ..)
+                | LogicalType::Varchar(..)
         ) {
             return Err(DatabaseError::InvalidType);
         }

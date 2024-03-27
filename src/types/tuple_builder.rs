@@ -1,8 +1,8 @@
 use crate::errors::DatabaseError;
 use crate::types::tuple::{Schema, Tuple};
 use crate::types::value::{DataValue, Utf8Type};
-use std::sync::Arc;
 use sqlparser::ast::CharLengthUnits;
+use std::sync::Arc;
 
 pub struct TupleBuilder<'a> {
     schema: &'a Schema,

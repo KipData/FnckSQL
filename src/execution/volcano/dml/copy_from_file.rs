@@ -105,9 +105,9 @@ mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
     use crate::db::DataBaseBuilder;
     use futures::StreamExt;
+    use sqlparser::ast::CharLengthUnits;
     use std::io::Write;
     use std::sync::Arc;
-    use sqlparser::ast::CharLengthUnits;
     use tempfile::TempDir;
 
     use super::*;
@@ -149,7 +149,12 @@ mod tests {
                     table_name: None,
                 },
                 nullable: false,
-                desc: ColumnDesc::new(LogicalType::Varchar(Some(10), CharLengthUnits::Characters), false, false, None),
+                desc: ColumnDesc::new(
+                    LogicalType::Varchar(Some(10), CharLengthUnits::Characters),
+                    false,
+                    false,
+                    None,
+                ),
             }),
         ];
 

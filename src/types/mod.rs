@@ -99,7 +99,7 @@ impl LogicalType {
             LogicalType::Varchar(_, _) => None,
             LogicalType::Char(len, unit) => match unit {
                 CharLengthUnits::Characters => None,
-                CharLengthUnits::Octets => Some(*len as usize)
+                CharLengthUnits::Octets => Some(*len as usize),
             },
             LogicalType::Decimal(_, _) => Some(16),
             LogicalType::Date => Some(4),
@@ -182,8 +182,8 @@ impl LogicalType {
         }
         if matches!(
             (left, right),
-            (LogicalType::Date, LogicalType::Varchar(_, ..))
-                | (LogicalType::Varchar(_, ..), LogicalType::Date)
+            (LogicalType::Date, LogicalType::Varchar(..))
+                | (LogicalType::Varchar(..), LogicalType::Date)
         ) {
             return Ok(LogicalType::Date);
         }
@@ -195,13 +195,13 @@ impl LogicalType {
         }
         if matches!(
             (left, right),
-            (LogicalType::DateTime, LogicalType::Varchar(_, ..))
-                | (LogicalType::Varchar(_, ..), LogicalType::DateTime)
+            (LogicalType::DateTime, LogicalType::Varchar(..))
+                | (LogicalType::Varchar(..), LogicalType::DateTime)
         ) {
             return Ok(LogicalType::DateTime);
         }
-        if let (LogicalType::Char(_, ..), LogicalType::Varchar(len, ..))
-        | (LogicalType::Varchar(len, ..), LogicalType::Char(_, ..)) = (left, right)
+        if let (LogicalType::Char(..), LogicalType::Varchar(len, ..))
+        | (LogicalType::Varchar(len, ..), LogicalType::Char(..)) = (left, right)
         {
             return Ok(LogicalType::Varchar(*len, CharLengthUnits::Characters));
         }
@@ -299,20 +299,22 @@ impl LogicalType {
             LogicalType::UBigint => matches!(to, LogicalType::Float | LogicalType::Double),
             LogicalType::Float => matches!(to, LogicalType::Double),
             LogicalType::Double => false,
-            LogicalType::Char(_, ..) => false,
-            LogicalType::Varchar(_, ..) => false,
+            LogicalType::Char(..) => false,
+            LogicalType::Varchar(..) => false,
             LogicalType::Date => matches!(
                 to,
-                LogicalType::DateTime | LogicalType::Varchar(_, ..) | LogicalType::Char(_, ..)
+                LogicalType::DateTime | LogicalType::Varchar(..) | LogicalType::Char(..)
             ),
             LogicalType::DateTime => matches!(
                 to,
                 LogicalType::Date
                     | LogicalType::Time
-                    | LogicalType::Varchar(_, ..)
-                    | LogicalType::Char(_, ..)
+                    | LogicalType::Varchar(..)
+                    | LogicalType::Char(..)
             ),
-            LogicalType::Time => matches!(to, LogicalType::Varchar(_, ..) | LogicalType::Char(_, ..)),
+            LogicalType::Time => {
+                matches!(to, LogicalType::Varchar(..) | LogicalType::Char(..))
+            }
             LogicalType::Decimal(_, _) | LogicalType::Tuple => false,
         }
     }
@@ -332,7 +334,10 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                     len = cmp::max(len, length);
                     char_unit = unit;
                 }
-                Ok(LogicalType::Char(len as u32, char_unit.unwrap_or(CharLengthUnits::Characters)))
+                Ok(LogicalType::Char(
+                    len as u32,
+                    char_unit.unwrap_or(CharLengthUnits::Characters),
+                ))
             }
             sqlparser::ast::DataType::CharVarying(varchar_len)
             | sqlparser::ast::DataType::CharacterVarying(varchar_len)
@@ -343,7 +348,10 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                     len = Some(length as u32);
                     char_unit = unit;
                 }
-                Ok(LogicalType::Varchar(len, char_unit.unwrap_or(CharLengthUnits::Characters)))
+                Ok(LogicalType::Varchar(
+                    len,
+                    char_unit.unwrap_or(CharLengthUnits::Characters),
+                ))
             }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
             sqlparser::ast::DataType::Double | sqlparser::ast::DataType::DoublePrecision => {

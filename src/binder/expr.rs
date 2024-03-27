@@ -3,7 +3,10 @@ use crate::errors::DatabaseError;
 use crate::expression;
 use crate::expression::agg::AggKind;
 use itertools::Itertools;
-use sqlparser::ast::{BinaryOperator, CharLengthUnits, DataType, Expr, Function, FunctionArg, FunctionArgExpr, Ident, Query, UnaryOperator};
+use sqlparser::ast::{
+    BinaryOperator, CharLengthUnits, DataType, Expr, Function, FunctionArg, FunctionArgExpr, Ident,
+    Query, UnaryOperator,
+};
 use std::slice;
 use std::sync::Arc;
 

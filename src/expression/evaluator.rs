@@ -7,10 +7,10 @@ use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use sqlparser::ast::CharLengthUnits;
 use std::cmp;
 use std::cmp::Ordering;
 use std::sync::Arc;
-use sqlparser::ast::CharLengthUnits;
 
 lazy_static! {
     static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
@@ -27,7 +27,7 @@ macro_rules! eval_to_num {
             return Ok(Arc::new(DataValue::Utf8 {
                 value: None,
                 ty: Utf8Type::Variable(None),
-                unit: CharLengthUnits::Characters
+                unit: CharLengthUnits::Characters,
             }));
         }
     };

@@ -7,8 +7,8 @@ use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use futures_async_stream::try_stream;
 use lazy_static::lazy_static;
-use std::sync::Arc;
 use sqlparser::ast::CharLengthUnits;
+use std::sync::Arc;
 
 lazy_static! {
     static ref PRIMARY_KEY_TYPE: ValueRef = Arc::new(DataValue::Utf8 {
