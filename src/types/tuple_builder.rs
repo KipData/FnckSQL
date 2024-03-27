@@ -2,6 +2,7 @@ use crate::errors::DatabaseError;
 use crate::types::tuple::{Schema, Tuple};
 use crate::types::value::{DataValue, Utf8Type};
 use std::sync::Arc;
+use sqlparser::ast::CharLengthUnits;
 
 pub struct TupleBuilder<'a> {
     schema: &'a Schema,
@@ -15,7 +16,8 @@ impl<'a> TupleBuilder<'a> {
     pub fn build_result(message: String) -> Tuple {
         let values = vec![Arc::new(DataValue::Utf8 {
             value: Some(message),
-            ty: Utf8Type::Variable,
+            ty: Utf8Type::Variable(None),
+            unit: CharLengthUnits::Characters,
         })];
 
         Tuple { id: None, values }
@@ -32,7 +34,8 @@ impl<'a> TupleBuilder<'a> {
             let data_value = Arc::new(
                 DataValue::Utf8 {
                     value: Some(value.to_string()),
-                    ty: Utf8Type::Variable,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 }
                 .cast(self.schema[i].datatype())?,
             );

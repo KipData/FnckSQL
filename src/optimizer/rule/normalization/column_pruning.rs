@@ -12,6 +12,7 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::sync::Arc;
+use sqlparser::ast::CharLengthUnits;
 
 lazy_static! {
     static ref COLUMN_PRUNING_RULE: Pattern = {
@@ -63,7 +64,8 @@ impl ColumnPruning {
                     if op.agg_calls.is_empty() && op.groupby_exprs.is_empty() {
                         let value = Arc::new(DataValue::Utf8 {
                             value: Some("*".to_string()),
-                            ty: Utf8Type::Variable,
+                            ty: Utf8Type::Variable(None),
+                            unit: CharLengthUnits::Characters,
                         });
                         // only single COUNT(*) is not depend on any column
                         // removed all expressions from the aggregate: push a COUNT(*)

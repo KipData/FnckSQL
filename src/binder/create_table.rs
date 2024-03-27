@@ -147,6 +147,7 @@ mod tests {
     use crate::storage::Storage;
     use crate::types::LogicalType;
     use std::sync::atomic::AtomicUsize;
+    use sqlparser::ast::CharLengthUnits;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -177,7 +178,7 @@ mod tests {
                 assert_eq!(op.columns[1].nullable, true);
                 assert_eq!(
                     op.columns[1].desc,
-                    ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false, None)
+                    ColumnDesc::new(LogicalType::Varchar(Some(10), CharLengthUnits::Characters), false, false, None)
                 );
             }
             _ => unreachable!(),

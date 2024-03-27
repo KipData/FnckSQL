@@ -138,6 +138,7 @@ mod test {
     use serde::Deserialize;
     use serde::Serialize;
     use std::sync::Arc;
+    use sqlparser::ast::CharLengthUnits;
 
     fn build_tuple() -> (Tuple, SchemaRef) {
         let schema_ref = Arc::new(vec![
@@ -149,14 +150,15 @@ mod test {
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Varchar(None), false, false, None),
+                ColumnDesc::new(LogicalType::Varchar(None, CharLengthUnits::Characters), false, false, None),
             )),
         ]);
         let values = vec![
             Arc::new(DataValue::Int32(Some(9))),
             Arc::new(DataValue::Utf8 {
                 value: Some("LOL".to_string()),
-                ty: Utf8Type::Variable,
+                ty: Utf8Type::Variable(None),
+                unit: CharLengthUnits::Characters,
             }),
         ];
 
@@ -207,7 +209,8 @@ mod test {
                 ScalarExpression::Constant(Arc::new(DataValue::Int8(Some(1)))),
                 ScalarExpression::Constant(Arc::new(DataValue::Utf8 {
                     value: Some("1".to_string()),
-                    ty: Utf8Type::Variable,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 })),
             ],
             &Tuple {

@@ -4,6 +4,7 @@ use crate::expression::ScalarExpression;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::sync::Arc;
+use sqlparser::ast::CharLengthUnits;
 
 use crate::types::tuple::EMPTY_TUPLE;
 use crate::types::value::ValueRef;
@@ -50,7 +51,7 @@ impl ColumnCatalog {
                 table_name: None,
             },
             nullable: true,
-            desc: ColumnDesc::new(LogicalType::Varchar(None), false, false, None),
+            desc: ColumnDesc::new(LogicalType::Varchar(None, CharLengthUnits::Characters), false, false, None),
         }
     }
 

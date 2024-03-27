@@ -107,6 +107,7 @@ mod tests {
     use futures::StreamExt;
     use std::io::Write;
     use std::sync::Arc;
+    use sqlparser::ast::CharLengthUnits;
     use tempfile::TempDir;
 
     use super::*;
@@ -148,7 +149,7 @@ mod tests {
                     table_name: None,
                 },
                 nullable: false,
-                desc: ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false, None),
+                desc: ColumnDesc::new(LogicalType::Varchar(Some(10), CharLengthUnits::Characters), false, false, None),
             }),
         ];
 

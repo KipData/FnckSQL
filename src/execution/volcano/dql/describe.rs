@@ -8,19 +8,23 @@ use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use futures_async_stream::try_stream;
 use lazy_static::lazy_static;
 use std::sync::Arc;
+use sqlparser::ast::CharLengthUnits;
 
 lazy_static! {
     static ref PRIMARY_KEY_TYPE: ValueRef = Arc::new(DataValue::Utf8 {
         value: Some(String::from("PRIMARY")),
-        ty: Utf8Type::Variable
+        ty: Utf8Type::Variable(None),
+        unit: CharLengthUnits::Characters
     });
     static ref UNIQUE_KEY_TYPE: ValueRef = Arc::new(DataValue::Utf8 {
         value: Some(String::from("UNIQUE")),
-        ty: Utf8Type::Variable
+        ty: Utf8Type::Variable(None),
+        unit: CharLengthUnits::Characters
     });
     static ref EMPTY_KEY_TYPE: ValueRef = Arc::new(DataValue::Utf8 {
         value: Some(String::from("EMPTY")),
-        ty: Utf8Type::Variable
+        ty: Utf8Type::Variable(None),
+        unit: CharLengthUnits::Characters
     });
 }
 
@@ -69,24 +73,29 @@ impl Describe {
             let values = vec![
                 Arc::new(DataValue::Utf8 {
                     value: Some(column.name().to_string()),
-                    ty: Utf8Type::Variable,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 }),
                 Arc::new(DataValue::Utf8 {
                     value: Some(datatype.to_string()),
-                    ty: Utf8Type::Variable,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 }),
                 Arc::new(DataValue::Utf8 {
                     value: datatype.raw_len().map(|len| len.to_string()),
-                    ty: Utf8Type::Variable,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 }),
                 Arc::new(DataValue::Utf8 {
                     value: Some(column.nullable.to_string()),
-                    ty: Utf8Type::Variable,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 }),
                 key_fn(column),
                 Arc::new(DataValue::Utf8 {
                     value: Some(default),
-                    ty: Utf8Type::Variable,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 }),
             ];
             yield Tuple { id: None, values };

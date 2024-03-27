@@ -6,6 +6,7 @@ use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type};
 use futures_async_stream::try_stream;
 use std::sync::Arc;
+use sqlparser::ast::CharLengthUnits;
 
 pub struct Explain {
     plan: LogicalPlan,
@@ -28,7 +29,8 @@ impl Explain {
     pub async fn _execute(self) {
         let values = vec![Arc::new(DataValue::Utf8 {
             value: Some(self.plan.explain(0)),
-            ty: Utf8Type::Variable,
+            ty: Utf8Type::Variable(None),
+            unit: CharLengthUnits::Characters
         })];
 
         yield Tuple { id: None, values };

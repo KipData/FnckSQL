@@ -176,6 +176,7 @@ mod tests {
     use itertools::Itertools;
     use rust_decimal::Decimal;
     use std::sync::Arc;
+    use sqlparser::ast::CharLengthUnits;
 
     #[test]
     fn test_tuple_serialize_to_and_deserialize_from() {
@@ -193,7 +194,7 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c3".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Varchar(Some(2)), false, false, None),
+                ColumnDesc::new(LogicalType::Varchar(Some(2), CharLengthUnits::Characters), false, false, None),
             )),
             Arc::new(ColumnCatalog::new(
                 "c4".to_string(),
@@ -248,7 +249,17 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c14".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Char(1), false, false, None),
+                ColumnDesc::new(LogicalType::Char(1, CharLengthUnits::Characters), false, false, None),
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c15".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Varchar(Some(2), CharLengthUnits::Octets), false, false, None),
+            )),
+            Arc::new(ColumnCatalog::new(
+                "c16".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Char(1, CharLengthUnits::Octets), false, false, None),
             )),
         ]);
 
@@ -260,7 +271,8 @@ mod tests {
                     Arc::new(DataValue::UInt32(Some(1))),
                     Arc::new(DataValue::Utf8 {
                         value: Some("LOL".to_string()),
-                        ty: Utf8Type::Variable,
+                        ty: Utf8Type::Variable(Some(2)),
+                        unit: CharLengthUnits::Characters,
                     }),
                     Arc::new(DataValue::Int16(Some(1))),
                     Arc::new(DataValue::UInt16(Some(1))),
@@ -275,6 +287,17 @@ mod tests {
                     Arc::new(DataValue::Utf8 {
                         value: Some("K".to_string()),
                         ty: Utf8Type::Fixed(1),
+                        unit: CharLengthUnits::Characters,
+                    }),
+                    Arc::new(DataValue::Utf8 {
+                        value: Some("LOL".to_string()),
+                        ty: Utf8Type::Variable(Some(2)),
+                        unit: CharLengthUnits::Octets,
+                    }),
+                    Arc::new(DataValue::Utf8 {
+                        value: Some("K".to_string()),
+                        ty: Utf8Type::Fixed(1),
+                        unit: CharLengthUnits::Octets,
                     }),
                 ],
             },
@@ -285,7 +308,8 @@ mod tests {
                     Arc::new(DataValue::UInt32(None)),
                     Arc::new(DataValue::Utf8 {
                         value: None,
-                        ty: Utf8Type::Variable,
+                        ty: Utf8Type::Variable(Some(2)),
+                        unit: CharLengthUnits::Characters,
                     }),
                     Arc::new(DataValue::Int16(None)),
                     Arc::new(DataValue::UInt16(None)),
@@ -300,6 +324,17 @@ mod tests {
                     Arc::new(DataValue::Utf8 {
                         value: None,
                         ty: Utf8Type::Fixed(1),
+                        unit: CharLengthUnits::Characters,
+                    }),
+                    Arc::new(DataValue::Utf8 {
+                        value: None,
+                        ty: Utf8Type::Variable(Some(2)),
+                        unit: CharLengthUnits::Octets,
+                    }),
+                    Arc::new(DataValue::Utf8 {
+                        value: None,
+                        ty: Utf8Type::Fixed(1),
+                        unit: CharLengthUnits::Octets,
                     }),
                 ],
             },
@@ -312,13 +347,13 @@ mod tests {
 
         let tuple_0 = Tuple::deserialize_from(
             &types,
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
             &columns,
             &tuples[0].serialize_to(&types).unwrap(),
         );
         let tuple_1 = Tuple::deserialize_from(
             &types,
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
             &columns,
             &tuples[1].serialize_to(&types).unwrap(),
         );

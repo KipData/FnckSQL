@@ -255,7 +255,7 @@ impl Histogram {
     ) -> Result<bool, DatabaseError> {
         let float_value = |value: &DataValue, prefix_len: usize| {
             let value = match value.logical_type() {
-                LogicalType::Varchar(_) | LogicalType::Char(_) => match value {
+                LogicalType::Varchar(_, ..) | LogicalType::Char(_, ..) => match value {
                     DataValue::Utf8 { value, .. } => value.as_ref().map(|string| {
                         if prefix_len > string.len() {
                             return 0.0;
