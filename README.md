@@ -18,13 +18,14 @@ Built by @KipData
 
 <p align="center">
     <a href="https://summer-ospp.ac.cn/org/orgdetail/0b09d23d-2510-4537-aa9d-45158bb6bdc2"><img src="https://img.shields.io/badge/OSPP-KipData-3DA639?logo=opensourceinitiative"></a>
-    &nbsp;
-    <a href="https://github.com/KipData/KipSQL/actions/workflows/ci.yml"><img src="https://github.com/KipData/KipSQL/actions/workflows/ci.yml/badge.svg" alt="CI"></img></a>
-    &nbsp;
     <a href="https://github.com/KipData/KipSQL/blob/main/LICENSE"><img src="https://img.shields.io/github/license/KipData/KipSQL"></a>
     &nbsp;
     <a href="https://www.rust-lang.org/community"><img src="https://img.shields.io/badge/Rust_Community%20-Join_us-brightgreen?style=plastic&logo=rust"></a>
+</p>
+<p align="center">
+    <a href="https://github.com/KipData/KipSQL/actions/workflows/ci.yml"><img src="https://github.com/KipData/KipSQL/actions/workflows/ci.yml/badge.svg" alt="CI"></img></a>
     <a href="https://crates.io/crates/fnck_sql/"><img src="https://img.shields.io/crates/v/fnck_sql.svg"></a>
+    <a href="https://hub.docker.com/r/kould23333/fncksql"><img src="https://img.shields.io/badge/Docker-fncksql-2496ED?logo=docker"></a>
 </p>
 <p align="center">
   <a href="https://github.com/KipData/KipSQL" target="_blank">
@@ -60,13 +61,18 @@ Storage Support:
 - KipDB
 
 ### Docker
+#### Pull Image
+```shell
+docker pull kould23333/fncksql:latest
+```
 #### Build From Source
 ~~~shell
 git clone https://github.com/KipData/FnckSQL.git
 cd FnckSQL
-docker build -t fncksql:latest .
+docker build -t kould23333/fncksql:latest .
 ~~~
 
+#### Run
 We installed the `psql` tool in the image for easy debug.
 
 You can use `psql -h 127.0.0.1 -p 5432` to do this.
@@ -78,7 +84,7 @@ docker run -d \
 --restart=always \
 -v fncksql-data:/fnck_sql/fncksql_data \
 -v /etc/localtime:/etc/localtime:ro \
-fncksql:latest
+kould23333/fncksql:latest
 ~~~
 
 ### Features
