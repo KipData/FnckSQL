@@ -10,7 +10,7 @@ use std::any::TypeId;
 use std::cmp;
 
 use crate::errors::DatabaseError;
-use sqlparser::ast::{CharLengthUnits, CharacterLength, ExactNumberInfo, TimezoneInfo};
+use sqlparser::ast::{CharLengthUnits, ExactNumberInfo, TimezoneInfo};
 use strum_macros::AsRefStr;
 
 pub type ColumnId = u32;
@@ -34,8 +34,8 @@ pub enum LogicalType {
     UBigint,
     Float,
     Double,
-    Char(u32),
-    Varchar(Option<u32>),
+    Char(u32, CharLengthUnits),
+    Varchar(Option<u32>, CharLengthUnits),
     Date,
     DateTime,
     Time,
@@ -75,7 +75,7 @@ impl LogicalType {
         } else if type_id == TypeId::of::<Decimal>() {
             Some(LogicalType::Decimal(None, None))
         } else if type_id == TypeId::of::<String>() {
-            Some(LogicalType::Varchar(None))
+            Some(LogicalType::Varchar(None, CharLengthUnits::Characters))
         } else {
             None
         }
@@ -96,8 +96,11 @@ impl LogicalType {
             LogicalType::Float => Some(4),
             LogicalType::Double => Some(8),
             /// Note: The non-fixed length type's raw_len is None e.g. Varchar
-            LogicalType::Varchar(_) => None,
-            LogicalType::Char(len) => Some(*len as usize),
+            LogicalType::Varchar(_, _) => None,
+            LogicalType::Char(len, unit) => match unit {
+                CharLengthUnits::Characters => None,
+                CharLengthUnits::Octets => Some(*len as usize),
+            },
             LogicalType::Decimal(_, _) => Some(16),
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
@@ -179,8 +182,8 @@ impl LogicalType {
         }
         if matches!(
             (left, right),
-            (LogicalType::Date, LogicalType::Varchar(_))
-                | (LogicalType::Varchar(_), LogicalType::Date)
+            (LogicalType::Date, LogicalType::Varchar(..))
+                | (LogicalType::Varchar(..), LogicalType::Date)
         ) {
             return Ok(LogicalType::Date);
         }
@@ -192,15 +195,15 @@ impl LogicalType {
         }
         if matches!(
             (left, right),
-            (LogicalType::DateTime, LogicalType::Varchar(_))
-                | (LogicalType::Varchar(_), LogicalType::DateTime)
+            (LogicalType::DateTime, LogicalType::Varchar(..))
+                | (LogicalType::Varchar(..), LogicalType::DateTime)
         ) {
             return Ok(LogicalType::DateTime);
         }
-        if let (LogicalType::Char(_), LogicalType::Varchar(len))
-        | (LogicalType::Varchar(len), LogicalType::Char(_)) = (left, right)
+        if let (LogicalType::Char(..), LogicalType::Varchar(len, ..))
+        | (LogicalType::Varchar(len, ..), LogicalType::Char(..)) = (left, right)
         {
-            return Ok(LogicalType::Varchar(*len));
+            return Ok(LogicalType::Varchar(*len, CharLengthUnits::Characters));
         }
         Err(DatabaseError::Incomparable(*left, *right))
     }
@@ -296,20 +299,22 @@ impl LogicalType {
             LogicalType::UBigint => matches!(to, LogicalType::Float | LogicalType::Double),
             LogicalType::Float => matches!(to, LogicalType::Double),
             LogicalType::Double => false,
-            LogicalType::Char(_) => false,
-            LogicalType::Varchar(_) => false,
+            LogicalType::Char(..) => false,
+            LogicalType::Varchar(..) => false,
             LogicalType::Date => matches!(
                 to,
-                LogicalType::DateTime | LogicalType::Varchar(_) | LogicalType::Char(_)
+                LogicalType::DateTime | LogicalType::Varchar(..) | LogicalType::Char(..)
             ),
             LogicalType::DateTime => matches!(
                 to,
                 LogicalType::Date
                     | LogicalType::Time
-                    | LogicalType::Varchar(_)
-                    | LogicalType::Char(_)
+                    | LogicalType::Varchar(..)
+                    | LogicalType::Char(..)
             ),
-            LogicalType::Time => matches!(to, LogicalType::Varchar(_) | LogicalType::Char(_)),
+            LogicalType::Time => {
+                matches!(to, LogicalType::Varchar(..) | LogicalType::Char(..))
+            }
             LogicalType::Decimal(_, _) | LogicalType::Tuple => false,
         }
     }
@@ -324,31 +329,29 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
             sqlparser::ast::DataType::Char(char_len)
             | sqlparser::ast::DataType::Character(char_len) => {
                 let mut len = 1;
-                if let Some(CharacterLength { length, unit }) = char_len {
-                    if matches!(unit, Some(CharLengthUnits::Octets)) {
-                        return Err(DatabaseError::UnsupportedStmt(format!(
-                            "char unit: {:?}",
-                            unit
-                        )));
-                    }
-                    len = cmp::max(len, length)
+                let mut char_unit = None;
+                if let Some(sqlparser::ast::CharacterLength { length, unit }) = char_len {
+                    len = cmp::max(len, length);
+                    char_unit = unit;
                 }
-                Ok(LogicalType::Char(len as u32))
+                Ok(LogicalType::Char(
+                    len as u32,
+                    char_unit.unwrap_or(CharLengthUnits::Characters),
+                ))
             }
             sqlparser::ast::DataType::CharVarying(varchar_len)
             | sqlparser::ast::DataType::CharacterVarying(varchar_len)
             | sqlparser::ast::DataType::Varchar(varchar_len) => {
                 let mut len = None;
-                if let Some(CharacterLength { length, unit }) = varchar_len {
-                    if matches!(unit, Some(CharLengthUnits::Octets)) {
-                        return Err(DatabaseError::UnsupportedStmt(format!(
-                            "char unit: {:?}",
-                            unit
-                        )));
-                    }
-                    len = Some(length as u32)
+                let mut char_unit = None;
+                if let Some(sqlparser::ast::CharacterLength { length, unit }) = varchar_len {
+                    len = Some(length as u32);
+                    char_unit = unit;
                 }
-                Ok(LogicalType::Varchar(len))
+                Ok(LogicalType::Varchar(
+                    len,
+                    char_unit.unwrap_or(CharLengthUnits::Characters),
+                ))
             }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
             sqlparser::ast::DataType::Double | sqlparser::ast::DataType::DoublePrecision => {

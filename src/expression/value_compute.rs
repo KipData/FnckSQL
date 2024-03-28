@@ -3,6 +3,7 @@ use crate::expression::{BinaryOperator, UnaryOperator};
 use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use crate::types::LogicalType;
 use regex::Regex;
+use sqlparser::ast::CharLengthUnits;
 use std::cmp::Ordering;
 
 fn unpack_bool(value: DataValue) -> Option<bool> {
@@ -193,8 +194,15 @@ impl DataValue {
         op: &BinaryOperator,
     ) -> Result<DataValue, DatabaseError> {
         if let BinaryOperator::Like(escape_char) | BinaryOperator::NotLike(escape_char) = op {
-            let value_option = unpack_utf8(self.clone().cast(&LogicalType::Varchar(None))?);
-            let pattern_option = unpack_utf8(right.clone().cast(&LogicalType::Varchar(None))?);
+            let value_option = unpack_utf8(
+                self.clone()
+                    .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?,
+            );
+            let pattern_option = unpack_utf8(
+                right
+                    .clone()
+                    .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?,
+            );
 
             let mut is_match = if let (Some(value), Some(pattern)) = (value_option, pattern_option)
             {
@@ -511,7 +519,7 @@ impl DataValue {
                     _ => return Err(DatabaseError::UnsupportedBinaryOperator(unified_type, *op)),
                 }
             }
-            LogicalType::Varchar(_) | LogicalType::Char(_) => {
+            LogicalType::Varchar(_, _) | LogicalType::Char(_, _) => {
                 let left_value = unpack_utf8(self.clone().cast(&unified_type)?);
                 let right_value = unpack_utf8(right.clone().cast(&unified_type)?);
 
@@ -576,7 +584,8 @@ impl DataValue {
 
                         DataValue::Utf8 {
                             value,
-                            ty: Utf8Type::Variable,
+                            ty: Utf8Type::Variable(None),
+                            unit: CharLengthUnits::Characters,
                         }
                     }
                     _ => return Err(DatabaseError::UnsupportedBinaryOperator(unified_type, *op)),
@@ -652,6 +661,7 @@ mod test {
     use crate::errors::DatabaseError;
     use crate::expression::BinaryOperator;
     use crate::types::value::{DataValue, Utf8Type};
+    use sqlparser::ast::CharLengthUnits;
 
     #[test]
     fn test_binary_op_arithmetic_plus() -> Result<(), DatabaseError> {
@@ -1544,11 +1554,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("b".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::Gt
             )?,
@@ -1558,11 +1570,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("b".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::Lt
             )?,
@@ -1572,11 +1586,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::GtEq
             )?,
@@ -1586,11 +1602,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::LtEq
             )?,
@@ -1600,11 +1618,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::NotEq
             )?,
@@ -1614,11 +1634,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::Eq
             )?,
@@ -1629,11 +1651,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: None,
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::Gt
             )?,
@@ -1643,11 +1667,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: None,
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::Lt
             )?,
@@ -1657,11 +1683,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: None,
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::GtEq
             )?,
@@ -1671,11 +1699,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: None,
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::LtEq
             )?,
@@ -1685,11 +1715,13 @@ mod test {
             DataValue::binary_op(
                 &DataValue::Utf8 {
                     value: None,
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
-                    ty: Utf8Type::Variable
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 },
                 &BinaryOperator::NotEq
             )?,

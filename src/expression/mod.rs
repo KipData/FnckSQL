@@ -5,7 +5,9 @@ use std::hash::Hash;
 use std::sync::Arc;
 use std::{fmt, mem};
 
-use sqlparser::ast::{BinaryOperator as SqlBinaryOperator, UnaryOperator as SqlUnaryOperator};
+use sqlparser::ast::{
+    BinaryOperator as SqlBinaryOperator, CharLengthUnits, UnaryOperator as SqlUnaryOperator,
+};
 
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
@@ -394,7 +396,9 @@ impl ScalarExpression {
             ScalarExpression::IsNull { .. }
             | ScalarExpression::In { .. }
             | ScalarExpression::Between { .. } => LogicalType::Boolean,
-            ScalarExpression::SubString { .. } => LogicalType::Varchar(None),
+            ScalarExpression::SubString { .. } => {
+                LogicalType::Varchar(None, CharLengthUnits::Characters)
+            }
             ScalarExpression::Position { .. } => LogicalType::Integer,
             ScalarExpression::Alias { expr, .. } | ScalarExpression::Reference { expr, .. } => {
                 expr.return_type()

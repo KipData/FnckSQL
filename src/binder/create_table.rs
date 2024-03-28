@@ -146,6 +146,7 @@ mod tests {
     use crate::storage::kip::KipStorage;
     use crate::storage::Storage;
     use crate::types::LogicalType;
+    use sqlparser::ast::CharLengthUnits;
     use std::sync::atomic::AtomicUsize;
     use tempfile::TempDir;
 
@@ -177,7 +178,12 @@ mod tests {
                 assert_eq!(op.columns[1].nullable, true);
                 assert_eq!(
                     op.columns[1].desc,
-                    ColumnDesc::new(LogicalType::Varchar(Some(10)), false, false, None)
+                    ColumnDesc::new(
+                        LogicalType::Varchar(Some(10), CharLengthUnits::Characters),
+                        false,
+                        false,
+                        None
+                    )
                 );
             }
             _ => unreachable!(),

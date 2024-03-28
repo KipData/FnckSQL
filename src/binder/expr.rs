@@ -4,8 +4,8 @@ use crate::expression;
 use crate::expression::agg::AggKind;
 use itertools::Itertools;
 use sqlparser::ast::{
-    BinaryOperator, DataType, Expr, Function, FunctionArg, FunctionArgExpr, Ident, Query,
-    UnaryOperator,
+    BinaryOperator, CharLengthUnits, DataType, Expr, Function, FunctionArg, FunctionArgExpr, Ident,
+    Query, UnaryOperator,
 };
 use std::slice;
 use std::sync::Arc;
@@ -69,7 +69,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 let logical_type = LogicalType::try_from(data_type.clone())?;
                 let value = DataValue::Utf8 {
                     value: Some(value.to_string()),
-                    ty: Utf8Type::Variable,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
                 }
                 .cast(&logical_type)?;
 
@@ -354,7 +355,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             | BinaryOperator::And
             | BinaryOperator::Or
             | BinaryOperator::Xor => LogicalType::Boolean,
-            BinaryOperator::StringConcat => LogicalType::Varchar(None),
+            BinaryOperator::StringConcat => LogicalType::Varchar(None, CharLengthUnits::Characters),
             _ => todo!(),
         };
 
@@ -603,7 +604,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
     fn wildcard_expr() -> ScalarExpression {
         ScalarExpression::Constant(Arc::new(DataValue::Utf8 {
             value: Some("*".to_string()),
-            ty: Utf8Type::Variable,
+            ty: Utf8Type::Variable(None),
+            unit: CharLengthUnits::Characters,
         }))
     }
 }

@@ -7,6 +7,7 @@ use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use sqlparser::ast::CharLengthUnits;
 use std::cmp;
 use std::cmp::Ordering;
 use std::sync::Arc;
@@ -25,7 +26,8 @@ macro_rules! eval_to_num {
         } else {
             return Ok(Arc::new(DataValue::Utf8 {
                 value: None,
-                ty: Utf8Type::Variable,
+                ty: Utf8Type::Variable(None),
+                unit: CharLengthUnits::Characters,
             }));
         }
     };
@@ -156,7 +158,7 @@ impl ScalarExpression {
                 from_expr,
             } => {
                 if let Some(mut string) = DataValue::clone(expr.eval(tuple, schema)?.as_ref())
-                    .cast(&LogicalType::Varchar(None))?
+                    .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                     .utf8()
                 {
                     if let Some(from_expr) = from_expr {
@@ -169,7 +171,8 @@ impl ScalarExpression {
                         if from > len_i {
                             return Ok(Arc::new(DataValue::Utf8 {
                                 value: None,
-                                ty: Utf8Type::Variable,
+                                ty: Utf8Type::Variable(None),
+                                unit: CharLengthUnits::Characters,
                             }));
                         }
                         string = string.split_off(from as usize);
@@ -182,19 +185,21 @@ impl ScalarExpression {
 
                     Ok(Arc::new(DataValue::Utf8 {
                         value: Some(string),
-                        ty: Utf8Type::Variable,
+                        ty: Utf8Type::Variable(None),
+                        unit: CharLengthUnits::Characters,
                     }))
                 } else {
                     Ok(Arc::new(DataValue::Utf8 {
                         value: None,
-                        ty: Utf8Type::Variable,
+                        ty: Utf8Type::Variable(None),
+                        unit: CharLengthUnits::Characters,
                     }))
                 }
             }
             ScalarExpression::Position { expr, in_expr } => {
                 let unpack = |expr: &ScalarExpression| -> Result<String, DatabaseError> {
                     Ok(DataValue::clone(expr.eval(tuple, schema)?.as_ref())
-                        .cast(&LogicalType::Varchar(None))?
+                        .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                         .utf8()
                         .unwrap_or("".to_owned()))
                 };

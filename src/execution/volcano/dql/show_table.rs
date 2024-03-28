@@ -5,6 +5,7 @@ use crate::storage::Transaction;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type};
 use futures_async_stream::try_stream;
+use sqlparser::ast::CharLengthUnits;
 use std::sync::Arc;
 
 pub struct ShowTables;
@@ -23,7 +24,8 @@ impl ShowTables {
         for TableMeta { table_name } in metas {
             let values = vec![Arc::new(DataValue::Utf8 {
                 value: Some(table_name.to_string()),
-                ty: Utf8Type::Variable,
+                ty: Utf8Type::Variable(None),
+                unit: CharLengthUnits::Characters,
             })];
 
             yield Tuple { id: None, values };
