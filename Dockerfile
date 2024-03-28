@@ -9,16 +9,18 @@ WORKDIR /builder
 RUN rustup default nightly
 RUN cargo build --release
 
-FROM ubuntu
+FROM debian:12.5-slim
+
+RUN echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ buster main contrib non-free" > /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/debian/ buster main contrib non-free" >> /etc/apt/sources.list
+RUN apt-get update && apt-get install -y postgresql-client
 
 ARG APP_SERVER=fnck_sql
 
 WORKDIR /fnck_sql
 
-ENV IP="127.0.0.1"
-
 EXPOSE 5432
 
 COPY --from=builder /builder/target/release/${APP_SERVER} ${APP_SERVER}
 
-ENTRYPOINT ["./fnck_sql"]
+ENTRYPOINT ["./fnck_sql", "--ip", "0.0.0.0"]

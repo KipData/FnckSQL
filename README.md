@@ -59,6 +59,28 @@ let tuples = fnck_sql.run("select * from t1").await?;
 Storage Support:
 - KipDB
 
+### Docker
+#### Build From Source
+~~~shell
+git clone https://github.com/KipData/FnckSQL.git
+cd FnckSQL
+docker build -t fncksql:latest .
+~~~
+
+We installed the `psql` tool in the image for easy debug.
+
+You can use `psql -h 127.0.0.1 -p 5432` to do this.
+
+~~~shell
+docker run -d \
+--name=fncksql \
+-p 5432:5432 \
+--restart=always \
+-v fncksql-data:/fnck_sql/fncksql_data \
+-v /etc/localtime:/etc/localtime:ro \
+fncksql:latest
+~~~
+
 ### Features
 - ORM Mapping: `features = ["marcos"]`
 ```rust
