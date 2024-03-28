@@ -567,13 +567,9 @@ impl DataValue {
                             }
                             CharLengthUnits::Octets => {
                                 let octets_len = *len as usize;
-                                let mut string = v.clone();
+                                let mut string_bytes = v.clone().into_bytes();
 
-                                for _ in 0..(octets_len - string.len()) {
-                                    string.push(' ')
-                                }
-                                let mut string_bytes = string.into_bytes();
-
+                                string_bytes.resize(octets_len, b' ');
                                 assert_eq!(octets_len, string_bytes.len());
                                 bytes.append(&mut string_bytes);
                                 return Ok(octets_len);
