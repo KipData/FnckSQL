@@ -1572,9 +1572,9 @@ impl fmt::Debug for DataValue {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
     use crate::errors::DatabaseError;
     use crate::types::value::DataValue;
+    use std::sync::Arc;
 
     #[test]
     fn test_mem_comparable_int() -> Result<(), DatabaseError> {
@@ -1674,17 +1674,20 @@ mod test {
             Arc::new(DataValue::Int8(None)),
             Arc::new(DataValue::Int8(Some(0))),
             Arc::new(DataValue::Int8(Some(1))),
-        ])).memcomparable_encode(&mut key_tuple_1)?;
+        ]))
+        .memcomparable_encode(&mut key_tuple_1)?;
         DataValue::Tuple(Some(vec![
             Arc::new(DataValue::Int8(Some(0))),
             Arc::new(DataValue::Int8(Some(0))),
             Arc::new(DataValue::Int8(Some(1))),
-        ])).memcomparable_encode(&mut key_tuple_2)?;
+        ]))
+        .memcomparable_encode(&mut key_tuple_2)?;
         DataValue::Tuple(Some(vec![
             Arc::new(DataValue::Int8(Some(0))),
             Arc::new(DataValue::Int8(Some(0))),
             Arc::new(DataValue::Int8(Some(2))),
-        ])).memcomparable_encode(&mut key_tuple_3)?;
+        ]))
+        .memcomparable_encode(&mut key_tuple_3)?;
 
         println!("{:?} < {:?}", key_tuple_1, key_tuple_2);
         println!("{:?} < {:?}", key_tuple_2, key_tuple_3);
