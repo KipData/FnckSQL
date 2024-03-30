@@ -16,6 +16,7 @@ use std::collections::{Bound, VecDeque};
 use std::ops::SubAssign;
 use std::sync::Arc;
 use std::{mem, slice};
+use bytes::Bytes;
 
 pub trait Storage: Sync + Send + Clone + 'static {
     type TransactionType: Transaction;
@@ -120,25 +121,225 @@ pub trait Transaction: Sync + Send + 'static {
     async fn commit(self) -> Result<(), DatabaseError>;
 }
 
-#[derive(Debug)]
-enum IndexValue {
-    PrimaryKey(Tuple),
-    Normal(TupleId),
+trait IndexImpl {
+    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError>;
+
+    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError>;
+
+    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError>;
+}
+
+enum IndexImplEnum {
+    PrimaryKey(PrimaryKeyIndexImpl),
+    Unique(UniqueIndexImpl),
+    Normal(NormalIndexImpl),
+    Composite(CompositeIndexImpl),
+}
+
+impl IndexImplEnum {
+    fn instance(index_type: IndexType) -> IndexImplEnum {
+        match index_type {
+            IndexType::PrimaryKey => IndexImplEnum::PrimaryKey(PrimaryKeyIndexImpl),
+            IndexType::Unique => IndexImplEnum::Unique(UniqueIndexImpl),
+            IndexType::Normal => IndexImplEnum::Normal(NormalIndexImpl),
+            IndexType::Composite => IndexImplEnum::Composite(CompositeIndexImpl),
+        }
+    }
+}
+
+struct PrimaryKeyIndexImpl;
+struct UniqueIndexImpl;
+struct NormalIndexImpl;
+struct CompositeIndexImpl;
+
+struct IndexImplParams<'a> {
+    tuple_schema_ref: Arc<Vec<ColumnRef>>,
+    projections: Vec<usize>,
+
+    index_meta: IndexMetaRef,
+    table_name: &'a str,
+    table_types: Vec<LogicalType>,
+    tx: &'a mvcc::Transaction,
+}
+
+impl IndexImplParams<'_> {
+    fn get_tuple_by_id(&self, tuple_id: &TupleId) -> Result<Option<Tuple>, DatabaseError> {
+        let key = TableCodec::encode_tuple_key(self.table_name, tuple_id)?;
+
+        Ok(self.tx.get(&key)?.map(|bytes| {
+            TableCodec::decode_tuple(
+                &self.table_types,
+                &self.projections,
+                &self.tuple_schema_ref,
+                &bytes,
+            )
+        }))
+    }
+}
+
+enum IndexResult<'a> {
+    Tuple(Tuple),
+    Scope(mvcc::TransactionIter<'a>)
+}
+
+impl IndexImpl for IndexImplEnum {
+    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+        match self {
+            IndexImplEnum::PrimaryKey(inner) => inner.index_lookup(bytes, params),
+            IndexImplEnum::Unique(inner) => inner.index_lookup(bytes, params),
+            IndexImplEnum::Normal(inner) => inner.index_lookup(bytes, params),
+            IndexImplEnum::Composite(inner) => inner.index_lookup(bytes, params),
+        }
+    }
+
+    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
+        match self {
+            IndexImplEnum::PrimaryKey(inner) => inner.eq_to_res(value, params),
+            IndexImplEnum::Unique(inner) => inner.eq_to_res(value, params),
+            IndexImplEnum::Normal(inner) => inner.eq_to_res(value, params),
+            IndexImplEnum::Composite(inner) => inner.eq_to_res(value, params),
+        }
+    }
+
+    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError> {
+        match self {
+            IndexImplEnum::PrimaryKey(inner) => inner.bound_key(params, value, is_upper),
+            IndexImplEnum::Unique(inner) => inner.bound_key(params, value, is_upper),
+            IndexImplEnum::Normal(inner) => inner.bound_key(params, value, is_upper),
+            IndexImplEnum::Composite(inner) => inner.bound_key(params, value, is_upper),
+        }
+    }
+}
+
+impl IndexImpl for PrimaryKeyIndexImpl {
+    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+        Ok(TableCodec::decode_tuple(
+            &params.table_types,
+            &params.projections,
+            &params.tuple_schema_ref,
+            bytes,
+        ))
+    }
+
+    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
+        let bytes = params.tx.get(&TableCodec::encode_tuple_key(params.table_name, value)?)?.ok_or_else(|| {
+                DatabaseError::NotFound(
+                    "secondary index",
+                    format!("tuple_id -> {}", value),
+                )
+            })?;
+        let tuple = TableCodec::decode_tuple(
+            &params.table_types,
+            &params.projections,
+            &params.tuple_schema_ref,
+            &bytes,
+        );
+        Ok(IndexResult::Tuple(tuple))
+    }
+
+    fn bound_key(&self, params: &IndexImplParams, val: &ValueRef, _: bool) -> Result<Vec<u8>, DatabaseError> {
+        TableCodec::encode_tuple_key(params.table_name, val)
+    }
+}
+
+fn secondary_index_lookup(bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+    let tuple_id = TableCodec::decode_index(bytes, &params.index_meta.pk_ty);
+    params.get_tuple_by_id(&tuple_id)?.ok_or_else(|| {
+        DatabaseError::NotFound("index's tuple_id", tuple_id.to_string())
+    })
+}
+
+impl IndexImpl for UniqueIndexImpl {
+    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+        secondary_index_lookup(bytes, params)
+    }
+
+    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
+        let bytes =
+            params.tx.get(&self.bound_key(params, value, false)?)?.ok_or_else(|| {
+                DatabaseError::NotFound(
+                    "secondary index",
+                    format!("index_value -> {}", value),
+                )
+            })?;
+        let tuple_id = TableCodec::decode_index(&bytes, &params.index_meta.pk_ty);
+        let tuple = params.get_tuple_by_id(&tuple_id)?.ok_or_else(|| {
+            DatabaseError::NotFound(
+                "secondary index",
+                format!("tuple_id -> {}", value),
+            )
+        })?;
+        Ok(IndexResult::Tuple(tuple))
+    }
+
+    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, _: bool) -> Result<Vec<u8>, DatabaseError> {
+        let index =
+            Index::new(params.index_meta.id, slice::from_ref(value), IndexType::Unique);
+
+        TableCodec::encode_index_key(params.table_name, &index, None)
+    }
+}
+
+impl IndexImpl for NormalIndexImpl {
+    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+        secondary_index_lookup(bytes, params)
+    }
+
+    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
+        let min = self.bound_key(params, value, false)?;
+        let max = self.bound_key(params, value, true)?;
+
+        let iter = params.tx.iter(
+            Bound::Included(min.as_slice()),
+            Bound::Included(max.as_slice()),
+        )?;
+        Ok(IndexResult::Scope(iter))
+    }
+
+    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError> {
+        let index =
+            Index::new(params.index_meta.id, slice::from_ref(value), IndexType::Normal);
+
+        TableCodec::encode_index_bound_key(params.table_name, &index, is_upper)
+    }
+}
+
+impl IndexImpl for CompositeIndexImpl {
+    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+        secondary_index_lookup(bytes, params)
+    }
+
+    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
+        let min = self.bound_key(params, value, false)?;
+        let max = self.bound_key(params, value, true)?;
+
+        let iter = params.tx.iter(
+            Bound::Included(min.as_slice()),
+            Bound::Included(max.as_slice()),
+        )?;
+        Ok(IndexResult::Scope(iter))
+    }
+
+    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError> {
+        let values = if let DataValue::Tuple(Some(values)) = value.as_ref() {
+            values.as_slice()
+        } else {
+            slice::from_ref(value)
+        };
+        let index = Index::new(params.index_meta.id, values, IndexType::Composite);
+
+        TableCodec::encode_index_bound_key(params.table_name, &index, is_upper)
+    }
 }
 
 // TODO: Table return optimization
 pub struct IndexIter<'a> {
     offset: usize,
     limit: Option<usize>,
-    tuple_schema_ref: Arc<Vec<ColumnRef>>,
-    projections: Vec<usize>,
 
-    index_meta: IndexMetaRef,
-    table: &'a TableCatalog,
-    tx: &'a mvcc::Transaction,
-
+    params: IndexImplParams<'a>,
+    inner: IndexImplEnum,
     // for buffering data
-    index_values: VecDeque<IndexValue>,
     ranges: VecDeque<Range>,
     scope_iter: Option<mvcc::TransactionIter<'a>>,
 }
@@ -154,140 +355,68 @@ impl IndexIter<'_> {
         }
     }
 
-    fn bound_key(&self, val: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError> {
-        match self.index_meta.ty {
-            IndexType::PrimaryKey => TableCodec::encode_tuple_key(&self.table.name, val),
-            IndexType::Unique => {
-                let index =
-                    Index::new(self.index_meta.id, slice::from_ref(val), self.index_meta.ty);
-
-                TableCodec::encode_index_key(&self.table.name, &index, None)
-            }
-            IndexType::Normal => {
-                let index =
-                    Index::new(self.index_meta.id, slice::from_ref(val), self.index_meta.ty);
-
-                TableCodec::encode_index_bound_key(&self.table.name, &index, is_upper)
-            }
-            IndexType::Composite => {
-                let values = if let DataValue::Tuple(Some(values)) = val.as_ref() {
-                    values.as_slice()
-                } else {
-                    slice::from_ref(val)
-                };
-                let index = Index::new(self.index_meta.id, values, self.index_meta.ty);
-
-                TableCodec::encode_index_bound_key(&self.table.name, &index, is_upper)
-            }
+    fn limit_sub(limit: &mut Option<usize>) {
+        if let Some(num) = limit.as_mut() {
+            num.sub_assign(1);
         }
     }
 
-    fn get_tuple_by_id(&mut self, tuple_id: &TupleId) -> Result<Option<Tuple>, DatabaseError> {
-        let key = TableCodec::encode_tuple_key(&self.table.name, tuple_id)?;
-
-        Ok(self.tx.get(&key)?.map(|bytes| {
-            TableCodec::decode_tuple(
-                &self.table.types(),
-                &self.projections,
-                &self.tuple_schema_ref,
-                &bytes,
-            )
-        }))
-    }
-
     fn is_empty(&self) -> bool {
-        self.scope_iter.is_none() && self.index_values.is_empty() && self.ranges.is_empty()
+        self.scope_iter.is_none() && self.ranges.is_empty()
     }
 }
 
 /// expression -> index value -> tuple
 impl Iter for IndexIter<'_> {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, DatabaseError> {
-        // 1. check limit
         if matches!(self.limit, Some(0)) || self.is_empty() {
             self.scope_iter = None;
             self.ranges.clear();
 
             return Ok(None);
         }
-        // 2. try get tuple on index_values and until it empty
-        while let Some(value) = self.index_values.pop_front() {
-            if Self::offset_move(&mut self.offset) {
-                continue;
-            }
-            let tuple = match value {
-                IndexValue::PrimaryKey(tuple) => {
-                    if let Some(num) = self.limit.as_mut() {
-                        num.sub_assign(1);
+
+        if let Some(iter) = &mut self.scope_iter {
+            while let Some((_, value_option)) = iter.try_next()? {
+                if let Some(bytes) = value_option {
+                    if Self::offset_move(&mut self.offset) {
+                        continue;
                     }
+                    Self::limit_sub(&mut self.limit);
+                    let tuple = self.inner.index_lookup(&bytes, &self.params)?;
 
                     return Ok(Some(tuple));
                 }
-                IndexValue::Normal(tuple_id) => {
-                    self.get_tuple_by_id(&tuple_id)?.ok_or_else(|| {
-                        DatabaseError::NotFound("index's tuple_id", tuple_id.to_string())
-                    })?
-                }
-            };
-            return Ok(Some(tuple));
-        }
-        assert!(self.index_values.is_empty());
-
-        // 3. If the current expression is a Scope,
-        // an iterator will be generated for reading the IndexValues of the Scope.
-        if let Some(iter) = &mut self.scope_iter {
-            while let Some((_, value_option)) = iter.try_next()? {
-                if let Some(value) = value_option {
-                    let index = if matches!(self.index_meta.ty, IndexType::PrimaryKey) {
-                        let tuple = TableCodec::decode_tuple(
-                            &self.table.types(),
-                            &self.projections,
-                            &self.tuple_schema_ref,
-                            &value,
-                        );
-
-                        IndexValue::PrimaryKey(tuple)
-                    } else {
-                        IndexValue::Normal(TableCodec::decode_index(&value, &self.index_meta.pk_ty))
-                    };
-                    self.index_values.push_back(index);
-                    break;
-                }
             }
-            if self.index_values.is_empty() {
-                self.scope_iter = None;
-            }
-            return self.next_tuple();
+            self.scope_iter = None;
         }
 
-        // 4. When `scope_iter` and `index_values` do not have a value, use the next expression to iterate
         if let Some(binary) = self.ranges.pop_front() {
             match binary {
                 Range::Scope { min, max } => {
-                    let table_name = &self.table.name;
-                    let index_meta = &self.index_meta;
-
+                    let table_name = self.params.table_name;
+                    let index_meta = &self.params.index_meta;
                     let bound_encode =
                         |bound: Bound<ValueRef>, is_upper: bool| -> Result<_, DatabaseError> {
                             match bound {
                                 Bound::Included(val) => {
-                                    Ok(Bound::Included(self.bound_key(&val, is_upper)?))
+                                    Ok(Bound::Included(self.inner.bound_key(&self.params, &val, is_upper)?))
                                 }
                                 Bound::Excluded(val) => {
-                                    Ok(Bound::Excluded(self.bound_key(&val, is_upper)?))
+                                    Ok(Bound::Excluded(self.inner.bound_key(&self.params, &val, is_upper)?))
                                 }
                                 Bound::Unbounded => Ok(Bound::Unbounded),
                             }
                         };
-                    let check_bound = |value: &mut Bound<Vec<u8>>, bound: Vec<u8>| {
-                        if matches!(value, Bound::Unbounded) {
-                            let _ = mem::replace(value, Bound::Included(bound));
-                        }
-                    };
                     let (bound_min, bound_max) = if matches!(index_meta.ty, IndexType::PrimaryKey) {
                         TableCodec::tuple_bound(table_name)
                     } else {
                         TableCodec::index_bound(table_name, &index_meta.id)
+                    };
+                    let check_bound = |value: &mut Bound<Vec<u8>>, bound: Vec<u8>| {
+                        if matches!(value, Bound::Unbounded) {
+                            let _ = mem::replace(value, Bound::Included(bound));
+                        }
                     };
 
                     let mut encode_min = bound_encode(min, false)?;
@@ -296,56 +425,22 @@ impl Iter for IndexIter<'_> {
                     let mut encode_max = bound_encode(max, true)?;
                     check_bound(&mut encode_max, bound_max);
 
-                    let iter = self.tx.iter(
+                    let iter = self.params.tx.iter(
                         encode_min.as_ref().map(Vec::as_slice),
                         encode_max.as_ref().map(Vec::as_slice),
                     )?;
                     self.scope_iter = Some(iter);
                 }
                 Range::Eq(val) => {
-                    match self.index_meta.ty {
-                        IndexType::PrimaryKey => {
-                            let bytes =
-                                self.tx.get(&self.bound_key(&val, false)?)?.ok_or_else(|| {
-                                    DatabaseError::NotFound(
-                                        "secondary index",
-                                        format!("value -> {}", val),
-                                    )
-                                })?;
-
-                            let tuple = TableCodec::decode_tuple(
-                                &self.table.types(),
-                                &self.projections,
-                                &self.tuple_schema_ref,
-                                &bytes,
-                            );
-                            self.index_values.push_back(IndexValue::PrimaryKey(tuple));
-                            self.scope_iter = None;
+                    match self.inner.eq_to_res(&val, &self.params)? {
+                        IndexResult::Tuple(tuple) => {
+                            if Self::offset_move(&mut self.offset) {
+                                return self.next_tuple();
+                            }
+                            Self::limit_sub(&mut self.limit);
+                            return Ok(Some(tuple));
                         }
-                        IndexType::Unique => {
-                            let bytes =
-                                self.tx.get(&self.bound_key(&val, false)?)?.ok_or_else(|| {
-                                    DatabaseError::NotFound(
-                                        "secondary index",
-                                        format!("value -> {}", val),
-                                    )
-                                })?;
-
-                            self.index_values.push_back(IndexValue::Normal(
-                                TableCodec::decode_index(&bytes, &self.index_meta.pk_ty),
-                            ));
-                            self.scope_iter = None;
-                        }
-                        IndexType::Normal | IndexType::Composite => {
-                            let min = self.bound_key(&val, false)?;
-                            let max = self.bound_key(&val, true)?;
-
-                            let iter = self.tx.iter(
-                                Bound::Included(min.as_slice()),
-                                Bound::Included(max.as_slice()),
-                            )?;
-                            self.scope_iter = Some(iter);
-                        }
+                        IndexResult::Scope(iter) => self.scope_iter = Some(iter),
                     }
                 }
                 _ => (),

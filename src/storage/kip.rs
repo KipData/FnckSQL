@@ -3,7 +3,7 @@ use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
 use crate::optimizer::core::statistics_meta::{StatisticMetaLoader, StatisticsMeta};
 use crate::storage::table_codec::TableCodec;
-use crate::storage::{Bounds, IndexIter, Iter, Storage, Transaction};
+use crate::storage::{Bounds, IndexImplEnum, IndexImplParams, IndexIter, Iter, Storage, Transaction};
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::{ColumnId, LogicalType};
@@ -118,6 +118,8 @@ impl Transaction for KipTransaction {
         let table = self
             .table(table_name.clone())
             .ok_or(DatabaseError::TableNotFound)?;
+        let table_types = table.types();
+        let table_name = table.name.as_str();
         let offset = offset_option.unwrap_or(0);
 
         let mut tuple_columns = Vec::with_capacity(columns.len());
@@ -126,18 +128,22 @@ impl Transaction for KipTransaction {
             tuple_columns.push(column);
             projections.push(projection);
         }
+        let inner = IndexImplEnum::instance(index_meta.ty);
 
         Ok(IndexIter {
             offset,
             limit: limit_option,
-            tuple_schema_ref: Arc::new(tuple_columns),
-            index_meta,
-            table,
-            index_values: VecDeque::new(),
+            params: IndexImplParams {
+                tuple_schema_ref: Arc::new(tuple_columns),
+                projections,
+                index_meta,
+                table_name,
+                table_types,
+                tx: &self.tx,
+            },
+            inner,
             ranges: VecDeque::from(ranges),
-            tx: &self.tx,
             scope_iter: None,
-            projections,
         })
     }
 
@@ -565,7 +571,7 @@ mod test {
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
     use crate::storage::kip::KipStorage;
-    use crate::storage::{IndexIter, Iter, Storage, Transaction};
+    use crate::storage::{IndexImplEnum, IndexImplParams, IndexIter, Iter, PrimaryKeyIndexImpl, Storage, Transaction};
     use crate::types::index::{IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
@@ -671,16 +677,21 @@ mod test {
         let mut iter = IndexIter {
             offset: 0,
             limit: None,
-            tuple_schema_ref: table.schema_ref().clone(),
-            index_meta: Arc::new(IndexMeta {
-                id: 0,
-                column_ids: vec![0],
-                table_name,
-                pk_ty: LogicalType::Integer,
-                name: "pk_a".to_string(),
-                ty: IndexType::PrimaryKey,
-            }),
-            table: &table,
+            params: IndexImplParams {
+                tuple_schema_ref: table.schema_ref().clone(),
+                projections: vec![0],
+                index_meta: Arc::new(IndexMeta {
+                    id: 0,
+                    column_ids: vec![0],
+                    table_name,
+                    pk_ty: LogicalType::Integer,
+                    name: "pk_a".to_string(),
+                    ty: IndexType::PrimaryKey,
+                }),
+                table_name: &table.name,
+                table_types: table.types(),
+                tx: &transaction.tx,
+            },
             ranges: VecDeque::from(vec![
                 Range::Eq(Arc::new(DataValue::Int32(Some(0)))),
                 Range::Scope {
@@ -688,10 +699,8 @@ mod test {
                     max: Bound::Included(Arc::new(DataValue::Int32(Some(4)))),
                 },
             ]),
-            index_values: VecDeque::new(),
-            tx: &transaction.tx,
             scope_iter: None,
-            projections: vec![0],
+            inner: IndexImplEnum::PrimaryKey(PrimaryKeyIndexImpl),
         };
         let mut result = Vec::new();
 
