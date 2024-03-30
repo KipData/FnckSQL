@@ -10,13 +10,13 @@ use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::{ColumnId, LogicalType};
+use bytes::Bytes;
 use kip_db::kernel::lsm::iterator::Iter as DBIter;
 use kip_db::kernel::lsm::mvcc;
 use std::collections::{Bound, VecDeque};
 use std::ops::SubAssign;
 use std::sync::Arc;
 use std::{mem, slice};
-use bytes::Bytes;
 
 pub trait Storage: Sync + Send + Clone + 'static {
     type TransactionType: Transaction;
@@ -122,11 +122,21 @@ pub trait Transaction: Sync + Send + 'static {
 }
 
 trait IndexImpl {
-    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError>;
+    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams)
+        -> Result<Tuple, DatabaseError>;
 
-    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError>;
+    fn eq_to_res<'a>(
+        &self,
+        value: &ValueRef,
+        params: &IndexImplParams<'a>,
+    ) -> Result<IndexResult<'a>, DatabaseError>;
 
-    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError>;
+    fn bound_key(
+        &self,
+        params: &IndexImplParams,
+        value: &ValueRef,
+        is_upper: bool,
+    ) -> Result<Vec<u8>, DatabaseError>;
 }
 
 enum IndexImplEnum {
@@ -179,11 +189,15 @@ impl IndexImplParams<'_> {
 
 enum IndexResult<'a> {
     Tuple(Tuple),
-    Scope(mvcc::TransactionIter<'a>)
+    Scope(mvcc::TransactionIter<'a>),
 }
 
 impl IndexImpl for IndexImplEnum {
-    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+    fn index_lookup(
+        &self,
+        bytes: &Bytes,
+        params: &IndexImplParams,
+    ) -> Result<Tuple, DatabaseError> {
         match self {
             IndexImplEnum::PrimaryKey(inner) => inner.index_lookup(bytes, params),
             IndexImplEnum::Unique(inner) => inner.index_lookup(bytes, params),
@@ -192,7 +206,11 @@ impl IndexImpl for IndexImplEnum {
         }
     }
 
-    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
+    fn eq_to_res<'a>(
+        &self,
+        value: &ValueRef,
+        params: &IndexImplParams<'a>,
+    ) -> Result<IndexResult<'a>, DatabaseError> {
         match self {
             IndexImplEnum::PrimaryKey(inner) => inner.eq_to_res(value, params),
             IndexImplEnum::Unique(inner) => inner.eq_to_res(value, params),
@@ -201,7 +219,12 @@ impl IndexImpl for IndexImplEnum {
         }
     }
 
-    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError> {
+    fn bound_key(
+        &self,
+        params: &IndexImplParams,
+        value: &ValueRef,
+        is_upper: bool,
+    ) -> Result<Vec<u8>, DatabaseError> {
         match self {
             IndexImplEnum::PrimaryKey(inner) => inner.bound_key(params, value, is_upper),
             IndexImplEnum::Unique(inner) => inner.bound_key(params, value, is_upper),
@@ -212,7 +235,11 @@ impl IndexImpl for IndexImplEnum {
 }
 
 impl IndexImpl for PrimaryKeyIndexImpl {
-    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+    fn index_lookup(
+        &self,
+        bytes: &Bytes,
+        params: &IndexImplParams,
+    ) -> Result<Tuple, DatabaseError> {
         Ok(TableCodec::decode_tuple(
             &params.table_types,
             &params.projections,
@@ -221,12 +248,16 @@ impl IndexImpl for PrimaryKeyIndexImpl {
         ))
     }
 
-    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
-        let bytes = params.tx.get(&TableCodec::encode_tuple_key(params.table_name, value)?)?.ok_or_else(|| {
-                DatabaseError::NotFound(
-                    "secondary index",
-                    format!("tuple_id -> {}", value),
-                )
+    fn eq_to_res<'a>(
+        &self,
+        value: &ValueRef,
+        params: &IndexImplParams<'a>,
+    ) -> Result<IndexResult<'a>, DatabaseError> {
+        let bytes = params
+            .tx
+            .get(&TableCodec::encode_tuple_key(params.table_name, value)?)?
+            .ok_or_else(|| {
+                DatabaseError::NotFound("secondary index", format!("tuple_id -> {}", value))
             })?;
         let tuple = TableCodec::decode_tuple(
             &params.table_types,
@@ -237,55 +268,80 @@ impl IndexImpl for PrimaryKeyIndexImpl {
         Ok(IndexResult::Tuple(tuple))
     }
 
-    fn bound_key(&self, params: &IndexImplParams, val: &ValueRef, _: bool) -> Result<Vec<u8>, DatabaseError> {
+    fn bound_key(
+        &self,
+        params: &IndexImplParams,
+        val: &ValueRef,
+        _: bool,
+    ) -> Result<Vec<u8>, DatabaseError> {
         TableCodec::encode_tuple_key(params.table_name, val)
     }
 }
 
 fn secondary_index_lookup(bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
     let tuple_id = TableCodec::decode_index(bytes, &params.index_meta.pk_ty);
-    params.get_tuple_by_id(&tuple_id)?.ok_or_else(|| {
-        DatabaseError::NotFound("index's tuple_id", tuple_id.to_string())
-    })
+    params
+        .get_tuple_by_id(&tuple_id)?
+        .ok_or_else(|| DatabaseError::NotFound("index's tuple_id", tuple_id.to_string()))
 }
 
 impl IndexImpl for UniqueIndexImpl {
-    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+    fn index_lookup(
+        &self,
+        bytes: &Bytes,
+        params: &IndexImplParams,
+    ) -> Result<Tuple, DatabaseError> {
         secondary_index_lookup(bytes, params)
     }
 
-    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
-        let bytes =
-            params.tx.get(&self.bound_key(params, value, false)?)?.ok_or_else(|| {
-                DatabaseError::NotFound(
-                    "secondary index",
-                    format!("index_value -> {}", value),
-                )
+    fn eq_to_res<'a>(
+        &self,
+        value: &ValueRef,
+        params: &IndexImplParams<'a>,
+    ) -> Result<IndexResult<'a>, DatabaseError> {
+        let bytes = params
+            .tx
+            .get(&self.bound_key(params, value, false)?)?
+            .ok_or_else(|| {
+                DatabaseError::NotFound("secondary index", format!("index_value -> {}", value))
             })?;
         let tuple_id = TableCodec::decode_index(&bytes, &params.index_meta.pk_ty);
         let tuple = params.get_tuple_by_id(&tuple_id)?.ok_or_else(|| {
-            DatabaseError::NotFound(
-                "secondary index",
-                format!("tuple_id -> {}", value),
-            )
+            DatabaseError::NotFound("secondary index", format!("tuple_id -> {}", value))
         })?;
         Ok(IndexResult::Tuple(tuple))
     }
 
-    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, _: bool) -> Result<Vec<u8>, DatabaseError> {
-        let index =
-            Index::new(params.index_meta.id, slice::from_ref(value), IndexType::Unique);
+    fn bound_key(
+        &self,
+        params: &IndexImplParams,
+        value: &ValueRef,
+        _: bool,
+    ) -> Result<Vec<u8>, DatabaseError> {
+        let index = Index::new(
+            params.index_meta.id,
+            slice::from_ref(value),
+            IndexType::Unique,
+        );
 
         TableCodec::encode_index_key(params.table_name, &index, None)
     }
 }
 
 impl IndexImpl for NormalIndexImpl {
-    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+    fn index_lookup(
+        &self,
+        bytes: &Bytes,
+        params: &IndexImplParams,
+    ) -> Result<Tuple, DatabaseError> {
         secondary_index_lookup(bytes, params)
     }
 
-    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
+    fn eq_to_res<'a>(
+        &self,
+        value: &ValueRef,
+        params: &IndexImplParams<'a>,
+    ) -> Result<IndexResult<'a>, DatabaseError> {
         let min = self.bound_key(params, value, false)?;
         let max = self.bound_key(params, value, true)?;
 
@@ -296,20 +352,36 @@ impl IndexImpl for NormalIndexImpl {
         Ok(IndexResult::Scope(iter))
     }
 
-    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError> {
-        let index =
-            Index::new(params.index_meta.id, slice::from_ref(value), IndexType::Normal);
+    fn bound_key(
+        &self,
+        params: &IndexImplParams,
+        value: &ValueRef,
+        is_upper: bool,
+    ) -> Result<Vec<u8>, DatabaseError> {
+        let index = Index::new(
+            params.index_meta.id,
+            slice::from_ref(value),
+            IndexType::Normal,
+        );
 
         TableCodec::encode_index_bound_key(params.table_name, &index, is_upper)
     }
 }
 
 impl IndexImpl for CompositeIndexImpl {
-    fn index_lookup(&self, bytes: &Bytes, params: &IndexImplParams) -> Result<Tuple, DatabaseError> {
+    fn index_lookup(
+        &self,
+        bytes: &Bytes,
+        params: &IndexImplParams,
+    ) -> Result<Tuple, DatabaseError> {
         secondary_index_lookup(bytes, params)
     }
 
-    fn eq_to_res<'a>(&self, value: &ValueRef, params: &IndexImplParams<'a>) -> Result<IndexResult<'a>, DatabaseError> {
+    fn eq_to_res<'a>(
+        &self,
+        value: &ValueRef,
+        params: &IndexImplParams<'a>,
+    ) -> Result<IndexResult<'a>, DatabaseError> {
         let min = self.bound_key(params, value, false)?;
         let max = self.bound_key(params, value, true)?;
 
@@ -320,7 +392,12 @@ impl IndexImpl for CompositeIndexImpl {
         Ok(IndexResult::Scope(iter))
     }
 
-    fn bound_key(&self, params: &IndexImplParams, value: &ValueRef, is_upper: bool) -> Result<Vec<u8>, DatabaseError> {
+    fn bound_key(
+        &self,
+        params: &IndexImplParams,
+        value: &ValueRef,
+        is_upper: bool,
+    ) -> Result<Vec<u8>, DatabaseError> {
         let values = if let DataValue::Tuple(Some(values)) = value.as_ref() {
             values.as_slice()
         } else {
@@ -399,12 +476,16 @@ impl Iter for IndexIter<'_> {
                     let bound_encode =
                         |bound: Bound<ValueRef>, is_upper: bool| -> Result<_, DatabaseError> {
                             match bound {
-                                Bound::Included(val) => {
-                                    Ok(Bound::Included(self.inner.bound_key(&self.params, &val, is_upper)?))
-                                }
-                                Bound::Excluded(val) => {
-                                    Ok(Bound::Excluded(self.inner.bound_key(&self.params, &val, is_upper)?))
-                                }
+                                Bound::Included(val) => Ok(Bound::Included(self.inner.bound_key(
+                                    &self.params,
+                                    &val,
+                                    is_upper,
+                                )?)),
+                                Bound::Excluded(val) => Ok(Bound::Excluded(self.inner.bound_key(
+                                    &self.params,
+                                    &val,
+                                    is_upper,
+                                )?)),
                                 Bound::Unbounded => Ok(Bound::Unbounded),
                             }
                         };
@@ -431,18 +512,16 @@ impl Iter for IndexIter<'_> {
                     )?;
                     self.scope_iter = Some(iter);
                 }
-                Range::Eq(val) => {
-                    match self.inner.eq_to_res(&val, &self.params)? {
-                        IndexResult::Tuple(tuple) => {
-                            if Self::offset_move(&mut self.offset) {
-                                return self.next_tuple();
-                            }
-                            Self::limit_sub(&mut self.limit);
-                            return Ok(Some(tuple));
+                Range::Eq(val) => match self.inner.eq_to_res(&val, &self.params)? {
+                    IndexResult::Tuple(tuple) => {
+                        if Self::offset_move(&mut self.offset) {
+                            return self.next_tuple();
                         }
-                        IndexResult::Scope(iter) => self.scope_iter = Some(iter),
+                        Self::limit_sub(&mut self.limit);
+                        return Ok(Some(tuple));
                     }
-                }
+                    IndexResult::Scope(iter) => self.scope_iter = Some(iter),
+                },
                 _ => (),
             }
         }

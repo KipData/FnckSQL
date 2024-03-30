@@ -3,7 +3,9 @@ use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
 use crate::optimizer::core::statistics_meta::{StatisticMetaLoader, StatisticsMeta};
 use crate::storage::table_codec::TableCodec;
-use crate::storage::{Bounds, IndexImplEnum, IndexImplParams, IndexIter, Iter, Storage, Transaction};
+use crate::storage::{
+    Bounds, IndexImplEnum, IndexImplParams, IndexIter, Iter, Storage, Transaction,
+};
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::{ColumnId, LogicalType};
@@ -571,7 +573,9 @@ mod test {
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
     use crate::storage::kip::KipStorage;
-    use crate::storage::{IndexImplEnum, IndexImplParams, IndexIter, Iter, PrimaryKeyIndexImpl, Storage, Transaction};
+    use crate::storage::{
+        IndexImplEnum, IndexImplParams, IndexIter, Iter, PrimaryKeyIndexImpl, Storage, Transaction,
+    };
     use crate::types::index::{IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
