@@ -211,7 +211,7 @@ impl TableCodec {
     }
 
     /// NonUnique Index:
-    /// Key: {TableName}{INDEX_TAG}{BOUND_MIN_TAG}{IndexID}{BOUND_MIN_TAG}{DataValue1}{DataValue2} .. {TupleId}
+    /// Key: {TableName}{INDEX_TAG}{BOUND_MIN_TAG}{IndexID}{BOUND_MIN_TAG}{DataValue1}{BOUND_MIN_TAG}{DataValue2} .. {TupleId}
     /// Value: TupleID
     ///
     /// Unique Index:

@@ -807,6 +807,7 @@ impl DataValue {
             DataValue::Tuple(Some(values)) => {
                 for v in values.iter() {
                     v.memcomparable_encode(b)?;
+                    b.push(0u8);
                 }
             }
             value => {
@@ -1573,6 +1574,7 @@ impl fmt::Debug for DataValue {
 mod test {
     use crate::errors::DatabaseError;
     use crate::types::value::DataValue;
+    use std::sync::Arc;
 
     #[test]
     fn test_mem_comparable_int() -> Result<(), DatabaseError> {
@@ -1658,6 +1660,39 @@ mod test {
         println!("{:?} < {:?}", key_f64_2, key_f64_3);
         assert!(key_f64_1 < key_f64_2);
         assert!(key_f64_2 < key_f64_3);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_mem_comparable_tuple() -> Result<(), DatabaseError> {
+        let mut key_tuple_1 = Vec::new();
+        let mut key_tuple_2 = Vec::new();
+        let mut key_tuple_3 = Vec::new();
+
+        DataValue::Tuple(Some(vec![
+            Arc::new(DataValue::Int8(None)),
+            Arc::new(DataValue::Int8(Some(0))),
+            Arc::new(DataValue::Int8(Some(1))),
+        ]))
+        .memcomparable_encode(&mut key_tuple_1)?;
+        DataValue::Tuple(Some(vec![
+            Arc::new(DataValue::Int8(Some(0))),
+            Arc::new(DataValue::Int8(Some(0))),
+            Arc::new(DataValue::Int8(Some(1))),
+        ]))
+        .memcomparable_encode(&mut key_tuple_2)?;
+        DataValue::Tuple(Some(vec![
+            Arc::new(DataValue::Int8(Some(0))),
+            Arc::new(DataValue::Int8(Some(0))),
+            Arc::new(DataValue::Int8(Some(2))),
+        ]))
+        .memcomparable_encode(&mut key_tuple_3)?;
+
+        println!("{:?} < {:?}", key_tuple_1, key_tuple_2);
+        println!("{:?} < {:?}", key_tuple_2, key_tuple_3);
+        assert!(key_tuple_1 < key_tuple_2);
+        assert!(key_tuple_2 < key_tuple_3);
 
         Ok(())
     }

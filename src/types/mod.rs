@@ -3,7 +3,7 @@ pub mod tuple;
 pub mod tuple_builder;
 pub mod value;
 
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::any::TypeId;
@@ -72,6 +72,8 @@ impl LogicalType {
             Some(LogicalType::Date)
         } else if type_id == TypeId::of::<NaiveDateTime>() {
             Some(LogicalType::DateTime)
+        } else if type_id == TypeId::of::<NaiveTime>() {
+            Some(LogicalType::Time)
         } else if type_id == TypeId::of::<Decimal>() {
             Some(LogicalType::Decimal(None, None))
         } else if type_id == TypeId::of::<String>() {
