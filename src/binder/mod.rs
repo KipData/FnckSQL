@@ -178,14 +178,20 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
     }
 
     /// get table from bindings
-    pub fn bind_table(&self, table_name: &str) -> Result<&TableCatalog, DatabaseError> {
+    pub fn bind_table(
+        &self,
+        table_name: &str,
+        parent: Option<&'a Binder<'a, T>>,
+    ) -> Result<&TableCatalog, DatabaseError> {
         let default_name = Arc::new(table_name.to_owned());
         let real_name = self.table_aliases.get(table_name).unwrap_or(&default_name);
-        self.bind_table
-            .iter()
-            .find(|((t, _), _)| t == real_name)
-            .ok_or(DatabaseError::InvalidTable(table_name.into()))
-            .map(|v| *v.1)
+        if let Some(table_catalog) = self.bind_table.iter().find(|((t, _), _)| t == real_name) {
+            Ok(table_catalog.1)
+        } else if let Some(binder) = parent {
+            binder.context.bind_table(table_name, binder.parent)
+        } else {
+            Err(DatabaseError::InvalidTable(table_name.into()))
+        }
     }
 
     // Tips: The order of this index is based on Aggregate being bound first.

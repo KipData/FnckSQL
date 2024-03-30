@@ -299,7 +299,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             try_default!(&table_name, column_name);
         }
         if let Some(table) = table_name.or(bind_table_name) {
-            let table_catalog = self.context.bind_table(&table)?;
+            let table_catalog = self.context.bind_table(&table, self.parent)?;
 
             let column_catalog = table_catalog
                 .get_column_by_name(&column_name)
