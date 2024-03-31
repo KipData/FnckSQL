@@ -1,5 +1,5 @@
 use chrono::format::{DelayedFormat, StrftimeItems};
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use integer_encoding::{FixedInt, FixedIntWriter};
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
@@ -20,7 +20,7 @@ use super::LogicalType;
 
 lazy_static! {
     pub static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
-    static ref UNIX_DATETIME: NaiveDateTime = NaiveDateTime::from_timestamp_opt(0, 0).unwrap();
+    static ref UNIX_DATETIME: NaiveDateTime = DateTime::from_timestamp(0, 0).unwrap().naive_utc();
     static ref UNIX_TIME: NaiveTime = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
 }
 
@@ -305,7 +305,7 @@ impl DataValue {
 
     pub fn datetime(&self) -> Option<NaiveDateTime> {
         if let DataValue::Date64(Some(val)) = self {
-            NaiveDateTime::from_timestamp_opt(*val, 0)
+            DateTime::from_timestamp(*val, 0).map(|dt| dt.naive_utc())
         } else {
             None
         }
@@ -478,7 +478,7 @@ impl DataValue {
                 unit: *unit,
             },
             LogicalType::Date => DataValue::Date32(Some(UNIX_DATETIME.num_days_from_ce())),
-            LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.timestamp())),
+            LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.and_utc().timestamp())),
             LogicalType::Time => DataValue::Time(Some(UNIX_TIME.num_seconds_from_midnight())),
             LogicalType::Decimal(_, _) => DataValue::Decimal(Some(Decimal::new(0, 0))),
             LogicalType::Tuple => DataValue::Tuple(Some(vec![])),
@@ -1208,7 +1208,7 @@ impl DataValue {
                                     NaiveDate::parse_from_str(&v, DATE_FMT)
                                         .map(|date| date.and_hms_opt(0, 0, 0).unwrap())
                                 })
-                                .map(|date_time| date_time.timestamp())
+                                .map(|date_time| date_time.and_utc().timestamp())
                         })
                         .transpose()?;
 
@@ -1252,7 +1252,7 @@ impl DataValue {
                     let option = value.and_then(|v| {
                         NaiveDate::from_num_days_from_ce_opt(v)
                             .and_then(|date| date.and_hms_opt(0, 0, 0))
-                            .map(|date_time| date_time.timestamp())
+                            .map(|date_time| date_time.and_utc().timestamp())
                     });
 
                     Ok(DataValue::Date64(option))
@@ -1279,7 +1279,8 @@ impl DataValue {
                 }
                 LogicalType::Date => {
                     let option = value.and_then(|v| {
-                        NaiveDateTime::from_timestamp_opt(v, 0)
+                        DateTime::from_timestamp(v, 0)
+                            .map(|dt| dt.naive_utc())
                             .map(|date_time| date_time.date().num_days_from_ce())
                     });
 
@@ -1288,7 +1289,7 @@ impl DataValue {
                 LogicalType::DateTime => Ok(DataValue::Date64(value)),
                 LogicalType::Time => {
                     let option = value.and_then(|v| {
-                        NaiveDateTime::from_timestamp_opt(v, 0)
+                        DateTime::from_timestamp(v, 0)
                             .map(|date_time| date_time.time().num_seconds_from_midnight())
                     });
 
@@ -1393,7 +1394,7 @@ impl DataValue {
     }
 
     fn date_time_format<'a>(v: i64) -> Option<DelayedFormat<StrftimeItems<'a>>> {
-        NaiveDateTime::from_timestamp_opt(v, 0).map(|date_time| date_time.format(DATE_TIME_FMT))
+        DateTime::from_timestamp(v, 0).map(|date_time| date_time.format(DATE_TIME_FMT))
     }
 
     fn time_format<'a>(v: u32) -> Option<DelayedFormat<StrftimeItems<'a>>> {
