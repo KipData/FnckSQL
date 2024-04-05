@@ -792,7 +792,7 @@ mod test {
     use crate::planner::operator::filter::FilterOperator;
     use crate::planner::operator::Operator;
     use crate::planner::LogicalPlan;
-    use crate::storage::kip::KipTransaction;
+    use crate::storage::kipdb::KipTransaction;
     use crate::types::value::DataValue;
     use std::ops::Bound;
     use std::sync::Arc;

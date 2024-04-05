@@ -192,7 +192,7 @@ mod tests {
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::limit::LimitOperator;
     use crate::planner::operator::Operator;
-    use crate::storage::kip::KipTransaction;
+    use crate::storage::kipdb::KipTransaction;
 
     #[tokio::test]
     async fn test_limit_project_transpose() -> Result<(), DatabaseError> {

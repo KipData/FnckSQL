@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use fnck_sql::db::{DBTransaction, DataBaseBuilder, Database};
 use fnck_sql::errors::DatabaseError;
-use fnck_sql::storage::kip::KipStorage;
+use fnck_sql::storage::kipdb::KipStorage;
 use fnck_sql::types::tuple::{Schema, Tuple};
 use fnck_sql::types::LogicalType;
 use futures::stream;

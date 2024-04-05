@@ -91,7 +91,7 @@ mod tests {
     use crate::optimizer::rule::implementation::ImplementationRuleImpl;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::PhysicalOption;
-    use crate::storage::kip::KipTransaction;
+    use crate::storage::kipdb::KipTransaction;
     use crate::storage::{Storage, Transaction};
     use crate::types::index::{IndexInfo, IndexMeta, IndexType};
     use crate::types::value::DataValue;

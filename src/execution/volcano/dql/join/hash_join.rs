@@ -383,7 +383,7 @@ mod test {
     use crate::planner::operator::values::ValuesOperator;
     use crate::planner::operator::Operator;
     use crate::planner::LogicalPlan;
-    use crate::storage::kip::KipStorage;
+    use crate::storage::kipdb::KipStorage;
     use crate::storage::Storage;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;

@@ -153,7 +153,7 @@ mod tests {
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
-    use crate::storage::kip::KipTransaction;
+    use crate::storage::kipdb::KipTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;

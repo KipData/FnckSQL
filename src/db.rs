@@ -15,7 +15,7 @@ use crate::optimizer::rule::implementation::ImplementationRuleImpl;
 use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
-use crate::storage::kip::KipStorage;
+use crate::storage::kipdb::KipStorage;
 use crate::storage::{Storage, Transaction};
 use crate::types::tuple::{SchemaRef, Tuple};
 use crate::udf::current_date::CurrentDate;

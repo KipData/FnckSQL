@@ -121,7 +121,7 @@ mod test {
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
     use crate::planner::LogicalPlan;
-    use crate::storage::kip::KipTransaction;
+    use crate::storage::kipdb::KipTransaction;
     use crate::types::value::DataValue;
     use crate::types::{ColumnId, LogicalType};
     use std::collections::Bound;
