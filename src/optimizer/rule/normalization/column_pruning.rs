@@ -200,7 +200,7 @@ mod tests {
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::join::JoinCondition;
     use crate::planner::operator::Operator;
-    use crate::storage::kip::KipTransaction;
+    use crate::storage::kipdb::KipTransaction;
 
     #[tokio::test]
     async fn test_column_pruning() -> Result<(), DatabaseError> {

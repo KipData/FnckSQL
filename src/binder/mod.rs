@@ -352,7 +352,7 @@ pub mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::errors::DatabaseError;
     use crate::planner::LogicalPlan;
-    use crate::storage::kip::KipStorage;
+    use crate::storage::kipdb::KipStorage;
     use crate::storage::{Storage, Transaction};
     use crate::types::LogicalType::Integer;
     use std::path::PathBuf;

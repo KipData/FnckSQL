@@ -143,7 +143,7 @@ mod tests {
     use super::*;
     use crate::binder::BinderContext;
     use crate::catalog::ColumnDesc;
-    use crate::storage::kip::KipStorage;
+    use crate::storage::kipdb::KipStorage;
     use crate::storage::Storage;
     use crate::types::LogicalType;
     use sqlparser::ast::CharLengthUnits;
