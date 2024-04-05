@@ -2,7 +2,7 @@
 
 [package]
 name        = "fnck_sql"
-version     = "0.0.1-alpha.14"
+version     = "0.0.1-alpha.15"
 edition     = "2021"
 authors     = ["Kould <kould2333@gmail.com>", "Xwg <loloxwg@gmail.com>"]
 description = "SQL as a Function for Rust"
