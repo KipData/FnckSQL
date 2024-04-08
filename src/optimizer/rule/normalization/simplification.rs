@@ -290,7 +290,6 @@ mod test {
                             evaluator: None,
                             ty: LogicalType::Integer,
                         }),
-                        evaluator: None,
                         ty: LogicalType::Integer,
                     }),
                     right_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
