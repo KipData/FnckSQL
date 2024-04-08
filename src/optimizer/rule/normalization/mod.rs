@@ -7,7 +7,9 @@ use crate::optimizer::rule::normalization::column_pruning::ColumnPruning;
 use crate::optimizer::rule::normalization::combine_operators::{
     CollapseGroupByAgg, CollapseProject, CombineFilter,
 };
-use crate::optimizer::rule::normalization::expression_remapper::ExpressionRemapper;
+use crate::optimizer::rule::normalization::compilation_in_advance::{
+    EvaluatorBind, ExpressionRemapper,
+};
 use crate::optimizer::rule::normalization::pushdown_limit::{
     EliminateLimits, LimitProjectTranspose, PushLimitIntoScan, PushLimitThroughJoin,
 };
@@ -18,7 +20,7 @@ use crate::optimizer::rule::normalization::simplification::SimplifyFilter;
 
 mod column_pruning;
 mod combine_operators;
-mod expression_remapper;
+mod compilation_in_advance;
 mod pushdown_limit;
 mod pushdown_predicates;
 mod simplification;
@@ -42,8 +44,9 @@ pub enum NormalizationRuleImpl {
     // Simplification
     SimplifyFilter,
     ConstantCalculation,
-    // ColumnRemapper
+    // CompilationInAdvance
     ExpressionRemapper,
+    EvaluatorBind,
 }
 
 impl MatchPattern for NormalizationRuleImpl {
@@ -62,6 +65,7 @@ impl MatchPattern for NormalizationRuleImpl {
             NormalizationRuleImpl::SimplifyFilter => SimplifyFilter.pattern(),
             NormalizationRuleImpl::ConstantCalculation => ConstantCalculation.pattern(),
             NormalizationRuleImpl::ExpressionRemapper => ExpressionRemapper.pattern(),
+            NormalizationRuleImpl::EvaluatorBind => EvaluatorBind.pattern(),
         }
     }
 }
@@ -92,6 +96,7 @@ impl NormalizationRule for NormalizationRuleImpl {
             }
             NormalizationRuleImpl::ConstantCalculation => ConstantCalculation.apply(node_id, graph),
             NormalizationRuleImpl::ExpressionRemapper => ExpressionRemapper.apply(node_id, graph),
+            NormalizationRuleImpl::EvaluatorBind => EvaluatorBind.apply(node_id, graph),
         }
     }
 }

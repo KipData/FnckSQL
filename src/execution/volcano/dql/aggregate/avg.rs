@@ -2,6 +2,7 @@ use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::aggregate::sum::SumAccumulator;
 use crate::execution::volcano::dql::aggregate::Accumulator;
 use crate::expression::BinaryOperator;
+use crate::types::evaluator::EvaluatorFactory;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
 use std::sync::Arc;
@@ -12,11 +13,11 @@ pub struct AvgAccumulator {
 }
 
 impl AvgAccumulator {
-    pub fn new(ty: &LogicalType) -> Self {
-        Self {
-            inner: SumAccumulator::new(ty),
+    pub fn new(ty: &LogicalType) -> Result<Self, DatabaseError> {
+        Ok(Self {
+            inner: SumAccumulator::new(ty)?,
             count: 0,
-        }
+        })
     }
 }
 
@@ -31,21 +32,23 @@ impl Accumulator for AvgAccumulator {
     }
 
     fn evaluate(&self) -> Result<ValueRef, DatabaseError> {
-        let value = self.inner.evaluate()?;
+        let mut value = self.inner.evaluate()?;
+        let value_ty = value.logical_type();
 
-        let quantity = if value.logical_type().is_signed_numeric() {
+        if self.count == 0 {
+            return Ok(Arc::new(DataValue::init(&value_ty)));
+        }
+        let quantity = if value_ty.is_signed_numeric() {
             DataValue::Int64(Some(self.count as i64))
         } else {
             DataValue::UInt32(Some(self.count as u32))
         };
-        if self.count == 0 {
-            return Ok(Arc::new(DataValue::init(&value.logical_type())));
-        }
+        let quantity_ty = quantity.logical_type();
 
-        Ok(Arc::new(DataValue::binary_op(
-            &value,
-            &quantity,
-            &BinaryOperator::Divide,
-        )?))
+        if value_ty != quantity_ty {
+            value = Arc::new(DataValue::clone(&value).cast(&quantity_ty)?)
+        }
+        let evaluator = EvaluatorFactory::binary_create(quantity_ty, BinaryOperator::Divide)?;
+        Ok(Arc::new(evaluator.0.binary_eval(&value, &quantity)))
     }
 }

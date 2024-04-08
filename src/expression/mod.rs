@@ -11,7 +11,9 @@ use sqlparser::ast::{
 
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
+use crate::errors::DatabaseError;
 use crate::expression::function::ScalarFunction;
+use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory};
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 
@@ -57,6 +59,7 @@ pub enum ScalarExpression {
         op: BinaryOperator,
         left_expr: Box<ScalarExpression>,
         right_expr: Box<ScalarExpression>,
+        evaluator: Option<BinaryEvaluatorBox>,
         ty: LogicalType,
     },
     AggCall {
@@ -273,6 +276,141 @@ impl ScalarExpression {
                 }
             }
         }
+    }
+
+    pub fn bind_evaluator(&mut self) -> Result<(), DatabaseError> {
+        match self {
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                op,
+                evaluator,
+                ..
+            } => {
+                left_expr.bind_evaluator()?;
+                right_expr.bind_evaluator()?;
+
+                let ty = LogicalType::max_logical_type(
+                    &left_expr.return_type(),
+                    &right_expr.return_type(),
+                )?;
+                let fn_cast = |expr: &mut ScalarExpression, ty: LogicalType| {
+                    if expr.return_type() != ty {
+                        *expr = ScalarExpression::TypeCast {
+                            expr: Box::new(mem::replace(expr, ScalarExpression::Empty)),
+                            ty,
+                        }
+                    }
+                };
+                fn_cast(left_expr, ty);
+                fn_cast(right_expr, ty);
+
+                *evaluator = Some(EvaluatorFactory::binary_create(ty, *op)?);
+            }
+            ScalarExpression::Alias { expr, .. } => {
+                expr.bind_evaluator()?;
+            }
+            ScalarExpression::TypeCast { expr, .. } => {
+                expr.bind_evaluator()?;
+            }
+            ScalarExpression::IsNull { expr, .. } => {
+                expr.bind_evaluator()?;
+            }
+            ScalarExpression::Unary { expr, .. } => {
+                expr.bind_evaluator()?;
+            }
+            ScalarExpression::AggCall { args, .. }
+            | ScalarExpression::Coalesce { exprs: args, .. }
+            | ScalarExpression::Tuple(args) => {
+                for arg in args {
+                    arg.bind_evaluator()?;
+                }
+            }
+            ScalarExpression::In { expr, args, .. } => {
+                expr.bind_evaluator()?;
+                for arg in args {
+                    arg.bind_evaluator()?;
+                }
+            }
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                expr.bind_evaluator()?;
+                left_expr.bind_evaluator()?;
+                right_expr.bind_evaluator()?;
+            }
+            ScalarExpression::SubString {
+                expr,
+                for_expr,
+                from_expr,
+            } => {
+                expr.bind_evaluator()?;
+                if let Some(expr) = for_expr {
+                    expr.bind_evaluator()?;
+                }
+                if let Some(expr) = from_expr {
+                    expr.bind_evaluator()?;
+                }
+            }
+            ScalarExpression::Position { expr, in_expr } => {
+                expr.bind_evaluator()?;
+                in_expr.bind_evaluator()?;
+            }
+            ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Constant(_)
+            | ScalarExpression::ColumnRef(_)
+            | ScalarExpression::Reference { .. } => (),
+            ScalarExpression::Function(function) => {
+                for expr in function.args.iter_mut() {
+                    expr.bind_evaluator()?;
+                }
+            }
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                condition.bind_evaluator()?;
+                left_expr.bind_evaluator()?;
+                right_expr.bind_evaluator()?;
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            }
+            | ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                left_expr.bind_evaluator()?;
+                right_expr.bind_evaluator()?;
+            }
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                if let Some(expr) = operand_expr {
+                    expr.bind_evaluator()?;
+                }
+                for (expr_1, expr_2) in expr_pairs {
+                    expr_1.bind_evaluator()?;
+                    expr_2.bind_evaluator()?;
+                }
+                if let Some(expr) = else_expr {
+                    expr.bind_evaluator()?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn has_count_star(&self) -> bool {

@@ -71,6 +71,7 @@ fn reduce_filters(filters: Vec<ScalarExpression>, having: bool) -> Option<Filter
             op: BinaryOperator::And,
             left_expr: Box::new(a),
             right_expr: Box::new(b),
+            evaluator: None,
             ty: LogicalType::Boolean,
         })
         .map(|f| FilterOperator {

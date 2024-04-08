@@ -485,6 +485,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         op: BinaryOperator::And,
                         left_expr: Box::new(acc),
                         right_expr: Box::new(expr),
+                        evaluator: None,
                         ty: LogicalType::Boolean,
                     });
 
@@ -654,6 +655,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                         op: BinaryOperator::And,
                         left_expr: Box::new(acc),
                         right_expr: Box::new(expr),
+                        evaluator: None,
                         ty: LogicalType::Boolean,
                     });
                 // TODO: handle cross join if on_keys is empty
@@ -723,6 +725,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 right_expr,
                 op,
                 ty,
+                ..
             } => {
                 match op {
                     BinaryOperator::Eq => {
@@ -746,6 +749,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                                         right_expr,
                                         op,
                                         ty,
+                                        evaluator: None,
                                     });
                                 }
                             }
@@ -757,6 +761,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                                         right_expr,
                                         op,
                                         ty,
+                                        evaluator: None,
                                     });
                                 }
                             }
@@ -772,6 +777,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                                         right_expr,
                                         op,
                                         ty,
+                                        evaluator: None,
                                     });
                                 }
                             }
@@ -800,6 +806,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                             right_expr,
                             op,
                             ty,
+                            evaluator: None,
                         });
                     }
                     _ => {
@@ -813,6 +820,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                                 right_expr,
                                 op,
                                 ty,
+                                evaluator: None,
                             });
                         }
                     }

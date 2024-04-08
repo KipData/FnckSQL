@@ -2,6 +2,7 @@ use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
 use crate::expression::function::ScalarFunction;
 use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
+use crate::types::evaluator::EvaluatorFactory;
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::{ColumnId, LogicalType};
 use std::mem;
@@ -157,12 +158,20 @@ impl ScalarExpression {
                 left_expr,
                 right_expr,
                 op,
+                ty,
                 ..
             } => {
-                let left = left_expr.unpack_val()?;
-                let right = right_expr.unpack_val()?;
+                let mut left = left_expr.unpack_val()?;
+                let mut right = right_expr.unpack_val()?;
+                let evaluator = EvaluatorFactory::binary_create(*ty, *op).ok()?;
 
-                DataValue::binary_op(&left, &right, op).ok().map(Arc::new)
+                if left.logical_type() != *ty {
+                    left = Arc::new(DataValue::clone(&left).cast(ty).ok()?);
+                }
+                if right.logical_type() != *ty {
+                    right = Arc::new(DataValue::clone(&right).cast(ty).ok()?);
+                }
+                Some(Arc::new(evaluator.0.binary_eval(&left, &right)))
             }
             _ => None,
         }
@@ -210,15 +219,27 @@ impl ScalarExpression {
                 op,
                 ..
             } => {
+                let ty = LogicalType::max_logical_type(
+                    &left_expr.return_type(),
+                    &right_expr.return_type(),
+                )?;
                 left_expr.constant_calculation()?;
                 right_expr.constant_calculation()?;
 
                 if let (
                     ScalarExpression::Constant(left_val),
                     ScalarExpression::Constant(right_val),
-                ) = (left_expr.as_ref(), right_expr.as_ref())
+                ) = (left_expr.as_mut(), right_expr.as_mut())
                 {
-                    let value = DataValue::binary_op(left_val, right_val, op)?;
+                    let evaluator = EvaluatorFactory::binary_create(ty, *op)?;
+
+                    if left_val.logical_type() != ty {
+                        *left_val = Arc::new(DataValue::clone(left_val).cast(&ty)?);
+                    }
+                    if right_val.logical_type() != ty {
+                        *right_val = Arc::new(DataValue::clone(right_val).cast(&ty)?);
+                    }
+                    let value = evaluator.0.binary_eval(left_val, right_val);
                     let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
                 }
             }
@@ -326,6 +347,7 @@ impl ScalarExpression {
                 right_expr,
                 op,
                 ty,
+                ..
             } => {
                 Self::fix_expr(replaces, left_expr, right_expr, op)?;
 
@@ -399,7 +421,7 @@ impl ScalarExpression {
                     );
                 }
             }
-            ScalarExpression::Unary { expr, op, ty } => {
+            ScalarExpression::Unary { expr, op, ty, .. } => {
                 if let Some(val) = expr.unpack_val() {
                     let new_expr =
                         ScalarExpression::Constant(Arc::new(DataValue::unary_op(&val, op)?));
@@ -430,6 +452,7 @@ impl ScalarExpression {
                     op: op_1,
                     left_expr: expr.clone(),
                     right_expr: Box::new(args.remove(0)),
+                    evaluator: None,
                     ty: LogicalType::Boolean,
                 };
 
@@ -440,9 +463,11 @@ impl ScalarExpression {
                             op: op_1,
                             left_expr: expr.clone(),
                             right_expr: Box::new(arg),
+                            evaluator: None,
                             ty: LogicalType::Boolean,
                         }),
                         right_expr: Box::new(new_expr),
+                        evaluator: None,
                         ty: LogicalType::Boolean,
                     }
                 }
@@ -470,14 +495,17 @@ impl ScalarExpression {
                         op: left_op,
                         left_expr: expr.clone(),
                         right_expr: mem::replace(left_expr, Box::new(ScalarExpression::Empty)),
+                        evaluator: None,
                         ty: LogicalType::Boolean,
                     }),
                     right_expr: Box::new(ScalarExpression::Binary {
                         op: right_op,
                         left_expr: mem::replace(expr, Box::new(ScalarExpression::Empty)),
                         right_expr: mem::replace(right_expr, Box::new(ScalarExpression::Empty)),
+                        evaluator: None,
                         ty: LogicalType::Boolean,
                     }),
+                    evaluator: None,
                     ty: LogicalType::Boolean,
                 };
 
@@ -616,6 +644,7 @@ impl ScalarExpression {
                 op: fixed_op,
                 left_expr: fixed_left_expr,
                 right_expr: fixed_right_expr,
+                evaluator: None,
                 ty: fix_ty,
             }),
         );

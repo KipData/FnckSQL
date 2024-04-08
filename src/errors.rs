@@ -43,6 +43,8 @@ pub enum DatabaseError {
     EmptyPlan,
     #[error("sql statement is empty")]
     EmptyStatement,
+    #[error("evaluator not found")]
+    EvaluatorNotFound,
     #[error("from utf8: {0}")]
     FromUtf8Error(
         #[source]

@@ -102,7 +102,7 @@ impl HashAggStatus {
         for (acc, value) in self
             .group_hash_accs
             .entry(group_keys)
-            .or_insert_with(|| create_accumulators(&self.agg_calls))
+            .or_insert_with(|| create_accumulators(&self.agg_calls).unwrap())
             .iter_mut()
             .zip_eq(values.iter())
         {

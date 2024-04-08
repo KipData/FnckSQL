@@ -132,6 +132,7 @@ mod test {
     use crate::expression::function::{FuncMonotonicity, FunctionSummary, ScalarFunctionImpl};
     use crate::expression::BinaryOperator;
     use crate::expression::ScalarExpression;
+    use crate::types::evaluator::EvaluatorFactory;
     use crate::types::tuple::{SchemaRef, Tuple};
     use crate::types::value::{DataValue, Utf8Type, ValueRef};
     use crate::types::LogicalType;
@@ -203,7 +204,9 @@ mod test {
     }
 
     function!(MyFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: ValueRef, v2: ValueRef| {
-        DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)
+        let plus_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
+
+        Ok(plus_evaluator.0.binary_eval(&v1, &v2))
     }));
 
     #[test]

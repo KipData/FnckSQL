@@ -36,7 +36,7 @@ impl SimpleAggExecutor {
             agg_calls,
             mut input,
         } = self;
-        let mut accs = create_accumulators(&agg_calls);
+        let mut accs = create_accumulators(&agg_calls)?;
         let schema = input.output_schema().clone();
 
         #[for_await]

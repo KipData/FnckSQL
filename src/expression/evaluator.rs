@@ -2,6 +2,7 @@ use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
 use crate::expression::function::ScalarFunction;
 use crate::expression::{AliasType, BinaryOperator, ScalarExpression};
+use crate::types::evaluator::EvaluatorFactory;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use crate::types::LogicalType;
@@ -80,13 +81,19 @@ impl ScalarExpression {
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
-                op,
+                evaluator,
                 ..
             } => {
                 let left = left_expr.eval(tuple, schema)?;
                 let right = right_expr.eval(tuple, schema)?;
 
-                Ok(Arc::new(DataValue::binary_op(&left, &right, op)?))
+                Ok(Arc::new(
+                    evaluator
+                        .as_ref()
+                        .ok_or(DatabaseError::EvaluatorNotFound)?
+                        .0
+                        .binary_eval(&left, &right),
+                ))
             }
             ScalarExpression::IsNull { expr, negated } => {
                 let mut is_null = expr.eval(tuple, schema)?.is_null();
@@ -292,10 +299,17 @@ impl ScalarExpression {
                     operand_value = Some(expr.eval(tuple, schema)?);
                 }
                 for (when_expr, result_expr) in expr_pairs {
-                    let when_value = when_expr.eval(tuple, schema)?;
+                    let mut when_value = when_expr.eval(tuple, schema)?;
                     let is_true = if let Some(operand_value) = &operand_value {
-                        operand_value
-                            .binary_op(&when_value, &BinaryOperator::Eq)?
+                        let ty = operand_value.logical_type();
+                        let evaluator = EvaluatorFactory::binary_create(ty, BinaryOperator::Eq)?;
+
+                        if when_value.logical_type() != ty {
+                            when_value = Arc::new(DataValue::clone(&when_value).cast(&ty)?);
+                        }
+                        evaluator
+                            .0
+                            .binary_eval(operand_value, &when_value)
                             .is_true()?
                     } else {
                         when_value.is_true()?
