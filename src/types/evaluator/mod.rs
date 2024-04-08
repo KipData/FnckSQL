@@ -152,12 +152,10 @@ impl EvaluatorFactory {
                 BinaryOperator::NotEq => {
                     Ok(BinaryEvaluatorBox(Arc::new(BooleanNotEqBinaryEvaluator)))
                 }
-                _ => {
-                   Err(DatabaseError::UnsupportedBinaryOperator(
-                        LogicalType::Boolean,
-                        op,
-                    ))
-                }
+                _ => Err(DatabaseError::UnsupportedBinaryOperator(
+                    LogicalType::Boolean,
+                    op,
+                )),
             },
             LogicalType::Varchar(_, _) | LogicalType::Char(_, _) => match op {
                 BinaryOperator::Gt => Ok(BinaryEvaluatorBox(Arc::new(Utf8GtBinaryEvaluator))),
