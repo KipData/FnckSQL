@@ -88,6 +88,7 @@ impl NormalizationRule for CombineFilter {
                         op: BinaryOperator::And,
                         left_expr: Box::new(op.predicate),
                         right_expr: Box::new(child_op.predicate.clone()),
+                        evaluator: None,
                         ty: LogicalType::Boolean,
                     };
                     child_op.having = op.having || child_op.having;
@@ -212,6 +213,7 @@ mod tests {
                 op: BinaryOperator::Eq,
                 left_expr: Box::new(Constant(Arc::new(DataValue::Int8(Some(1))))),
                 right_expr: Box::new(Constant(Arc::new(DataValue::Int8(Some(1))))),
+                evaluator: None,
                 ty: LogicalType::Boolean,
             }
         } else {

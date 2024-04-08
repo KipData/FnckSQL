@@ -1,3 +1,4 @@
+pub mod evaluator;
 pub mod index;
 pub mod tuple;
 pub mod tuple_builder;
@@ -202,10 +203,12 @@ impl LogicalType {
         ) {
             return Ok(LogicalType::DateTime);
         }
-        if let (LogicalType::Char(..), LogicalType::Varchar(len, ..))
-        | (LogicalType::Varchar(len, ..), LogicalType::Char(..)) = (left, right)
+        if let (LogicalType::Char(..), LogicalType::Varchar(..))
+        | (LogicalType::Varchar(..), LogicalType::Char(..))
+        | (LogicalType::Char(..), LogicalType::Char(..))
+        | (LogicalType::Varchar(..), LogicalType::Varchar(..)) = (left, right)
         {
-            return Ok(LogicalType::Varchar(*len, CharLengthUnits::Characters));
+            return Ok(LogicalType::Varchar(None, CharLengthUnits::Characters));
         }
         Err(DatabaseError::Incomparable(*left, *right))
     }

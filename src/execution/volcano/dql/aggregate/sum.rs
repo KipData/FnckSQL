@@ -1,6 +1,7 @@
 use crate::errors::DatabaseError;
 use crate::execution::volcano::dql::aggregate::Accumulator;
 use crate::expression::BinaryOperator;
+use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory};
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
 use ahash::RandomState;
@@ -9,22 +10,24 @@ use std::sync::Arc;
 
 pub struct SumAccumulator {
     result: DataValue,
+    evaluator: BinaryEvaluatorBox,
 }
 
 impl SumAccumulator {
-    pub fn new(ty: &LogicalType) -> Self {
+    pub fn new(ty: &LogicalType) -> Result<Self, DatabaseError> {
         assert!(ty.is_numeric());
 
-        Self {
+        Ok(Self {
             result: DataValue::init(ty),
-        }
+            evaluator: EvaluatorFactory::binary_create(*ty, BinaryOperator::Plus)?,
+        })
     }
 }
 
 impl Accumulator for SumAccumulator {
     fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
         if !value.is_null() {
-            self.result = DataValue::binary_op(&self.result, value, &BinaryOperator::Plus)?;
+            self.result = self.evaluator.0.binary_eval(&self.result, value);
         }
 
         Ok(())
@@ -41,11 +44,11 @@ pub struct DistinctSumAccumulator {
 }
 
 impl DistinctSumAccumulator {
-    pub fn new(ty: &LogicalType) -> Self {
-        Self {
+    pub fn new(ty: &LogicalType) -> Result<Self, DatabaseError> {
+        Ok(Self {
             distinct_values: HashSet::default(),
-            inner: SumAccumulator::new(ty),
-        }
+            inner: SumAccumulator::new(ty)?,
+        })
     }
 }
 

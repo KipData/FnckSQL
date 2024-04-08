@@ -3,6 +3,7 @@ use crate::execution::volcano::dql::sort::radix_sort;
 use crate::expression::range_detacher::Range;
 use crate::expression::BinaryOperator;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
+use crate::types::evaluator::EvaluatorFactory;
 use crate::types::index::{IndexId, IndexMeta};
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
@@ -159,15 +160,16 @@ fn is_under(
     is_min: bool,
 ) -> Result<bool, DatabaseError> {
     let _is_under = |value: &ValueRef, target: &ValueRef, is_min: bool| {
-        let res = value.binary_op(
-            target,
-            &if is_min {
+        let evaluator = EvaluatorFactory::binary_create(
+            value.logical_type(),
+            if is_min {
                 BinaryOperator::Lt
             } else {
                 BinaryOperator::LtEq
             },
         )?;
-        Ok::<bool, DatabaseError>(matches!(res, DataValue::Boolean(Some(true))))
+        let value = evaluator.0.binary_eval(value, target);
+        Ok::<bool, DatabaseError>(matches!(value, DataValue::Boolean(Some(true))))
     };
 
     Ok(match target {
@@ -183,15 +185,16 @@ fn is_above(
     is_min: bool,
 ) -> Result<bool, DatabaseError> {
     let _is_above = |value: &ValueRef, target: &ValueRef, is_min: bool| {
-        let res = value.binary_op(
-            target,
-            &if is_min {
+        let evaluator = EvaluatorFactory::binary_create(
+            value.logical_type(),
+            if is_min {
                 BinaryOperator::GtEq
             } else {
                 BinaryOperator::Gt
             },
         )?;
-        Ok::<bool, DatabaseError>(matches!(res, DataValue::Boolean(Some(true))))
+        let value = evaluator.0.binary_eval(value, target);
+        Ok::<bool, DatabaseError>(matches!(value, DataValue::Boolean(Some(true))))
     };
     Ok(match target {
         Bound::Included(target) => _is_above(value, target, is_min)?,

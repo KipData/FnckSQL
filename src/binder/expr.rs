@@ -145,6 +145,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     op: expression::BinaryOperator::Eq,
                     left_expr,
                     right_expr: Box::new(alias_expr),
+                    evaluator: None,
                     ty: LogicalType::Boolean,
                 })
             }
@@ -272,6 +273,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             op,
             left_expr,
             right_expr,
+            evaluator: None,
             ty: LogicalType::Boolean,
         })
     }
@@ -342,9 +344,18 @@ impl<'a, T: Transaction> Binder<'a, T> {
             BinaryOperator::Plus
             | BinaryOperator::Minus
             | BinaryOperator::Multiply
-            | BinaryOperator::Divide
             | BinaryOperator::Modulo => {
                 LogicalType::max_logical_type(&left_expr.return_type(), &right_expr.return_type())?
+            }
+            BinaryOperator::Divide => {
+                if let LogicalType::Decimal(precision, scale) = LogicalType::max_logical_type(
+                    &left_expr.return_type(),
+                    &right_expr.return_type(),
+                )? {
+                    LogicalType::Decimal(precision, scale)
+                } else {
+                    LogicalType::Double
+                }
             }
             BinaryOperator::Gt
             | BinaryOperator::Lt
@@ -356,13 +367,14 @@ impl<'a, T: Transaction> Binder<'a, T> {
             | BinaryOperator::Or
             | BinaryOperator::Xor => LogicalType::Boolean,
             BinaryOperator::StringConcat => LogicalType::Varchar(None, CharLengthUnits::Characters),
-            _ => todo!(),
+            op => return Err(DatabaseError::UnsupportedStmt(format!("{}", op))),
         };
 
         Ok(ScalarExpression::Binary {
             op: (op.clone()).into(),
             left_expr,
             right_expr,
+            evaluator: None,
             ty,
         })
     }
@@ -382,6 +394,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(ScalarExpression::Unary {
             op: (*op).into(),
             expr,
+            evaluator: None,
             ty,
         })
     }

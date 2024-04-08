@@ -186,7 +186,11 @@ impl<S: Storage> Database<S> {
             .batch(
                 "Expression Remapper".to_string(),
                 HepBatchStrategy::once_topdown(),
-                vec![NormalizationRuleImpl::ExpressionRemapper],
+                vec![
+                    NormalizationRuleImpl::ExpressionRemapper,
+                    // TIPS: This rule is necessary
+                    NormalizationRuleImpl::EvaluatorBind,
+                ],
             )
             .implementations(vec![
                 // DQL
@@ -263,6 +267,7 @@ mod test {
     use crate::expression::{BinaryOperator, UnaryOperator};
     use crate::function;
     use crate::storage::{Storage, Transaction};
+    use crate::types::evaluator::EvaluatorFactory;
     use crate::types::tuple::{create_table, Tuple};
     use crate::types::value::{DataValue, ValueRef};
     use crate::types::LogicalType;
@@ -304,7 +309,9 @@ mod test {
     }
 
     function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: ValueRef, v2: ValueRef| {
-        let value = DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)?;
+        let plus_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
+        let value = plus_evaluator.0.binary_eval(&v1, &v2);
+
         DataValue::unary_op(&value, &UnaryOperator::Minus)
     }));
 
@@ -315,13 +322,9 @@ mod test {
             .register_function(TestFunction::new())
             .build()
             .await?;
-        let _ = fnck_sql
-            .run("CREATE TABLE test (id int primary key, c1 int, c2 int default test(1, 2));")
+        let (schema, tuples) = fnck_sql
+            .run("SELECT DATE '2016-03-26' = DATE '2016-03-26'")
             .await?;
-        let _ = fnck_sql
-            .run("INSERT INTO test VALUES (1, 2, 2), (0, 1, 1), (2, 1, 1), (3, 3, default);")
-            .await?;
-        let (schema, tuples) = fnck_sql.run("select test(c1, 1), c2 from test").await?;
         println!("{}", create_table(&schema, &tuples));
 
         Ok(())

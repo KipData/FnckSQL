@@ -330,6 +330,8 @@ mod test {
     use crate::planner::operator::Operator;
     use crate::storage::kipdb::KipStorage;
     use crate::storage::Storage;
+    use crate::types::evaluator::int32::Int32GtBinaryEvaluator;
+    use crate::types::evaluator::BinaryEvaluatorBox;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::collections::HashSet;
@@ -441,7 +443,8 @@ mod test {
                 true,
                 desc.clone(),
             )))),
-            ty: LogicalType::Integer,
+            evaluator: Some(BinaryEvaluatorBox(Arc::new(Int32GtBinaryEvaluator))),
+            ty: LogicalType::Boolean,
         };
 
         (on_keys, values_t1, values_t2, filter)

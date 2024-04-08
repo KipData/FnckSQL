@@ -192,10 +192,8 @@ mod test {
         let plan_7 = select_sql_run("select * from t1 where 1 < -c1").await?;
         // c1 > 0
         let plan_8 = select_sql_run("select * from t1 where 1 < c1 + 1").await?;
-
         // c1 < 24
         let plan_9 = select_sql_run("select * from t1 where (-1 - c1) + 1 > 24").await?;
-
         // c1 < 24
         let plan_10 = select_sql_run("select * from t1 where 24 < (-1 - c1) + 1").await?;
 
@@ -289,11 +287,14 @@ mod test {
                             right_expr: Box::new(ScalarExpression::Constant(Arc::new(
                                 DataValue::Int32(Some(1))
                             ))),
+                            evaluator: None,
                             ty: LogicalType::Integer,
                         }),
+                        evaluator: None,
                         ty: LogicalType::Integer,
                     }),
                     right_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
+                    evaluator: None,
                     ty: LogicalType::Boolean,
                 }
             )
