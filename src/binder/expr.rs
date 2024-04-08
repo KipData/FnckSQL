@@ -394,7 +394,6 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(ScalarExpression::Unary {
             op: (*op).into(),
             expr,
-            evaluator: None,
             ty,
         })
     }

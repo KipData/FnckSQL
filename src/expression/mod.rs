@@ -13,7 +13,7 @@ use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
 use crate::errors::DatabaseError;
 use crate::expression::function::ScalarFunction;
-use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory, UnaryEvaluatorBox};
+use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory};
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 
@@ -53,7 +53,6 @@ pub enum ScalarExpression {
     Unary {
         op: UnaryOperator,
         expr: Box<ScalarExpression>,
-        evaluator: Option<UnaryEvaluatorBox>,
         ty: LogicalType,
     },
     Binary {

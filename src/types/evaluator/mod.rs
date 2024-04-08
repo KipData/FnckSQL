@@ -75,29 +75,6 @@ impl Hash for BinaryEvaluatorBox {
     }
 }
 
-#[typetag::serde(tag = "type")]
-pub trait UnaryEvaluator: Send + Sync + Debug {
-    fn unary_eval(&self, value: &DataValue) -> DataValue;
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct UnaryEvaluatorBox(pub Arc<dyn BinaryEvaluator>);
-
-impl PartialEq for UnaryEvaluatorBox {
-    fn eq(&self, _: &Self) -> bool {
-        // FIXME
-        true
-    }
-}
-
-impl Eq for UnaryEvaluatorBox {}
-
-impl Hash for UnaryEvaluatorBox {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_i8(42)
-    }
-}
-
 macro_rules! numeric_binary_evaluator {
     ($value_type:ident, $op:expr, $ty:expr) => {
         paste! {

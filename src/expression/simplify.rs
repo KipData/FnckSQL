@@ -571,7 +571,6 @@ impl ScalarExpression {
             Box::new(ScalarExpression::Unary {
                 op: fix_op,
                 expr,
-                evaluator: None,
                 ty: fix_ty,
             }),
         );
