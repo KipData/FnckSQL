@@ -88,7 +88,11 @@ impl ScalarExpression {
                 let right = right_expr.eval(tuple, schema)?;
 
                 Ok(Arc::new(
-                    evaluator.as_ref().unwrap().0.binary_eval(&left, &right),
+                    evaluator
+                        .as_ref()
+                        .ok_or(DatabaseError::EvaluatorNotFound)?
+                        .0
+                        .binary_eval(&left, &right),
                 ))
             }
             ScalarExpression::IsNull { expr, negated } => {
