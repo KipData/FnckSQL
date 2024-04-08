@@ -322,9 +322,13 @@ mod test {
             .register_function(TestFunction::new())
             .build()
             .await?;
-        let (schema, tuples) = fnck_sql
-            .run("SELECT DATE '2016-03-26' = DATE '2016-03-26'")
+        let _ = fnck_sql
+            .run("CREATE TABLE test (id int primary key, c1 int, c2 int default test(1, 2));")
             .await?;
+        let _ = fnck_sql
+            .run("INSERT INTO test VALUES (1, 2, 2), (0, 1, 1), (2, 1, 1), (3, 3, default);")
+            .await?;
+        let (schema, tuples) = fnck_sql.run("select test(c1, 1), c2 from test").await?;
         println!("{}", create_table(&schema, &tuples));
 
         Ok(())
