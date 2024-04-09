@@ -18,7 +18,7 @@ pub mod uint8;
 pub mod utf8;
 
 use crate::errors::DatabaseError;
-use crate::expression::BinaryOperator;
+use crate::expression::{BinaryOperator, UnaryOperator};
 use crate::types::evaluator::boolean::*;
 use crate::types::evaluator::date::*;
 use crate::types::evaluator::datetime::*;
@@ -57,8 +57,16 @@ pub trait BinaryEvaluator: Send + Sync + Debug {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue;
 }
 
+#[typetag::serde(tag = "type")]
+pub trait UnaryEvaluator: Send + Sync + Debug {
+    fn unary_eval(&self, value: &DataValue) -> DataValue;
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BinaryEvaluatorBox(pub Arc<dyn BinaryEvaluator>);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UnaryEvaluatorBox(pub Arc<dyn UnaryEvaluator>);
 
 impl PartialEq for BinaryEvaluatorBox {
     fn eq(&self, _: &Self) -> bool {
@@ -70,6 +78,21 @@ impl PartialEq for BinaryEvaluatorBox {
 impl Eq for BinaryEvaluatorBox {}
 
 impl Hash for BinaryEvaluatorBox {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_i8(42)
+    }
+}
+
+impl PartialEq for UnaryEvaluatorBox {
+    fn eq(&self, _: &Self) -> bool {
+        // FIXME
+        true
+    }
+}
+
+impl Eq for UnaryEvaluatorBox {}
+
+impl Hash for UnaryEvaluatorBox {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_i8(42)
     }
@@ -100,9 +123,44 @@ macro_rules! numeric_binary_evaluator {
     };
 }
 
+macro_rules! numeric_unary_evaluator {
+    ($value_type:ident, $op:expr, $ty:expr) => {
+        paste! {
+            match $op {
+                UnaryOperator::Plus => Ok(UnaryEvaluatorBox(Arc::new([<$value_type PlusUnaryEvaluator>]))),
+                UnaryOperator::Minus => Ok(UnaryEvaluatorBox(Arc::new([<$value_type MinusUnaryEvaluator>]))),
+                _ => {
+                    return Err(DatabaseError::UnsupportedUnaryOperator(
+                        $ty,
+                        $op,
+                    ))
+                }
+            }
+        }
+    };
+}
+
 pub struct EvaluatorFactory;
 
 impl EvaluatorFactory {
+    pub fn unary_create(
+        ty: LogicalType,
+        op: UnaryOperator,
+    ) -> Result<UnaryEvaluatorBox, DatabaseError> {
+        match ty {
+            LogicalType::Tinyint => numeric_unary_evaluator!(Int8, op, LogicalType::Tinyint),
+            LogicalType::Smallint => numeric_unary_evaluator!(Int16, op, LogicalType::Smallint),
+            LogicalType::Integer => numeric_unary_evaluator!(Int32, op, LogicalType::Integer),
+            LogicalType::Bigint => numeric_unary_evaluator!(Int64, op, LogicalType::Bigint),
+            LogicalType::Boolean => match op {
+                UnaryOperator::Not => Ok(UnaryEvaluatorBox(Arc::new(BooleanNotUnaryEvaluator))),
+                _ => Err(DatabaseError::UnsupportedUnaryOperator(ty, op)),
+            },
+            LogicalType::Float => numeric_unary_evaluator!(Float32, op, LogicalType::Float),
+            LogicalType::Double => numeric_unary_evaluator!(Float64, op, LogicalType::Double),
+            _ => Err(DatabaseError::UnsupportedUnaryOperator(ty, op)),
+        }
+    }
     pub fn binary_create(
         ty: LogicalType,
         op: BinaryOperator,
@@ -171,6 +229,35 @@ impl EvaluatorFactory {
             },
         }
     }
+}
+
+#[macro_export]
+macro_rules! numeric_unary_evaluator_definition {
+    ($value_type:ident, $compute_type:path) => {
+        paste! {
+            #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+            pub struct [<$value_type PlusUnaryEvaluator>];
+            #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+            pub struct [<$value_type MinusUnaryEvaluator>];
+
+            #[typetag::serde]
+            impl UnaryEvaluator for [<$value_type PlusUnaryEvaluator>] {
+                fn unary_eval(&self, value: &DataValue) -> DataValue {
+                    value.clone()
+                }
+            }
+            #[typetag::serde]
+            impl UnaryEvaluator for [<$value_type MinusUnaryEvaluator>] {
+                fn unary_eval(&self, value: &DataValue) -> DataValue {
+                    let value = match value {
+                        $compute_type(value) => value,
+                        _ => unsafe { hint::unreachable_unchecked() },
+                    };
+                    $compute_type(value.map(|v| -v))
+                }
+            }
+        }
+    };
 }
 
 #[macro_export]

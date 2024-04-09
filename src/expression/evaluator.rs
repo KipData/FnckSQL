@@ -128,10 +128,18 @@ impl ScalarExpression {
                 }
                 Ok(Arc::new(DataValue::Boolean(Some(is_in))))
             }
-            ScalarExpression::Unary { expr, op, .. } => {
+            ScalarExpression::Unary {
+                expr, evaluator, ..
+            } => {
                 let value = expr.eval(tuple, schema)?;
 
-                Ok(Arc::new(DataValue::unary_op(&value, op)?))
+                Ok(Arc::new(
+                    evaluator
+                        .as_ref()
+                        .ok_or(DatabaseError::EvaluatorNotFound)?
+                        .0
+                        .unary_eval(&value),
+                ))
             }
             ScalarExpression::AggCall { .. } => {
                 unreachable!("must use `NormalizationRuleImpl::ExpressionRemapper`")
