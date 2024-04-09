@@ -13,7 +13,7 @@ use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
 use crate::errors::DatabaseError;
 use crate::expression::function::ScalarFunction;
-use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory};
+use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory, UnaryEvaluatorBox};
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 
@@ -22,7 +22,6 @@ mod evaluator;
 pub mod function;
 pub mod range_detacher;
 pub mod simplify;
-pub mod value_compute;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub enum AliasType {
@@ -53,6 +52,7 @@ pub enum ScalarExpression {
     Unary {
         op: UnaryOperator,
         expr: Box<ScalarExpression>,
+        evaluator: Option<UnaryEvaluatorBox>,
         ty: LogicalType,
     },
     Binary {
@@ -307,6 +307,29 @@ impl ScalarExpression {
 
                 *evaluator = Some(EvaluatorFactory::binary_create(ty, *op)?);
             }
+            ScalarExpression::Unary {
+                expr,
+                op,
+                evaluator,
+                ..
+            } => {
+                expr.bind_evaluator()?;
+
+                let ty = expr.return_type();
+                if ty.is_unsigned_numeric() {
+                    *expr.as_mut() = ScalarExpression::TypeCast {
+                        expr: Box::new(mem::replace(expr, ScalarExpression::Empty)),
+                        ty: match ty {
+                            LogicalType::UTinyint => LogicalType::Tinyint,
+                            LogicalType::USmallint => LogicalType::Smallint,
+                            LogicalType::UInteger => LogicalType::Integer,
+                            LogicalType::UBigint => LogicalType::Bigint,
+                            _ => unreachable!(),
+                        },
+                    }
+                }
+                *evaluator = Some(EvaluatorFactory::unary_create(ty, *op)?);
+            }
             ScalarExpression::Alias { expr, .. } => {
                 expr.bind_evaluator()?;
             }
@@ -314,9 +337,6 @@ impl ScalarExpression {
                 expr.bind_evaluator()?;
             }
             ScalarExpression::IsNull { expr, .. } => {
-                expr.bind_evaluator()?;
-            }
-            ScalarExpression::Unary { expr, .. } => {
                 expr.bind_evaluator()?;
             }
             ScalarExpression::AggCall { args, .. }

@@ -1,4 +1,4 @@
-use crate::expression::BinaryOperator;
+use crate::expression::{BinaryOperator, UnaryOperator};
 use crate::types::LogicalType;
 use chrono::ParseError;
 use kip_db::KernelError;
@@ -143,6 +143,8 @@ pub enum DatabaseError {
     TooLong,
     #[error("there are more buckets: {0} than elements: {1}")]
     TooManyBuckets(usize, usize),
+    #[error("unsupported unary operator: {0} cannot support {1} for calculations")]
+    UnsupportedUnaryOperator(LogicalType, UnaryOperator),
     #[error("unsupported binary operator: {0} cannot support {1} for calculations")]
     UnsupportedBinaryOperator(LogicalType, BinaryOperator),
     #[error("unsupported statement: {0}")]

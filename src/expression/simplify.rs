@@ -149,29 +149,49 @@ impl ScalarExpression {
 
                 Some(Arc::new(DataValue::Boolean(is_null)))
             }
-            ScalarExpression::Unary { expr, op, .. } => {
-                let val = expr.unpack_val()?;
-
-                DataValue::unary_op(&val, op).ok().map(Arc::new)
+            ScalarExpression::Unary {
+                expr,
+                op,
+                evaluator,
+                ty,
+                ..
+            } => {
+                let value = expr.unpack_val()?;
+                let unary_value = if let Some(evaluator) = evaluator {
+                    evaluator.0.unary_eval(&value)
+                } else {
+                    EvaluatorFactory::unary_create(*ty, *op)
+                        .ok()?
+                        .0
+                        .unary_eval(&value)
+                };
+                Some(Arc::new(unary_value))
             }
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
                 op,
                 ty,
+                evaluator,
                 ..
             } => {
                 let mut left = left_expr.unpack_val()?;
                 let mut right = right_expr.unpack_val()?;
-                let evaluator = EvaluatorFactory::binary_create(*ty, *op).ok()?;
-
                 if left.logical_type() != *ty {
                     left = Arc::new(DataValue::clone(&left).cast(ty).ok()?);
                 }
                 if right.logical_type() != *ty {
                     right = Arc::new(DataValue::clone(&right).cast(ty).ok()?);
                 }
-                Some(Arc::new(evaluator.0.binary_eval(&left, &right)))
+                let binary_value = if let Some(evaluator) = evaluator {
+                    evaluator.0.binary_eval(&left, &right)
+                } else {
+                    EvaluatorFactory::binary_create(*ty, *op)
+                        .ok()?
+                        .0
+                        .binary_eval(&left, &right)
+                };
+                Some(Arc::new(binary_value))
             }
             _ => None,
         }
@@ -205,11 +225,23 @@ impl ScalarExpression {
 
     pub fn constant_calculation(&mut self) -> Result<(), DatabaseError> {
         match self {
-            ScalarExpression::Unary { expr, op, .. } => {
+            ScalarExpression::Unary {
+                expr,
+                op,
+                evaluator,
+                ty,
+                ..
+            } => {
                 expr.constant_calculation()?;
 
                 if let ScalarExpression::Constant(unary_val) = expr.as_ref() {
-                    let value = DataValue::unary_op(unary_val, op)?;
+                    let value = if let Some(evaluator) = evaluator {
+                        evaluator.0.unary_eval(unary_val)
+                    } else {
+                        EvaluatorFactory::unary_create(*ty, *op)?
+                            .0
+                            .unary_eval(unary_val)
+                    };
                     let _ = mem::replace(self, ScalarExpression::Constant(Arc::new(value)));
                 }
             }
@@ -421,10 +453,22 @@ impl ScalarExpression {
                     );
                 }
             }
-            ScalarExpression::Unary { expr, op, ty, .. } => {
-                if let Some(val) = expr.unpack_val() {
-                    let new_expr =
-                        ScalarExpression::Constant(Arc::new(DataValue::unary_op(&val, op)?));
+            ScalarExpression::Unary {
+                expr,
+                op,
+                ty,
+                evaluator,
+                ..
+            } => {
+                if let Some(value) = expr.unpack_val() {
+                    let value = if let Some(evaluator) = evaluator {
+                        evaluator.0.unary_eval(&value)
+                    } else {
+                        EvaluatorFactory::unary_create(*ty, *op)?
+                            .0
+                            .unary_eval(&value)
+                    };
+                    let new_expr = ScalarExpression::Constant(Arc::new(value));
                     let _ = mem::replace(self, new_expr);
                 } else {
                     replaces.push(Replace::Unary(ReplaceUnary {
@@ -571,6 +615,7 @@ impl ScalarExpression {
             Box::new(ScalarExpression::Unary {
                 op: fix_op,
                 expr,
+                evaluator: None,
                 ty: fix_ty,
             }),
         );
