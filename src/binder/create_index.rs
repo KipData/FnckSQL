@@ -10,7 +10,7 @@ use crate::types::index::IndexType;
 use sqlparser::ast::{ObjectName, OrderByExpr};
 use std::sync::Arc;
 
-impl<'a, T: Transaction> Binder<'a, T> {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     pub(crate) fn bind_create_index(
         &mut self,
         table_name: &ObjectName,
@@ -29,7 +29,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
             IndexType::Composite
         };
 
-        let table = self.context.table_and_bind(table_name.clone(), None)?;
+        let table = self
+            .context
+            .table_and_bind(table_name.clone(), None, None)?;
         let plan = ScanOperator::build(table_name.clone(), table);
         let mut columns = Vec::with_capacity(exprs.len());
 

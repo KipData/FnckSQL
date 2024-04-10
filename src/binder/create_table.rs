@@ -14,7 +14,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::LogicalType;
 
-impl<'a, T: Transaction> Binder<'a, T> {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     // TODO: TableConstraint
     pub(crate) fn bind_create_table(
         &mut self,

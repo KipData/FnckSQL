@@ -12,7 +12,7 @@ use sqlparser::ast::{Expr, Ident, ObjectName};
 use std::slice;
 use std::sync::Arc;
 
-impl<'a, T: Transaction> Binder<'a, T> {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     pub(crate) fn bind_insert(
         &mut self,
         name: &ObjectName,
@@ -24,7 +24,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
         self.context.allow_default = true;
         let table_name = Arc::new(lower_case_name(name)?);
 
-        let table = self.context.table_and_bind(table_name.clone(), None)?;
+        let table = self
+            .context
+            .table_and_bind(table_name.clone(), None, None)?;
         let mut _schema_ref = None;
         let values_len = expr_rows[0].len();
 

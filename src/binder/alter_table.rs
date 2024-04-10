@@ -12,7 +12,7 @@ use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 
-impl<'a, T: Transaction> Binder<'a, T> {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     pub(crate) fn bind_alter_table(
         &mut self,
         name: &ObjectName,

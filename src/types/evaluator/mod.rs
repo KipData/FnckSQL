@@ -65,8 +65,20 @@ pub trait UnaryEvaluator: Send + Sync + Debug {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BinaryEvaluatorBox(pub Arc<dyn BinaryEvaluator>);
 
+impl BinaryEvaluatorBox {
+    pub fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
+        self.0.binary_eval(left, right)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnaryEvaluatorBox(pub Arc<dyn UnaryEvaluator>);
+
+impl UnaryEvaluatorBox {
+    pub fn unary_eval(&self, value: &DataValue) -> DataValue {
+        self.0.unary_eval(value)
+    }
+}
 
 impl PartialEq for BinaryEvaluatorBox {
     fn eq(&self, _: &Self) -> bool {
@@ -112,6 +124,7 @@ macro_rules! numeric_binary_evaluator {
                 BinaryOperator::LtEq => Ok(BinaryEvaluatorBox(Arc::new([<$value_type LtEqBinaryEvaluator>]))),
                 BinaryOperator::Eq => Ok(BinaryEvaluatorBox(Arc::new([<$value_type EqBinaryEvaluator>]))),
                 BinaryOperator::NotEq => Ok(BinaryEvaluatorBox(Arc::new([<$value_type NotEqBinaryEvaluator>]))),
+                BinaryOperator::Modulo => Ok(BinaryEvaluatorBox(Arc::new([<$value_type ModBinaryEvaluator>]))),
                 _ => {
                     return Err(DatabaseError::UnsupportedBinaryOperator(
                         $ty,
@@ -251,6 +264,7 @@ macro_rules! numeric_unary_evaluator_definition {
                 fn unary_eval(&self, value: &DataValue) -> DataValue {
                     let value = match value {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     $compute_type(value.map(|v| -v))
@@ -284,16 +298,20 @@ macro_rules! numeric_binary_evaluator_definition {
             pub struct [<$value_type EqBinaryEvaluator>];
             #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
             pub struct [<$value_type NotEqBinaryEvaluator>];
+            #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+            pub struct [<$value_type ModBinaryEvaluator>];
 
             #[typetag::serde]
             impl BinaryEvaluator for [<$value_type PlusBinaryEvaluator>] {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -309,10 +327,12 @@ macro_rules! numeric_binary_evaluator_definition {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -328,10 +348,12 @@ macro_rules! numeric_binary_evaluator_definition {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -347,10 +369,12 @@ macro_rules! numeric_binary_evaluator_definition {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -366,10 +390,12 @@ macro_rules! numeric_binary_evaluator_definition {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -385,10 +411,12 @@ macro_rules! numeric_binary_evaluator_definition {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -404,10 +432,12 @@ macro_rules! numeric_binary_evaluator_definition {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -423,10 +453,12 @@ macro_rules! numeric_binary_evaluator_definition {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -442,10 +474,12 @@ macro_rules! numeric_binary_evaluator_definition {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -461,10 +495,12 @@ macro_rules! numeric_binary_evaluator_definition {
                 fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
                     let left = match left {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let right = match right {
                         $compute_type(value) => value,
+                        DataValue::Null => &None,
                         _ => unsafe { hint::unreachable_unchecked() },
                     };
                     let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -473,6 +509,27 @@ macro_rules! numeric_binary_evaluator_definition {
                         None
                     };
                     DataValue::Boolean(value)
+                }
+            }
+            #[typetag::serde]
+            impl BinaryEvaluator for [<$value_type ModBinaryEvaluator>] {
+                fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
+                    let left = match left {
+                        $compute_type(value) => value,
+                        DataValue::Null => &None,
+                        _ => unsafe { hint::unreachable_unchecked() },
+                    };
+                    let right = match right {
+                        $compute_type(value) => value,
+                        DataValue::Null => &None,
+                        _ => unsafe { hint::unreachable_unchecked() },
+                    };
+                    let value = if let (Some(v1), Some(v2)) = (left, right) {
+                        Some(v1 % v2)
+                    } else {
+                        None
+                    };
+                    $compute_type(value)
                 }
             }
         }

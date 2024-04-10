@@ -114,8 +114,11 @@ implement_from_tuple!(
 - User-Defined Function: `features = ["marcos"]`
 ```rust
 function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
-    let value = DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)?;
-    DataValue::unary_op(&value, &UnaryOperator::Minus)
+    let plus_binary_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
+    let value = plus_binary_evaluator.binary_eval(&v1, &v2);
+
+    let plus_unary_evaluator = EvaluatorFactory::unary_create(LogicalType::Integer, UnaryOperator::Minus)?;
+    Ok(plus_unary_evaluator.unary_eval(&value))
 });
 
 let fnck_sql = DataBaseBuilder::path("./data")
@@ -178,7 +181,7 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - [x] Alias
   - [x] Aggregation: count()/sum()/avg()/min()/max()
   - [x] SubQuery[select/from/where]
-  - [x] Join: Inner/Left/Right/Full/Cross
+  - [x] Join: Inner/Left/Right/Full/Cross (Natural\Using)
   - [x] Group By
   - [x] Having
   - [x] Order By

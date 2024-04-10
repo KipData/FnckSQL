@@ -17,7 +17,7 @@ mod truncate;
 mod update;
 
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -85,13 +85,16 @@ pub struct BinderContext<'a, T: Transaction> {
     pub(crate) functions: &'a Functions,
     pub(crate) transaction: &'a T,
     // Tips: When there are multiple tables and Wildcard, use BTreeMap to ensure that the order of the output tables is certain.
-    pub(crate) bind_table: BTreeMap<(TableName, Option<JoinType>), &'a TableCatalog>,
+    pub(crate) bind_table:
+        BTreeMap<(TableName, Option<TableName>, Option<JoinType>), &'a TableCatalog>,
     // alias
-    expr_aliases: HashMap<String, ScalarExpression>,
-    table_aliases: HashMap<String, TableName>,
+    expr_aliases: BTreeMap<(Option<String>, String), ScalarExpression>,
+    table_aliases: HashMap<TableName, TableName>,
     // agg
     group_by_exprs: Vec<ScalarExpression>,
     pub(crate) agg_calls: Vec<ScalarExpression>,
+    // join
+    using: HashSet<String>,
 
     bind_step: QueryBindStep,
     sub_queries: HashMap<QueryBindStep, Vec<SubQueryType>>,
@@ -114,6 +117,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             table_aliases: Default::default(),
             group_by_exprs: vec![],
             agg_calls: Default::default(),
+            using: Default::default(),
             bind_step: QueryBindStep::From,
             sub_queries: Default::default(),
             temp_table_id,
@@ -162,6 +166,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
     pub fn table_and_bind(
         &mut self,
         table_name: TableName,
+        alias: Option<TableName>,
         join_type: Option<JoinType>,
     ) -> Result<&TableCatalog, DatabaseError> {
         let table = if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
@@ -172,20 +177,21 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         .ok_or(DatabaseError::TableNotFound)?;
 
         self.bind_table
-            .insert((table_name.clone(), join_type), table);
+            .insert((table_name.clone(), alias, join_type), table);
 
         Ok(table)
     }
 
     /// get table from bindings
-    pub fn bind_table(
+    pub fn bind_table<'b: 'a>(
         &self,
         table_name: &str,
-        parent: Option<&'a Binder<'a, T>>,
+        parent: Option<&'b Binder<'a, 'b, T>>,
     ) -> Result<&TableCatalog, DatabaseError> {
-        let default_name = Arc::new(table_name.to_owned());
-        let real_name = self.table_aliases.get(table_name).unwrap_or(&default_name);
-        if let Some(table_catalog) = self.bind_table.iter().find(|((t, _), _)| t == real_name) {
+        if let Some(table_catalog) = self.bind_table.iter().find(|((t, alias, _), _)| {
+            t.as_str() == table_name
+                || matches!(alias.as_ref().map(|a| a.as_str() == table_name), Some(true))
+        }) {
             Ok(table_catalog.1)
         } else if let Some(binder) = parent {
             binder.context.bind_table(table_name, binder.parent)
@@ -202,11 +208,20 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
     }
 
-    pub fn add_alias(&mut self, alias: String, expr: ScalarExpression) {
-        self.expr_aliases.insert(alias, expr);
+    pub fn add_using(&mut self, name: String) {
+        self.using.insert(name);
     }
 
-    pub fn add_table_alias(&mut self, alias: String, table: TableName) {
+    pub fn add_alias(
+        &mut self,
+        alias_table: Option<String>,
+        alias_column: String,
+        expr: ScalarExpression,
+    ) {
+        self.expr_aliases.insert((alias_table, alias_column), expr);
+    }
+
+    pub fn add_table_alias(&mut self, alias: TableName, table: TableName) {
         self.table_aliases.insert(alias.clone(), table.clone());
     }
 
@@ -215,13 +230,13 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
     }
 }
 
-pub struct Binder<'a, T: Transaction> {
+pub struct Binder<'a, 'b, T: Transaction> {
     context: BinderContext<'a, T>,
-    pub(crate) parent: Option<&'a Binder<'a, T>>,
+    pub(crate) parent: Option<&'b Binder<'a, 'b, T>>,
 }
 
-impl<'a, T: Transaction> Binder<'a, T> {
-    pub fn new(context: BinderContext<'a, T>, parent: Option<&'a Binder<'a, T>>) -> Self {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+    pub fn new(context: BinderContext<'a, T>, parent: Option<&'b Binder<'a, 'b, T>>) -> Self {
         Binder { context, parent }
     }
 
@@ -324,6 +339,18 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 right,
             } => self.bind_set_operation(op, set_quantifier, left, right),
             _ => todo!(),
+        }
+    }
+
+    fn extend(&mut self, context: BinderContext<'a, T>) {
+        for (key, table) in context.bind_table {
+            self.context.bind_table.insert(key, table);
+        }
+        for (key, expr) in context.expr_aliases {
+            self.context.expr_aliases.insert(key, expr);
+        }
+        for (key, table_name) in context.table_aliases {
+            self.context.table_aliases.insert(key, table_name);
         }
     }
 }

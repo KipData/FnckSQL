@@ -1,0 +1,1091 @@
+statement ok
+drop table if exists onecolumn
+
+statement ok
+CREATE TABLE onecolumn (id INT PRIMARY KEY, x INT NULL)
+
+statement ok
+INSERT INTO onecolumn(id, x) VALUES (0, 44), (1, NULL), (2, 42)
+
+query II
+SELECT * FROM onecolumn AS a(aid, x) CROSS JOIN onecolumn AS b(bid, y) order by x
+----
+1 null 0 44
+1 null 1 null
+1 null 2 42
+2 42 0 44
+2 42 1 null
+2 42 2 42
+0 44 0 44
+0 44 1 null
+0 44 2 42
+
+# FIXME
+# statement error 1065
+# SELECT x FROM onecolumn AS a, onecolumn AS b;
+
+query II
+SELECT * FROM onecolumn AS a(aid, x) JOIN onecolumn AS b(bid, y) ON a.x = b.y order by a.x desc
+----
+0 44 0 44
+2 42 2 42
+
+query I
+SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x) ORDER BY x desc
+----
+0 44 0
+2 42 2
+
+query I
+SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn as b order by a.x desc
+----
+0 44
+2 42
+
+query II
+SELECT * FROM onecolumn AS a(aid, x) LEFT OUTER JOIN onecolumn AS b(bid, y) ON a.x = b.y order by a.x
+----
+1 null null null
+2 42 2 42
+0 44 0 44
+
+query I
+SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+----
+1 null null
+2 42 2
+0 44 0
+
+# FIXME
+# statement error 1065
+# SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
+
+query I
+SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b order by a.x
+----
+1 null
+2 42
+0 44
+
+query II
+SELECT * FROM onecolumn AS a(aid, x) RIGHT OUTER JOIN onecolumn AS b(bid, y) ON a.x = b.y order by x
+----
+null null 1 null
+2 42 2 42
+0 44 0 44
+
+query I
+SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+----
+null null 1
+2 42 2
+0 44 0
+
+# FIXME: The fields output by Using are determined by JoinType. At this time, because it is a Right Outer Join, the first row of results should be (1 null).
+query I
+SELECT * FROM onecolumn AS a NATURAL RIGHT OUTER JOIN onecolumn AS b order by x
+----
+null null
+2 42
+0 44
+
+statement ok
+drop table if exists onecolumn_w
+
+statement ok
+CREATE TABLE onecolumn_w(w_id INT PRIMARY KEY, w INT)
+
+statement ok
+INSERT INTO onecolumn_w(w_id, w) VALUES (0, 42),(1, 43)
+
+query II
+SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn_w as b
+----
+0 44 42 0
+0 44 43 1
+1 null 42 0
+1 null 43 1
+2 42 42 0
+2 42 43 1
+
+statement ok
+drop table if exists othercolumn
+
+statement ok
+CREATE TABLE othercolumn (o_id INT PRIMARY KEY, x INT)
+
+statement ok
+INSERT INTO othercolumn(o_id, x) VALUES (0, 43),(1, 42),(2, 16)
+
+query II
+SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b ON a.x = b.x ORDER BY a.x,b.x
+----
+1 null null null
+null null 2 16
+null null 0 43
+2 42 1 42
+0 44 null null
+
+query II
+SELECT * FROM onecolumn AS a full OUTER JOIN othercolumn AS b ON a.x = b.x and a.x > 16 order by a.x
+----
+null null 0 43
+null null 2 16
+1 null null null
+2 42 1 42
+0 44 null null
+
+query II
+SELECT * FROM onecolumn AS a full OUTER JOIN othercolumn AS b ON a.x = b.x and b.x > 16 order by b.x,a.x
+----
+1 null null null
+0 44 null null
+null null 2 16
+2 42 1 42
+null null 0 43
+
+# TODO: Full Join on nested loop join
+# query II
+# SELECT * FROM onecolumn AS a full OUTER JOIN othercolumn AS b ON false order by b.x
+# ----
+# 42 NULL
+# 44 NULL
+# NULL 16
+# NULL 42
+# NULL 43
+# NULL NULL
+
+# TODO: Full Join on nested loop join
+# query II
+# SELECT * FROM onecolumn AS a full OUTER JOIN othercolumn AS b ON true order by b.x
+# ----
+# 42 16
+# 42 42
+# 42 43
+# 44 16
+# 44 42
+# 44 43
+# NULL 16
+# NULL 42
+# NULL 43
+
+# TODO: Full Join on nested loop join
+# query
+# SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY x
+
+# TODO: Full Join on nested loop join
+# query
+# SELECT x AS s, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY s
+
+# TODO: Full Join on nested loop join
+# query
+# SELECT * FROM onecolumn AS a NATURAL FULL OUTER JOIN othercolumn AS b ORDER BY x
+
+# TODO
+# query
+# SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42)) AS v(x) LIMIT 1
+
+statement ok
+drop table if exists empty
+
+statement ok
+CREATE TABLE empty (e_id INT PRIMARY KEY, x INT)
+
+statement ok
+SELECT * FROM onecolumn AS a(aid, x) CROSS JOIN empty AS b(bid, y)
+
+statement ok
+SELECT * FROM empty AS a CROSS JOIN onecolumn AS b
+
+statement ok
+SELECT * FROM onecolumn AS a(aid, x) JOIN empty AS b(bid, y) ON a.x = b.y
+
+statement ok
+SELECT * FROM onecolumn AS a JOIN empty AS b USING(x)
+
+statement ok
+SELECT * FROM empty AS a(aid, x) JOIN onecolumn AS b(bid, y) ON a.x = b.y
+
+statement ok
+SELECT * FROM empty AS a JOIN onecolumn AS b USING(x)
+
+query IT
+SELECT * FROM onecolumn AS a(aid, x) LEFT OUTER JOIN empty AS b(bid, y) ON a.x = b.y ORDER BY a.x
+----
+null null 1 null
+null null 2 42
+null null 0 44
+
+# FIXME: The fields output by Using are determined by JoinType.
+# query I
+# SELECT * FROM onecolumn AS a LEFT OUTER JOIN empty AS b USING(x) ORDER BY x
+# ----
+# null null 2
+# null 42 0
+# null 44 1
+
+statement ok
+SELECT * FROM empty AS a(aid, x) LEFT OUTER JOIN onecolumn AS b(bid, y) ON a.x = b.y
+
+statement ok
+SELECT * FROM empty AS a LEFT OUTER JOIN onecolumn AS b USING(x)
+
+statement ok
+SELECT * FROM onecolumn AS a(aid, x) RIGHT OUTER JOIN empty AS b(bid, y) ON a.x = b.y
+
+statement ok
+SELECT * FROM onecolumn AS a RIGHT OUTER JOIN empty AS b USING(x)
+
+# TODO: Full Join on nested loop join
+query II
+SELECT * FROM empty AS a(aid, x) FULL OUTER JOIN onecolumn AS b(bid, y) ON a.x = b.y ORDER BY b.y
+----
+null null 1 null
+null null 2 42
+null null 0 44
+
+statement ok
+SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+
+# TODO: Full Join on nested loop join
+# query II
+# SELECT * FROM onecolumn AS a(x) FULL OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
+# ----
+# 42 NULL
+# 44 NULL
+# NULL NULL
+
+# TODO: Full Join on nested loop join
+# query
+# SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x) ORDER BY x
+
+# TODO: Full Join on nested loop join
+# query II
+# SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y ORDER BY b.y
+# ----
+# NULL 42
+# NULL 44
+# NULL NULL
+
+# TODO: Full Join on nested loop join
+# query
+# SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
+
+statement ok
+drop table if exists twocolumn
+
+statement ok
+CREATE TABLE twocolumn (t_id INT PRIMARY KEY, x INT NULL, y INT NULL)
+
+statement ok
+INSERT INTO twocolumn(t_id, x, y) VALUES (0,44,51), (1,NULL,52), (2,42,53), (3,45,45)
+
+query II
+SELECT * FROM onecolumn NATURAL JOIN twocolumn
+----
+0 44 0 51
+2 42 2 53
+
+query IIII
+SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = a.y order by a.x
+----
+3 45 45 0 44 51
+3 45 45 1 null 52
+3 45 45 2 42 53
+3 45 45 3 45 45
+
+query II
+SELECT o.x, t.y FROM onecolumn o INNER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
+----
+42 53
+
+query IT
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.y=53) order by o.x
+----
+null null
+42 53
+44 null
+
+query II
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND o.x=44) order by o.x
+----
+null null
+42 null
+44 51
+
+query II
+SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x=44) order by o.x
+----
+null null
+42 null
+44 51
+
+# TODO: Full Join on nested loop join
+# query
+# SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
+
+statement ok
+drop table if exists a
+
+statement ok
+drop table if exists b
+
+statement ok
+CREATE TABLE a (id int primary key, i int)
+
+statement ok
+INSERT INTO a VALUES (0, 1), (1, 2), (2, 3)
+
+statement ok
+CREATE TABLE b (id int primary key, i int, b boolean)
+
+statement ok
+INSERT INTO b VALUES (0, 2, true), (1, 3, true), (2, 4, false)
+
+query III
+SELECT * FROM a INNER JOIN b ON a.i = b.i
+----
+1 2 0 2 true
+2 3 1 3 true
+
+query ITT
+SELECT * FROM a LEFT OUTER JOIN b ON a.i = b.i
+----
+1 2 0 2 true
+2 3 1 3 true
+0 1 null null null
+
+query III
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i order by b
+----
+null null 2 4 false
+1 2 0 2 true
+2 3 1 3 true
+
+query III
+SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i order by b
+----
+0 1 null null null
+null null 2 4 false
+1 2 0 2 true
+2 3 1 3 true
+
+query III
+SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i
+----
+null null 2 4 false
+0 1 null null null
+1 2 0 2 true
+2 3 1 3 true
+
+statement ok
+INSERT INTO b VALUES (3, 3, false)
+
+query III
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b
+----
+1 2 0 2 true
+2 3 3 3 false
+2 3 1 3 true
+null null 2 4 false
+
+query III
+SELECT * FROM a FULL OUTER JOIN b ON a.i=b.i ORDER BY b.i, b.b
+----
+0 1 null null null
+1 2 0 2 true
+2 3 3 3 false
+2 3 1 3 true
+null null 2 4 false
+
+# TODO
+# query IIIIII
+# SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(aid,b) ON a.b=twocolumn.x JOIN twocolumn AS c(cid,d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1 LIMIT 1
+# ----
+# 42 42 53 42 42 53
+
+# query I
+# SELECT * FROM onecolumn JOIN twocolumn ON twocolumn.x = onecolumn.x AND onecolumn.x IN (SELECT x FROM twocolumn WHERE y >= 52)
+# ----
+# 42 42 53
+
+# query I
+# SELECT * FROM onecolumn JOIN (VALUES (41),(42),(43)) AS a(x) USING(x)
+# ----
+# 42
+
+query I
+SELECT * FROM onecolumn JOIN (SELECT x + 2 AS x FROM onecolumn) USING(x)
+----
+0 44
+
+# TODO
+# query IIIII
+# SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x LIMIT 1
+# ----
+# 42 53 53 53
+
+# TODO
+# query IIIIII
+# SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY s
+# ----
+# 42 42 42 53 53 53
+# 44 44 44 51 51 51
+# 45 45 45 45 45 45
+
+# TODO
+# statement error 1065
+# SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
+
+# TODO
+# query I
+# SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
+# ----
+# 42
+# 44
+
+statement ok
+drop table if exists othertype
+
+statement ok
+CREATE TABLE othertype (ot_id int primary key, x VARCHAR)
+
+# TODO
+# statement error 1065
+# SELECT * FROM (onecolumn JOIN onecolumn USING(x))
+
+# TODO
+# statement error 1065
+# SELECT * FROM (onecolumn JOIN twocolumn USING(x) JOIN onecolumn USING(x))
+
+# TODO
+# query II
+# SELECT * FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
+
+# TODO
+# query I
+# SELECT x FROM (onecolumn JOIN othercolumn USING (x)) JOIN (onecolumn AS a JOIN othercolumn AS b USING(x)) USING(x)
+
+# TODO
+# statement error 1065
+# SELECT x FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
+
+# TODO
+# statement error 1065
+# SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
+
+# TODO
+# statement error 1065
+# SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)
+
+statement ok
+drop table if exists s
+
+statement ok
+CREATE TABLE s(sid int primary key, x INT)
+
+statement ok
+INSERT INTO s(sid, x) VALUES (0, 1),(1, 2),(2, 3),(3, 4),(4, 5),(5, 6),(6, 7),(7, 8),(8, 9),(9, 10)
+
+statement ok
+drop table if exists pairs
+
+statement ok
+drop table if exists square
+
+statement ok
+CREATE TABLE square (n INT PRIMARY KEY, sq INT)
+
+statement ok
+INSERT INTO square VALUES (1,1), (2,4), (3,9), (4,16), (5,25), (6,36)
+
+statement ok
+CREATE TABLE pairs (pid INT PRIMARY KEY, a INT, b INT)
+
+statement ok
+INSERT INTO pairs VALUES (0,1,1), (1,1,2), (2,1,3), (3,1,4), (4,1,5), (5,1,6), (6,2,3), (7,2,4), (8,2,5), (9,2,6), (10,3,4), (11,3,5), (12,3,6), (13,4,5), (14,4,6)
+
+query IIII
+SELECT * FROM pairs, square WHERE pairs.b = square.n order by a
+----
+0 1 1 1 1
+1 1 2 2 4
+2 1 3 3 9
+3 1 4 4 16
+4 1 5 5 25
+5 1 6 6 36
+6 2 3 3 9
+7 2 4 4 16
+8 2 5 5 25
+9 2 6 6 36
+10 3 4 4 16
+11 3 5 5 25
+12 3 6 6 36
+13 4 5 5 25
+14 4 6 6 36
+
+query IIII
+SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
+----
+2 1 3 2 4
+12 3 6 3 9
+13 4 5 3 9
+
+# query
+# SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
+
+# TODO: Full Join on nested loop join
+# query IIII
+# SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq order by a
+# ----
+# 1 1 NULL NULL
+# 1 2 NULL NULL
+# 1 3 2 4
+# 1 4 NULL NULL
+# 1 5 NULL NULL
+# 1 6 NULL NULL
+# 2 3 NULL NULL
+# 2 4 NULL NULL
+# 2 5 NULL NULL
+# 2 6 NULL NULL
+# 3 4 NULL NULL
+# 3 5 NULL NULL
+# 3 6 3 9
+# 4 5 3 9
+# 4 6 NULL NULL
+# NULL NULL 1 1
+# NULL NULL 4 16
+# NULL NULL 5 25
+# NULL NULL 6 36
+
+# TODO: Full Join on nested loop join
+# query IIII
+# SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2 order by a
+# ----
+# 1 3 2 4
+# 3 6 3 9
+
+query IITT rowsort
+SELECT * FROM (SELECT * FROM pairs LEFT JOIN square ON b = sq AND a > 1 AND n < 6) WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
+----
+1 1 2 null null
+10 3 4 2 4
+11 3 5 null null
+12 3 6 null null
+13 4 5 null null
+14 4 6 null null
+2 1 3 null null
+3 1 4 null null
+4 1 5 null null
+5 1 6 null null
+6 2 3 null null
+7 2 4 2 4
+8 2 5 null null
+9 2 6 null null
+
+query IIII
+SELECT * FROM (SELECT * FROM pairs RIGHT JOIN square ON b = sq AND a > 1 AND n < 6) WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq) order by n
+----
+null null null 2 4
+10 3 4 2 4
+null null null 3 9
+null null null 4 16
+null null null 5 25
+null null null 6 36
+
+statement ok
+drop table if exists t1
+
+statement ok
+drop table if exists t2
+
+statement ok
+CREATE TABLE t1 (col1 INT PRIMARY KEY, x INT, col2 INT, y INT)
+
+statement ok
+CREATE TABLE t2 (col3 INT PRIMARY KEY, y INT, x INT, col4 INT)
+
+statement ok
+INSERT INTO t1 VALUES (10, 1, 11, 1), (20, 2, 21, 1), (30, 3, 31, 1)
+
+statement ok
+INSERT INTO t2 VALUES (100, 1, 1, 101), (200, 1, 201, 2), (400, 1, 401, 4)
+
+query IIIIIII
+SELECT * FROM t1 JOIN t2 USING(x)
+----
+10 1 11 1 100 1 101
+
+query IIIIII
+SELECT * FROM t1 NATURAL JOIN t2
+----
+10 1 11 1 100 101
+
+query IIIIIIII
+SELECT * FROM t1 JOIN t2 ON t2.x=t1.x
+----
+10 1 11 1 100 1 1 101
+
+# query
+# SELECT * FROM t1 FULL OUTER JOIN t2 USING(x)
+
+# query
+# SELECT * FROM t1 NATURAL FULL OUTER JOIN t2
+
+query III
+SELECT t2.x, t1.x, x FROM t1 JOIN t2 USING(x)
+----
+1 1 1
+
+# query
+# SELECT t2.x, t1.x, x FROM t1 FULL OUTER JOIN t2 USING(x)
+
+query I
+SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
+----
+1
+
+statement ok
+drop table if exists pkBA
+
+statement ok
+drop table if exists pkBC
+
+statement ok
+drop table if exists pkBAC
+
+statement ok
+drop table if exists pkBAD
+
+statement ok
+CREATE TABLE pkBA (a INT PRIMARY KEY, b INT, c INT, d INT)
+
+statement ok
+CREATE TABLE pkBC (a INT PRIMARY KEY, b INT, c INT, d INT)
+
+statement ok
+CREATE TABLE pkBAC (a INT PRIMARY KEY, b INT, c INT, d INT)
+
+statement ok
+CREATE TABLE pkBAD (a INT PRIMARY KEY, b INT, c INT, d INT)
+
+statement ok
+drop table if exists str1
+
+statement ok
+drop table if exists str2
+
+statement ok
+CREATE TABLE str1 (aid INT PRIMARY KEY, a INT, s VARCHAR)
+
+statement ok
+INSERT INTO str1 VALUES (0, 1, 'a' ), (1, 2, 'A'), (2, 3, 'c'), (3, 4, 'D')
+
+statement ok
+CREATE TABLE str2 (bid INT PRIMARY KEY, a INT, s VARCHAR)
+
+statement ok
+INSERT INTO str2 VALUES (0, 1, 'A'), (1, 2, 'B'), (2, 3, 'C'), (3, 4, 'E')
+
+query TTT
+SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
+----
+A A A
+
+query TTT
+SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s) order by str1.s
+----
+A A A
+D D null
+a a null
+c c null
+
+# FIXME: The fields output by Using are determined by JoinType.
+query TTT
+SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s) order by str2.s
+----
+A A A
+null null B
+null null C
+null null E
+
+query ITIT
+SELECT * FROM str1 LEFT OUTER JOIN str2 ON str1.s = str2.s order by str1.a
+----
+0 1 a null null null
+1 2 A 0 1 A
+2 3 c null null null
+3 4 D null null null
+
+statement ok
+INSERT INTO str1 VALUES (4, 1, 'a' ), (5, 2, 'A'), (6, 3, 'c'), (7, 4, 'D')
+
+query ITIT
+select * from str1 right join str2 on str1.s = str2.s order by str2.a
+----
+1 2 A 0 1 A
+5 2 A 0 1 A
+null null null 1 2 B
+null null null 2 3 C
+null null null 3 4 E
+
+query ITIT
+select * from str1 right join str2 on false order by str2.a
+----
+null null null 0 1 A
+null null null 1 2 B
+null null null 2 3 C
+null null null 3 4 E
+
+# query
+# SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
+
+statement ok
+drop table if exists xyu
+
+statement ok
+drop table if exists xyv
+
+statement ok
+CREATE TABLE xyu (uid INT PRIMARY key, x INT, y INT, u INT)
+
+statement ok
+INSERT INTO xyu VALUES (0, 0, 0, 0), (1, 1, 1, 1), (2, 3, 1, 31), (3, 3, 2, 32), (4, 4, 4, 44)
+
+statement ok
+CREATE TABLE xyv (vid INT PRIMARY key, x INT, y INT, v INT)
+
+statement ok
+INSERT INTO xyv VALUES (5, 1, 1, 1), (6, 2, 2, 2), (7, 3, 1, 31), (8, 3, 3, 33), (9, 5, 5, 55)
+
+query IIII
+SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
+----
+2 3 1 31 7 31
+
+query IIII
+SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2 order by xyu.uid
+----
+2 3 1 31 7 31
+3 3 2 32 null null
+4 4 4 44 null null
+
+# FIXME: The fields output by Using are determined by JoinType.
+# query IIII
+# SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2 order by y
+# ----
+# 31 3 1 31
+# NULL 3 3 33
+# NULL 5 5 55
+
+# statement error 1065
+# SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
+
+query IIIIII
+SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
+----
+1 1 1 1 5 1 1 1
+
+query IIIIII
+SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+1 1 1 1 5 1 1 1
+
+query IIITTT
+SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10 order by xyu.uid
+----
+0 0 0 0 null null null null
+1 1 1 1 5 1 1 1
+2 3 1 31 null null null null
+3 3 2 32 null null null null
+4 4 4 44 null null null null
+
+query IIIIII
+SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10 order by v
+----
+1 1 1 1 5 1 1 1
+null null null null 6 2 2 2
+null null null null 7 3 1 31
+null null null null 8 3 3 33
+null null null null 9 5 5 55
+
+query IIII rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+31 2 3 1 31 7
+32 3 3 2 null null
+44 4 4 4 null null
+
+# FIXME: The fields output by Using are determined by JoinType.
+# query IIII
+# SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2 order by v
+# ----
+# 31 3 1 31
+# NULL 3 3 33
+# NULL 5 5 55
+
+# query
+# SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+
+query IIITTT rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+0 0 0 0 null null null null
+1 1 1 1 1 5 1 1
+31 2 3 1 null null null null
+32 3 3 2 null null null null
+44 4 4 4 null null null null
+
+query IIIIII
+SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10 ORDER BY v
+----
+1 1 1 1 1 5 1 1
+null null null null 2 6 2 2
+null null null null 31 7 3 1
+null null null null 33 8 3 3
+null null null null 55 9 5 5
+
+statement ok
+drop table if exists l
+
+statement ok
+drop table if exists r
+
+statement ok
+CREATE TABLE l (a INT PRIMARY KEY, b1 INT)
+
+statement ok
+CREATE TABLE r (a INT PRIMARY KEY, b2 INT)
+
+statement ok
+INSERT INTO l VALUES (1, 1), (2, 1), (3, 1)
+
+statement ok
+INSERT INTO r VALUES (2, 1), (3, 1), (4, 1)
+
+query III
+SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 1
+----
+1 1 null
+
+query III
+SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
+----
+2 1 1
+
+query III
+SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3
+----
+3 1 1
+
+# FIXME: The fields output by Using are determined by JoinType.
+# query III
+# SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 4
+# ----
+# NULL 4 1
+
+statement ok
+drop table if exists foo
+
+statement ok
+drop table if exists bar
+
+# TODO: Join Cast
+# statement ok
+# CREATE TABLE foo (a INT PRIMARY KEY,  b INT,  c FLOAT,  d FLOAT)
+# TODO: Join Cast
+# statement ok
+# INSERT INTO foo VALUES (1, 1, 1, 1),  (2, 2, 2, 2),  (3, 3, 3, 3)
+# TODO: Join Cast
+# statement ok
+# CREATE TABLE bar (a INT PRIMARY KEY,  b FLOAT,  c FLOAT,  d INT)
+# TODO: Join Cast
+# statement ok
+# INSERT INTO bar VALUES (1, 1, 1, 1),  (2, 2, 2, 2),  (3, 3, 3, 3)
+# TODO: Join Cast
+# query II??
+# SELECT * FROM foo NATURAL JOIN bar
+# ----
+# 1 1 1.0 1.0
+# 2 2 2.0 2.0
+# 3 3 3.0 3.0
+# TODO: Join Cast
+# query II??I?I
+# SELECT * FROM foo JOIN bar USING (b)
+# ----
+# 1 1 1.0 1.0 1 1.0 1
+# 2 2 2.0 2.0 2 2.0 2
+# 3 3 3.0 3.0 3 3.0 3
+# TODO: Join Cast
+# query II???I
+# SELECT * FROM foo JOIN bar USING (a, b)
+# ----
+# 1 1 1.0 1.0 1.0 1
+# 2 2 2.0 2.0 2.0 2
+# 3 3 3.0 3.0 3.0 3
+# TODO: Join Cast
+# query II??I
+# SELECT * FROM foo JOIN bar USING (a, b, c)
+# ----
+# 1 1 1.0 1.0 1
+# 2 2 2.0 2.0 2
+# 3 3 3.0 3.0 3
+# TODO: Join Cast
+# query II??I??I
+# SELECT * FROM foo JOIN bar ON foo.b = bar.b
+# ----
+# 1 1 1.0 1.0 1 1.0 1.0 1
+# 2 2 2.0 2.0 2 2.0 2.0 2
+# 3 3 3.0 3.0 3 3.0 3.0 3
+# TODO: Join Cast
+# query II??I??I
+# SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
+# ----
+# 1 1 1.0 1.0 1 1.0 1.0 1
+# 2 2 2.0 2.0 2 2.0 2.0 2
+# 3 3 3.0 3.0 3 3.0 3.0 3
+# TODO: Join Cast
+# query II??I??I
+# SELECT * FROM foo, bar WHERE foo.b = bar.b
+# ----
+# 1 1 1.0 1.0 1 1.0 1.0 1
+# 2 2 2.0 2.0 2 2.0 2.0 2
+# 3 3 3.0 3.0 3 3.0 3.0 3
+# TODO: Join Cast
+# query II??I??I
+# SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
+# ----
+# 1 1 1.0 1.0 1 1.0 1.0 1
+# 2 2 2.0 2.0 2 2.0 2.0 2
+# 3 3 3.0 3.0 3 3.0 3.0 3
+# TODO: Join Cast
+# query II???I
+# SELECT * FROM foo JOIN bar USING (a, b) WHERE foo.c = bar.c AND foo.d = bar.d
+# ----
+# 1 1 1.0 1.0 1.0 1
+# 2 2 2.0 2.0 2.0 2
+# 3 3 3.0 3.0 3.0 3
+
+query TII
+SELECT * FROM onecolumn AS a(aid, x) RIGHT JOIN twocolumn ON false order by y
+----
+null null 3 45 45
+null null 0 44 51
+null null 1 null 52
+null null 2 42 53
+
+statement ok
+SELECT * FROM onecolumn AS a(aid, x) RIGHT JOIN twocolumn ON true where false order by y
+
+statement ok
+SELECT * FROM onecolumn AS a(aid, x) LEFT JOIN twocolumn ON true where twocolumn.x > 50 order by y
+
+statement ok
+insert into onecolumn values(42)
+
+# TODO: Explicitly declare Semi/AntiJoin
+# query II
+# select * from onecolumn as a right semi join twocolumn as b on a.x = b.x order by b.x
+# ----
+# 42 53
+# 44 51
+# TODO: Explicitly declare Semi/AntiJoin
+# query II
+# select * from onecolumn as a right anti join twocolumn as b on a.x = b.x order by b.x
+# ----
+# 45 45
+# NULL 52
+# TODO: Explicitly declare Semi/AntiJoin
+# query II
+# select * from onecolumn as a right semi join twocolumn as b on a.x = b.x and a.x > 42 order by b.x
+# ----
+# 44 51
+# TODO: Explicitly declare Semi/AntiJoin
+# query II
+# select * from onecolumn as a right anti join twocolumn as b on a.x = b.x and a.x > 42 order by b.x
+# ----
+# 42 53
+# 45 45
+# NULL 52
+# TODO: Explicitly declare Semi/AntiJoin
+# query II
+# select * from onecolumn as a right semi join twocolumn as b on a.x = b.x and b.x > 42 order by b.x
+# ----
+# 44 51
+# TODO: Explicitly declare Semi/AntiJoin
+# query II
+# select * from onecolumn as a right anti join twocolumn as b on a.x = b.x and b.x > 42 order by b.x
+# ----
+# 42 53
+# 45 45
+# NULL 52
+# TODO: Explicitly declare Semi/AntiJoin
+# query II
+# select * from onecolumn as a right semi join twocolumn as b on true order by b.x
+# ----
+# 42 53
+# 44 51
+# 45 45
+# NULL 52
+# TODO: Explicitly declare Semi/AntiJoin
+# statement ok
+# select * from onecolumn as a right anti join twocolumn as b on true order by b.x
+# TODO: Explicitly declare Semi/AntiJoin
+# statement ok
+# select * from onecolumn as a right semi join twocolumn as b on false order by b.x
+# TODO: Explicitly declare Semi/AntiJoin
+# query II
+# select * from onecolumn as a right anti join twocolumn as b on false order by b.x
+# ----
+# 42 53
+# 44 51
+# 45 45
+# NULL 52
+
+query III
+select * from onecolumn as a left join twocolumn as b on a.x = b.x where b.x > 42
+----
+0 44 0 44 51
+
+query III
+select * from onecolumn as a left join twocolumn as b on a.x = b.x where b.x > 44 or b.x < 43
+----
+2 42 2 42 53
+
+query III
+select * from onecolumn as a left join twocolumn as b on a.x = b.x where b.x > 42 and b.x < 45
+----
+0 44 0 44 51
+
+# query
+# SELECT column1, column1+1FROM  (SELECT * FROM    (VALUES (NULL, NULL)) AS t      NATURAL FULL OUTER JOIN    (VALUES (1, 1)) AS u)
+
+# query
+# SELECT * FROM (VALUES (1, 2)) a(a1,a2) FULL JOIN (VALUES (3, 4)) b(b1,b2) ON a1=b1 ORDER BY a2
+
+# statement ok
+# drop table if exists abcd
+
+# statement ok
+# drop table if exists dxby
+
+# statement ok
+# CREATE TABLE abcd (a INT, b INT, c INT, d INT)
+
+# statement ok
+# INSERT INTO abcd VALUES (1, 1, 1, 1), (2, 2, 2, 2)
+
+# statement ok
+# CREATE TABLE dxby (d INT, x INT, b INT, y INT)
+
+# statement ok
+# INSERT INTO dxby VALUES (2, 2, 2, 2), (3, 3, 3, 3)
+
+# query
+# SELECT * FROM abcd NATURAL FULL OUTER JOIN dxby
+
+# query
+# SELECT abcd.*, dxby.* FROM abcd NATURAL FULL OUTER JOIN dxby
+
+# query
+# SELECT abcd.*, dxby.* FROM abcd INNER JOIN dxby USING (d, b)

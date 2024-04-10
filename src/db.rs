@@ -310,10 +310,10 @@ mod test {
 
     function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: ValueRef, v2: ValueRef| {
         let plus_binary_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
-        let value = plus_binary_evaluator.0.binary_eval(&v1, &v2);
+        let value = plus_binary_evaluator.binary_eval(&v1, &v2);
 
         let plus_unary_evaluator = EvaluatorFactory::unary_create(LogicalType::Integer, UnaryOperator::Minus)?;
-        Ok(plus_unary_evaluator.0.unary_eval(&value))
+        Ok(plus_unary_evaluator.unary_eval(&value))
     }));
 
     #[tokio::test]
