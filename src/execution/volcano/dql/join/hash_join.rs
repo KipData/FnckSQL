@@ -142,8 +142,11 @@ impl HashJoinStatus {
 
         let right_cols_len = tuple.values.len();
         let values = Self::eval_keys(on_right_keys, &tuple, &full_schema_ref[*left_schema_len..])?;
+        let has_null = values.iter().any(|value| value.is_null());
 
-        if let Some((tuples, is_used, is_filtered)) = build_map.get_mut(&values) {
+        if let (false, Some((tuples, is_used, is_filtered))) =
+            (has_null, build_map.get_mut(&values))
+        {
             let mut bits_option = None;
             *is_used = true;
 

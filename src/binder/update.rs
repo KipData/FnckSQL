@@ -22,7 +22,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         if let TableFactor::Table { name, .. } = &to.relation {
             let table_name = Arc::new(lower_case_name(name)?);
 
-            let mut plan = self.bind_table_ref(slice::from_ref(to))?;
+            let mut plan = self.bind_table_ref(to)?;
 
             if let Some(predicate) = selection {
                 plan = self.bind_where(plan, predicate)?;

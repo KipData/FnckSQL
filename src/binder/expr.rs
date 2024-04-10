@@ -19,11 +19,11 @@ use crate::types::value::{DataValue, Utf8Type};
 use crate::types::LogicalType;
 
 macro_rules! try_alias {
-    ($context:expr, $column_name:expr) => {
-        if let Some(expr) = $context.expr_aliases.get(&$column_name) {
+    ($context:expr, $full_name:expr) => {
+        if let Some(expr) = $context.expr_aliases.get(&$full_name) {
             return Ok(ScalarExpression::Alias {
                 expr: Box::new(expr.clone()),
-                alias: AliasType::Name($column_name),
+                alias: AliasType::Name($full_name.1),
             });
         }
     };
@@ -283,7 +283,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         idents: &[Ident],
         bind_table_name: Option<String>,
     ) -> Result<ScalarExpression, DatabaseError> {
-        let (table_name, column_name) = match idents {
+        let full_name = match idents {
             [column] => (None, lower_ident(column)),
             [table, column] => (Some(lower_ident(table)), lower_ident(column)),
             _ => {
@@ -296,25 +296,40 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 ))
             }
         };
-        try_alias!(self.context, column_name);
+        try_alias!(self.context, full_name);
         if self.context.allow_default {
-            try_default!(&table_name, column_name);
+            try_default!(&full_name.0, full_name.1);
         }
-        if let Some(table) = table_name.or(bind_table_name) {
+        if let Some(table) = full_name.0.or(bind_table_name) {
             let table_catalog = self.context.bind_table(&table, self.parent)?;
 
             let column_catalog = table_catalog
-                .get_column_by_name(&column_name)
-                .ok_or_else(|| DatabaseError::NotFound("column", column_name))?;
+                .get_column_by_name(&full_name.1)
+                .ok_or_else(|| DatabaseError::NotFound("column", full_name.1))?;
             Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
         } else {
-            let op = |got_column: &mut Option<&'a ColumnRef>, context: &BinderContext<'a, T>| {
-                for table_catalog in context.bind_table.values() {
+            let op = |got_column: &mut Option<ScalarExpression>, context: &BinderContext<'a, T>| {
+                for ((_, alias, _), table_catalog) in context.bind_table.iter() {
                     if got_column.is_some() {
                         break;
                     }
-                    if let Some(column_catalog) = table_catalog.get_column_by_name(&column_name) {
-                        *got_column = Some(column_catalog);
+                    if let Some(alias) = alias {
+                        *got_column = self.context.expr_aliases.iter().find_map(
+                            |((alias_table, alias_column), expr)| {
+                                matches!(
+                                    alias_table
+                                        .as_ref()
+                                        .map(|table_name| table_name == alias.as_ref()
+                                            && alias_column == &full_name.1),
+                                    Some(true)
+                                )
+                                .then(|| expr.clone())
+                            },
+                        );
+                    } else if let Some(column_catalog) =
+                        table_catalog.get_column_by_name(&full_name.1)
+                    {
+                        *got_column = Some(ScalarExpression::ColumnRef(column_catalog.clone()));
                     }
                 }
             };
@@ -325,9 +340,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             if let Some(parent) = self.parent {
                 op(&mut got_column, &parent.context);
             }
-            let column_catalog =
-                got_column.ok_or_else(|| DatabaseError::NotFound("column", column_name))?;
-            Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
+            Ok(got_column.ok_or_else(|| DatabaseError::NotFound("column", full_name.1))?)
         }
     }
 

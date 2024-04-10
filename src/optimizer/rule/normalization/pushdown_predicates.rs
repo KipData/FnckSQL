@@ -227,7 +227,7 @@ impl NormalizationRule for PushPredicateIntoScan {
                         *range = match meta.ty {
                             IndexType::PrimaryKey | IndexType::Unique | IndexType::Normal => {
                                 RangeDetacher::new(meta.table_name.as_str(), &meta.column_ids[0])
-                                    .detach(&op.predicate)?
+                                    .detach(&op.predicate)
                             }
                             IndexType::Composite => {
                                 let mut res = None;
@@ -236,7 +236,7 @@ impl NormalizationRule for PushPredicateIntoScan {
                                 for column_id in meta.column_ids.iter() {
                                     if let Some(range) =
                                         RangeDetacher::new(meta.table_name.as_str(), column_id)
-                                            .detach(&op.predicate)?
+                                            .detach(&op.predicate)
                                     {
                                         if range.only_eq() {
                                             eq_ranges.push(range);

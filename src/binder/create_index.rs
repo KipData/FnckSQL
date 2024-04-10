@@ -29,7 +29,9 @@ impl<'a, T: Transaction> Binder<'a, T> {
             IndexType::Composite
         };
 
-        let table = self.context.table_and_bind(table_name.clone(), None)?;
+        let table = self
+            .context
+            .table_and_bind(table_name.clone(), None, None)?;
         let plan = ScanOperator::build(table_name.clone(), table);
         let mut columns = Vec::with_capacity(exprs.len());
 

@@ -1,5 +1,4 @@
 use crate::catalog::ColumnRef;
-use crate::errors::DatabaseError;
 use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
 use crate::types::ColumnId;
@@ -187,35 +186,31 @@ impl<'a> RangeDetacher<'a> {
         }
     }
 
-    pub(crate) fn detach(
-        &mut self,
-        expr: &ScalarExpression,
-    ) -> Result<Option<Range>, DatabaseError> {
+    pub(crate) fn detach(&mut self, expr: &ScalarExpression) -> Option<Range> {
         match expr {
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
                 op,
                 ..
-            } => match (self.detach(left_expr)?, self.detach(right_expr)?) {
+            } => match (self.detach(left_expr), self.detach(right_expr)) {
                 (Some(left_binary), Some(right_binary)) => {
-                    Ok(Self::merge_binary(*op, left_binary, right_binary))
+                    Self::merge_binary(*op, left_binary, right_binary)
                 }
                 (None, None) => {
                     if let (Some(col), Some(val)) =
                         (left_expr.unpack_col(false), right_expr.unpack_val())
                     {
-                        return Ok(self.new_range(*op, col, val, false));
+                        return self.new_range(*op, col, val, false);
                     } else if let (Some(val), Some(col)) =
                         (left_expr.unpack_val(), right_expr.unpack_col(false))
                     {
-                        return Ok(self.new_range(*op, col, val, true));
+                        return self.new_range(*op, col, val, true);
                     }
 
-                    Ok(None)
+                    None
                 }
-                (Some(binary), None) => Ok(self.check_or(op, binary)),
-                (None, Some(binary)) => Ok(self.check_or(op, binary)),
+                (Some(binary), None) | (None, Some(binary)) => self.check_or(op, binary),
             },
             ScalarExpression::Alias { expr, .. }
             | ScalarExpression::TypeCast { expr, .. }
@@ -228,16 +223,16 @@ impl<'a> RangeDetacher<'a> {
                 ScalarExpression::ColumnRef(column) => {
                     if let (Some(col_id), Some(col_table)) = (column.id(), column.table_name()) {
                         if &col_id == self.column_id && col_table.as_str() == self.table_name {
-                            return Ok(if *negated {
+                            return if *negated {
                                 // Range::NotEq(NULL_VALUE.clone())
                                 None
                             } else {
                                 Some(Range::Eq(NULL_VALUE.clone()))
-                            });
+                            };
                         }
                     }
 
-                    Ok(None)
+                    None
                 }
                 ScalarExpression::Constant(_)
                 | ScalarExpression::Alias { .. }
@@ -260,7 +255,7 @@ impl<'a> RangeDetacher<'a> {
                 | ScalarExpression::Reference { .. }
                 | ScalarExpression::Empty => unreachable!(),
             },
-            ScalarExpression::Constant(_) | ScalarExpression::ColumnRef(_) => Ok(None),
+            ScalarExpression::Constant(_) | ScalarExpression::ColumnRef(_) => None,
             // FIXME: support [RangeDetacher::_detach]
             ScalarExpression::Tuple(_)
             | ScalarExpression::AggCall { .. }
@@ -269,7 +264,7 @@ impl<'a> RangeDetacher<'a> {
             | ScalarExpression::IfNull { .. }
             | ScalarExpression::NullIf { .. }
             | ScalarExpression::Coalesce { .. }
-            | ScalarExpression::CaseWhen { .. } => Ok(None),
+            | ScalarExpression::CaseWhen { .. } => None,
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
         }
     }
@@ -817,21 +812,21 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 = 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 => {}", range);
             assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
         }
         {
             let plan = select_sql_run("select * from t1 where c1 != 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 != 1 => {:#?}", range);
             assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 > 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 > 1 => c1: {}", range);
             assert_eq!(
                 range,
@@ -844,7 +839,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 >= 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 >= 1 => c1: {}", range);
             assert_eq!(
                 range,
@@ -857,7 +852,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 < 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 < 1 => c1: {}", range);
             assert_eq!(
                 range,
@@ -870,7 +865,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 <= 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 <= 1 => c1: {}", range);
             assert_eq!(
                 range,
@@ -883,7 +878,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 < 1 and c1 >= 0").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 < 1 and c1 >= 0 => c1: {}", range);
             assert_eq!(
                 range,
@@ -896,7 +891,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 < 1 or c1 >= 0").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 < 1 or c1 >= 0 => c1: {}", range);
             assert_eq!(
                 range,
@@ -910,14 +905,14 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 = 1 and c1 = 0").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 and c1 = 0 => c1: {}", range);
             assert_eq!(range, Range::Dummy)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 = 1 or c1 = 0").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 or c1 = 0 => c1: {}", range);
             assert_eq!(
                 range,
@@ -930,14 +925,14 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 = 1 and c1 = 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 and c1 = 1 => c1: {}", range);
             assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
         }
         {
             let plan = select_sql_run("select * from t1 where c1 = 1 or c1 = 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 or c1 = 1 => c1: {}", range);
             assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
         }
@@ -945,21 +940,21 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 > 1 and c1 = 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 > 1 and c1 = 1 => c1: {}", range);
             assert_eq!(range, Range::Dummy)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 >= 1 and c1 = 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 >= 1 and c1 = 1 => c1: {}", range);
             assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
         }
         {
             let plan = select_sql_run("select * from t1 where c1 > 1 or c1 = 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 > 1 or c1 = 1 => c1: {}", range);
             assert_eq!(
                 range,
@@ -972,7 +967,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 >= 1 or c1 = 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 >= 1 or c1 = 1 => c1: {}", range);
             assert_eq!(
                 range,
@@ -989,7 +984,7 @@ mod test {
             )
             .await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!(
                 "(c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4) => c1: {}",
                 range
@@ -1007,7 +1002,7 @@ mod test {
                 select_sql_run("select * from t1 where (c1 > 0 and c1 < 3) or (c1 > 1 and c1 < 4)")
                     .await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!(
                 "(c1 > 0 and c1 < 3) or (c1 > 1 and c1 < 4) => c1: {}",
                 range
@@ -1027,7 +1022,7 @@ mod test {
             )
             .await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!(
                 "((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) and c1 = 0 => c1: {}",
                 range
@@ -1040,7 +1035,7 @@ mod test {
             )
             .await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!(
                 "((c1 > 0 and c1 < 3) or (c1 > 1 and c1 < 4)) and c1 = 0 => c1: {}",
                 range
@@ -1053,7 +1048,7 @@ mod test {
             )
             .await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!(
                 "((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) or c1 = 0 => c1: {}",
                 range
@@ -1075,7 +1070,7 @@ mod test {
             )
             .await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!(
                 "((c1 > 0 and c1 < 3) or (c1 > 1 and c1 < 4)) or c1 = 0 => c1: {}",
                 range
@@ -1092,14 +1087,14 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where (((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) and c1 = 0) and (c1 >= 0 and c1 <= 2)").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("(((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) and c1 = 0) and (c1 >= 0 and c1 <= 2) => c1: {}", range);
             assert_eq!(range, Range::Dummy)
         }
         {
             let plan = select_sql_run("select * from t1 where (((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) and c1 = 0) or (c1 >= 0 and c1 <= 2)").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("(((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) and c1 = 0) or (c1 >= 0 and c1 <= 2) => c1: {}", range);
             assert_eq!(
                 range,
@@ -1113,7 +1108,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where ((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) and ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5))").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) and ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
             assert_eq!(
                 range,
@@ -1132,7 +1127,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where ((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) or ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5))").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) or ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
             assert_eq!(
                 range,
@@ -1152,7 +1147,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where true").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("empty => c1: {:#?}", range);
             assert_eq!(range, None)
         }
@@ -1160,21 +1155,21 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c2 = 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c2 = 1 => c1: {:#?}", range);
             assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 > 1 or c2 > 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 > 1 or c2 > 1 => c1: {:#?}", range);
             assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 > c2 or c2 > 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 > c2 or c2 > 1 => c1: {:#?}", range);
             assert_eq!(range, None)
         }
@@ -1185,7 +1180,7 @@ mod test {
             )
             .await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!(
                 "c1 = 5 or (c1 > 5 and (c1 > 6 or c1 < 8) and c1 < 12) => c1: {}",
                 range
@@ -1205,7 +1200,7 @@ mod test {
             )
                 .await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!(
                 "((c2 >= -8 and -4 >= c1) or (c1 >= 0 and 5 > c2)) and ((c2 > 0 and c1 <= 1) or (c1 > -8 and c2 < -6)) => c1: {}",
                 range
@@ -1235,14 +1230,14 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 = null").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null => c1: {}", range);
             assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(None))))
         }
         {
             let plan = select_sql_run("select * from t1 where c1 = null or c1 = 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null or c1 = 1 => c1: {}", range);
             assert_eq!(
                 range,
@@ -1255,7 +1250,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 = null or c1 < 5").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null or c1 < 5 => c1: {}", range);
             assert_eq!(
                 range,
@@ -1269,7 +1264,7 @@ mod test {
             let plan =
                 select_sql_run("select * from t1 where c1 = null or (c1 > 1 and c1 < 5)").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null or (c1 > 1 and c1 < 5) => c1: {}", range);
             assert_eq!(
                 range,
@@ -1285,7 +1280,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 = null and c1 < 5").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null and c1 < 5 => c1: {}", range);
             assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(None))))
         }
@@ -1293,7 +1288,7 @@ mod test {
             let plan =
                 select_sql_run("select * from t1 where c1 = null and (c1 > 1 and c1 < 5)").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null and (c1 > 1 and c1 < 5) => c1: {}", range);
             assert_eq!(range, Range::Dummy)
         }
@@ -1301,21 +1296,21 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where c1 != null").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 != null => c1: {:#?}", range);
             assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 = null or c1 != 1").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 = null or c1 != 1 => c1: {:#?}", range);
             assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 != null or c1 < 5").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 != null or c1 < 5 => c1: {:#?}", range);
             assert_eq!(range, None)
         }
@@ -1323,14 +1318,14 @@ mod test {
             let plan =
                 select_sql_run("select * from t1 where c1 != null or (c1 > 1 and c1 < 5)").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?;
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 != null or (c1 > 1 and c1 < 5) => c1: {:#?}", range);
             assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 != null and c1 < 5").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 != null and c1 < 5 => c1: {}", range);
             assert_eq!(
                 range,
@@ -1344,7 +1339,7 @@ mod test {
             let plan =
                 select_sql_run("select * from t1 where c1 != null and (c1 > 1 and c1 < 5)").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 != null and (c1 > 1 and c1 < 5) => c1: {}", range);
             assert_eq!(
                 range,
@@ -1357,7 +1352,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where (c1 = null or (c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) or ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5))").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("(c1 = null or (c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) or ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
             assert_eq!(
                 range,
@@ -1377,7 +1372,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where ((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) or (c1 = null or (c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5))").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) or (c1 = null or (c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
             assert_eq!(
                 range,
@@ -1397,7 +1392,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where (c1 = null or (c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) and ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5))").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("(c1 = null or (c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) and ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
             assert_eq!(
                 range,
@@ -1416,7 +1411,7 @@ mod test {
         {
             let plan = select_sql_run("select * from t1 where ((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) and (c1 = null or (c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5))").await?;
             let op = plan_filter(plan)?.unwrap();
-            let range = RangeDetacher::new("t1", &0).detach(&op.predicate)?.unwrap();
+            let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) and (c1 = null or (c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
             assert_eq!(
                 range,

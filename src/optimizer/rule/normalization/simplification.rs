@@ -157,7 +157,7 @@ mod test {
         }
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
             let range = RangeDetacher::new("t1", &0)
-                .detach(&filter_op.predicate)?
+                .detach(&filter_op.predicate)
                 .unwrap();
             assert_eq!(
                 range,
@@ -206,7 +206,7 @@ mod test {
                 )
                 .find_best::<KipTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                Ok(RangeDetacher::new("t1", &0).detach(&filter_op.predicate)?)
+                Ok(RangeDetacher::new("t1", &0).detach(&filter_op.predicate))
             } else {
                 Ok(None)
             }
@@ -317,7 +317,7 @@ mod test {
             )
             .find_best::<KipTransaction>(None)?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-            Ok(RangeDetacher::new("t1", &column_id).detach(&filter_op.predicate)?)
+            Ok(RangeDetacher::new("t1", &column_id).detach(&filter_op.predicate))
         } else {
             Ok(None)
         }

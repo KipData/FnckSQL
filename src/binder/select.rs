@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
     types::value::DataValue,
 };
 
-use super::{lower_case_name, lower_ident, Binder, QueryBindStep, SubQueryType};
+use super::{lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep, SubQueryType};
 
 use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
@@ -71,8 +71,23 @@ impl<'a, T: Transaction> Binder<'a, T> {
         select: &Select,
         orderby: &[OrderByExpr],
     ) -> Result<LogicalPlan, DatabaseError> {
-        let mut plan = self.bind_table_ref(&select.from)?;
+        let mut plan = if select.from.is_empty() {
+            LogicalPlan::new(Operator::Dummy, vec![])
+        } else {
+            let mut plan = self.bind_table_ref(&select.from[0])?;
 
+            if select.from.len() > 1 {
+                for from in select.from[1..].iter() {
+                    plan = LJoinOperator::build(
+                        plan,
+                        self.bind_table_ref(from)?,
+                        JoinCondition::None,
+                        JoinType::Cross,
+                    )
+                }
+            }
+            plan
+        };
         // Resolve scalar function call.
         // TODO support SRF(Set-Returning Function).
 
@@ -224,16 +239,11 @@ impl<'a, T: Transaction> Binder<'a, T> {
 
     pub(crate) fn bind_table_ref(
         &mut self,
-        from: &[TableWithJoins],
+        from: &TableWithJoins,
     ) -> Result<LogicalPlan, DatabaseError> {
         self.context.step(QueryBindStep::From);
 
-        assert!(from.len() < 2, "not support yet.");
-        if from.is_empty() {
-            return Ok(LogicalPlan::new(Operator::Dummy, vec![]));
-        }
-
-        let TableWithJoins { relation, joins } = &from[0];
+        let TableWithJoins { relation, joins } = from;
         let mut plan = self.bind_single_table_ref(relation, None)?;
 
         for join in joins {
@@ -256,7 +266,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             TableFactor::Derived {
                 subquery, alias, ..
             } => {
-                let plan = self.bind_query(subquery)?;
+                let mut plan = self.bind_query(subquery)?;
                 let mut tables = plan.referenced_table();
 
                 if let Some(TableAlias {
@@ -269,11 +279,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     }
                     let table_alias = Arc::new(name.value.to_lowercase());
 
-                    self.register_alias(
-                        alias_column,
-                        table_alias.to_string(),
-                        tables.pop().unwrap(),
-                    )?;
+                    plan =
+                        self.bind_alias(plan, alias_column, table_alias, tables.pop().unwrap())?;
                 }
                 plan
             }
@@ -283,35 +290,52 @@ impl<'a, T: Transaction> Binder<'a, T> {
         Ok(plan)
     }
 
-    fn register_alias(
+    pub(crate) fn bind_alias(
         &mut self,
+        mut plan: LogicalPlan,
         alias_column: &[Ident],
-        table_alias: String,
+        table_alias: TableName,
         table_name: TableName,
-    ) -> Result<(), DatabaseError> {
-        if !alias_column.is_empty() {
-            let table = self
-                .context
-                .table(table_name.clone())
-                .ok_or(DatabaseError::TableNotFound)?;
-
-            if alias_column.len() != table.columns_len() {
-                return Err(DatabaseError::MisMatch("alias", "columns"));
-            }
-            let aliases_with_columns = alias_column
+    ) -> Result<LogicalPlan, DatabaseError> {
+        let input_schema = plan.output_schema();
+        if !alias_column.is_empty() && alias_column.len() != input_schema.len() {
+            return Err(DatabaseError::MisMatch("alias", "columns"));
+        }
+        let aliases_with_columns = if alias_column.is_empty() {
+            input_schema
+                .iter()
+                .cloned()
+                .map(|column| (column.name().to_string(), column))
+                .collect_vec()
+        } else {
+            alias_column
                 .iter()
                 .map(lower_ident)
-                .zip(table.columns().cloned())
-                .collect_vec();
+                .zip(input_schema.iter().cloned())
+                .collect_vec()
+        };
+        let mut alias_exprs = Vec::with_capacity(aliases_with_columns.len());
 
-            for (alias, column) in aliases_with_columns {
-                self.context
-                    .add_alias(alias, ScalarExpression::ColumnRef(column));
-            }
+        for (alias, column) in aliases_with_columns {
+            let mut alias_column = ColumnCatalog::clone(&column);
+            alias_column.set_name(alias.clone());
+            alias_column.set_table_name(table_alias.clone());
+
+            let alias_column_expr = ScalarExpression::Alias {
+                expr: Box::new(ScalarExpression::ColumnRef(column)),
+                alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
+                    alias_column,
+                )))),
+            };
+            self.context.add_alias(
+                Some(table_alias.to_string()),
+                alias,
+                alias_column_expr.clone(),
+            );
+            alias_exprs.push(alias_column_expr);
         }
         self.context.add_table_alias(table_alias, table_name);
-
-        Ok(())
+        self.bind_project(plan, alias_exprs)
     }
 
     pub(crate) fn _bind_single_table_ref(
@@ -321,12 +345,21 @@ impl<'a, T: Transaction> Binder<'a, T> {
         alias: Option<&TableAlias>,
     ) -> Result<LogicalPlan, DatabaseError> {
         let table_name = Arc::new(table.to_string());
-
-        let table_catalog = self.context.table_and_bind(table_name.clone(), join_type)?;
-        let scan_op = ScanOperator::build(table_name.clone(), table_catalog);
+        let mut table_alias = None;
+        let mut alias_idents = None;
 
         if let Some(TableAlias { name, columns }) = alias {
-            self.register_alias(columns, lower_ident(name), table_name.clone())?;
+            table_alias = Some(Arc::new(name.value.to_lowercase()));
+            alias_idents = Some(columns);
+        }
+
+        let table_catalog =
+            self.context
+                .table_and_bind(table_name.clone(), table_alias.clone(), join_type)?;
+        let mut scan_op = ScanOperator::build(table_name.clone(), table_catalog);
+
+        if let Some(idents) = alias_idents {
+            scan_op = self.bind_alias(scan_op, idents, table_alias.unwrap(), table_name.clone())?;
         }
 
         Ok(scan_op)
@@ -352,7 +385,8 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     let expr = self.bind_expr(expr)?;
                     let alias_name = alias.to_string();
 
-                    self.context.add_alias(alias_name.clone(), expr.clone());
+                    self.context
+                        .add_alias(None, alias_name.clone(), expr.clone());
 
                     select_items.push(ScalarExpression::Alias {
                         expr: Box::new(expr),
@@ -363,14 +397,21 @@ impl<'a, T: Transaction> Binder<'a, T> {
                     if let Operator::Project(op) = &plan.operator {
                         return Ok(op.exprs.clone());
                     }
-                    for (table_name, _) in self.context.bind_table.keys() {
-                        self.bind_table_column_refs(&mut select_items, table_name.clone())?;
+                    let mut join_used = HashSet::with_capacity(self.context.using.len());
+
+                    for (table_name, alias, _) in self.context.bind_table.keys() {
+                        self.bind_table_column_refs(
+                            &mut select_items,
+                            alias.as_ref().unwrap_or(table_name).clone(),
+                            &mut join_used,
+                        )?;
                     }
                 }
                 SelectItem::QualifiedWildcard(table_name, _) => {
                     self.bind_table_column_refs(
                         &mut select_items,
                         Arc::new(lower_case_name(table_name)?),
+                        &mut HashSet::with_capacity(self.context.using.len()),
                     )?;
                 }
             };
@@ -383,32 +424,46 @@ impl<'a, T: Transaction> Binder<'a, T> {
         &self,
         exprs: &mut Vec<ScalarExpression>,
         table_name: TableName,
+        join_used: &mut HashSet<String>,
     ) -> Result<(), DatabaseError> {
+        let mut is_bound_alias = false;
+
+        let fn_used = |column_name: &str, context: &BinderContext<T>, join_used: &HashSet<_>| {
+            context.using.contains(column_name) && join_used.contains(column_name)
+        };
+        for (_, alias_expr) in self.context.expr_aliases.iter().filter(|(_, expr)| {
+            if let ScalarExpression::ColumnRef(col) = expr.unpack_alias_ref() {
+                let column_name = col.name();
+
+                if Some(&table_name) == col.table_name()
+                    && !fn_used(column_name, &self.context, join_used)
+                {
+                    join_used.insert(column_name.to_string());
+                    return true;
+                }
+            }
+            false
+        }) {
+            is_bound_alias = true;
+            exprs.push(alias_expr.clone());
+        }
+        if is_bound_alias {
+            return Ok(());
+        }
+
         let table = self
             .context
             .table(table_name.clone())
             .ok_or(DatabaseError::TableNotFound)?;
-        let alias_map: HashMap<&ScalarExpression, &String> = self
-            .context
-            .expr_aliases
-            .iter()
-            .filter(|(_, expr)| {
-                if let ScalarExpression::ColumnRef(col) = expr {
-                    return Some(&table_name) == col.table_name();
-                }
-                false
-            })
-            .map(|(alias, expr)| (expr, alias))
-            .collect();
         for column in table.columns() {
-            let mut expr = ScalarExpression::ColumnRef(column.clone());
+            let column_name = column.name();
 
-            if let Some(alias_expr) = alias_map.get(&expr) {
-                expr = ScalarExpression::Alias {
-                    expr: Box::new(expr),
-                    alias: AliasType::Name(alias_expr.to_string()),
-                }
+            if fn_used(column_name, &self.context, join_used) {
+                continue;
             }
+            let expr = ScalarExpression::ColumnRef(column.clone());
+
+            join_used.insert(column_name.to_string());
             exprs.push(expr);
         }
         Ok(())
@@ -597,7 +652,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
         let mut left_table_force_nullable = false;
         let mut left_table = None;
 
-        for ((_, join_option), table) in bind_tables {
+        for ((_, _, join_option), table) in bind_tables {
             if let Some(join_type) = join_option {
                 let (left_force_nullable, right_force_nullable) = joins_nullable(join_type);
                 table_force_nullable.push((table, right_force_nullable));
@@ -626,10 +681,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
         }
     }
 
-    fn bind_join_constraint(
+    fn bind_join_constraint<'b>(
         &mut self,
-        left_schema: &SchemaRef,
-        right_schema: &SchemaRef,
+        left_schema: &'b SchemaRef,
+        right_schema: &'b SchemaRef,
         constraint: &JoinConstraint,
     ) -> Result<JoinCondition, DatabaseError> {
         match constraint {
@@ -665,23 +720,24 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 })
             }
             JoinConstraint::Using(idents) => {
-                let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = vec![];
-                let fn_column = |schema: &Schema, ident: &Ident| {
+                let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = Vec::new();
+                let fn_column = |schema: &Schema, name: &str| {
                     schema
                         .iter()
-                        .find(|column| column.name() == lower_ident(ident))
+                        .find(|column| column.name() == name)
                         .map(|column| ScalarExpression::ColumnRef(column.clone()))
                 };
-
                 for ident in idents {
+                    let name = lower_ident(ident);
                     if let (Some(left_column), Some(right_column)) = (
-                        fn_column(left_schema, ident),
-                        fn_column(right_schema, ident),
+                        fn_column(left_schema, &name),
+                        fn_column(right_schema, &name),
                     ) {
                         on_keys.push((left_column, right_column));
                     } else {
                         return Err(DatabaseError::InvalidColumn("not found column".to_string()))?;
                     }
+                    self.context.add_using(name);
                 }
                 Ok(JoinCondition::On {
                     on: on_keys,
@@ -689,7 +745,29 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 })
             }
             JoinConstraint::None => Ok(JoinCondition::None),
-            _ => unimplemented!("not supported join constraint {:?}", constraint),
+            JoinConstraint::Natural => {
+                let fn_names = |schema: &'b Schema| -> HashSet<&'b str> {
+                    schema.iter().map(|column| column.name()).collect()
+                };
+                let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = Vec::new();
+
+                for name in fn_names(left_schema).intersection(&fn_names(right_schema)) {
+                    self.context.add_using(name.to_string());
+                    if let (Some(left_column), Some(right_column)) = (
+                        left_schema.iter().find(|column| column.name() == *name),
+                        right_schema.iter().find(|column| column.name() == *name),
+                    ) {
+                        on_keys.push((
+                            ScalarExpression::ColumnRef(left_column.clone()),
+                            ScalarExpression::ColumnRef(right_column.clone()),
+                        ));
+                    }
+                }
+                Ok(JoinCondition::On {
+                    on: on_keys,
+                    filter: None,
+                })
+            }
         }
     }
 
