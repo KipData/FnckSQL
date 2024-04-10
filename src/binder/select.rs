@@ -403,7 +403,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                         self.bind_table_column_refs(
                             &mut select_items,
                             alias.as_ref().unwrap_or(table_name).clone(),
-                            &mut join_used,
+                            Some(&mut join_used),
                         )?;
                     }
                 }
@@ -411,7 +411,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                     self.bind_table_column_refs(
                         &mut select_items,
                         Arc::new(lower_case_name(table_name)?),
-                        &mut HashSet::with_capacity(self.context.using.len()),
+                        None,
                     )?;
                 }
             };
@@ -424,21 +424,25 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         &self,
         exprs: &mut Vec<ScalarExpression>,
         table_name: TableName,
-        join_used: &mut HashSet<String>,
+        mut join_used: Option<&mut HashSet<String>>,
     ) -> Result<(), DatabaseError> {
         let mut is_bound_alias = false;
 
-        let fn_used = |column_name: &str, context: &BinderContext<T>, join_used: &HashSet<_>| {
-            context.using.contains(column_name) && join_used.contains(column_name)
-        };
+        let fn_used =
+            |column_name: &str, context: &BinderContext<T>, join_used: Option<&HashSet<_>>| {
+                context.using.contains(column_name)
+                    && matches!(join_used.map(|used| used.contains(column_name)), Some(true))
+            };
         for (_, alias_expr) in self.context.expr_aliases.iter().filter(|(_, expr)| {
             if let ScalarExpression::ColumnRef(col) = expr.unpack_alias_ref() {
                 let column_name = col.name();
 
                 if Some(&table_name) == col.table_name()
-                    && !fn_used(column_name, &self.context, join_used)
+                    && !fn_used(column_name, &self.context, join_used.as_deref())
                 {
-                    join_used.insert(column_name.to_string());
+                    if let Some(used) = join_used.as_mut() {
+                        used.insert(column_name.to_string());
+                    }
                     return true;
                 }
             }
@@ -458,12 +462,14 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         for column in table.columns() {
             let column_name = column.name();
 
-            if fn_used(column_name, &self.context, join_used) {
+            if fn_used(column_name, &self.context, join_used.as_deref()) {
                 continue;
             }
             let expr = ScalarExpression::ColumnRef(column.clone());
 
-            join_used.insert(column_name.to_string());
+            if let Some(used) = join_used.as_mut() {
+                used.insert(column_name.to_string());
+            }
             exprs.push(expr);
         }
         Ok(())

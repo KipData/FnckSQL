@@ -16,9 +16,8 @@ mod show;
 mod truncate;
 mod update;
 
-use ahash::HashSet;
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
