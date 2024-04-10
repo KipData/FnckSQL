@@ -39,10 +39,12 @@ impl BinaryEvaluator for TupleEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {
@@ -57,10 +59,12 @@ impl BinaryEvaluator for TupleNotEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {
@@ -75,10 +79,12 @@ impl BinaryEvaluator for TupleGtBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {
@@ -93,10 +99,12 @@ impl BinaryEvaluator for TupleGtEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {
@@ -111,10 +119,12 @@ impl BinaryEvaluator for TupleLtBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {
@@ -129,10 +139,12 @@ impl BinaryEvaluator for TupleLtEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Tuple(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {

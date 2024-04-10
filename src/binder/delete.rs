@@ -8,7 +8,7 @@ use crate::storage::Transaction;
 use sqlparser::ast::{Expr, TableAlias, TableFactor, TableWithJoins};
 use std::sync::Arc;
 
-impl<'a, T: Transaction> Binder<'a, T> {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     pub(crate) fn bind_delete(
         &mut self,
         from: &TableWithJoins,

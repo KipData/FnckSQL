@@ -10,7 +10,7 @@ use crate::types::index::IndexType;
 use sqlparser::ast::{ObjectName, OrderByExpr};
 use std::sync::Arc;
 
-impl<'a, T: Transaction> Binder<'a, T> {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     pub(crate) fn bind_create_index(
         &mut self,
         table_name: &ObjectName,

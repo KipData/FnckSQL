@@ -34,10 +34,12 @@ impl BinaryEvaluator for Utf8GtBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -53,10 +55,12 @@ impl BinaryEvaluator for Utf8GtEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -72,10 +76,12 @@ impl BinaryEvaluator for Utf8LtBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -91,10 +97,12 @@ impl BinaryEvaluator for Utf8LtEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -110,10 +118,12 @@ impl BinaryEvaluator for Utf8EqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -129,10 +139,12 @@ impl BinaryEvaluator for Utf8NotEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
@@ -148,10 +160,12 @@ impl BinaryEvaluator for Utf8StringConcatBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {
@@ -170,10 +184,12 @@ impl BinaryEvaluator for Utf8LikeBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let value = match left {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let pattern = match right {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let is_match = if let (Some(value), Some(pattern)) = (value, pattern) {
@@ -190,10 +206,12 @@ impl BinaryEvaluator for Utf8NotLikeBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let value = match left {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let pattern = match right {
             DataValue::Utf8 { value, .. } => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let is_match = if let (Some(value), Some(pattern)) = (value, pattern) {

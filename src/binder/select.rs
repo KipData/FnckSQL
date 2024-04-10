@@ -35,7 +35,7 @@ use sqlparser::ast::{
     TableWithJoins,
 };
 
-impl<'a, T: Transaction> Binder<'a, T> {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, DatabaseError> {
         let origin_step = self.context.step_now();
 
@@ -487,7 +487,18 @@ impl<'a, T: Transaction> Binder<'a, T> {
             JoinOperator::CrossJoin => (JoinType::Cross, None),
             _ => unimplemented!(),
         };
-        let mut right = self.bind_single_table_ref(relation, Some(join_type))?;
+        let BinderContext {
+            transaction,
+            functions,
+            temp_table_id,
+            ..
+        } = &self.context;
+        let mut binder = Binder::new(
+            BinderContext::new(*transaction, functions, temp_table_id.clone()),
+            Some(self),
+        );
+        let mut right = binder.bind_single_table_ref(relation, Some(join_type))?;
+        self.extend(binder.context);
 
         let on = match joint_condition {
             Some(constraint) => {
@@ -681,10 +692,10 @@ impl<'a, T: Transaction> Binder<'a, T> {
         }
     }
 
-    fn bind_join_constraint<'b>(
+    fn bind_join_constraint<'c>(
         &mut self,
-        left_schema: &'b SchemaRef,
-        right_schema: &'b SchemaRef,
+        left_schema: &'c SchemaRef,
+        right_schema: &'c SchemaRef,
         constraint: &JoinConstraint,
     ) -> Result<JoinCondition, DatabaseError> {
         match constraint {
@@ -746,7 +757,7 @@ impl<'a, T: Transaction> Binder<'a, T> {
             }
             JoinConstraint::None => Ok(JoinCondition::None),
             JoinConstraint::Natural => {
-                let fn_names = |schema: &'b Schema| -> HashSet<&'b str> {
+                let fn_names = |schema: &'c Schema| -> HashSet<&'c str> {
                     schema.iter().map(|column| column.name()).collect()
                 };
                 let mut on_keys: Vec<(ScalarExpression, ScalarExpression)> = Vec::new();

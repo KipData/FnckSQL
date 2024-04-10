@@ -184,10 +184,10 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
     }
 
     /// get table from bindings
-    pub fn bind_table(
+    pub fn bind_table<'b: 'a>(
         &self,
         table_name: &str,
-        parent: Option<&'a Binder<'a, T>>,
+        parent: Option<&'b Binder<'a, 'b, T>>,
     ) -> Result<&TableCatalog, DatabaseError> {
         if let Some(table_catalog) = self.bind_table.iter().find(|((t, alias, _), _)| {
             t.as_str() == table_name
@@ -231,13 +231,13 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
     }
 }
 
-pub struct Binder<'a, T: Transaction> {
+pub struct Binder<'a, 'b, T: Transaction> {
     context: BinderContext<'a, T>,
-    pub(crate) parent: Option<&'a Binder<'a, T>>,
+    pub(crate) parent: Option<&'b Binder<'a, 'b, T>>,
 }
 
-impl<'a, T: Transaction> Binder<'a, T> {
-    pub fn new(context: BinderContext<'a, T>, parent: Option<&'a Binder<'a, T>>) -> Self {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+    pub fn new(context: BinderContext<'a, T>, parent: Option<&'b Binder<'a, 'b, T>>) -> Self {
         Binder { context, parent }
     }
 
@@ -340,6 +340,18 @@ impl<'a, T: Transaction> Binder<'a, T> {
                 right,
             } => self.bind_set_operation(op, set_quantifier, left, right),
             _ => todo!(),
+        }
+    }
+
+    fn extend(&mut self, context: BinderContext<'a, T>) {
+        for (key, table) in context.bind_table {
+            self.context.bind_table.insert(key, table);
+        }
+        for (key, expr) in context.expr_aliases {
+            self.context.expr_aliases.insert(key, expr);
+        }
+        for (key, table_name) in context.table_aliases {
+            self.context.table_aliases.insert(key, table_name);
         }
     }
 }

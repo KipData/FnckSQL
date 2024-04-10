@@ -37,7 +37,7 @@ macro_rules! try_default {
     };
 }
 
-impl<'a, T: Transaction> Binder<'a, T> {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, DatabaseError> {
         match expr {
             Expr::Identifier(ident) => {

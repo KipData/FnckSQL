@@ -19,6 +19,7 @@ impl UnaryEvaluator for BooleanNotUnaryEvaluator {
     fn unary_eval(&self, value: &DataValue) -> DataValue {
         let value = match value {
             DataValue::Boolean(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         DataValue::Boolean(value.map(|v| !v))
@@ -29,10 +30,12 @@ impl BinaryEvaluator for BooleanAndBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Boolean(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Boolean(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {
@@ -49,10 +52,12 @@ impl BinaryEvaluator for BooleanOrBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Boolean(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Boolean(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {
@@ -69,10 +74,12 @@ impl BinaryEvaluator for BooleanEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Boolean(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Boolean(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {
@@ -88,10 +95,12 @@ impl BinaryEvaluator for BooleanNotEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
         let left = match left {
             DataValue::Boolean(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let right = match right {
             DataValue::Boolean(value) => value,
+            DataValue::Null => &None,
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = match (left, right) {

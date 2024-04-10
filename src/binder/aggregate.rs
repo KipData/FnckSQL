@@ -14,7 +14,7 @@ use crate::{
 
 use super::{Binder, QueryBindStep};
 
-impl<'a, T: Transaction> Binder<'a, T> {
+impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     pub fn bind_aggregate(
         &mut self,
         children: LogicalPlan,
