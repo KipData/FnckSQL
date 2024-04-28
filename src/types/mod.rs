@@ -358,6 +358,9 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                     char_unit.unwrap_or(CharLengthUnits::Characters),
                 ))
             }
+            sqlparser::ast::DataType::String => {
+                Ok(LogicalType::Varchar(None, CharLengthUnits::Characters))
+            }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
             sqlparser::ast::DataType::Double | sqlparser::ast::DataType::DoublePrecision => {
                 Ok(LogicalType::Double)
