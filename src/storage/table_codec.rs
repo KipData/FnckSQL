@@ -30,6 +30,25 @@ enum CodecType {
 }
 
 impl TableCodec {
+    pub fn check_primary_key_type(ty: &LogicalType) -> Result<(), DatabaseError> {
+        if !matches!(
+            ty,
+            LogicalType::Tinyint
+                | LogicalType::Smallint
+                | LogicalType::Integer
+                | LogicalType::Bigint
+                | LogicalType::UTinyint
+                | LogicalType::USmallint
+                | LogicalType::UInteger
+                | LogicalType::UBigint
+                | LogicalType::Char(..)
+                | LogicalType::Varchar(..)
+        ) {
+            return Err(DatabaseError::InvalidType);
+        }
+        Ok(())
+    }
+
     /// TableName + Type
     ///
     /// Tips: Root full key = key_prefix
@@ -159,23 +178,11 @@ impl TableCodec {
         table_name: &str,
         tuple_id: &TupleId,
     ) -> Result<Vec<u8>, DatabaseError> {
+        Self::check_primary_key_type(&tuple_id.logical_type())?;
+
         let mut key_prefix = Self::key_prefix(CodecType::Tuple, table_name);
         key_prefix.push(BOUND_MIN_TAG);
 
-        if !matches!(
-            tuple_id.logical_type(),
-            LogicalType::Tinyint
-                | LogicalType::Smallint
-                | LogicalType::Integer
-                | LogicalType::Bigint
-                | LogicalType::UTinyint
-                | LogicalType::USmallint
-                | LogicalType::UInteger
-                | LogicalType::UBigint
-                | LogicalType::Varchar(..)
-        ) {
-            return Err(DatabaseError::InvalidType);
-        }
         tuple_id.memcomparable_encode(&mut key_prefix)?;
 
         Ok(key_prefix)
