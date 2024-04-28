@@ -80,7 +80,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                 return_orderby.push(SortField::new(
                     expr,
                     asc.map_or(true, |asc| asc),
-                    nulls_first.map_or(true, |first| first),
+                    nulls_first.map_or(false, |first| first),
                 ));
             }
             Some(return_orderby)

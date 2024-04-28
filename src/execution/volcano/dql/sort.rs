@@ -52,13 +52,12 @@ pub(crate) fn sort(
                 let mut key = Vec::new();
 
                 expr.eval(&tuple, schema)?.memcomparable_encode(&mut key)?;
-                key.push(if *nulls_first { u8::MIN } else { u8::MAX });
-
                 if !asc {
                     for byte in key.iter_mut() {
                         *byte ^= 0xFF;
                     }
                 }
+                key.push(if *nulls_first { u8::MIN } else { u8::MAX });
                 full_key.extend(key);
             }
             Ok::<(Tuple, Vec<u8>), DatabaseError>((tuple, full_key))
