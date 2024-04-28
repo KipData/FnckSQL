@@ -276,6 +276,11 @@ pub trait Transaction: Sync + Send + 'static + Sized {
         columns: Vec<ColumnCatalog>,
         if_not_exists: bool,
     ) -> Result<TableName, DatabaseError> {
+        let mut table_catalog = TableCatalog::new(table_name.clone(), columns)?;
+        let (_, column) = table_catalog.primary_key()?;
+
+        TableCodec::check_primary_key_type(column.datatype())?;
+
         let (table_key, value) =
             TableCodec::encode_root_table(&TableMeta::empty(table_name.clone()))?;
         if self.get(&table_key)?.is_some() {
@@ -284,11 +289,8 @@ pub trait Transaction: Sync + Send + 'static + Sized {
             }
             return Err(DatabaseError::TableExists);
         }
-        self.set(table_key, value)?;
-
-        let mut table_catalog = TableCatalog::new(table_name.clone(), columns)?;
-
         self.create_index_meta_for_table(&mut table_catalog)?;
+        self.set(table_key, value)?;
 
         for column in table_catalog.columns() {
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
