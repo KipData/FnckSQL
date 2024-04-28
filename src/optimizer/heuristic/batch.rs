@@ -3,6 +3,7 @@ use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 /// A batch of rules.
 #[derive(Clone)]
 pub struct HepBatch {
+    #[allow(dead_code)]
     pub name: String,
     pub strategy: HepBatchStrategy,
     pub rules: Vec<NormalizationRuleImpl>,
