@@ -8,10 +8,14 @@ use crate::types::value::{DataValue, Utf8Type, ValueRef};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use sqlparser::ast::CharLengthUnits;
+use sqlparser::ast::{
+    CharLengthUnits,
+    TrimWhereField
+};
 use std::cmp;
 use std::cmp::Ordering;
 use std::sync::Arc;
+use regex::Regex;
 
 lazy_static! {
     static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
@@ -223,6 +227,44 @@ impl ScalarExpression {
                 Ok(Arc::new(DataValue::Int32(Some(
                     str.find(&pattern).map(|pos| pos as i32 + 1).unwrap_or(0),
                 ))))
+            }
+            ScalarExpression::Trim { expr, trim_what_expr, trim_where } => {
+                if let Some(string) = DataValue::clone(expr.eval(tuple, schema)?.as_ref())
+                    .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
+                    .utf8()
+                {   
+                    let mut trim_what = String::from(" ");
+                    if let Some(trim_what_expr) = trim_what_expr {
+                        trim_what =  DataValue::clone(trim_what_expr.eval(tuple, schema)?.as_ref())
+                            .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
+                            .utf8()
+                            .unwrap_or_default();
+                    }
+                    let trim_regex = match trim_where {
+                        Some(TrimWhereField::Both) | None => {
+                            Regex::new(&format!(r"^(?:{0})*([\w\W]*?)(?:{0})*$", regex::escape(&trim_what))).unwrap()
+                        },
+                        Some(TrimWhereField::Leading) => {
+                            Regex::new(&format!(r"^(?:{0})*([\w\W]*?)", regex::escape(&trim_what))).unwrap()
+                        },
+                        Some(TrimWhereField::Trailing) => {
+                            Regex::new(&format!(r"([\w\W]*?)(?:{0})*$", regex::escape(&trim_what))).unwrap()
+                        }
+                    };
+                    let string_trimmed = trim_regex.replace_all(&string, "$1").to_string();
+
+                    Ok(Arc::new(DataValue::Utf8 {
+                        value: Some(string_trimmed),
+                        ty: Utf8Type::Variable(None),
+                        unit: CharLengthUnits::Characters,
+                    }))
+                } else {
+                    Ok(Arc::new(DataValue::Utf8 {
+                        value: None,
+                        ty: Utf8Type::Variable(None),
+                        unit: CharLengthUnits::Characters,
+                    }))
+                }
             }
             ScalarExpression::Reference { pos, .. } => {
                 return Ok(tuple

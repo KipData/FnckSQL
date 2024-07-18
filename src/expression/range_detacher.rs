@@ -219,6 +219,7 @@ impl<'a> RangeDetacher<'a> {
             | ScalarExpression::Between { expr, .. }
             | ScalarExpression::SubString { expr, .. } => self.detach(expr),
             ScalarExpression::Position { expr, .. } => self.detach(expr),
+            ScalarExpression::Trim { expr, .. } => self.detach(expr),
             ScalarExpression::IsNull { expr, negated, .. } => match expr.as_ref() {
                 ScalarExpression::ColumnRef(column) => {
                     if let (Some(col_id), Some(col_table)) = (column.id(), column.table_name()) {
@@ -245,6 +246,7 @@ impl<'a> RangeDetacher<'a> {
                 | ScalarExpression::Between { .. }
                 | ScalarExpression::SubString { .. }
                 | ScalarExpression::Position { .. }
+                | ScalarExpression::Trim { .. }
                 | ScalarExpression::Function(_)
                 | ScalarExpression::If { .. }
                 | ScalarExpression::IfNull { .. }
