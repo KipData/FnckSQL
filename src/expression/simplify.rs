@@ -88,12 +88,16 @@ impl ScalarExpression {
             ScalarExpression::Position { expr, in_expr } => {
                 expr.exist_column(table_name, col_id) || in_expr.exist_column(table_name, col_id)
             }
-            ScalarExpression::Trim { expr, trim_what_expr, .. } => {
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                ..
+            } => {
                 expr.exist_column(table_name, col_id)
-                || trim_what_expr
-                    .as_ref()
-                    .map(|expr| expr.exist_column(table_name, col_id))
-                    == Some(true)
+                    || trim_what_expr
+                        .as_ref()
+                        .map(|expr| expr.exist_column(table_name, col_id))
+                        == Some(true)
             }
             ScalarExpression::Constant(_) => false,
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
@@ -323,9 +327,13 @@ impl ScalarExpression {
                 expr.constant_calculation()?;
                 in_expr.constant_calculation()?;
             }
-            ScalarExpression::Trim { expr, trim_what_expr, .. } => {
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                ..
+            } => {
                 expr.constant_calculation()?;
-                if let Some(trim_what_expr) = trim_what_expr { 
+                if let Some(trim_what_expr) = trim_what_expr {
                     trim_what_expr.constant_calculation()?;
                 }
             }

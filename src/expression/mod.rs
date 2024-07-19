@@ -1,10 +1,10 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use sqlparser::ast::TrimWhereField;
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 use std::sync::Arc;
 use std::{fmt, mem};
-use sqlparser::ast::TrimWhereField;
 
 use sqlparser::ast::{
     BinaryOperator as SqlBinaryOperator, CharLengthUnits, UnaryOperator as SqlUnaryOperator,
@@ -92,7 +92,7 @@ pub enum ScalarExpression {
     Trim {
         expr: Box<ScalarExpression>,
         trim_what_expr: Option<Box<ScalarExpression>>,
-        trim_where: Option<TrimWhereField>
+        trim_where: Option<TrimWhereField>,
     },
     // Temporary expression used for expression substitution
     Empty,
@@ -232,7 +232,11 @@ impl ScalarExpression {
                 expr.try_reference(output_exprs);
                 in_expr.try_reference(output_exprs);
             }
-            ScalarExpression::Trim { expr, trim_what_expr, .. } => {
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                ..
+            } => {
                 expr.try_reference(output_exprs);
                 if let Some(trim_what_expr) = trim_what_expr {
                     trim_what_expr.try_reference(output_exprs);
@@ -391,7 +395,11 @@ impl ScalarExpression {
                 expr.bind_evaluator()?;
                 in_expr.bind_evaluator()?;
             }
-            ScalarExpression::Trim { expr, trim_what_expr, .. } => {
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                ..
+            } => {
                 expr.bind_evaluator()?;
                 if let Some(trim_what_expr) = trim_what_expr {
                     trim_what_expr.bind_evaluator()?;
@@ -495,12 +503,13 @@ impl ScalarExpression {
             ScalarExpression::Position { expr, in_expr } => {
                 expr.has_count_star() || in_expr.has_count_star()
             }
-            ScalarExpression::Trim { expr, trim_what_expr, .. } => {
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                ..
+            } => {
                 expr.has_count_star()
-                || trim_what_expr
-                    .as_ref()
-                    .map(|expr| expr.has_count_star())
-                    == Some(true)
+                    || trim_what_expr.as_ref().map(|expr| expr.has_count_star()) == Some(true)
             }
             ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Reference { expr, .. } => expr.has_count_star(),
@@ -585,7 +594,7 @@ impl ScalarExpression {
             ScalarExpression::Position { .. } => LogicalType::Integer,
             ScalarExpression::Trim { .. } => {
                 LogicalType::Varchar(None, CharLengthUnits::Characters)
-            },
+            }
             ScalarExpression::Alias { expr, .. } | ScalarExpression::Reference { expr, .. } => {
                 expr.return_type()
             }
@@ -666,7 +675,11 @@ impl ScalarExpression {
                     columns_collect(expr, vec, only_column_ref);
                     columns_collect(in_expr, vec, only_column_ref);
                 }
-                ScalarExpression::Trim { expr, trim_what_expr, .. } => {
+                ScalarExpression::Trim {
+                    expr,
+                    trim_what_expr,
+                    ..
+                } => {
                     columns_collect(expr, vec, only_column_ref);
                     if let Some(trim_what_expr) = trim_what_expr {
                         columns_collect(trim_what_expr, vec, only_column_ref);
@@ -764,12 +777,13 @@ impl ScalarExpression {
             ScalarExpression::Position { expr, in_expr } => {
                 expr.has_agg_call() || in_expr.has_agg_call()
             }
-            ScalarExpression::Trim { expr, trim_what_expr, .. } => {
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                ..
+            } => {
                 expr.has_agg_call()
-                || trim_what_expr
-                    .as_ref()
-                    .map(|expr| expr.has_agg_call())
-                    == Some(true)
+                    || trim_what_expr.as_ref().map(|expr| expr.has_agg_call()) == Some(true)
             }
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Tuple(args)
@@ -912,24 +926,30 @@ impl ScalarExpression {
                     in_expr.output_name()
                 )
             }
-            ScalarExpression::Trim { expr, trim_what_expr, trim_where } => {
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                trim_where,
+            } => {
                 let trim_what_str = {
                     trim_what_expr
-                    .as_ref()
-                    .map(|expr| expr.output_name())
-                    .unwrap_or(" ".to_string())
+                        .as_ref()
+                        .map(|expr| expr.output_name())
+                        .unwrap_or(" ".to_string())
                 };
                 let trim_where_str = match trim_where {
                     Some(TrimWhereField::Both) => format!("both '{}' from", trim_what_str),
                     Some(TrimWhereField::Leading) => format!("leading '{}' from", trim_what_str),
                     Some(TrimWhereField::Trailing) => format!("trailing '{}' from", trim_what_str),
-                    None => if trim_what_str.is_empty() { String::new() } else { format!("'{}' from", trim_what_str) }
+                    None => {
+                        if trim_what_str.is_empty() {
+                            String::new()
+                        } else {
+                            format!("'{}' from", trim_what_str)
+                        }
+                    }
                 };
-                format!(
-                    "trim({} {})",
-                    trim_where_str,
-                    expr.output_name()
-                )
+                format!("trim({} {})", trim_where_str, expr.output_name())
             }
             ScalarExpression::Reference { expr, .. } => expr.output_name(),
             ScalarExpression::Empty => unreachable!(),

@@ -3,44 +3,44 @@
 query T
 SELECT TRIM ( 'foo' )
 ----
-'foo'
+foo
+
+query B
+SELECT TRIM ( 'foo' FROM 'foo' ) = ''
+----
+true
+
+query B
+SELECT TRIM ( BOTH 'foo' FROM 'foo' ) = ''
+----
+true
 
 query T
-SELECT TRIM ( 'foo' FROM 'foo' )
+SELECT TRIM ( BOTH 'foo' )
 ----
-''
+foo
 
 query T
-SELECT TRIM ( BOTH 'foo' FROM 'foo' )
+SELECT TRIM ( '' FROM 'foo' )
 ----
-''
+foo
+
+query B
+SELECT TRIM ( LEADING 'foo' FROM 'foo' ) = ''
+----
+true
 
 query T
-SELECT TRIM ( BOTH FROM 'foo' )
+SELECT TRIM ( LEADING 'foo' )
 ----
-'foo'
+foo
+
+query B
+SELECT TRIM ( TRAILING 'foo' FROM 'foo' ) = ''
+----
+true
 
 query T
-SELECT TRIM ( FROM 'foo' )
+SELECT TRIM ( TRAILING 'foo' )
 ----
-'foo'
-
-query T
-SELECT TRIM ( LEADING 'foo' FROM 'foo' )
-----
-''
-
-query T
-SELECT TRIM ( LEADING FROM 'foo' )
-----
-'foo'
-
-query T
-SELECT TRIM ( TRAILING 'foo' FROM 'foo' )
-----
-''
-
-query T
-SELECT TRIM ( TRAILING FROM 'foo' )
-----
-'foo'
+foo
