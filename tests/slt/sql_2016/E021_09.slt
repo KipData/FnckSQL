@@ -1,48 +1,46 @@
 # E021-09: TRIM function
 
-# TODO: TRIM()
+query T
+SELECT TRIM ( 'foo' )
+----
+foo
 
-# query T
-# SELECT TRIM ( 'foo' )
-# ----
-# 'foo'
+query B
+SELECT TRIM ( 'foo' FROM 'foo' ) = ''
+----
+true
 
-# query T
-# SELECT TRIM ( 'foo' FROM 'foo' )
-# ----
-# ''
+query B
+SELECT TRIM ( BOTH 'foo' FROM 'foo' ) = ''
+----
+true
 
-# query T
-# SELECT TRIM ( BOTH 'foo' FROM 'foo' )
-# ----
-# ''
+query T
+SELECT TRIM ( BOTH 'foo' )
+----
+foo
 
-# query T
-# SELECT TRIM ( BOTH FROM 'foo' )
-# ----
-# 'foo'
+query T
+SELECT TRIM ( '' FROM 'foo' )
+----
+foo
 
-# query T
-# SELECT TRIM ( FROM 'foo' )
-# ----
-# 'foo'
+query B
+SELECT TRIM ( LEADING 'foo' FROM 'foo' ) = ''
+----
+true
 
-# query T
-# SELECT TRIM ( LEADING 'foo' FROM 'foo' )
-# ----
-# ''
+query T
+SELECT TRIM ( LEADING 'foo' )
+----
+foo
 
-# query T
-# SELECT TRIM ( LEADING FROM 'foo' )
-# ----
-# 'foo'
+query B
+SELECT TRIM ( TRAILING 'foo' FROM 'foo' ) = ''
+----
+true
 
-# query T
-# SELECT TRIM ( TRAILING 'foo' FROM 'foo' )
-# ----
-# ''
-
-# query T
-# SELECT TRIM ( TRAILING FROM 'foo' )
-# ----
-# 'foo'
+query T
+SELECT TRIM ( TRAILING 'foo' )
+----
+foo

@@ -140,6 +140,16 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                 self.visit_column_agg_expr(expr)?;
                 self.visit_column_agg_expr(in_expr)?;
             }
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                ..
+            } => {
+                self.visit_column_agg_expr(expr)?;
+                if let Some(trim_what_expr) = trim_what_expr {
+                    self.visit_column_agg_expr(trim_what_expr)?;
+                }
+            }
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => (),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Tuple(args)
@@ -363,6 +373,17 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             ScalarExpression::Position { expr, in_expr } => {
                 self.validate_having_orderby(expr)?;
                 self.validate_having_orderby(in_expr)?;
+                Ok(())
+            }
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                ..
+            } => {
+                self.validate_having_orderby(expr)?;
+                if let Some(trim_what_expr) = trim_what_expr {
+                    self.validate_having_orderby(trim_what_expr)?;
+                }
                 Ok(())
             }
             ScalarExpression::Constant(_) => Ok(()),

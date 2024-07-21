@@ -113,6 +113,21 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                 expr: Box::new(self.bind_expr(expr)?),
                 in_expr: Box::new(self.bind_expr(r#in)?),
             }),
+            Expr::Trim {
+                expr,
+                trim_what,
+                trim_where,
+            } => {
+                let mut trim_what_expr = None;
+                if let Some(trim_what) = trim_what {
+                    trim_what_expr = Some(Box::new(self.bind_expr(trim_what)?))
+                }
+                Ok(ScalarExpression::Trim {
+                    expr: Box::new(self.bind_expr(expr)?),
+                    trim_what_expr,
+                    trim_where: *trim_where,
+                })
+            }
             Expr::Subquery(subquery) => {
                 let (sub_query, column) = self.bind_subquery(subquery)?;
                 let (expr, sub_query) = if !self.context.is_step(&QueryBindStep::Where) {
