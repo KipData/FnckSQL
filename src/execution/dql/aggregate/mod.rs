@@ -7,9 +7,7 @@ mod sum;
 
 use crate::errors::DatabaseError;
 use crate::execution::dql::aggregate::avg::AvgAccumulator;
-use crate::execution::dql::aggregate::count::{
-    CountAccumulator, DistinctCountAccumulator,
-};
+use crate::execution::dql::aggregate::count::{CountAccumulator, DistinctCountAccumulator};
 use crate::execution::dql::aggregate::min_max::MinMaxAccumulator;
 use crate::execution::dql::aggregate::sum::{DistinctSumAccumulator, SumAccumulator};
 use crate::expression::agg::AggKind;
