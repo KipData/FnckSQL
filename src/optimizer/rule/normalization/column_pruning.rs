@@ -200,11 +200,11 @@ mod tests {
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::join::JoinCondition;
     use crate::planner::operator::Operator;
-    use crate::storage::kipdb::KipTransaction;
+    use crate::storage::rocksdb::RocksTransaction;
 
-    #[tokio::test]
-    async fn test_column_pruning() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select c1, c3 from t1 left join t2 on c1 = c3").await?;
+    #[test]
+    fn test_column_pruning() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select c1, c3 from t1 left join t2 on c1 = c3")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -212,7 +212,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::ColumnPruning],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
 
         assert_eq!(best_plan.childrens.len(), 1);
         match best_plan.operator {

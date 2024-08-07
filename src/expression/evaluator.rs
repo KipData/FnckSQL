@@ -230,6 +230,7 @@ impl ScalarExpression {
                 trim_what_expr,
                 trim_where,
             } => {
+                let mut value = None;
                 if let Some(string) = DataValue::clone(expr.eval(tuple, schema)?.as_ref())
                     .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                     .utf8()
@@ -258,18 +259,13 @@ impl ScalarExpression {
                     };
                     let string_trimmed = trim_regex.replace_all(&string, "$1").to_string();
 
-                    Ok(Arc::new(DataValue::Utf8 {
-                        value: Some(string_trimmed),
-                        ty: Utf8Type::Variable(None),
-                        unit: CharLengthUnits::Characters,
-                    }))
-                } else {
-                    Ok(Arc::new(DataValue::Utf8 {
-                        value: None,
-                        ty: Utf8Type::Variable(None),
-                        unit: CharLengthUnits::Characters,
-                    }))
+                    value = Some(string_trimmed)
                 }
+                Ok(Arc::new(DataValue::Utf8 {
+                    value,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
+                }))
             }
             ScalarExpression::Reference { pos, .. } => {
                 return Ok(tuple

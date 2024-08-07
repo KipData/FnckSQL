@@ -2,6 +2,7 @@
 #![allow(unused_doc_comments)]
 #![feature(result_flattening)]
 #![feature(coroutines)]
+#![feature(coroutine_trait)]
 #![feature(iterator_try_collect)]
 #![feature(slice_pattern)]
 #![feature(is_sorted)]
@@ -21,3 +22,4 @@ pub mod planner;
 pub mod storage;
 pub mod types;
 mod udf;
+pub(crate) mod utils;

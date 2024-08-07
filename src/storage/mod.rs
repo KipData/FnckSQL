@@ -1,4 +1,4 @@
-pub mod kipdb;
+pub mod rocksdb;
 mod table_codec;
 
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
@@ -10,9 +10,9 @@ use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::{ColumnId, LogicalType};
+use crate::utils::lru::ShardingLruCache;
 use bytes::Bytes;
 use itertools::Itertools;
-use kip_db::kernel::utils::lru_cache::ShardingLruCache;
 use std::collections::{Bound, VecDeque};
 use std::ops::SubAssign;
 use std::sync::Arc;
@@ -20,18 +20,21 @@ use std::{mem, slice};
 
 pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), StatisticsMeta>;
 
-pub trait Storage: Sync + Send + Clone + 'static {
-    type TransactionType: Transaction;
+pub trait Storage: Clone {
+    type TransactionType<'a>: Transaction
+    where
+        Self: 'a;
 
-    #[allow(async_fn_in_trait)]
-    async fn transaction(&self) -> Result<Self::TransactionType, DatabaseError>;
+    fn transaction(&self) -> Result<Self::TransactionType<'_>, DatabaseError>;
 }
 
 /// Optional bounds of the reader, of the form (offset, limit).
 pub(crate) type Bounds = (Option<usize>, Option<usize>);
 
-pub trait Transaction: Sync + Send + 'static + Sized {
-    type IterType<'a>: InnerIter;
+pub trait Transaction: Sized {
+    type IterType<'a>: InnerIter
+    where
+        Self: 'a;
 
     /// The bounds is applied to the whole data batches, not per batch.
     ///
@@ -335,21 +338,14 @@ pub trait Transaction: Sync + Send + 'static + Sized {
     }
 
     fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
-        let mut option = self.table_cache().get(&table_name);
+        self.table_cache()
+            .get_or_insert(table_name.to_string(), |_| {
+                // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
+                let (columns, indexes) = self.table_collect(table_name.clone())?;
 
-        if option.is_none() {
-            // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
-            let (columns, indexes) = self.table_collect(table_name.clone()).ok()?;
-
-            if let Ok(catalog) = TableCatalog::reload(table_name.clone(), columns, indexes) {
-                option = self
-                    .table_cache()
-                    .get_or_insert(table_name.to_string(), |_| Ok(catalog))
-                    .ok();
-            }
-        }
-
-        option
+                TableCatalog::reload(table_name.clone(), columns, indexes)
+            })
+            .ok()
     }
 
     fn table_metas(&self) -> Result<Vec<TableMeta>, DatabaseError> {
@@ -490,8 +486,7 @@ pub trait Transaction: Sync + Send + 'static + Sized {
     fn table_cache(&self) -> &ShardingLruCache<String, TableCatalog>;
     fn meta_cache(&self) -> &StatisticsMetaCache;
 
-    #[allow(async_fn_in_trait)]
-    async fn commit(self) -> Result<(), DatabaseError>;
+    fn commit(self) -> Result<(), DatabaseError>;
 }
 
 trait IndexImpl<T: Transaction> {
@@ -563,7 +558,7 @@ impl<T: Transaction> IndexImplParams<'_, T> {
     }
 }
 
-enum IndexResult<'a, T: Transaction> {
+enum IndexResult<'a, T: Transaction + 'a> {
     Tuple(Tuple),
     Scope(T::IterType<'a>),
 }
@@ -788,7 +783,7 @@ impl<T: Transaction> IndexImpl<T> for CompositeIndexImpl {
     }
 }
 
-pub struct TupleIter<'a, T: Transaction> {
+pub struct TupleIter<'a, T: Transaction + 'a> {
     offset: usize,
     limit: Option<usize>,
     table_types: Vec<LogicalType>,
@@ -797,7 +792,7 @@ pub struct TupleIter<'a, T: Transaction> {
     iter: T::IterType<'a>,
 }
 
-impl<T: Transaction> Iter for TupleIter<'_, T> {
+impl<'a, T: Transaction + 'a> Iter for TupleIter<'a, T> {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, DatabaseError> {
         while self.offset > 0 {
             let _ = self.iter.try_next()?;
@@ -841,7 +836,7 @@ pub struct IndexIter<'a, T: Transaction> {
     scope_iter: Option<T::IterType<'a>>,
 }
 
-impl<T: Transaction> IndexIter<'_, T> {
+impl<'a, T: Transaction + 'a> IndexIter<'a, T> {
     fn offset_move(offset: &mut usize) -> bool {
         if *offset > 0 {
             offset.sub_assign(1);
@@ -947,10 +942,10 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
     }
 }
 
-pub trait InnerIter: Sync + Send {
+pub trait InnerIter {
     fn try_next(&mut self) -> Result<Option<(Bytes, Bytes)>, DatabaseError>;
 }
 
-pub trait Iter: Sync + Send {
+pub trait Iter {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, DatabaseError>;
 }

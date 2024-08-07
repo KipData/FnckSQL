@@ -221,9 +221,9 @@ mod tests {
     use crate::planner::LogicalPlan;
     use petgraph::stable_graph::{EdgeIndex, NodeIndex};
 
-    #[tokio::test]
-    async fn test_graph_for_plan() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+    #[test]
+    fn test_graph_for_plan() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let graph = HepGraph::new(plan);
 
         assert!(graph
@@ -243,9 +243,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_graph_add_node() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+    #[test]
+    fn test_graph_add_node() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.add_node(HepNodeId::new(1), None, Operator::Dummy);
@@ -271,9 +271,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_graph_replace_node() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+    #[test]
+    fn test_graph_replace_node() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.replace_node(HepNodeId::new(1), Operator::Dummy);
@@ -283,9 +283,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_graph_remove_middle_node_by_single() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+    #[test]
+    fn test_graph_remove_middle_node_by_single() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.remove_node(HepNodeId::new(1), false);
@@ -302,9 +302,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_graph_remove_middle_node_with_childrens() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+    #[test]
+    fn test_graph_remove_middle_node_with_childrens() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.remove_node(HepNodeId::new(1), true);
@@ -314,9 +314,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_graph_swap_node() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+    #[test]
+    fn test_graph_swap_node() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         let before_op_0 = graph.operator(HepNodeId::new(0)).clone();
@@ -333,9 +333,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_graph_add_root() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+    #[test]
+    fn test_graph_add_root() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.add_root(Operator::Dummy);
@@ -349,8 +349,8 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_graph_to_plan() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_graph_to_plan() -> Result<(), DatabaseError> {
         fn clear_output_schema_buf(plan: &mut LogicalPlan) {
             plan._output_schema_ref = None;
 
@@ -358,7 +358,7 @@ mod tests {
                 clear_output_schema_buf(child);
             }
         }
-        let mut plan = select_sql_run("select * from t1 left join t2 on c1 = c3").await?;
+        let mut plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
         clear_output_schema_buf(&mut plan);
 
         let graph = HepGraph::new(plan.clone());

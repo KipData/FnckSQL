@@ -28,17 +28,12 @@ implement_from_tuple!(
 );
 
 #[cfg(feature = "marcos")]
-#[tokio::main]
-async fn main() -> Result<(), DatabaseError> {
-    let database = DataBaseBuilder::path("./hello_world").build().await?;
+fn main() -> Result<(), DatabaseError> {
+    let database = DataBaseBuilder::path("./hello_world").build()?;
 
-    let _ = database
-        .run("create table if not exists my_struct (c1 int primary key, c2 int)")
-        .await?;
-    let _ = database
-        .run("insert into my_struct values(0, 0), (1, 1)")
-        .await?;
-    let (schema, tuples) = database.run("select * from my_struct").await?;
+    let _ = database.run("create table if not exists my_struct (c1 int primary key, c2 int)")?;
+    let _ = database.run("insert into my_struct values(0, 0), (1, 1)")?;
+    let (schema, tuples) = database.run("select * from my_struct")?;
     let tuples = tuples
         .into_iter()
         .map(|tuple| MyStruct::from((&schema, tuple)))
@@ -46,7 +41,7 @@ async fn main() -> Result<(), DatabaseError> {
 
     println!("{:#?}", tuples);
 
-    let _ = database.run("drop table my_struct").await?;
+    let _ = database.run("drop table my_struct")?;
 
     Ok(())
 }

@@ -34,10 +34,9 @@ impl<'a, T: Transaction> StatisticMetaLoader<'a, T> {
             return Ok(Some(statistics_meta));
         }
         if let Some(path) = self.tx.table_meta_path(table_name.as_str(), index_id)? {
-            let statistics_meta = StatisticsMeta::from_file(path)?;
-
             Ok(Some(
-                self.cache.get_or_insert(key, |_| Ok(statistics_meta))?,
+                self.cache
+                    .get_or_insert(key, |_| StatisticsMeta::from_file(path))?,
             ))
         } else {
             Ok(None)
@@ -84,6 +83,7 @@ impl StatisticsMeta {
             .create(true)
             .write(true)
             .read(true)
+            .truncate(false)
             .open(path)?;
         bincode::serialize_into(&mut file, self)?;
         file.flush()?;
@@ -96,6 +96,7 @@ impl StatisticsMeta {
             .create(true)
             .write(true)
             .read(true)
+            .truncate(false)
             .open(path)?;
         Ok(bincode::deserialize_from(file)?)
     }

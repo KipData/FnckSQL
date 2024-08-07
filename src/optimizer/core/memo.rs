@@ -91,7 +91,7 @@ mod tests {
     use crate::optimizer::rule::implementation::ImplementationRuleImpl;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::PhysicalOption;
-    use crate::storage::kipdb::KipTransaction;
+    use crate::storage::rocksdb::RocksTransaction;
     use crate::storage::{Storage, Transaction};
     use crate::types::index::{IndexInfo, IndexMeta, IndexType};
     use crate::types::value::DataValue;
@@ -102,25 +102,19 @@ mod tests {
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    #[tokio::test]
-    async fn test_build_memo() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_build_memo() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let database = DataBaseBuilder::path(temp_dir.path()).build().await?;
-        database
-            .run("create table t1 (c1 int primary key, c2 int)")
-            .await?;
-        database
-            .run("create table t2 (c3 int primary key, c4 int)")
-            .await?;
+        let database = DataBaseBuilder::path(temp_dir.path()).build()?;
+        database.run("create table t1 (c1 int primary key, c2 int)")?;
+        database.run("create table t2 (c3 int primary key, c4 int)")?;
 
         for i in 0..1000 {
-            let _ = database
-                .run(format!("insert into t1 values({}, {})", i, i + 1).as_str())
-                .await?;
+            let _ = database.run(format!("insert into t1 values({}, {})", i, i + 1).as_str())?;
         }
-        database.run("analyze table t1").await?;
+        database.run("analyze table t1")?;
 
-        let transaction = database.storage.transaction().await?;
+        let transaction = database.storage.transaction()?;
         let functions = Default::default();
         let mut binder = Binder::new(
             BinderContext::new(&transaction, &functions, Arc::new(AtomicUsize::new(0))),
@@ -145,7 +139,7 @@ mod tests {
                     NormalizationRuleImpl::PushPredicateIntoScan,
                 ],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
         let graph = HepGraph::new(best_plan);
         let rules = vec![
             ImplementationRuleImpl::Projection,

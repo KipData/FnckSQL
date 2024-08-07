@@ -121,18 +121,17 @@ mod test {
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
     use crate::planner::LogicalPlan;
-    use crate::storage::kipdb::KipTransaction;
+    use crate::storage::rocksdb::RocksTransaction;
     use crate::types::value::DataValue;
     use crate::types::{ColumnId, LogicalType};
     use std::collections::Bound;
     use std::sync::Arc;
 
-    #[tokio::test]
-    async fn test_constant_calculation_omitted() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_constant_calculation_omitted() -> Result<(), DatabaseError> {
         // (2 + (-1)) < -(c1 + 1)
         let plan =
-            select_sql_run("select c1 + (2 + 1), 2 + 1 from t1 where (2 + (-1)) < -(c1 + 1)")
-                .await?;
+            select_sql_run("select c1 + (2 + 1), 2 + 1 from t1 where (2 + (-1)) < -(c1 + 1)")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -143,7 +142,7 @@ mod test {
                     NormalizationRuleImpl::ConstantCalculation,
                 ],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
         if let Operator::Project(project_op) = best_plan.clone().operator {
             let constant_expr = ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(3))));
             if let ScalarExpression::Binary { right_expr, .. } = &project_op.exprs[0] {
@@ -173,29 +172,29 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_simplify_filter_single_column() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_simplify_filter_single_column() -> Result<(), DatabaseError> {
         // c1 + 1 < -1 => c1 < -2
-        let plan_1 = select_sql_run("select * from t1 where -(c1 + 1) > 1").await?;
+        let plan_1 = select_sql_run("select * from t1 where -(c1 + 1) > 1")?;
         // 1 - c1 < -1 => c1 > 2
-        let plan_2 = select_sql_run("select * from t1 where -(1 - c1) > 1").await?;
+        let plan_2 = select_sql_run("select * from t1 where -(1 - c1) > 1")?;
         // c1 < -1
-        let plan_3 = select_sql_run("select * from t1 where -c1 > 1").await?;
+        let plan_3 = select_sql_run("select * from t1 where -c1 > 1")?;
         // c1 > 0
-        let plan_4 = select_sql_run("select * from t1 where c1 + 1 > 1").await?;
+        let plan_4 = select_sql_run("select * from t1 where c1 + 1 > 1")?;
 
         // c1 + 1 < -1 => c1 < -2
-        let plan_5 = select_sql_run("select * from t1 where 1 < -(c1 + 1)").await?;
+        let plan_5 = select_sql_run("select * from t1 where 1 < -(c1 + 1)")?;
         // 1 - c1 < -1 => c1 > 2
-        let plan_6 = select_sql_run("select * from t1 where 1 < -(1 - c1)").await?;
+        let plan_6 = select_sql_run("select * from t1 where 1 < -(1 - c1)")?;
         // c1 < -1
-        let plan_7 = select_sql_run("select * from t1 where 1 < -c1").await?;
+        let plan_7 = select_sql_run("select * from t1 where 1 < -c1")?;
         // c1 > 0
-        let plan_8 = select_sql_run("select * from t1 where 1 < c1 + 1").await?;
+        let plan_8 = select_sql_run("select * from t1 where 1 < c1 + 1")?;
         // c1 < 24
-        let plan_9 = select_sql_run("select * from t1 where (-1 - c1) + 1 > 24").await?;
+        let plan_9 = select_sql_run("select * from t1 where (-1 - c1) + 1 > 24")?;
         // c1 < 24
-        let plan_10 = select_sql_run("select * from t1 where 24 < (-1 - c1) + 1").await?;
+        let plan_10 = select_sql_run("select * from t1 where 24 < (-1 - c1) + 1")?;
 
         let op = |plan: LogicalPlan| -> Result<Option<Range>, DatabaseError> {
             let best_plan = HepOptimizer::new(plan.clone())
@@ -204,7 +203,7 @@ mod test {
                     HepBatchStrategy::once_topdown(),
                     vec![NormalizationRuleImpl::SimplifyFilter],
                 )
-                .find_best::<KipTransaction>(None)?;
+                .find_best::<RocksTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
                 Ok(RangeDetacher::new("t1", &0).detach(&filter_op.predicate))
             } else {
@@ -233,9 +232,9 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_simplify_filter_repeating_column() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 where -(c1 + 1) > c2").await?;
+    #[test]
+    fn test_simplify_filter_repeating_column() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 where -(c1 + 1) > c2")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -243,7 +242,7 @@ mod test {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::SimplifyFilter],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
             let c1_col = ColumnCatalog {
                 summary: ColumnSummary {
@@ -315,7 +314,7 @@ mod test {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::SimplifyFilter],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
             Ok(RangeDetacher::new("t1", &column_id).detach(&filter_op.predicate))
         } else {
@@ -323,18 +322,16 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    async fn test_simplify_filter_multiple_column() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_simplify_filter_multiple_column() -> Result<(), DatabaseError> {
         // c1 + 1 < -1 => c1 < -2
-        let plan_1 =
-            select_sql_run("select * from t1 where -(c1 + 1) > 1 and -(1 - c2) > 1").await?;
+        let plan_1 = select_sql_run("select * from t1 where -(c1 + 1) > 1 and -(1 - c2) > 1")?;
         // 1 - c1 < -1 => c1 > 2
-        let plan_2 =
-            select_sql_run("select * from t1 where -(1 - c1) > 1 and -(c2 + 1) > 1").await?;
+        let plan_2 = select_sql_run("select * from t1 where -(1 - c1) > 1 and -(c2 + 1) > 1")?;
         // c1 < -1
-        let plan_3 = select_sql_run("select * from t1 where -c1 > 1 and c2 + 1 > 1").await?;
+        let plan_3 = select_sql_run("select * from t1 where -c1 > 1 and c2 + 1 > 1")?;
         // c1 > 0
-        let plan_4 = select_sql_run("select * from t1 where c1 + 1 > 1 and -c2 > 1").await?;
+        let plan_4 = select_sql_run("select * from t1 where c1 + 1 > 1 and -c2 > 1")?;
 
         let range_1_c1 = plan_filter(&plan_1, &0)?.unwrap();
         let range_1_c2 = plan_filter(&plan_1, &1)?.unwrap();
@@ -408,20 +405,19 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_simplify_filter_multiple_column_in_or() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_simplify_filter_multiple_column_in_or() -> Result<(), DatabaseError> {
         // c1 > c2 or c1 > 1
-        let plan_1 = select_sql_run("select * from t1 where c1 > c2 or c1 > 1").await?;
+        let plan_1 = select_sql_run("select * from t1 where c1 > c2 or c1 > 1")?;
 
         assert_eq!(plan_filter(&plan_1, &0)?, None);
 
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_simplify_filter_multiple_dispersed_same_column_in_or() -> Result<(), DatabaseError>
-    {
-        let plan_1 = select_sql_run("select * from t1 where c1 = 4 and c1 > c2 or c1 > 1").await?;
+    #[test]
+    fn test_simplify_filter_multiple_dispersed_same_column_in_or() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1 where c1 = 4 and c1 > c2 or c1 > 1")?;
 
         assert_eq!(
             plan_filter(&plan_1, &0)?,
@@ -434,9 +430,9 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_simplify_filter_column_is_null() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1 where c1 is null").await?;
+    #[test]
+    fn test_simplify_filter_column_is_null() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1 where c1 is null")?;
 
         assert_eq!(
             plan_filter(&plan_1, &0)?,
@@ -446,18 +442,18 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_simplify_filter_column_is_not_null() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1 where c1 is not null").await?;
+    #[test]
+    fn test_simplify_filter_column_is_not_null() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1 where c1 is not null")?;
 
         assert_eq!(plan_filter(&plan_1, &0)?, None);
 
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_simplify_filter_column_in() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1 where c1 in (1, 2, 3)").await?;
+    #[test]
+    fn test_simplify_filter_column_in() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1 where c1 in (1, 2, 3)")?;
 
         assert_eq!(
             plan_filter(&plan_1, &0)?,
@@ -471,9 +467,9 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_simplify_filter_column_not_in() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1 where c1 not in (1, 2, 3)").await?;
+    #[test]
+    fn test_simplify_filter_column_not_in() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1 where c1 not in (1, 2, 3)")?;
 
         assert_eq!(plan_filter(&plan_1, &0)?, None);
 

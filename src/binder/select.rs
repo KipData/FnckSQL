@@ -18,7 +18,7 @@ use super::{lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep, 
 
 use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
-use crate::execution::volcano::dql::join::joins_nullable;
+use crate::execution::dql::join::joins_nullable;
 use crate::expression::{AliasType, BinaryOperator};
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
@@ -942,30 +942,28 @@ mod tests {
     use crate::binder::test::select_sql_run;
     use crate::errors::DatabaseError;
 
-    #[tokio::test]
-    async fn test_select_bind() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1").await?;
+    #[test]
+    fn test_select_bind() -> Result<(), DatabaseError> {
+        let plan_1 = select_sql_run("select * from t1")?;
         println!("just_col:\n {:#?}", plan_1);
-        let plan_2 = select_sql_run("select t1.c1, t1.c2 from t1").await?;
+        let plan_2 = select_sql_run("select t1.c1, t1.c2 from t1")?;
         println!("table_with_col:\n {:#?}", plan_2);
-        let plan_3 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > 2").await?;
+        let plan_3 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > 2")?;
         println!("table_with_col_and_c1_compare_constant:\n {:#?}", plan_3);
-        let plan_4 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > c2").await?;
+        let plan_4 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > c2")?;
         println!("table_with_col_and_c1_compare_c2:\n {:#?}", plan_4);
-        let plan_5 = select_sql_run("select avg(t1.c1) from t1").await?;
+        let plan_5 = select_sql_run("select avg(t1.c1) from t1")?;
         println!("table_with_col_and_c1_avg:\n {:#?}", plan_5);
-        let plan_6 =
-            select_sql_run("select t1.c1, t1.c2 from t1 where (t1.c1 - t1.c2) > 1").await?;
+        let plan_6 = select_sql_run("select t1.c1, t1.c2 from t1 where (t1.c1 - t1.c2) > 1")?;
         println!("table_with_col_nested:\n {:#?}", plan_6);
 
-        let plan_7 = select_sql_run("select * from t1 limit 1").await?;
+        let plan_7 = select_sql_run("select * from t1 limit 1")?;
         println!("limit:\n {:#?}", plan_7);
 
-        let plan_8 = select_sql_run("select * from t1 offset 2").await?;
+        let plan_8 = select_sql_run("select * from t1 offset 2")?;
         println!("offset:\n {:#?}", plan_8);
 
-        let plan_9 =
-            select_sql_run("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1").await?;
+        let plan_9 = select_sql_run("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1")?;
         println!("join:\n {:#?}", plan_9);
 
         Ok(())

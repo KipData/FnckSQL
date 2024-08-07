@@ -1,7 +1,6 @@
 use crate::expression::{BinaryOperator, UnaryOperator};
 use crate::types::LogicalType;
 use chrono::ParseError;
-use kip_db::KernelError;
 use sqlparser::parser::ParserError;
 use std::num::{ParseFloatError, ParseIntError, TryFromIntError};
 use std::str::ParseBoolError;
@@ -17,6 +16,8 @@ pub enum DatabaseError {
         #[from]
         Box<bincode::ErrorKind>,
     ),
+    #[error("cache size overflow")]
+    CacheSizeOverFlow,
     #[error("cast fail")]
     CastFail,
     #[error("channel close")]
@@ -67,18 +68,6 @@ pub enum DatabaseError {
         #[from]
         std::io::Error,
     ),
-    #[error("task join error: {0}")]
-    TaskJoinError(
-        #[from]
-        #[source]
-        tokio::task::JoinError,
-    ),
-    #[error("kipdb error: {0}")]
-    KipDBError(
-        #[source]
-        #[from]
-        KernelError,
-    ),
     #[error("{0} and {1} do not match")]
     MisMatch(&'static str, &'static str),
     #[error("add column must be nullable or specify a default value")]
@@ -121,6 +110,14 @@ pub enum DatabaseError {
     ),
     #[error("must contain primary key!")]
     PrimaryKeyNotFound,
+    #[error("rocksdb: {0}")]
+    RocksDB(
+        #[source]
+        #[from]
+        rocksdb::Error,
+    ),
+    #[error("the number of caches cannot be divisible by the number of shards")]
+    ShardingNotAlign,
     #[error("the table already exists")]
     TableExists,
     #[error("the table not found")]

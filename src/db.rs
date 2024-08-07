@@ -1,13 +1,6 @@
-use ahash::HashMap;
-use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
-use sqlparser::ast::Statement;
-use std::path::PathBuf;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
-
 use crate::binder::{command_type, Binder, BinderContext, CommandType};
 use crate::errors::DatabaseError;
-use crate::execution::volcano::{build_write, try_collect};
+use crate::execution::{build_write, try_collect};
 use crate::expression::function::{FunctionSummary, ScalarFunctionImpl};
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -15,17 +8,23 @@ use crate::optimizer::rule::implementation::ImplementationRuleImpl;
 use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
-use crate::storage::kipdb::KipStorage;
+use crate::storage::rocksdb::RocksStorage;
 use crate::storage::{Storage, Transaction};
 use crate::types::tuple::{SchemaRef, Tuple};
 use crate::udf::current_date::CurrentDate;
+use ahash::HashMap;
+use parking_lot::{ArcRwLockReadGuard, ArcRwLockWriteGuard, RawRwLock, RwLock};
+use sqlparser::ast::Statement;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 
 pub(crate) type Functions = HashMap<FunctionSummary, Arc<dyn ScalarFunctionImpl>>;
 
 #[allow(dead_code)]
 pub(crate) enum MetaDataLock {
-    Read(RwLockReadGuardArc<()>),
-    Write(RwLockWriteGuardArc<()>),
+    Read(ArcRwLockReadGuard<RawRwLock, ()>),
+    Write(ArcRwLockWriteGuard<RawRwLock, ()>),
 }
 
 pub struct DataBaseBuilder {
@@ -48,10 +47,10 @@ impl DataBaseBuilder {
         self
     }
 
-    pub async fn build(mut self) -> Result<Database<KipStorage>, DatabaseError> {
+    pub fn build(mut self) -> Result<Database<RocksStorage>, DatabaseError> {
         self = self.register_function(CurrentDate::new());
 
-        let storage = KipStorage::new(self.path).await?;
+        let storage = RocksStorage::new(self.path)?;
 
         Ok(Database {
             storage,
@@ -69,10 +68,7 @@ pub struct Database<S: Storage> {
 
 impl<S: Storage> Database<S> {
     /// Run SQL queries.
-    pub async fn run<T: AsRef<str>>(
-        &self,
-        sql: T,
-    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+    pub fn run<T: AsRef<str>>(&self, sql: T) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
         // parse
         let stmts = parse_sql(sql)?;
         if stmts.is_empty() {
@@ -80,33 +76,32 @@ impl<S: Storage> Database<S> {
         }
         let stmt = &stmts[0];
         let _guard = if matches!(command_type(stmt)?, CommandType::DDL) {
-            MetaDataLock::Write(self.mdl.write_arc().await)
+            MetaDataLock::Write(self.mdl.write_arc())
         } else {
-            MetaDataLock::Read(self.mdl.read_arc().await)
+            MetaDataLock::Read(self.mdl.read_arc())
         };
-        let transaction = self.storage.transaction().await?;
+        let transaction = self.storage.transaction()?;
         let plan = Self::build_plan(stmt, &transaction, &self.functions)?;
 
-        Self::run_volcano(transaction, plan).await
+        Self::run_volcano(transaction, plan)
     }
 
-    pub(crate) async fn run_volcano(
-        mut transaction: <S as Storage>::TransactionType,
+    pub(crate) fn run_volcano(
+        mut transaction: <S as Storage>::TransactionType<'_>,
         mut plan: LogicalPlan,
     ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
         let schema = plan.output_schema().clone();
-        let mut stream = build_write(plan, &mut transaction);
-        let tuples = try_collect(&mut stream).await?;
+        let iterator = build_write(plan, &mut transaction);
+        let tuples = try_collect(iterator)?;
 
-        drop(stream);
-        transaction.commit().await?;
+        transaction.commit()?;
 
         Ok((schema, tuples))
     }
 
-    pub async fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
-        let guard = self.mdl.read_arc().await;
-        let transaction = self.storage.transaction().await?;
+    pub fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
+        let guard = self.mdl.read_arc();
+        let transaction = self.storage.transaction()?;
 
         Ok(DBTransaction {
             inner: transaction,
@@ -117,7 +112,7 @@ impl<S: Storage> Database<S> {
 
     pub(crate) fn build_plan(
         stmt: &Statement,
-        transaction: &<S as Storage>::TransactionType,
+        transaction: &<S as Storage>::TransactionType<'_>,
         functions: &Functions,
     ) -> Result<LogicalPlan, DatabaseError> {
         let mut binder = Binder::new(
@@ -222,17 +217,14 @@ impl<S: Storage> Database<S> {
     }
 }
 
-pub struct DBTransaction<S: Storage> {
-    inner: S::TransactionType,
+pub struct DBTransaction<'a, S: Storage + 'a> {
+    inner: S::TransactionType<'a>,
     functions: Arc<Functions>,
-    _guard: RwLockReadGuardArc<()>,
+    _guard: ArcRwLockReadGuard<RawRwLock, ()>,
 }
 
-impl<S: Storage> DBTransaction<S> {
-    pub async fn run<T: AsRef<str>>(
-        &mut self,
-        sql: T,
-    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+impl<S: Storage> DBTransaction<'_, S> {
+    pub fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
         let stmts = parse_sql(sql)?;
         if stmts.is_empty() {
             return Err(DatabaseError::EmptyStatement);
@@ -246,13 +238,13 @@ impl<S: Storage> DBTransaction<S> {
         let mut plan = Database::<S>::build_plan(stmt, &self.inner, &self.functions)?;
 
         let schema = plan.output_schema().clone();
-        let mut stream = build_write(plan, &mut self.inner);
+        let executor = build_write(plan, &mut self.inner);
 
-        Ok((schema, try_collect(&mut stream).await?))
+        Ok((schema, try_collect(executor)?))
     }
 
-    pub async fn commit(self) -> Result<(), DatabaseError> {
-        self.inner.commit().await?;
+    pub fn commit(self) -> Result<(), DatabaseError> {
+        self.inner.commit()?;
 
         Ok(())
     }
@@ -276,7 +268,7 @@ mod test {
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    async fn build_table(mut transaction: impl Transaction) -> Result<(), DatabaseError> {
+    fn build_table(mut transaction: impl Transaction) -> Result<(), DatabaseError> {
         let columns = vec![
             ColumnCatalog::new(
                 "c1".to_string(),
@@ -290,19 +282,19 @@ mod test {
             ),
         ];
         let _ = transaction.create_table(Arc::new("t1".to_string()), columns, false)?;
-        transaction.commit().await?;
+        transaction.commit()?;
 
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_run_sql() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_run_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let database = DataBaseBuilder::path(temp_dir.path()).build().await?;
-        let transaction = database.storage.transaction().await?;
-        build_table(transaction).await?;
+        let database = DataBaseBuilder::path(temp_dir.path()).build()?;
+        let transaction = database.storage.transaction()?;
+        build_table(transaction)?;
 
-        let batch = database.run("select * from t1").await?;
+        let batch = database.run("select * from t1")?;
 
         println!("{:#?}", batch);
         Ok(())
@@ -316,45 +308,40 @@ mod test {
         Ok(plus_unary_evaluator.unary_eval(&value))
     }));
 
-    #[tokio::test]
-    async fn test_udf() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_udf() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path())
             .register_function(TestFunction::new())
-            .build()
-            .await?;
+            .build()?;
         let _ = fnck_sql
-            .run("CREATE TABLE test (id int primary key, c1 int, c2 int default test(1, 2));")
-            .await?;
+            .run("CREATE TABLE test (id int primary key, c1 int, c2 int default test(1, 2));")?;
         let _ = fnck_sql
-            .run("INSERT INTO test VALUES (1, 2, 2), (0, 1, 1), (2, 1, 1), (3, 3, default);")
-            .await?;
-        let (schema, tuples) = fnck_sql.run("select test(c1, 1), c2 from test").await?;
+            .run("INSERT INTO test VALUES (1, 2, 2), (0, 1, 1), (2, 1, 1), (3, 3, default);")?;
+        let (schema, tuples) = fnck_sql.run("select test(c1, 1), c2 from test")?;
         println!("{}", create_table(&schema, &tuples));
 
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_transaction_sql() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_transaction_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build().await?;
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
 
-        let _ = fnck_sql
-            .run("create table t1 (a int primary key, b int)")
-            .await?;
+        let _ = fnck_sql.run("create table t1 (a int primary key, b int)")?;
 
-        let mut tx_1 = fnck_sql.new_transaction().await?;
-        let mut tx_2 = fnck_sql.new_transaction().await?;
+        let mut tx_1 = fnck_sql.new_transaction()?;
+        let mut tx_2 = fnck_sql.new_transaction()?;
 
-        let _ = tx_1.run("insert into t1 values(0, 0)").await?;
-        let _ = tx_1.run("insert into t1 values(1, 1)").await?;
+        let _ = tx_1.run("insert into t1 values(0, 0)")?;
+        let _ = tx_1.run("insert into t1 values(1, 1)")?;
 
-        let _ = tx_2.run("insert into t1 values(0, 0)").await?;
-        let _ = tx_2.run("insert into t1 values(3, 3)").await?;
+        let _ = tx_2.run("insert into t1 values(0, 0)")?;
+        let _ = tx_2.run("insert into t1 values(3, 3)")?;
 
-        let (_, tuples_1) = tx_1.run("select * from t1").await?;
-        let (_, tuples_2) = tx_2.run("select * from t1").await?;
+        let (_, tuples_1) = tx_1.run("select * from t1")?;
+        let (_, tuples_2) = tx_2.run("select * from t1")?;
 
         assert_eq!(tuples_1.len(), 2);
         assert_eq!(tuples_2.len(), 2);
@@ -389,12 +376,12 @@ mod test {
             ]
         );
 
-        tx_1.commit().await?;
+        tx_1.commit()?;
 
-        assert!(tx_2.commit().await.is_err());
+        assert!(tx_2.commit().is_err());
 
-        let mut tx_3 = fnck_sql.new_transaction().await?;
-        let res = tx_3.run("create table t2 (a int primary key, b int)").await;
+        let mut tx_3 = fnck_sql.new_transaction()?;
+        let res = tx_3.run("create table t2 (a int primary key, b int)");
         assert!(res.is_err());
 
         Ok(())
