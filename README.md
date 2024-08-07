@@ -40,15 +40,13 @@ FnckSQL individual developers independently implemented LSM KV-based SQL DBMS ou
 Welcome to our WebSite, Power By FnckSQL: **http://www.kipdata.site/**
 
 ### Quick Started
-Tips: Install rust toolchain first.
+Tips: Install rust toolchain and llvm first.
 
 Clone the repository
 ``` shell
 git clone https://github.com/KipData/FnckSQL.git
 ```
-![start](./static/images/start.gif)
-then use `psql` to enter sql
-![pg](./static/images/pg.gif)
+
 Using FnckSQL in code
 ```rust
 let fnck_sql = DataBaseBuilder::path("./data")
