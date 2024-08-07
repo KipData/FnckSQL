@@ -192,11 +192,11 @@ mod tests {
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::limit::LimitOperator;
     use crate::planner::operator::Operator;
-    use crate::storage::kipdb::KipTransaction;
+    use crate::storage::rocksdb::RocksTransaction;
 
-    #[tokio::test]
-    async fn test_limit_project_transpose() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select c1, c2 from t1 limit 1").await?;
+    #[test]
+    fn test_limit_project_transpose() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select c1, c2 from t1 limit 1")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -204,7 +204,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::LimitProjectTranspose],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
 
         if let Operator::Project(_) = &best_plan.operator {
         } else {
@@ -219,9 +219,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_eliminate_limits() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select c1, c2 from t1 limit 1 offset 1").await?;
+    #[test]
+    fn test_eliminate_limits() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select c1, c2 from t1 limit 1 offset 1")?;
 
         let mut optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_eliminate_limits".to_string(),
@@ -236,7 +236,7 @@ mod tests {
 
         optimizer.graph.add_root(Operator::Limit(new_limit_op));
 
-        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
+        let best_plan = optimizer.find_best::<RocksTransaction>(None)?;
 
         if let Operator::Limit(op) = &best_plan.operator {
             assert_eq!(op.limit, Some(1));
@@ -252,9 +252,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_push_limit_through_join() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 limit 1").await?;
+    #[test]
+    fn test_push_limit_through_join() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 limit 1")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -265,7 +265,7 @@ mod tests {
                     NormalizationRuleImpl::PushLimitThroughJoin,
                 ],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
 
         if let Operator::Join(_) = &best_plan.childrens[0].childrens[0].operator {
         } else {
@@ -281,9 +281,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_push_limit_into_table_scan() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 limit 1 offset 1").await?;
+    #[test]
+    fn test_push_limit_into_table_scan() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 limit 1 offset 1")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -294,7 +294,7 @@ mod tests {
                     NormalizationRuleImpl::PushLimitIntoTableScan,
                 ],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
 
         if let Operator::Scan(op) = &best_plan.childrens[0].operator {
             assert_eq!(op.limit, (Some(1), Some(1)))

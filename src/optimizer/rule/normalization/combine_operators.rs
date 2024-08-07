@@ -154,14 +154,14 @@ mod tests {
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
-    use crate::storage::kipdb::KipTransaction;
+    use crate::storage::rocksdb::RocksTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::sync::Arc;
 
-    #[tokio::test]
-    async fn test_collapse_project() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select c1, c2 from t1").await?;
+    #[test]
+    fn test_collapse_project() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select c1, c2 from t1")?;
 
         let mut optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_collapse_project".to_string(),
@@ -179,7 +179,7 @@ mod tests {
 
         optimizer.graph.add_root(new_project_op);
 
-        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
+        let best_plan = optimizer.find_best::<RocksTransaction>(None)?;
 
         if let Operator::Project(op) = &best_plan.operator {
             assert_eq!(op.exprs.len(), 1);
@@ -196,9 +196,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_combine_filter() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 where c1 > 1").await?;
+    #[test]
+    fn test_combine_filter() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select * from t1 where c1 > 1")?;
 
         let mut optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_combine_filter".to_string(),
@@ -224,7 +224,7 @@ mod tests {
             .graph
             .add_node(HepNodeId::new(0), Some(HepNodeId::new(1)), new_filter_op);
 
-        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
+        let best_plan = optimizer.find_best::<RocksTransaction>(None)?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             if let ScalarExpression::Binary { op, .. } = &op.predicate {
@@ -239,9 +239,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_collapse_group_by_agg() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select distinct c1, c2 from t1 group by c1, c2").await?;
+    #[test]
+    fn test_collapse_group_by_agg() -> Result<(), DatabaseError> {
+        let plan = select_sql_run("select distinct c1, c2 from t1 group by c1, c2")?;
 
         let optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_collapse_group_by_agg".to_string(),
@@ -249,7 +249,7 @@ mod tests {
             vec![NormalizationRuleImpl::CollapseGroupByAgg],
         );
 
-        let best_plan = optimizer.find_best::<KipTransaction>(None)?;
+        let best_plan = optimizer.find_best::<RocksTransaction>(None)?;
 
         if let Operator::Aggregate(_) = &best_plan.childrens[0].operator {
             if let Operator::Aggregate(_) = &best_plan.childrens[0].childrens[0].operator {

@@ -143,18 +143,18 @@ mod tests {
     use super::*;
     use crate::binder::BinderContext;
     use crate::catalog::ColumnDesc;
-    use crate::storage::kipdb::KipStorage;
+    use crate::storage::rocksdb::RocksStorage;
     use crate::storage::Storage;
     use crate::types::LogicalType;
     use sqlparser::ast::CharLengthUnits;
     use std::sync::atomic::AtomicUsize;
     use tempfile::TempDir;
 
-    #[tokio::test]
-    async fn test_create_bind() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_create_bind() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let storage = KipStorage::new(temp_dir.path()).await?;
-        let transaction = storage.transaction().await?;
+        let storage = RocksStorage::new(temp_dir.path())?;
+        let transaction = storage.transaction()?;
         let functions = Default::default();
 
         let sql = "create table t1 (id int primary key, name varchar(10) null)";

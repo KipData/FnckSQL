@@ -25,7 +25,6 @@ Built by @KipData
 <p align="center">
     <a href="https://github.com/KipData/KipSQL/actions/workflows/ci.yml"><img src="https://github.com/KipData/KipSQL/actions/workflows/ci.yml/badge.svg" alt="CI"></img></a>
     <a href="https://crates.io/crates/fnck_sql/"><img src="https://img.shields.io/crates/v/fnck_sql.svg"></a>
-    <a href="https://hub.docker.com/r/kould23333/fncksql"><img src="https://img.shields.io/badge/Docker-fncksql-2496ED?logo=docker"></a>
 </p>
 <p align="center">
   <a href="https://github.com/KipData/KipSQL" target="_blank">
@@ -53,38 +52,17 @@ then use `psql` to enter sql
 Using FnckSQL in code
 ```rust
 let fnck_sql = DataBaseBuilder::path("./data")
-    .build()
-    .await?;
-let tuples = fnck_sql.run("select * from t1").await?;
+    .build()?;
+let tuples = fnck_sql.run("select * from t1")?;
 ```
 Storage Support:
-- KipDB
+- RocksDB
 
-### Docker
-#### Pull Image
-```shell
-docker pull kould23333/fncksql:latest
-```
 #### Build From Source
 ~~~shell
 git clone https://github.com/KipData/FnckSQL.git
 cd FnckSQL
 docker build -t kould23333/fncksql:latest .
-~~~
-
-#### Run
-We installed the `psql` tool in the image for easy debug.
-
-You can use `psql -h 127.0.0.1 -p 5432` to do this.
-
-~~~shell
-docker run -d \
---name=fncksql \
--p 5432:5432 \
---restart=always \
--v fncksql-data:/fnck_sql/fncksql_data \
--v /etc/localtime:/etc/localtime:ro \
-kould23333/fncksql:latest
 ~~~
 
 ### Features
@@ -123,15 +101,13 @@ function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> Logi
 
 let fnck_sql = DataBaseBuilder::path("./data")
     .register_function(TestFunction::new())
-    .build()
-    .await?;
+    .build()?;
 ```
 - Optimizer
   - RBO
   - CBO based on RBO(Physical Selection)
 - Execute
   - Volcano
-  - Codegen on LuaJIT: `features = ["codegen_execute"]`
 - MVCC Transaction
   - Optimistic
 - Field options

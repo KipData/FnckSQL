@@ -9,22 +9,16 @@ description = "SQL as a Function for Rust"
 license     = "Apache-2.0"
 repository  = "https://github.com/KipData/KipSQL"
 readme      = "README.md"
-keywords    = ["async", "sql", "sqlite", "database", "mysql"]
+keywords    = ["sql", "sqlite", "database", "mysql"]
 categories  = ["development-tools", "database"]
 default-run = "fnck_sql"
-
-[[bin]]
-name              = "fnck_sql"
-path              = "src/bin/server.rs"
-required-features = ["net"]
 
 [lib]
 doctest = false
 
 [features]
-default = ["marcos", "net"]
+default = ["marcos"]
 marcos  = []
-net     = ["dep:pgwire", "dep:async-trait", "dep:env_logger", "dep:log"]
 
 [[bench]]
 name    = "query_bench"
@@ -32,49 +26,41 @@ path    = "benchmarks/query_benchmark.rs"
 harness = false
 
 [dependencies]
-ahash                 = { version = "0.8.11" }
-async-lock            = { version = "3.3.0" }
-async-trait           = { version = "0.1.77", optional = true }
-bincode               = { version = "1.3.3" }
-bytes                 = { version = "1.5.0" }
-chrono                = { version = "0.4.26" }
-clap                  = { version = "4.5.2" }
-comfy-table           = { version = "7.1.0" }
-csv                   = { version = "1.3.0" }
-dirs                  = { version = "5.0.1" }
-env_logger            = { version = "0.11.3", optional = true }
-futures               = { version = "0.3.30" }
-futures-async-stream  = { version = "0.2.11" }
-integer-encoding      = { version = "3.0.4" }
-itertools             = { version = "0.12.1" }
-kip_db                = { version = "0.1.2-alpha.26.fix1" }
-lazy_static           = { version = "1.4.0" }
-log                   = { version = "0.4.21", optional = true }
-ordered-float         = { version = "4.2.0" }
-paste                 = { version = "1.0.14" }
-petgraph              = { version = "0.6.4" }
-pgwire                = { version = "0.19.2", optional = true }
-rand                  = { version = "0.9.0-alpha.0" }
-regex                 = { version = "1.10.3" }
-rust_decimal          = { version = "1.34.3" }
-serde                 = { version = "1.0.197", features = ["derive", "rc"] }
-siphasher             = { version = "1.0.0", features = ["serde"] }
-sqlparser             = { version = "0.34.0", features = ["serde"] }
+ahash                 = { version = "0.8" }
+bincode               = { version = "1" }
+bytes                 = { version = "1" }
+chrono                = { version = "0.4" }
+clap                  = { version = "4" }
+comfy-table           = { version = "7" }
+csv                   = { version = "1" }
+dirs                  = { version = "5" }
+integer-encoding      = { version = "3" }
+itertools             = { version = "0.12" }
+lazy_static           = { version = "1" }
+ordered-float         = { version = "4" }
+paste                 = { version = "1" }
+parking_lot           = { version = "0.12", features = ["arc_lock"] }
+petgraph              = { version = "0.6" }
+rand                  = { version = "0.9.0-alpha" }
+regex                 = { version = "1" }
+rocksdb               = { git = "https://github.com/rust-rocksdb/rust-rocksdb", rev = "1cf906dc4087f06631820f13855e6b27bd21b972" }
+rust_decimal          = { version = "1" }
+serde                 = { version = "1", features = ["derive", "rc"] }
+siphasher             = { version = "1", features = ["serde"] }
+sqlparser             = { version = "0.34", features = ["serde"] }
 strum_macros          = { version = "0.26.2" }
-thiserror             = { version = "1.0.58" }
-tokio                 = { version = "1.36.0", features = ["full"] }
-tracing               = { version = "0.1.40" }
+thiserror             = { version = "1" }
+tracing               = { version = "0.1" }
 typetag               = { version = "0.2" }
 
 [dev-dependencies]
-cargo-tarpaulin       = { version = "0.27.1" }
-criterion             = { version = "0.5.1", features = ["async_tokio", "html_reports"] }
-indicatif             = { version = "0.17.8" }
-rand_distr            = { version = "0.4.3" }
-tempfile              = { version = "3.10.1" }
-tokio-test            = { version = "0.4.3" }
+cargo-tarpaulin       = { version = "0.27" }
+criterion             = { version = "0.5", features = ["async_tokio", "html_reports"] }
+indicatif             = { version = "0.17" }
+rand_distr            = { version = "0.4" }
+tempfile              = { version = "3.10" }
 # Benchmark
-sqlite                = { version = "0.34.0" }
+sqlite                = { version = "0.34" }
 
 [target.'cfg(unix)'.dev-dependencies]
 pprof = { version = "0.13", features = ["flamegraph", "criterion"] }

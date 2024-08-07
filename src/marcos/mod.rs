@@ -63,7 +63,7 @@ macro_rules! implement_from_tuple {
 /// let fnck_sql = DataBaseBuilder::path("./example")
 ///     .register_function(TestFunction::new())
 ///     .build()
-///     .await?;
+///     ?;
 /// ```
 #[macro_export]
 macro_rules! function {

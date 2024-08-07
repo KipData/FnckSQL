@@ -1,5 +1,5 @@
 use crate::errors::DatabaseError;
-use crate::execution::volcano::dql::sort::radix_sort;
+use crate::execution::dql::sort::radix_sort;
 use crate::expression::range_detacher::Range;
 use crate::expression::BinaryOperator;
 use crate::optimizer::core::cm_sketch::CountMinSketch;

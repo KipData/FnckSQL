@@ -273,16 +273,16 @@ mod tests {
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
-    use crate::storage::kipdb::KipTransaction;
+    use crate::storage::rocksdb::RocksTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::collections::Bound;
     use std::sync::Arc;
 
-    #[tokio::test]
-    async fn test_push_predicate_into_scan() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_push_predicate_into_scan() -> Result<(), DatabaseError> {
         // 1 - c2 < 0 => c2 > 1
-        let plan = select_sql_run("select * from t1 where -(1 - c2) > 0").await?;
+        let plan = select_sql_run("select * from t1 where -(1 - c2) > 0")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -295,7 +295,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::PushPredicateIntoScan],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
 
         if let Operator::Scan(op) = &best_plan.childrens[0].childrens[0].operator {
             let mock_range = Range::Scope {
@@ -311,11 +311,10 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_push_predicate_through_join_in_left_join() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_push_predicate_through_join_in_left_join() -> Result<(), DatabaseError> {
         let plan =
-            select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2")
-                .await?;
+            select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -323,7 +322,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::PushPredicateThroughJoin],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -354,11 +353,10 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_push_predicate_through_join_in_right_join() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_push_predicate_through_join_in_right_join() -> Result<(), DatabaseError> {
         let plan =
-            select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2")
-                .await?;
+            select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -366,7 +364,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::PushPredicateThroughJoin],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             match op.predicate {
@@ -397,11 +395,10 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_push_predicate_through_join_in_inner_join() -> Result<(), DatabaseError> {
+    #[test]
+    fn test_push_predicate_through_join_in_inner_join() -> Result<(), DatabaseError> {
         let plan =
-            select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2")
-                .await?;
+            select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -409,7 +406,7 @@ mod tests {
                 HepBatchStrategy::once_topdown(),
                 vec![NormalizationRuleImpl::PushPredicateThroughJoin],
             )
-            .find_best::<KipTransaction>(None)?;
+            .find_best::<RocksTransaction>(None)?;
 
         if let Operator::Join(_) = &best_plan.childrens[0].operator {
         } else {

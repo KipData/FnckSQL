@@ -379,7 +379,7 @@ pub mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::errors::DatabaseError;
     use crate::planner::LogicalPlan;
-    use crate::storage::kipdb::KipStorage;
+    use crate::storage::rocksdb::RocksStorage;
     use crate::storage::{Storage, Transaction};
     use crate::types::LogicalType::Integer;
     use std::path::PathBuf;
@@ -387,11 +387,11 @@ pub mod test {
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    pub(crate) async fn build_test_catalog(
+    pub(crate) fn build_test_catalog(
         path: impl Into<PathBuf> + Send,
-    ) -> Result<KipStorage, DatabaseError> {
-        let storage = KipStorage::new(path).await?;
-        let mut transaction = storage.transaction().await?;
+    ) -> Result<RocksStorage, DatabaseError> {
+        let storage = RocksStorage::new(path)?;
+        let mut transaction = storage.transaction()?;
 
         let _ = transaction.create_table(
             Arc::new("t1".to_string()),
@@ -427,15 +427,15 @@ pub mod test {
             false,
         )?;
 
-        transaction.commit().await?;
+        transaction.commit()?;
 
         Ok(storage)
     }
 
-    pub async fn select_sql_run<S: AsRef<str>>(sql: S) -> Result<LogicalPlan, DatabaseError> {
+    pub fn select_sql_run<S: AsRef<str>>(sql: S) -> Result<LogicalPlan, DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let storage = build_test_catalog(temp_dir.path()).await?;
-        let transaction = storage.transaction().await?;
+        let storage = build_test_catalog(temp_dir.path())?;
+        let transaction = storage.transaction()?;
         let functions = Default::default();
         let mut binder = Binder::new(
             BinderContext::new(&transaction, &functions, Arc::new(AtomicUsize::new(0))),

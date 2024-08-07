@@ -16,8 +16,7 @@ struct Args {
     path: String,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let args = Args::parse();
 
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
@@ -39,11 +38,10 @@ async fn main() {
 
         let db = DataBaseBuilder::path(temp_dir.path())
             .build()
-            .await
             .expect("init db error");
         let mut tester = Runner::new(SQLBase { db });
 
-        if let Err(err) = tester.run_file_async(filepath).await {
+        if let Err(err) = tester.run_file(filepath) {
             panic!("test error: {}", err);
         }
         println!("-> Pass!\n");

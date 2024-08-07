@@ -1,21 +1,20 @@
 use fnck_sql::db::Database;
 use fnck_sql::errors::DatabaseError;
-use fnck_sql::storage::kipdb::KipStorage;
-use sqllogictest::{AsyncDB, DBOutput, DefaultColumnType};
+use fnck_sql::storage::rocksdb::RocksStorage;
+use sqllogictest::{DBOutput, DefaultColumnType, DB};
 use std::time::Instant;
 
 pub struct SQLBase {
-    pub db: Database<KipStorage>,
+    pub db: Database<RocksStorage>,
 }
 
-#[async_trait::async_trait]
-impl AsyncDB for SQLBase {
+impl DB for SQLBase {
     type Error = DatabaseError;
     type ColumnType = DefaultColumnType;
 
-    async fn run(&mut self, sql: &str) -> Result<DBOutput<Self::ColumnType>, Self::Error> {
+    fn run(&mut self, sql: &str) -> Result<DBOutput<Self::ColumnType>, Self::Error> {
         let start = Instant::now();
-        let (schema, tuples) = self.db.run(sql).await?;
+        let (schema, tuples) = self.db.run(sql)?;
         println!("|— Input SQL: {}", sql);
         println!(" |— time spent: {:?}", start.elapsed());
 
