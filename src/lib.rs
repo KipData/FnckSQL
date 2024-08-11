@@ -1,3 +1,90 @@
+//! FnckSQL is a high-performance SQL database
+//! that can be embedded in Rust code (based on RocksDB by default),
+//! making it possible to call SQL just like calling a function.
+//! It supports most of the syntax of SQL 2016.
+//!
+//! FnckSQL provides thread-safe API: [`DataBase::run`](db::Database::run) for running SQL
+//!
+//! FnckSQL uses [`DataBaseBuilder`](db::DataBaseBuilder) for instance construction,
+//! configuration in builder mode
+//!
+//! Support type
+//! - SqlNull
+//! - Boolean
+//! - Tinyint
+//! - UTinyint
+//! - Smallint
+//! - USmallint
+//! - Integer
+//! - UInteger
+//! - Bigint
+//! - UBigint
+//! - Float
+//! - Double
+//! - Char
+//! - Varchar
+//! - Date
+//! - DateTime
+//! - Time
+//! - Tuple
+//!
+//! support optimistic transaction with the
+//! [`Database::new_transaction`](db::Database::new_transaction) method.
+//!
+//! support UDF (User-Defined Function) so that users can customize internal calculation functions
+//! with the [`DataBaseBuilder::register_function`](db::DataBaseBuilder::register_function)
+//!
+//! # Examples
+//!
+//! ```ignore
+//! use fnck_sql::db::DataBaseBuilder;
+//! use fnck_sql::errors::DatabaseError;
+//! use fnck_sql::implement_from_tuple;
+//! use fnck_sql::types::tuple::{SchemaRef, Tuple};
+//! use fnck_sql::types::value::DataValue;
+//! use fnck_sql::types::LogicalType;
+//! use itertools::Itertools;
+//!
+//! #[derive(Default, Debug, PartialEq)]
+//! struct MyStruct {
+//!     pub c1: i32,
+//!     pub c2: String,
+//! }
+//!
+//! implement_from_tuple!(
+//!     MyStruct, (
+//!         c1: i32 => |inner: &mut MyStruct, value| {
+//!             if let DataValue::Int32(Some(val)) = value {
+//!                 inner.c1 = val;
+//!             }
+//!         },
+//!         c2: String => |inner: &mut MyStruct, value| {
+//!             if let DataValue::Utf8 { value: Some(val), .. } = value {
+//!                 inner.c2 = val;
+//!             }
+//!         }
+//!     )
+//! );
+//!
+//! #[cfg(feature = "marcos")]
+//! fn main() -> Result<(), DatabaseError> {
+//!     let database = DataBaseBuilder::path("./hello_world").build()?;
+//!
+//!     let _ = database.run("create table if not exists my_struct (c1 int primary key, c2 int)")?;
+//!     let _ = database.run("insert into my_struct values(0, 0), (1, 1)")?;
+//!     let (schema, tuples) = database.run("select * from my_struct")?;
+//!     let tuples = tuples
+//!         .into_iter()
+//!         .map(|tuple| MyStruct::from((&schema, tuple)))
+//!         .collect_vec();
+//!
+//!     println!("{:#?}", tuples);
+//!
+//!     let _ = database.run("drop table my_struct")?;
+//!
+//!     Ok(())
+//! }
+//! ```
 #![feature(error_generic_member_access)]
 #![allow(unused_doc_comments)]
 #![feature(result_flattening)]
@@ -8,6 +95,9 @@
 #![feature(is_sorted)]
 #![feature(stmt_expr_attributes)]
 extern crate core;
+
+use crate::db::DataBaseBuilder;
+
 pub mod binder;
 pub mod catalog;
 pub mod db;

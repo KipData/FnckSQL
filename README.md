@@ -25,6 +25,7 @@ Built by @KipData
 <p align="center">
     <a href="https://github.com/KipData/KipSQL/actions/workflows/ci.yml"><img src="https://github.com/KipData/KipSQL/actions/workflows/ci.yml/badge.svg" alt="CI"></img></a>
     <a href="https://crates.io/crates/fnck_sql/"><img src="https://img.shields.io/crates/v/fnck_sql.svg"></a>
+    <a href="https://hub.docker.com/r/kould23333/fncksql"><img src="https://img.shields.io/badge/Docker-fncksql-2496ED?logo=docker"></a>
 </p>
 <p align="center">
   <a href="https://github.com/KipData/KipSQL" target="_blank">
@@ -35,9 +36,10 @@ Built by @KipData
 
 ### What is FnckSQL
 
-FnckSQL individual developers independently implemented LSM KV-based SQL DBMS out of hobby. This SQL database will prove to you that anyone can write a database (even the core author cannot find a job). If you are also a database-related Enthusiastic, let us give this "beautiful" industry a middle finger🖕.
-
-Welcome to our WebSite, Power By FnckSQL: **http://www.kipdata.site/**
+FnckSQL is a high-performance SQL database
+that can be embedded in Rust code (based on RocksDB by default),
+making it possible to call SQL just like calling a function.
+It supports most of the syntax of SQL 2016. 
 
 ### Quick Started
 Tips: Install rust toolchain and llvm first.
@@ -46,21 +48,46 @@ Clone the repository
 ``` shell
 git clone https://github.com/KipData/FnckSQL.git
 ```
-
-Using FnckSQL in code
+#### Using FnckSQL in code
 ```rust
-let fnck_sql = DataBaseBuilder::path("./data")
-    .build()?;
+let fnck_sql = DataBaseBuilder::path("./data").build()?;
 let tuples = fnck_sql.run("select * from t1")?;
 ```
+
+#### PG Wire Service
+run `cargo run --features="net"` to start server
+![start](./static/images/start.gif)
+then use `psql` to enter sql
+![pg](./static/images/pg.gif)
+
 Storage Support:
 - RocksDB
 
+### Docker
+#### Pull Image
+```shell
+docker pull kould23333/fncksql:latest
+```
 #### Build From Source
 ~~~shell
 git clone https://github.com/KipData/FnckSQL.git
 cd FnckSQL
 docker build -t kould23333/fncksql:latest .
+~~~
+
+#### Run
+We installed the `psql` tool in the image for easy debug.
+
+You can use `psql -h 127.0.0.1 -p 5432` to do this.
+
+~~~shell
+docker run -d \
+--name=fncksql \
+-p 5432:5432 \
+--restart=always \
+-v fncksql-data:/fnck_sql/fncksql_data \
+-v /etc/localtime:/etc/localtime:ro \
+kould23333/fncksql:latest
 ~~~
 
 ### Features

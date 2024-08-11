@@ -19,15 +19,15 @@ pub struct RocksStorage {
 impl RocksStorage {
     pub fn new(path: impl Into<PathBuf> + Send) -> Result<Self, DatabaseError> {
         let mut bb = rocksdb::BlockBasedOptions::default();
-        bb.set_block_cache(&rocksdb::Cache::new_lru_cache(4 * 1_024 * 1_024 * 1_024));
+        bb.set_block_cache(&rocksdb::Cache::new_lru_cache(40 * 1_024 * 1_024));
 
         let mut opts = rocksdb::Options::default();
         opts.set_block_based_table_factory(&bb);
         opts.create_if_missing(true);
 
         let storage = OptimisticTransactionDB::open(&opts, path.into())?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new()).unwrap());
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new()).unwrap());
+        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
 
         Ok(RocksStorage {
             inner: Arc::new(storage),
