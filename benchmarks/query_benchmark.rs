@@ -24,14 +24,11 @@ fn query_cases() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
-async fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
+fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
     let database = DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH)
         .build()
-        .await
         .unwrap();
-    database
-        .run("create table t1 (c1 int primary key, c2 int)")
-        .await?;
+    database.run("create table t1 (c1 int primary key, c2 int)")?;
     let pb = ProgressBar::new(TABLE_ROW_NUM);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -39,14 +36,12 @@ async fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
             .unwrap(),
     );
     for i in 0..TABLE_ROW_NUM {
-        let _ = database
-            .run(format!("insert into t1 values({}, {})", i, i + 1).as_str())
-            .await?;
+        let _ = database.run(format!("insert into t1 values({}, {})", i, i + 1).as_str())?;
         pb.set_position(i + 1);
     }
     pb.finish_with_message("Insert completed!");
 
-    let _ = database.run("analyze table t1").await?;
+    let _ = database.run("analyze table t1")?;
 
     Ok(())
 }
@@ -79,45 +74,37 @@ fn path_exists_and_is_directory(path: &str) -> bool {
 }
 
 fn query_on_execute(c: &mut Criterion) {
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(8)
-        .enable_all()
+    if !Path::new(QUERY_BENCH_SQLITE_PATH).exists() {
+        println!(
+            "SQLITE: The table is not initialized and data insertion is started. => {}",
+            TABLE_ROW_NUM
+        );
+
+        init_sqlite_query_bench().unwrap();
+    }
+    if !path_exists_and_is_directory(QUERY_BENCH_FNCK_SQL_PATH) {
+        println!(
+            "FnckSQL: The table is not initialized and data insertion is started. => {}",
+            TABLE_ROW_NUM
+        );
+
+        init_fncksql_query_bench().unwrap();
+    }
+    let database = DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH)
         .build()
         .unwrap();
-    let database = rt.block_on(async {
-        if !Path::new(QUERY_BENCH_SQLITE_PATH).exists() {
-            println!(
-                "SQLITE: The table is not initialized and data insertion is started. => {}",
-                TABLE_ROW_NUM
-            );
-
-            init_sqlite_query_bench().unwrap();
-        }
-        if !path_exists_and_is_directory(QUERY_BENCH_FNCK_SQL_PATH) {
-            println!(
-                "FnckSQL: The table is not initialized and data insertion is started. => {}",
-                TABLE_ROW_NUM
-            );
-
-            init_fncksql_query_bench().await.unwrap();
-        }
-        DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH)
-            .build()
-            .await
-            .unwrap()
-    });
     println!("Table initialization completed");
 
     for (name, case) in query_cases() {
         c.bench_function(format!("FnckSQL: {} by '{}'", name, case).as_str(), |b| {
-            b.to_async(&rt).iter(|| async {
-                let _tuples = database.run(case).await.unwrap();
+            b.iter(|| {
+                let _tuples = database.run(case).unwrap();
             })
         });
 
         let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned()).unwrap();
         c.bench_function(format!("SQLite: {} by '{}'", name, case).as_str(), |b| {
-            b.to_async(&rt).iter(|| async {
+            b.iter(|| {
                 let _tuples = connection
                     .prepare(case)
                     .unwrap()
