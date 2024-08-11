@@ -1,17 +1,18 @@
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [package]
-name        = "fnck_sql"
-version     = "0.0.1"
-edition     = "2021"
-authors     = ["Kould <kould2333@gmail.com>", "Xwg <loloxwg@gmail.com>"]
-description = "SQL as a Function for Rust"
-license     = "Apache-2.0"
-repository  = "https://github.com/KipData/KipSQL"
-readme      = "README.md"
-keywords    = ["sql", "sqlite", "database", "mysql"]
-categories  = ["development-tools", "database"]
-default-run = "fnck_sql"
+name          = "fnck_sql"
+version       = "0.0.2"
+edition       = "2021"
+authors       = ["Kould <kould2333@gmail.com>", "Xwg <loloxwg@gmail.com>"]
+description   = "SQL as a Function for Rust"
+documentation = "https://docs.rs/fnck_sql/latest/fnck_sql/"
+license       = "Apache-2.0"
+repository    = "https://github.com/KipData/KipSQL"
+readme        = "README.md"
+keywords      = ["sql", "sqlite", "database", "mysql"]
+categories    = ["development-tools", "database"]
+default-run   = "fnck_sql"
 
 [[bin]]
 name              = "fnck_sql"

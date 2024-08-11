@@ -96,8 +96,6 @@
 #![feature(stmt_expr_attributes)]
 extern crate core;
 
-use crate::db::DataBaseBuilder;
-
 pub mod binder;
 pub mod catalog;
 pub mod db;
