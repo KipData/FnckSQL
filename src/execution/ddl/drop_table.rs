@@ -1,6 +1,6 @@
 use crate::execution::{Executor, WriteExecutor};
 use crate::planner::operator::drop_table::DropTableOperator;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::tuple_builder::TupleBuilder;
 
@@ -15,7 +15,11 @@ impl From<DropTableOperator> for DropTable {
 }
 
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropTable {
-    fn execute_mut(self, transaction: &'a mut T) -> Executor<'a> {
+    fn execute_mut(
+        self,
+        (table_cache, _): (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a mut T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -24,7 +28,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropTable {
                     if_exists,
                 } = self.op;
 
-                throw!(transaction.drop_table(&table_name, if_exists));
+                throw!(transaction.drop_table(table_cache, table_name.clone(), if_exists));
 
                 yield Ok(TupleBuilder::build_result(format!("{}", table_name)));
             },

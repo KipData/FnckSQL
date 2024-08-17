@@ -4,7 +4,7 @@ use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::create_index::CreateIndexOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
@@ -26,7 +26,11 @@ impl From<(CreateIndexOperator, LogicalPlan)> for CreateIndex {
 }
 
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateIndex {
-    fn execute_mut(mut self, transaction: &'a mut T) -> Executor<'a> {
+    fn execute_mut(
+        mut self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a mut T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -47,20 +51,25 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateIndex {
                     })
                     .unzip();
                 let schema = self.input.output_schema().clone();
-                let index_id =
-                    match transaction.add_index_meta(&table_name, index_name, column_ids, ty) {
-                        Ok(index_id) => index_id,
-                        Err(DatabaseError::DuplicateIndex(index_name)) => {
-                            if if_not_exists {
-                                return;
-                            } else {
-                                throw!(Err(DatabaseError::DuplicateIndex(index_name)))
-                            }
+                let index_id = match transaction.add_index_meta(
+                    cache.0,
+                    &table_name,
+                    index_name,
+                    column_ids,
+                    ty,
+                ) {
+                    Ok(index_id) => index_id,
+                    Err(DatabaseError::DuplicateIndex(index_name)) => {
+                        if if_not_exists {
+                            return;
+                        } else {
+                            throw!(Err(DatabaseError::DuplicateIndex(index_name)))
                         }
-                        err => throw!(err),
-                    };
+                    }
+                    err => throw!(err),
+                };
                 let mut index_values = Vec::new();
-                let mut coroutine = build_read(self.input, transaction);
+                let mut coroutine = build_read(self.input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let mut tuple: Tuple = throw!(tuple);

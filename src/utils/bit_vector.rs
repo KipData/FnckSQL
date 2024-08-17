@@ -4,6 +4,7 @@ use std::slice;
 
 #[derive(Debug, Default)]
 pub struct BitVector {
+    #[allow(dead_code)]
     len: u64,
     bit_groups: Vec<i8>,
 }
@@ -31,14 +32,17 @@ impl BitVector {
         self.bit_groups[index / 8] >> (index % 8) & 1 != 0
     }
 
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.len as usize
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
+    #[allow(dead_code)]
     pub fn to_raw(&self, bytes: &mut Vec<u8>) {
         bytes.append(&mut u64::encode_fixed_vec(self.len));
 
@@ -47,6 +51,7 @@ impl BitVector {
         }
     }
 
+    #[allow(dead_code)]
     pub fn from_raw(bytes: &[u8]) -> Self {
         let len = u64::decode_fixed(&bytes[0..8]);
         let bit_groups = bytes[8..]

@@ -283,6 +283,7 @@ impl<K: Hash + Eq + PartialEq, V> LruCache<K, V> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn get(&mut self, key: &K) -> Option<&V> {
         if let Some(node) = self.inner.get(key) {
@@ -333,6 +334,7 @@ impl<K: Hash + Eq + PartialEq, V> LruCache<K, V> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn get_or_insert<F>(&mut self, key: K, fn_once: F) -> Result<&V, DatabaseError>
     where
@@ -342,6 +344,7 @@ impl<K: Hash + Eq + PartialEq, V> LruCache<K, V> {
             .map(|node| unsafe { &node.as_ref().value })
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn len(&self) -> usize {
         self.inner.len()
@@ -352,6 +355,7 @@ impl<K: Hash + Eq + PartialEq, V> LruCache<K, V> {
         self.inner.is_empty()
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn iter(&self) -> LruCacheIter<K, V> {
         LruCacheIter {

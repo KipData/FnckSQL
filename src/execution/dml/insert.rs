@@ -4,7 +4,7 @@ use crate::execution::dql::projection::Projection;
 use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
@@ -41,7 +41,11 @@ impl From<(InsertOperator, LogicalPlan)> for Insert {
 }
 
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
-    fn execute_mut(self, transaction: &'a mut T) -> Executor<'a> {
+    fn execute_mut(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a mut T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -60,9 +64,10 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                     .map(|col| col.id())
                     .ok_or_else(|| DatabaseError::NotNull));
 
-                if let Some(table_catalog) = transaction.table(table_name.clone()).cloned() {
+                if let Some(table_catalog) = transaction.table(cache.0, table_name.clone()).cloned()
+                {
                     let types = table_catalog.types();
-                    let mut coroutine = build_read(input, transaction);
+                    let mut coroutine = build_read(input, cache, transaction);
 
                     while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                         let Tuple { values, .. } = throw!(tuple);

@@ -5,7 +5,7 @@ use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::tuple::{Schema, SchemaRef, Tuple};
 use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
@@ -42,7 +42,11 @@ impl From<(JoinOperator, LogicalPlan, LogicalPlan)> for HashJoin {
 }
 
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
-    fn execute(self, transaction: &'a T) -> Executor<'a> {
+    fn execute(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -63,7 +67,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
                 // build phase:
                 // 1.construct hashtable, one hash key may contains multiple rows indices.
                 // 2.merged all left tuples.
-                let mut coroutine = build_read(left_input, transaction);
+                let mut coroutine = build_read(left_input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let tuple: Tuple = throw!(tuple);
@@ -72,7 +76,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
                 }
 
                 // probe phase
-                let mut coroutine = build_read(right_input, transaction);
+                let mut coroutine = build_read(right_input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let tuple: Tuple = throw!(tuple);
@@ -430,6 +434,8 @@ mod test {
     use crate::storage::Storage;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
+    use crate::utils::lru::ShardingLruCache;
+    use std::hash::RandomState;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -522,6 +528,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
+        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
@@ -531,7 +539,8 @@ mod test {
             },
             join_type: JoinType::Inner,
         };
-        let executor = HashJoin::from((op, left, right)).execute(&transaction);
+        let executor =
+            HashJoin::from((op, left, right)).execute((&table_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         assert_eq!(tuples.len(), 3);
@@ -557,6 +566,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
+        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
@@ -569,7 +580,7 @@ mod test {
         //Outer
         {
             let executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
-            let tuples = try_collect(executor.execute(&transaction))?;
+            let tuples = try_collect(executor.execute((&table_cache, &meta_cache), &transaction))?;
 
             assert_eq!(tuples.len(), 4);
 
@@ -594,7 +605,8 @@ mod test {
         {
             let mut executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
             executor.ty = JoinType::LeftSemi;
-            let mut tuples = try_collect(executor.execute(&transaction))?;
+            let mut tuples =
+                try_collect(executor.execute((&table_cache, &meta_cache), &transaction))?;
 
             assert_eq!(tuples.len(), 2);
             tuples.sort_by_key(|tuple| {
@@ -616,7 +628,7 @@ mod test {
         {
             let mut executor = HashJoin::from((op, left, right));
             executor.ty = JoinType::LeftAnti;
-            let tuples = try_collect(executor.execute(&transaction))?;
+            let tuples = try_collect(executor.execute((&table_cache, &meta_cache), &transaction))?;
 
             assert_eq!(tuples.len(), 1);
             assert_eq!(
@@ -633,6 +645,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
+        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
@@ -642,7 +656,8 @@ mod test {
             },
             join_type: JoinType::RightOuter,
         };
-        let executor = HashJoin::from((op, left, right)).execute(&transaction);
+        let executor =
+            HashJoin::from((op, left, right)).execute((&table_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         assert_eq!(tuples.len(), 4);
@@ -672,6 +687,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
+        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
@@ -681,7 +698,8 @@ mod test {
             },
             join_type: JoinType::Full,
         };
-        let executor = HashJoin::from((op, left, right)).execute(&transaction);
+        let executor =
+            HashJoin::from((op, left, right)).execute((&table_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         assert_eq!(tuples.len(), 5);

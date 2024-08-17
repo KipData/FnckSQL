@@ -6,7 +6,7 @@ use crate::optimizer::core::histogram::HistogramBuilder;
 use crate::optimizer::core::statistics_meta::StatisticsMeta;
 use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::index::IndexMetaRef;
 use crate::types::tuple::Tuple;
@@ -49,7 +49,11 @@ impl From<(AnalyzeOperator, LogicalPlan)> for Analyze {
 }
 
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
-    fn execute_mut(self, transaction: &'a mut T) -> Executor<'a> {
+    fn execute_mut(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a mut T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -62,7 +66,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                 let schema = input.output_schema().clone();
                 let mut builders = Vec::with_capacity(index_metas.len());
                 let table = throw!(transaction
-                    .table(table_name.clone())
+                    .table(cache.0, table_name.clone())
                     .cloned()
                     .ok_or(DatabaseError::TableNotFound));
 
@@ -74,7 +78,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                     ));
                 }
 
-                let mut coroutine = build_read(input, transaction);
+                let mut coroutine = build_read(input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let tuple = throw!(tuple);
@@ -113,7 +117,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
                     }));
-                    throw!(transaction.save_table_meta(&table_name, path, meta));
+                    throw!(transaction.save_table_meta(cache.1, &table_name, path, meta));
                 }
                 yield Ok(Tuple { id: None, values });
             },

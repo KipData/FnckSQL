@@ -1,5 +1,6 @@
 use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::planner::LogicalPlan;
+use crate::storage::{StatisticsMetaCache, TableCache};
 use crate::types::index::{Index, IndexType};
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
@@ -25,7 +26,11 @@ impl From<(AddColumnOperator, LogicalPlan)> for AddColumn {
 }
 
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
-    fn execute_mut(mut self, transaction: &'a mut T) -> Executor<'a> {
+    fn execute_mut(
+        mut self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a mut T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -45,7 +50,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
                 }
                 types.push(*column.datatype());
 
-                let mut coroutine = build_read(self.input, transaction);
+                let mut coroutine = build_read(self.input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let mut tuple: Tuple = throw!(tuple);
@@ -65,13 +70,14 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
                 for tuple in tuples {
                     throw!(transaction.append(table_name, tuple, &types, true));
                 }
-                let col_id = throw!(transaction.add_column(table_name, column, *if_not_exists));
+                let col_id =
+                    throw!(transaction.add_column(cache.0, table_name, column, *if_not_exists));
 
                 // Unique Index
                 if let (Some(unique_values), Some(unique_meta)) = (
                     unique_values,
                     transaction
-                        .table(table_name.clone())
+                        .table(cache.0, table_name.clone())
                         .and_then(|table| table.get_unique_index(&col_id))
                         .cloned(),
                 ) {

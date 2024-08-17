@@ -1,7 +1,7 @@
 use crate::execution::{Executor, ReadExecutor};
 use crate::expression::range_detacher::Range;
 use crate::planner::operator::scan::ScanOperator;
-use crate::storage::{Iter, Transaction};
+use crate::storage::{Iter, StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::index::IndexMetaRef;
 
@@ -27,7 +27,11 @@ impl From<(ScanOperator, IndexMetaRef, Range)> for IndexScan {
 }
 
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for IndexScan {
-    fn execute(self, transaction: &'a T) -> Executor<'a> {
+    fn execute(
+        self,
+        (table_cache, _): (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -39,7 +43,14 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for IndexScan {
                 } = self.op;
 
                 let mut iter = transaction
-                    .read_by_index(table_name, limit, columns, self.index_by, self.ranges)
+                    .read_by_index(
+                        table_cache,
+                        table_name,
+                        limit,
+                        columns,
+                        self.index_by,
+                        self.ranges,
+                    )
                     .unwrap();
 
                 while let Some(tuple) = throw!(iter.next_tuple()) {

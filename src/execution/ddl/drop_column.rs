@@ -2,7 +2,7 @@ use crate::errors::DatabaseError;
 use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
@@ -22,7 +22,11 @@ impl From<(DropColumnOperator, LogicalPlan)> for DropColumn {
 }
 
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
-    fn execute_mut(mut self, transaction: &'a mut T) -> Executor<'a> {
+    fn execute_mut(
+        mut self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a mut T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -53,7 +57,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                         }
                         types.push(*column_ref.datatype());
                     }
-                    let mut coroutine = build_read(self.input, transaction);
+                    let mut coroutine = build_read(self.input, cache, transaction);
 
                     while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                         let mut tuple: Tuple = throw!(tuple);
@@ -65,7 +69,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                     for tuple in tuples {
                         throw!(transaction.append(&table_name, tuple, &types, true));
                     }
-                    throw!(transaction.drop_column(&table_name, &column_name));
+                    throw!(transaction.drop_column(cache.0, &table_name, &column_name));
 
                     yield Ok(TupleBuilder::build_result("1".to_string()));
                 } else if if_exists {

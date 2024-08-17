@@ -1,7 +1,7 @@
 use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::planner::operator::limit::LimitOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
@@ -23,7 +23,11 @@ impl From<(LimitOperator, LogicalPlan)> for Limit {
 }
 
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Limit {
-    fn execute(self, transaction: &'a T) -> Executor<'a> {
+    fn execute(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -41,7 +45,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Limit {
                 let offset_limit = offset_val + limit.unwrap_or(1) - 1;
 
                 let mut i = 0;
-                let mut coroutine = build_read(input, transaction);
+                let mut coroutine = build_read(input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     i += 1;

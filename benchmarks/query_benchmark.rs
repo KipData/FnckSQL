@@ -11,7 +11,7 @@ use std::path::Path;
 
 const QUERY_BENCH_FNCK_SQL_PATH: &'static str = "./fncksql_bench";
 const QUERY_BENCH_SQLITE_PATH: &'static str = "./sqlite_bench";
-const TABLE_ROW_NUM: u64 = 2_00_000;
+const TABLE_ROW_NUM: u64 = 200_000;
 
 fn query_cases() -> Vec<(&'static str, &'static str)> {
     vec![

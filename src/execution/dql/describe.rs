@@ -2,7 +2,7 @@ use crate::catalog::{ColumnCatalog, TableName};
 use crate::execution::DatabaseError;
 use crate::execution::{Executor, ReadExecutor};
 use crate::planner::operator::describe::DescribeOperator;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type, ValueRef};
@@ -41,12 +41,16 @@ impl From<DescribeOperator> for Describe {
 }
 
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Describe {
-    fn execute(self, transaction: &'a T) -> Executor<'a> {
+    fn execute(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
                 let table = throw!(transaction
-                    .table(self.table_name.clone())
+                    .table(cache.0, self.table_name.clone())
                     .ok_or(DatabaseError::TableNotFound));
                 let key_fn = |column: &ColumnCatalog| {
                     if column.desc.is_primary {

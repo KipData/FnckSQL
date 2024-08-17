@@ -5,7 +5,7 @@ use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::tuple::{SchemaRef, Tuple};
 use crate::types::value::ValueRef;
@@ -40,10 +40,14 @@ impl From<(AggregateOperator, LogicalPlan)> for HashAggExecutor {
 }
 
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashAggExecutor {
-    fn execute(self, transaction: &'a T) -> Executor<'a> {
+    fn execute(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
-            || {
+            move || {
                 let HashAggExecutor {
                     agg_calls,
                     groupby_exprs,
@@ -53,7 +57,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashAggExecutor {
                 let mut agg_status =
                     HashAggStatus::new(input.output_schema().clone(), agg_calls, groupby_exprs);
 
-                let mut coroutine = build_read(input, transaction);
+                let mut coroutine = build_read(input, cache, transaction);
 
                 while let CoroutineState::Yielded(result) = Pin::new(&mut coroutine).resume(()) {
                     throw!(agg_status.update(throw!(result)));
@@ -171,12 +175,17 @@ mod test {
     use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
+    use crate::utils::lru::ShardingLruCache;
     use itertools::Itertools;
+    use std::hash::RandomState;
     use std::sync::Arc;
     use tempfile::TempDir;
 
     #[test]
     fn test_hash_agg() -> Result<(), DatabaseError> {
+        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path()).unwrap();
         let transaction = storage.transaction()?;
@@ -230,7 +239,10 @@ mod test {
             _output_schema_ref: None,
         };
 
-        let tuples = try_collect(HashAggExecutor::from((operator, input)).execute(&transaction))?;
+        let tuples = try_collect(
+            HashAggExecutor::from((operator, input))
+                .execute((&table_cache, &meta_cache), &transaction),
+        )?;
 
         println!(
             "hash_agg_test: \n{}",
