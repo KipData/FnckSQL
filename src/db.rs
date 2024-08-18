@@ -1,4 +1,5 @@
 use crate::binder::{command_type, Binder, BinderContext, CommandType};
+use crate::catalog::TableCatalog;
 use crate::errors::DatabaseError;
 use crate::execution::{build_write, try_collect};
 use crate::expression::function::{FunctionSummary, ScalarFunctionImpl};
@@ -9,12 +10,14 @@ use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
 use crate::storage::rocksdb::RocksStorage;
-use crate::storage::{Storage, Transaction};
+use crate::storage::{StatisticsMetaCache, Storage, TableCache, Transaction};
 use crate::types::tuple::{SchemaRef, Tuple};
 use crate::udf::current_date::CurrentDate;
+use crate::utils::lru::ShardingLruCache;
 use ahash::HashMap;
 use parking_lot::{ArcRwLockReadGuard, ArcRwLockWriteGuard, RawRwLock, RwLock};
 use sqlparser::ast::Statement;
+use std::hash::RandomState;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
@@ -51,19 +54,25 @@ impl DataBaseBuilder {
         self = self.register_function(CurrentDate::new());
 
         let storage = RocksStorage::new(self.path)?;
+        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
 
         Ok(Database {
             storage,
             functions: Arc::new(self.functions),
             mdl: Arc::new(RwLock::new(())),
+            meta_cache,
+            table_cache,
         })
     }
 }
 
 pub struct Database<S: Storage> {
-    pub storage: S,
+    pub(crate) storage: S,
     functions: Arc<Functions>,
     mdl: Arc<RwLock<()>>,
+    pub(crate) meta_cache: Arc<StatisticsMetaCache>,
+    pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
 }
 
 impl<S: Storage> Database<S> {
@@ -80,18 +89,21 @@ impl<S: Storage> Database<S> {
         } else {
             MetaDataLock::Read(self.mdl.read_arc())
         };
-        let transaction = self.storage.transaction()?;
-        let plan = Self::build_plan(stmt, &transaction, &self.functions)?;
+        let mut transaction = self.storage.transaction()?;
+        let mut plan = Self::build_plan(
+            stmt,
+            &self.table_cache,
+            &self.meta_cache,
+            &transaction,
+            &self.functions,
+        )?;
 
-        Self::run_volcano(transaction, plan)
-    }
-
-    pub(crate) fn run_volcano(
-        mut transaction: <S as Storage>::TransactionType<'_>,
-        mut plan: LogicalPlan,
-    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
         let schema = plan.output_schema().clone();
-        let iterator = build_write(plan, &mut transaction);
+        let iterator = build_write(
+            plan,
+            (&self.table_cache, &self.meta_cache),
+            &mut transaction,
+        );
         let tuples = try_collect(iterator)?;
 
         transaction.commit()?;
@@ -107,16 +119,25 @@ impl<S: Storage> Database<S> {
             inner: transaction,
             functions: self.functions.clone(),
             _guard: guard,
+            meta_cache: self.meta_cache.clone(),
+            table_cache: self.table_cache.clone(),
         })
     }
 
     pub(crate) fn build_plan(
         stmt: &Statement,
+        table_cache: &TableCache,
+        meta_cache: &StatisticsMetaCache,
         transaction: &<S as Storage>::TransactionType<'_>,
         functions: &Functions,
     ) -> Result<LogicalPlan, DatabaseError> {
         let mut binder = Binder::new(
-            BinderContext::new(transaction, functions, Arc::new(AtomicUsize::new(0))),
+            BinderContext::new(
+                table_cache,
+                transaction,
+                functions,
+                Arc::new(AtomicUsize::new(0)),
+            ),
             None,
         );
         /// Build a logical plan.
@@ -129,8 +150,8 @@ impl<S: Storage> Database<S> {
         let source_plan = binder.bind(stmt)?;
         // println!("source_plan plan: {:#?}", source_plan);
 
-        let best_plan =
-            Self::default_optimizer(source_plan).find_best(Some(&transaction.meta_loader()))?;
+        let best_plan = Self::default_optimizer(source_plan)
+            .find_best(Some(&transaction.meta_loader(meta_cache)))?;
         // println!("best_plan plan: {:#?}", best_plan);
 
         Ok(best_plan)
@@ -221,6 +242,8 @@ pub struct DBTransaction<'a, S: Storage + 'a> {
     inner: S::TransactionType<'a>,
     functions: Arc<Functions>,
     _guard: ArcRwLockReadGuard<RawRwLock, ()>,
+    pub(crate) meta_cache: Arc<StatisticsMetaCache>,
+    pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
 }
 
 impl<S: Storage> DBTransaction<'_, S> {
@@ -235,10 +258,16 @@ impl<S: Storage> DBTransaction<'_, S> {
                 "`DDL` is not allowed to execute within a transaction".to_string(),
             ));
         }
-        let mut plan = Database::<S>::build_plan(stmt, &self.inner, &self.functions)?;
+        let mut plan = Database::<S>::build_plan(
+            stmt,
+            &self.table_cache,
+            &self.meta_cache,
+            &self.inner,
+            &self.functions,
+        )?;
 
         let schema = plan.output_schema().clone();
-        let executor = build_write(plan, &mut self.inner);
+        let executor = build_write(plan, (&self.table_cache, &self.meta_cache), &mut self.inner);
 
         Ok((schema, try_collect(executor)?))
     }
@@ -258,7 +287,7 @@ mod test {
     use crate::expression::ScalarExpression;
     use crate::expression::{BinaryOperator, UnaryOperator};
     use crate::function;
-    use crate::storage::{Storage, Transaction};
+    use crate::storage::{Storage, TableCache, Transaction};
     use crate::types::evaluator::EvaluatorFactory;
     use crate::types::tuple::{create_table, Tuple};
     use crate::types::value::{DataValue, ValueRef};
@@ -268,7 +297,10 @@ mod test {
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    fn build_table(mut transaction: impl Transaction) -> Result<(), DatabaseError> {
+    fn build_table(
+        table_cache: &TableCache,
+        mut transaction: impl Transaction,
+    ) -> Result<(), DatabaseError> {
         let columns = vec![
             ColumnCatalog::new(
                 "c1".to_string(),
@@ -281,7 +313,8 @@ mod test {
                 ColumnDesc::new(LogicalType::Boolean, false, false, None),
             ),
         ];
-        let _ = transaction.create_table(Arc::new("t1".to_string()), columns, false)?;
+        let _ =
+            transaction.create_table(table_cache, Arc::new("t1".to_string()), columns, false)?;
         transaction.commit()?;
 
         Ok(())
@@ -292,7 +325,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let database = DataBaseBuilder::path(temp_dir.path()).build()?;
         let transaction = database.storage.transaction()?;
-        build_table(transaction)?;
+        build_table(&database.table_cache, transaction)?;
 
         let batch = database.run("select * from t1")?;
 

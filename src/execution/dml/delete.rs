@@ -5,7 +5,7 @@ use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::index::{Index, IndexId, IndexType};
 use crate::types::tuple::Tuple;
@@ -28,7 +28,11 @@ impl From<(DeleteOperator, LogicalPlan)> for Delete {
 }
 
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
-    fn execute_mut(self, transaction: &'a mut T) -> Executor<'a> {
+    fn execute_mut(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a mut T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -39,13 +43,13 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
 
                 let schema = input.output_schema().clone();
                 let table = throw!(transaction
-                    .table(table_name.clone())
+                    .table(cache.0, table_name.clone())
                     .cloned()
                     .ok_or(DatabaseError::TableNotFound));
                 let mut tuple_ids = Vec::new();
                 let mut indexes: HashMap<IndexId, Value> = HashMap::new();
 
-                let mut coroutine = build_read(input, transaction);
+                let mut coroutine = build_read(input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let tuple: Tuple = throw!(tuple);

@@ -146,7 +146,9 @@ mod tests {
     use crate::storage::rocksdb::RocksStorage;
     use crate::storage::Storage;
     use crate::types::LogicalType;
+    use crate::utils::lru::ShardingLruCache;
     use sqlparser::ast::CharLengthUnits;
+    use std::hash::RandomState;
     use std::sync::atomic::AtomicUsize;
     use tempfile::TempDir;
 
@@ -155,11 +157,17 @@ mod tests {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
         let functions = Default::default();
 
         let sql = "create table t1 (id int primary key, name varchar(10) null)";
         let mut binder = Binder::new(
-            BinderContext::new(&transaction, &functions, Arc::new(AtomicUsize::new(0))),
+            BinderContext::new(
+                &table_cache,
+                &transaction,
+                &functions,
+                Arc::new(AtomicUsize::new(0)),
+            ),
             None,
         );
         let stmt = crate::parser::parse_sql(sql).unwrap();

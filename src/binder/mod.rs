@@ -27,7 +27,7 @@ use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::JoinType;
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{TableCache, Transaction};
 
 pub enum InputRefType {
     AggCall,
@@ -83,6 +83,7 @@ pub enum SubQueryType {
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
     pub(crate) functions: &'a Functions,
+    pub(crate) table_cache: &'a TableCache,
     pub(crate) transaction: &'a T,
     // Tips: When there are multiple tables and Wildcard, use BTreeMap to ensure that the order of the output tables is certain.
     pub(crate) bind_table:
@@ -105,12 +106,14 @@ pub struct BinderContext<'a, T: Transaction> {
 
 impl<'a, T: Transaction> BinderContext<'a, T> {
     pub fn new(
+        table_cache: &'a TableCache,
         transaction: &'a T,
         functions: &'a Functions,
         temp_table_id: Arc<AtomicUsize>,
     ) -> Self {
         BinderContext {
             functions,
+            table_cache,
             transaction,
             bind_table: Default::default(),
             expr_aliases: Default::default(),
@@ -157,9 +160,9 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
 
     pub fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
         if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
-            self.transaction.table(real_name.clone())
+            self.transaction.table(self.table_cache, real_name.clone())
         } else {
-            self.transaction.table(table_name)
+            self.transaction.table(self.table_cache, table_name)
         }
     }
 
@@ -170,9 +173,9 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         join_type: Option<JoinType>,
     ) -> Result<&TableCatalog, DatabaseError> {
         let table = if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
-            self.transaction.table(real_name.clone())
+            self.transaction.table(self.table_cache, real_name.clone())
         } else {
-            self.transaction.table(table_name.clone())
+            self.transaction.table(self.table_cache, table_name.clone())
         }
         .ok_or(DatabaseError::TableNotFound)?;
 
@@ -380,20 +383,24 @@ pub mod test {
     use crate::errors::DatabaseError;
     use crate::planner::LogicalPlan;
     use crate::storage::rocksdb::RocksStorage;
-    use crate::storage::{Storage, Transaction};
+    use crate::storage::{Storage, TableCache, Transaction};
     use crate::types::LogicalType::Integer;
+    use crate::utils::lru::ShardingLruCache;
+    use std::hash::RandomState;
     use std::path::PathBuf;
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
     use tempfile::TempDir;
 
     pub(crate) fn build_test_catalog(
+        table_cache: &TableCache,
         path: impl Into<PathBuf> + Send,
     ) -> Result<RocksStorage, DatabaseError> {
         let storage = RocksStorage::new(path)?;
         let mut transaction = storage.transaction()?;
 
         let _ = transaction.create_table(
+            table_cache,
             Arc::new("t1".to_string()),
             vec![
                 ColumnCatalog::new(
@@ -411,6 +418,7 @@ pub mod test {
         )?;
 
         let _ = transaction.create_table(
+            table_cache,
             Arc::new("t2".to_string()),
             vec![
                 ColumnCatalog::new(
@@ -434,11 +442,17 @@ pub mod test {
 
     pub fn select_sql_run<S: AsRef<str>>(sql: S) -> Result<LogicalPlan, DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let storage = build_test_catalog(temp_dir.path())?;
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let storage = build_test_catalog(&table_cache, temp_dir.path())?;
         let transaction = storage.transaction()?;
         let functions = Default::default();
         let mut binder = Binder::new(
-            BinderContext::new(&transaction, &functions, Arc::new(AtomicUsize::new(0))),
+            BinderContext::new(
+                &table_cache,
+                &transaction,
+                &functions,
+                Arc::new(AtomicUsize::new(0)),
+            ),
             None,
         );
         let stmt = crate::parser::parse_sql(sql)?;

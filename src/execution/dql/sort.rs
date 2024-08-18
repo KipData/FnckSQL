@@ -2,7 +2,7 @@ use crate::errors::DatabaseError;
 use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::tuple::{Schema, Tuple};
 use itertools::Itertools;
@@ -87,7 +87,11 @@ impl From<(SortOperator, LogicalPlan)> for Sort {
 }
 
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Sort {
-    fn execute(self, transaction: &'a T) -> Executor<'a> {
+    fn execute(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
@@ -100,7 +104,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Sort {
                 let schema = input.output_schema().clone();
                 let mut tuples: Vec<Tuple> = vec![];
 
-                let mut coroutine = build_read(input, transaction);
+                let mut coroutine = build_read(input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     tuples.push(throw!(tuple));

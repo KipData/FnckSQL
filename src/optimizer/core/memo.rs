@@ -117,7 +117,12 @@ mod tests {
         let transaction = database.storage.transaction()?;
         let functions = Default::default();
         let mut binder = Binder::new(
-            BinderContext::new(&transaction, &functions, Arc::new(AtomicUsize::new(0))),
+            BinderContext::new(
+                &database.table_cache,
+                &transaction,
+                &functions,
+                Arc::new(AtomicUsize::new(0)),
+            ),
             None,
         );
         // where: c1 => 2, (40, +inf)
@@ -149,7 +154,11 @@ mod tests {
             ImplementationRuleImpl::IndexScan,
         ];
 
-        let memo = Memo::new(&graph, &transaction.meta_loader(), &rules)?;
+        let memo = Memo::new(
+            &graph,
+            &transaction.meta_loader(&database.meta_cache),
+            &rules,
+        )?;
         let best_plan = graph.into_plan(Some(&memo));
         let exprs = &memo.groups.get(&NodeIndex::new(3)).unwrap();
 

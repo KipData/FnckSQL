@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::{mem, slice};
 
 pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), StatisticsMeta>;
+pub(crate) type TableCache = ShardingLruCache<String, TableCatalog>;
 
 pub trait Storage: Clone {
     type TransactionType<'a>: Transaction
@@ -41,6 +42,7 @@ pub trait Transaction: Sized {
     /// The projections is column indices.
     fn read(
         &self,
+        table_cache: &TableCache,
         table_name: TableName,
         bounds: Bounds,
         mut columns: Vec<(usize, ColumnRef)>,
@@ -49,7 +51,7 @@ pub trait Transaction: Sized {
         assert!(columns.iter().map(|(i, _)| i).all_unique());
 
         let table = self
-            .table(table_name.clone())
+            .table(table_cache, table_name.clone())
             .ok_or(DatabaseError::TableNotFound)?;
         let table_types = table.types();
         if columns.is_empty() {
@@ -76,19 +78,20 @@ pub trait Transaction: Sized {
         })
     }
 
-    fn read_by_index(
-        &self,
+    fn read_by_index<'a>(
+        &'a self,
+        table_cache: &'a TableCache,
         table_name: TableName,
         (offset_option, limit_option): Bounds,
         columns: Vec<(usize, ColumnRef)>,
         index_meta: IndexMetaRef,
         ranges: Vec<Range>,
-    ) -> Result<IndexIter<'_, Self>, DatabaseError> {
+    ) -> Result<IndexIter<'a, Self>, DatabaseError> {
         assert!(columns.is_sorted_by_key(|(i, _)| i));
         assert!(columns.iter().map(|(i, _)| i).all_unique());
 
         let table = self
-            .table(table_name.clone())
+            .table(table_cache, table_name.clone())
             .ok_or(DatabaseError::TableNotFound)?;
         let table_types = table.types();
         let table_name = table.name.as_str();
@@ -121,16 +124,17 @@ pub trait Transaction: Sized {
 
     fn add_index_meta(
         &mut self,
+        table_cache: &TableCache,
         table_name: &TableName,
         index_name: String,
         column_ids: Vec<ColumnId>,
         ty: IndexType,
     ) -> Result<IndexId, DatabaseError> {
-        if let Some(mut table) = self.table(table_name.clone()).cloned() {
+        if let Some(mut table) = self.table(table_cache, table_name.clone()).cloned() {
             let index_meta = table.add_index_meta(index_name, column_ids, ty)?;
             let (key, value) = TableCodec::encode_index_meta(table_name, index_meta)?;
             self.set(key, value)?;
-            self.table_cache().remove(table_name);
+            table_cache.remove(table_name);
 
             Ok(index_meta.id)
         } else {
@@ -203,11 +207,12 @@ pub trait Transaction: Sized {
 
     fn add_column(
         &mut self,
+        table_cache: &TableCache,
         table_name: &TableName,
         column: &ColumnCatalog,
         if_not_exists: bool,
     ) -> Result<ColumnId, DatabaseError> {
-        if let Some(mut table) = self.table(table_name.clone()).cloned() {
+        if let Some(mut table) = self.table(table_cache, table_name.clone()).cloned() {
             if !column.nullable && column.default_value()?.is_none() {
                 return Err(DatabaseError::NeedNullAbleOrDefault);
             }
@@ -236,7 +241,7 @@ pub trait Transaction: Sized {
             let column = table.get_column_by_id(&col_id).unwrap();
             let (key, value) = TableCodec::encode_column(table_name, column)?;
             self.set(key, value)?;
-            self.table_cache().remove(table_name);
+            table_cache.remove(table_name);
 
             Ok(col_id)
         } else {
@@ -246,10 +251,11 @@ pub trait Transaction: Sized {
 
     fn drop_column(
         &mut self,
+        table_cache: &TableCache,
         table_name: &TableName,
         column_name: &str,
     ) -> Result<(), DatabaseError> {
-        if let Some(table_catalog) = self.table(table_name.clone()).cloned() {
+        if let Some(table_catalog) = self.table(table_cache, table_name.clone()).cloned() {
             let column = table_catalog.get_column_by_name(column_name).unwrap();
 
             let (key, _) = TableCodec::encode_column(table_name, column)?;
@@ -265,7 +271,7 @@ pub trait Transaction: Sized {
                 let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id);
                 self._drop_data(&index_min, &index_max)?;
             }
-            self.table_cache().remove(table_name);
+            table_cache.remove(table_name);
 
             Ok(())
         } else {
@@ -275,6 +281,7 @@ pub trait Transaction: Sized {
 
     fn create_table(
         &mut self,
+        table_cache: &TableCache,
         table_name: TableName,
         columns: Vec<ColumnCatalog>,
         if_not_exists: bool,
@@ -299,30 +306,34 @@ pub trait Transaction: Sized {
             let (key, value) = TableCodec::encode_column(&table_name, column)?;
             self.set(key, value)?;
         }
-        self.table_cache()
-            .put(table_name.to_string(), table_catalog);
+        table_cache.put(table_name.to_string(), table_catalog);
 
         Ok(table_name)
     }
 
-    fn drop_table(&mut self, table_name: &str, if_exists: bool) -> Result<(), DatabaseError> {
-        if self.table(Arc::new(table_name.to_string())).is_none() {
+    fn drop_table(
+        &mut self,
+        table_cache: &TableCache,
+        table_name: TableName,
+        if_exists: bool,
+    ) -> Result<(), DatabaseError> {
+        if self.table(table_cache, table_name.clone()).is_none() {
             if if_exists {
                 return Ok(());
             } else {
                 return Err(DatabaseError::TableNotFound);
             }
         }
-        self.drop_data(table_name)?;
+        self.drop_data(table_name.as_str())?;
 
-        let (column_min, column_max) = TableCodec::columns_bound(table_name);
+        let (column_min, column_max) = TableCodec::columns_bound(table_name.as_str());
         self._drop_data(&column_min, &column_max)?;
 
-        let (index_meta_min, index_meta_max) = TableCodec::index_meta_bound(table_name);
+        let (index_meta_min, index_meta_max) = TableCodec::index_meta_bound(table_name.as_str());
         self._drop_data(&index_meta_min, &index_meta_max)?;
 
-        self.remove(&TableCodec::encode_root_table_key(table_name))?;
-        self.table_cache().remove(&table_name.to_string());
+        self.remove(&TableCodec::encode_root_table_key(table_name.as_str()))?;
+        table_cache.remove(&table_name);
 
         Ok(())
     }
@@ -337,8 +348,12 @@ pub trait Transaction: Sized {
         Ok(())
     }
 
-    fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
-        self.table_cache()
+    fn table<'a>(
+        &'a self,
+        table_cache: &'a TableCache,
+        table_name: TableName,
+    ) -> Option<&TableCatalog> {
+        table_cache
             .get_or_insert(table_name.to_string(), |_| {
                 // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
                 let (columns, indexes) = self.table_collect(table_name.clone())?;
@@ -364,15 +379,14 @@ pub trait Transaction: Sized {
 
     fn save_table_meta(
         &mut self,
+        meta_cache: &StatisticsMetaCache,
         table_name: &TableName,
         path: String,
         statistics_meta: StatisticsMeta,
     ) -> Result<(), DatabaseError> {
         // TODO: clean old meta file
         let index_id = statistics_meta.index_id();
-        let _ = self
-            .meta_cache()
-            .put((table_name.clone(), index_id), statistics_meta);
+        meta_cache.put((table_name.clone(), index_id), statistics_meta);
         let (key, value) = TableCodec::encode_statistics_path(table_name.as_str(), index_id, path);
 
         self.set(key, value)?;
@@ -391,11 +405,11 @@ pub trait Transaction: Sized {
             .transpose()
     }
 
-    fn meta_loader(&self) -> StatisticMetaLoader<Self>
+    fn meta_loader<'a>(&'a self, meta_cache: &'a StatisticsMetaCache) -> StatisticMetaLoader<Self>
     where
         Self: Sized,
     {
-        StatisticMetaLoader::new(self, self.meta_cache())
+        StatisticMetaLoader::new(self, meta_cache)
     }
 
     fn table_collect(
@@ -482,9 +496,6 @@ pub trait Transaction: Sized {
         min: Bound<&[u8]>,
         max: Bound<&[u8]>,
     ) -> Result<Self::IterType<'a>, DatabaseError>;
-
-    fn table_cache(&self) -> &ShardingLruCache<String, TableCatalog>;
-    fn meta_cache(&self) -> &StatisticsMetaCache;
 
     fn commit(self) -> Result<(), DatabaseError>;
 }

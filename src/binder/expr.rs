@@ -248,13 +248,14 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
         subquery: &Query,
     ) -> Result<(LogicalPlan, Arc<ColumnCatalog>), DatabaseError> {
         let BinderContext {
+            table_cache,
             transaction,
             functions,
             temp_table_id,
             ..
         } = &self.context;
         let mut binder = Binder::new(
-            BinderContext::new(*transaction, functions, temp_table_id.clone()),
+            BinderContext::new(table_cache, *transaction, functions, temp_table_id.clone()),
             Some(self),
         );
         let mut sub_query = binder.bind_query(subquery)?;

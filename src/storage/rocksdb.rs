@@ -1,19 +1,14 @@
-use crate::catalog::TableCatalog;
 use crate::errors::DatabaseError;
-use crate::storage::{InnerIter, StatisticsMetaCache, Storage, Transaction};
-use crate::utils::lru::ShardingLruCache;
+use crate::storage::{InnerIter, Storage, Transaction};
 use bytes::Bytes;
 use rocksdb::{DBIteratorWithThreadMode, Direction, IteratorMode, OptimisticTransactionDB};
 use std::collections::Bound;
-use std::hash::RandomState;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct RocksStorage {
     pub inner: Arc<OptimisticTransactionDB>,
-    pub(crate) meta_cache: Arc<StatisticsMetaCache>,
-    pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
 }
 
 impl RocksStorage {
@@ -26,13 +21,9 @@ impl RocksStorage {
         opts.create_if_missing(true);
 
         let storage = OptimisticTransactionDB::open(&opts, path.into())?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
 
         Ok(RocksStorage {
             inner: Arc::new(storage),
-            meta_cache,
-            table_cache,
         })
     }
 }
@@ -45,16 +36,12 @@ impl Storage for RocksStorage {
     fn transaction(&self) -> Result<Self::TransactionType<'_>, DatabaseError> {
         Ok(RocksTransaction {
             tx: self.inner.transaction(),
-            meta_cache: self.meta_cache.clone(),
-            table_cache: self.table_cache.clone(),
         })
     }
 }
 
 pub struct RocksTransaction<'db> {
     tx: rocksdb::Transaction<'db, OptimisticTransactionDB>,
-    pub(crate) meta_cache: Arc<StatisticsMetaCache>,
-    pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
 }
 
 impl<'txn> Transaction for RocksTransaction<'txn> {
@@ -103,14 +90,6 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
         })
     }
 
-    fn table_cache(&self) -> &ShardingLruCache<String, TableCatalog> {
-        self.table_cache.as_ref()
-    }
-
-    fn meta_cache(&self) -> &StatisticsMetaCache {
-        self.meta_cache.as_ref()
-    }
-
     fn commit(self) -> Result<(), DatabaseError> {
         self.tx.commit()?;
         Ok(())
@@ -127,18 +106,20 @@ impl InnerIter for RocksIter<'_, '_> {
     fn try_next(&mut self) -> Result<Option<(Bytes, Bytes)>, DatabaseError> {
         for result in self.iter.by_ref() {
             let (key, value) = result?;
-            let lower_bound_check = match &self.lower {
-                Bound::Included(ref lower) => key.as_ref() >= lower.as_slice(),
-                Bound::Excluded(ref lower) => key.as_ref() > lower.as_slice(),
-                Bound::Unbounded => true,
-            };
             let upper_bound_check = match &self.upper {
                 Bound::Included(ref upper) => key.as_ref() <= upper.as_slice(),
                 Bound::Excluded(ref upper) => key.as_ref() < upper.as_slice(),
                 Bound::Unbounded => true,
             };
-
-            if lower_bound_check && upper_bound_check {
+            if !upper_bound_check {
+                break;
+            }
+            let lower_bound_check = match &self.lower {
+                Bound::Included(ref lower) => key.as_ref() >= lower.as_slice(),
+                Bound::Excluded(ref lower) => key.as_ref() > lower.as_slice(),
+                Bound::Unbounded => true,
+            };
+            if lower_bound_check {
                 return Ok(Some((Bytes::from(key), Bytes::from(value))));
             }
         }
@@ -160,16 +141,19 @@ mod test {
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
+    use crate::utils::lru::ShardingLruCache;
     use itertools::Itertools;
     use std::collections::{Bound, VecDeque};
+    use std::hash::RandomState;
     use std::sync::Arc;
     use tempfile::TempDir;
 
     #[test]
-    fn test_in_kipdb_storage_works_with_data() -> Result<(), DatabaseError> {
+    fn test_in_rocksdb_storage_works_with_data() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let mut transaction = storage.transaction()?;
+        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
         let columns = Arc::new(vec![
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
@@ -187,9 +171,14 @@ mod test {
             .iter()
             .map(|col_ref| ColumnCatalog::clone(&col_ref))
             .collect_vec();
-        let _ = transaction.create_table(Arc::new("test".to_string()), source_columns, false)?;
+        let _ = transaction.create_table(
+            &table_cache,
+            Arc::new("test".to_string()),
+            source_columns,
+            false,
+        )?;
 
-        let table_catalog = transaction.table(Arc::new("test".to_string()));
+        let table_catalog = transaction.table(&table_cache, Arc::new("test".to_string()));
         assert!(table_catalog.is_some());
         assert!(table_catalog
             .unwrap()
@@ -222,6 +211,7 @@ mod test {
         )?;
 
         let mut iter = transaction.read(
+            &table_cache,
             Arc::new("test".to_string()),
             (Some(1), Some(1)),
             vec![(0, columns[0].clone())],
@@ -249,7 +239,10 @@ mod test {
         let transaction = fnck_sql.storage.transaction()?;
 
         let table_name = Arc::new("t1".to_string());
-        let table = transaction.table(table_name.clone()).unwrap().clone();
+        let table = transaction
+            .table(&fnck_sql.table_cache, table_name.clone())
+            .unwrap()
+            .clone();
         let tuple_ids = vec![
             Arc::new(DataValue::Int32(Some(0))),
             Arc::new(DataValue::Int32(Some(2))),
@@ -304,12 +297,13 @@ mod test {
         let transaction = fnck_sql.storage.transaction().unwrap();
 
         let table = transaction
-            .table(Arc::new("t1".to_string()))
+            .table(&fnck_sql.table_cache, Arc::new("t1".to_string()))
             .unwrap()
             .clone();
         let columns = table.columns().cloned().enumerate().collect_vec();
         let mut iter = transaction
             .read_by_index(
+                &fnck_sql.table_cache,
                 Arc::new("t1".to_string()),
                 (Some(0), Some(1)),
                 columns,

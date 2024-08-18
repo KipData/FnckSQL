@@ -34,7 +34,7 @@ use crate::execution::dql::values::Values;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::planner::LogicalPlan;
-use crate::storage::Transaction;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
 use crate::types::index::IndexInfo;
 use crate::types::tuple::Tuple;
 use std::ops::{Coroutine, CoroutineState};
@@ -44,14 +44,26 @@ pub type Executor<'a> =
     Box<dyn Coroutine<Yield = Result<Tuple, DatabaseError>, Return = ()> + 'a + Unpin>;
 
 pub trait ReadExecutor<'a, T: Transaction + 'a> {
-    fn execute(self, transaction: &'a T) -> Executor<'a>;
+    fn execute(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a T,
+    ) -> Executor<'a>;
 }
 
 pub trait WriteExecutor<'a, T: Transaction + 'a> {
-    fn execute_mut(self, transaction: &'a mut T) -> Executor<'a>;
+    fn execute_mut(
+        self,
+        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        transaction: &'a mut T,
+    ) -> Executor<'a>;
 }
 
-pub fn build_read<'a, T: Transaction + 'a>(plan: LogicalPlan, transaction: &'a T) -> Executor<'a> {
+pub fn build_read<'a, T: Transaction + 'a>(
+    plan: LogicalPlan,
+    cache: (&'a TableCache, &'a StatisticsMetaCache),
+    transaction: &'a T,
+) -> Executor<'a> {
     let LogicalPlan {
         operator,
         mut childrens,
@@ -59,20 +71,20 @@ pub fn build_read<'a, T: Transaction + 'a>(plan: LogicalPlan, transaction: &'a T
     } = plan;
 
     match operator {
-        Operator::Dummy => Dummy {}.execute(transaction),
+        Operator::Dummy => Dummy {}.execute(cache, transaction),
         Operator::Aggregate(op) => {
             let input = childrens.pop().unwrap();
 
             if op.groupby_exprs.is_empty() {
-                SimpleAggExecutor::from((op, input)).execute(transaction)
+                SimpleAggExecutor::from((op, input)).execute(cache, transaction)
             } else {
-                HashAggExecutor::from((op, input)).execute(transaction)
+                HashAggExecutor::from((op, input)).execute(cache, transaction)
             }
         }
         Operator::Filter(op) => {
             let input = childrens.pop().unwrap();
 
-            Filter::from((op, input)).execute(transaction)
+            Filter::from((op, input)).execute(cache, transaction)
         }
         Operator::Join(op) => {
             let right_input = childrens.pop().unwrap();
@@ -82,15 +94,17 @@ pub fn build_read<'a, T: Transaction + 'a>(plan: LogicalPlan, transaction: &'a T
                 JoinCondition::On { on, .. }
                     if !on.is_empty() && plan.physical_option == Some(PhysicalOption::HashJoin) =>
                 {
-                    HashJoin::from((op, left_input, right_input)).execute(transaction)
+                    HashJoin::from((op, left_input, right_input)).execute(cache, transaction)
                 }
-                _ => NestedLoopJoin::from((op, left_input, right_input)).execute(transaction),
+                _ => {
+                    NestedLoopJoin::from((op, left_input, right_input)).execute(cache, transaction)
+                }
             }
         }
         Operator::Project(op) => {
             let input = childrens.pop().unwrap();
 
-            Projection::from((op, input)).execute(transaction)
+            Projection::from((op, input)).execute(cache, transaction)
         }
         Operator::Scan(op) => {
             if let Some(PhysicalOption::IndexScan(IndexInfo {
@@ -98,34 +112,34 @@ pub fn build_read<'a, T: Transaction + 'a>(plan: LogicalPlan, transaction: &'a T
                 range: Some(range),
             })) = plan.physical_option
             {
-                IndexScan::from((op, meta, range)).execute(transaction)
+                IndexScan::from((op, meta, range)).execute(cache, transaction)
             } else {
-                SeqScan::from(op).execute(transaction)
+                SeqScan::from(op).execute(cache, transaction)
             }
         }
         Operator::Sort(op) => {
             let input = childrens.pop().unwrap();
 
-            Sort::from((op, input)).execute(transaction)
+            Sort::from((op, input)).execute(cache, transaction)
         }
         Operator::Limit(op) => {
             let input = childrens.pop().unwrap();
 
-            Limit::from((op, input)).execute(transaction)
+            Limit::from((op, input)).execute(cache, transaction)
         }
-        Operator::Values(op) => Values::from(op).execute(transaction),
-        Operator::Show => ShowTables.execute(transaction),
+        Operator::Values(op) => Values::from(op).execute(cache, transaction),
+        Operator::Show => ShowTables.execute(cache, transaction),
         Operator::Explain => {
             let input = childrens.pop().unwrap();
 
-            Explain::from(input).execute(transaction)
+            Explain::from(input).execute(cache, transaction)
         }
-        Operator::Describe(op) => Describe::from(op).execute(transaction),
+        Operator::Describe(op) => Describe::from(op).execute(cache, transaction),
         Operator::Union(_) => {
             let right_input = childrens.pop().unwrap();
             let left_input = childrens.pop().unwrap();
 
-            Union::from((left_input, right_input)).execute(transaction)
+            Union::from((left_input, right_input)).execute(cache, transaction)
         }
         _ => unreachable!(),
     }
@@ -133,6 +147,7 @@ pub fn build_read<'a, T: Transaction + 'a>(plan: LogicalPlan, transaction: &'a T
 
 pub fn build_write<'a, T: Transaction + 'a>(
     plan: LogicalPlan,
+    cache: (&'a TableCache, &'a StatisticsMetaCache),
     transaction: &'a mut T,
 ) -> Executor<'a> {
     let LogicalPlan {
@@ -146,36 +161,36 @@ pub fn build_write<'a, T: Transaction + 'a>(
         Operator::Insert(op) => {
             let input = childrens.pop().unwrap();
 
-            Insert::from((op, input)).execute_mut(transaction)
+            Insert::from((op, input)).execute_mut(cache, transaction)
         }
         Operator::Update(op) => {
             let values = childrens.pop().unwrap();
             let input = childrens.pop().unwrap();
 
-            Update::from((op, input, values)).execute_mut(transaction)
+            Update::from((op, input, values)).execute_mut(cache, transaction)
         }
         Operator::Delete(op) => {
             let input = childrens.pop().unwrap();
 
-            Delete::from((op, input)).execute_mut(transaction)
+            Delete::from((op, input)).execute_mut(cache, transaction)
         }
         Operator::AddColumn(op) => {
             let input = childrens.pop().unwrap();
-            AddColumn::from((op, input)).execute_mut(transaction)
+            AddColumn::from((op, input)).execute_mut(cache, transaction)
         }
         Operator::DropColumn(op) => {
             let input = childrens.pop().unwrap();
-            DropColumn::from((op, input)).execute_mut(transaction)
+            DropColumn::from((op, input)).execute_mut(cache, transaction)
         }
-        Operator::CreateTable(op) => CreateTable::from(op).execute_mut(transaction),
+        Operator::CreateTable(op) => CreateTable::from(op).execute_mut(cache, transaction),
         Operator::CreateIndex(op) => {
             let input = childrens.pop().unwrap();
 
-            CreateIndex::from((op, input)).execute_mut(transaction)
+            CreateIndex::from((op, input)).execute_mut(cache, transaction)
         }
-        Operator::DropTable(op) => DropTable::from(op).execute_mut(transaction),
-        Operator::Truncate(op) => Truncate::from(op).execute_mut(transaction),
-        Operator::CopyFromFile(op) => CopyFromFile::from(op).execute_mut(transaction),
+        Operator::DropTable(op) => DropTable::from(op).execute_mut(cache, transaction),
+        Operator::Truncate(op) => Truncate::from(op).execute_mut(cache, transaction),
+        Operator::CopyFromFile(op) => CopyFromFile::from(op).execute_mut(cache, transaction),
         #[warn(unused_assignments)]
         Operator::CopyToFile(_op) => {
             todo!()
@@ -183,7 +198,7 @@ pub fn build_write<'a, T: Transaction + 'a>(
         Operator::Analyze(op) => {
             let input = childrens.pop().unwrap();
 
-            Analyze::from((op, input)).execute_mut(transaction)
+            Analyze::from((op, input)).execute_mut(cache, transaction)
         }
         operator => build_read(
             LogicalPlan {
@@ -192,6 +207,7 @@ pub fn build_write<'a, T: Transaction + 'a>(
                 physical_option,
                 _output_schema_ref,
             },
+            cache,
             transaction,
         ),
     }
