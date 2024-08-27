@@ -144,8 +144,8 @@ table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: Logi
         }))) as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
 }));
 let fnck_sql = DataBaseBuilder::path("./data")
-.register_table_function(TestFunction::new())
-.build()?;
+  .register_table_function(MyTableFunction::new())
+  .build()?;
 ```
 - Optimizer
   - RBO
