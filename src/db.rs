@@ -303,20 +303,12 @@ impl<S: Storage> DBTransaction<'_, S> {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
+    use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::{DataBaseBuilder, DatabaseError};
-    use crate::expression::function::scala::{FuncMonotonicity, ScalarFunctionImpl};
-    use crate::expression::function::FunctionSummary;
-    use crate::expression::ScalarExpression;
-    use crate::expression::{BinaryOperator, UnaryOperator};
-    use crate::scala_function;
     use crate::storage::{Storage, TableCache, Transaction};
-    use crate::types::evaluator::EvaluatorFactory;
-    use crate::types::tuple::{create_table, Tuple};
-    use crate::types::value::{DataValue, ValueRef};
+    use crate::types::tuple::create_table;
+    use crate::types::value::DataValue;
     use crate::types::LogicalType;
-    use serde::Deserialize;
-    use serde::Serialize;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -356,25 +348,12 @@ mod test {
         Ok(())
     }
 
-    scala_function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: ValueRef, v2: ValueRef| {
-        let plus_binary_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
-        let value = plus_binary_evaluator.binary_eval(&v1, &v2);
-
-        let plus_unary_evaluator = EvaluatorFactory::unary_create(LogicalType::Integer, UnaryOperator::Minus)?;
-        Ok(plus_unary_evaluator.unary_eval(&value))
-    }));
-
+    /// use [CurrentDate](crate::function::current_date::CurrentDate) on this case
     #[test]
     fn test_udf() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let fnck_sql = DataBaseBuilder::path(temp_dir.path())
-            .register_scala_function(TestFunction::new())
-            .build()?;
-        let _ = fnck_sql
-            .run("CREATE TABLE test (id int primary key, c1 int, c2 int default test(1, 2));")?;
-        let _ = fnck_sql
-            .run("INSERT INTO test VALUES (1, 2, 2), (0, 1, 1), (2, 1, 1), (3, 3, default);")?;
-        let (schema, tuples) = fnck_sql.run("select test(c1, 1), c2 from test")?;
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
+        let (schema, tuples) = fnck_sql.run("select current_date()")?;
         println!("{}", create_table(&schema, &tuples));
 
         Ok(())

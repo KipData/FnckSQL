@@ -6,6 +6,6 @@ pub mod table;
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 pub struct FunctionSummary {
-    pub(crate) name: String,
-    pub(crate) arg_types: Vec<LogicalType>,
+    pub name: String,
+    pub arg_types: Vec<LogicalType>,
 }

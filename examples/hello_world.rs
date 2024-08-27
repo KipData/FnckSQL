@@ -1,9 +1,7 @@
 use fnck_sql::db::DataBaseBuilder;
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::implement_from_tuple;
-use fnck_sql::types::tuple::{SchemaRef, Tuple};
 use fnck_sql::types::value::DataValue;
-use fnck_sql::types::LogicalType;
 use itertools::Itertools;
 
 #[derive(Default, Debug, PartialEq)]

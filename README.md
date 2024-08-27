@@ -91,7 +91,7 @@ kould23333/fncksql:latest
 ~~~
 
 ### Features
-- ORM Mapping: `features = ["marcos"]`
+- ORM Mapping: `features = ["macros"]`
 ```rust
 #[derive(Default, Debug, PartialEq)]
 struct MyStruct {
@@ -114,7 +114,7 @@ implement_from_tuple!(
     )
 );
 ```
-- User-Defined Function: `features = ["marcos"]`
+- User-Defined Function: `features = ["macros"]`
 ```rust
 function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
     let plus_binary_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
