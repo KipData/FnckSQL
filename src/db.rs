@@ -201,22 +201,21 @@ impl<S: Storage> Database<S> {
                 ],
             )
             .batch(
-                "Combine Operators".to_string(),
-                HepBatchStrategy::fix_point_topdown(10),
-                vec![
-                    NormalizationRuleImpl::CollapseProject,
-                    NormalizationRuleImpl::CollapseGroupByAgg,
-                    NormalizationRuleImpl::CombineFilter,
-                ],
-            )
-            .batch(
                 "Limit Pushdown".to_string(),
                 HepBatchStrategy::fix_point_topdown(10),
                 vec![
                     NormalizationRuleImpl::LimitProjectTranspose,
                     NormalizationRuleImpl::PushLimitThroughJoin,
                     NormalizationRuleImpl::PushLimitIntoTableScan,
-                    NormalizationRuleImpl::EliminateLimits,
+                ],
+            )
+            .batch(
+                "Combine Operators".to_string(),
+                HepBatchStrategy::fix_point_topdown(10),
+                vec![
+                    NormalizationRuleImpl::CollapseProject,
+                    NormalizationRuleImpl::CollapseGroupByAgg,
+                    NormalizationRuleImpl::CombineFilter,
                 ],
             )
             .batch(
@@ -364,7 +363,9 @@ mod test {
     fn test_udtf() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
-        let (schema, tuples) = fnck_sql.run("select number from table(numbers(10))")?;
+        let (schema, tuples) = fnck_sql.run(
+            "SELECT * FROM (select * from table(numbers(10)) a ORDER BY number LIMIT 5) OFFSET 3",
+        )?;
         println!("{}", create_table(&schema, &tuples));
 
         Ok(())

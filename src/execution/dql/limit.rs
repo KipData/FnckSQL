@@ -42,7 +42,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Limit {
                 }
 
                 let offset_val = offset.unwrap_or(0);
-                let offset_limit = offset_val + limit.unwrap_or(1) - 1;
+                let offset_limit = offset_val.saturating_add(limit.unwrap_or(usize::MAX)) - 1;
 
                 let mut i = 0;
                 let mut coroutine = build_read(input, cache, transaction);

@@ -4,11 +4,10 @@ use crate::optimizer::core::pattern::PatternChildrenPredicate;
 use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::planner::operator::join::JoinType;
-use crate::planner::operator::limit::LimitOperator;
 use crate::planner::operator::Operator;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use std::cmp;
+
 lazy_static! {
     static ref LIMIT_PROJECT_TRANSPOSE_RULE: Pattern = {
         Pattern {
@@ -63,51 +62,6 @@ impl NormalizationRule for LimitProjectTranspose {
         }
 
         Ok(())
-    }
-}
-
-/// Combines two adjacent Limit operators into one, merging the expressions into one single
-/// expression.
-pub struct EliminateLimits;
-
-impl MatchPattern for EliminateLimits {
-    fn pattern(&self) -> &Pattern {
-        &ELIMINATE_LIMITS_RULE
-    }
-}
-
-impl NormalizationRule for EliminateLimits {
-    fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
-        if let Operator::Limit(op) = graph.operator(node_id) {
-            if let Some(child_id) = graph.eldest_child_at(node_id) {
-                if let Operator::Limit(child_op) = graph.operator(child_id) {
-                    let offset = Self::binary_options(op.offset, child_op.offset, |a, b| a + b);
-                    let limit = Self::binary_options(op.limit, child_op.limit, cmp::min);
-
-                    let new_limit_op = LimitOperator { offset, limit };
-
-                    graph.remove_node(child_id, false);
-                    graph.replace_node(node_id, Operator::Limit(new_limit_op));
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl EliminateLimits {
-    fn binary_options<F: Fn(usize, usize) -> usize>(
-        a: Option<usize>,
-        b: Option<usize>,
-        _fn: F,
-    ) -> Option<usize> {
-        match (a, b) {
-            (Some(a), Some(b)) => Some(_fn(a, b)),
-            (Some(a), None) => Some(a),
-            (None, Some(b)) => Some(b),
-            (None, None) => None,
-        }
     }
 }
 
@@ -190,7 +144,6 @@ mod tests {
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
-    use crate::planner::operator::limit::LimitOperator;
     use crate::planner::operator::Operator;
     use crate::storage::rocksdb::RocksTransaction;
 
@@ -214,39 +167,6 @@ mod tests {
         if let Operator::Limit(_) = &best_plan.childrens[0].operator {
         } else {
             unreachable!("Should be a limit operator")
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_eliminate_limits() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select c1, c2 from t1 limit 1 offset 1")?;
-
-        let mut optimizer = HepOptimizer::new(plan.clone()).batch(
-            "test_eliminate_limits".to_string(),
-            HepBatchStrategy::once_topdown(),
-            vec![NormalizationRuleImpl::EliminateLimits],
-        );
-
-        let new_limit_op = LimitOperator {
-            offset: Some(2),
-            limit: Some(1),
-        };
-
-        optimizer.graph.add_root(Operator::Limit(new_limit_op));
-
-        let best_plan = optimizer.find_best::<RocksTransaction>(None)?;
-
-        if let Operator::Limit(op) = &best_plan.operator {
-            assert_eq!(op.limit, Some(1));
-            assert_eq!(op.offset, Some(3));
-        } else {
-            unreachable!("Should be a project operator")
-        }
-
-        if let Operator::Limit(_) = &best_plan.childrens[0].operator {
-            unreachable!("Should not be a limit operator")
         }
 
         Ok(())
