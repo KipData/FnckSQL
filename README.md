@@ -116,7 +116,7 @@ implement_from_tuple!(
 ```
 - User-Defined Function: `features = ["macros"]`
 ```rust
-function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+scala_function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
     let plus_binary_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
     let value = plus_binary_evaluator.binary_eval(&v1, &v2);
 
@@ -125,8 +125,27 @@ function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> Logi
 });
 
 let fnck_sql = DataBaseBuilder::path("./data")
-    .register_function(TestFunction::new())
+    .register_scala_function(TestFunction::new())
     .build()?;
+```
+- User-Defined Table Function: `features = ["macros"]`
+```rust
+table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: ValueRef| {
+    let num = v1.i32().unwrap();
+
+    Ok(Box::new((0..num)
+        .into_iter()
+        .map(|i| Ok(Tuple {
+            id: None,
+            values: vec![
+                Arc::new(DataValue::Int32(Some(i))),
+                Arc::new(DataValue::Int32(Some(i))),
+            ]
+        }))) as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
+}));
+let fnck_sql = DataBaseBuilder::path("./data")
+.register_table_function(TestFunction::new())
+.build()?;
 ```
 - Optimizer
   - RBO
