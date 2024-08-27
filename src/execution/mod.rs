@@ -22,6 +22,7 @@ use crate::execution::dql::describe::Describe;
 use crate::execution::dql::dummy::Dummy;
 use crate::execution::dql::explain::Explain;
 use crate::execution::dql::filter::Filter;
+use crate::execution::dql::function_scan::FunctionScan;
 use crate::execution::dql::index_scan::IndexScan;
 use crate::execution::dql::join::hash_join::HashJoin;
 use crate::execution::dql::limit::Limit;
@@ -106,7 +107,7 @@ pub fn build_read<'a, T: Transaction + 'a>(
 
             Projection::from((op, input)).execute(cache, transaction)
         }
-        Operator::Scan(op) => {
+        Operator::TableScan(op) => {
             if let Some(PhysicalOption::IndexScan(IndexInfo {
                 meta,
                 range: Some(range),
@@ -117,6 +118,7 @@ pub fn build_read<'a, T: Transaction + 'a>(
                 SeqScan::from(op).execute(cache, transaction)
             }
         }
+        Operator::FunctionScan(op) => FunctionScan::from(op).execute(cache, transaction),
         Operator::Sort(op) => {
             let input = childrens.pop().unwrap();
 

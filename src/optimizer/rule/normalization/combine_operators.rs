@@ -187,7 +187,7 @@ mod tests {
             unreachable!("Should be a project operator")
         }
 
-        if let Operator::Scan(_) = &best_plan.childrens[0].operator {
+        if let Operator::TableScan(_) = &best_plan.childrens[0].operator {
             assert_eq!(best_plan.childrens[0].childrens.len(), 0)
         } else {
             unreachable!("Should be a scan operator")

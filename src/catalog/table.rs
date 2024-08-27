@@ -64,7 +64,7 @@ impl TableCatalog {
         self.indexes.iter()
     }
 
-    pub(crate) fn schema_ref(&self) -> &SchemaRef {
+    pub fn schema_ref(&self) -> &SchemaRef {
         &self.schema_ref
     }
 
@@ -139,7 +139,7 @@ impl TableCatalog {
         Ok(self.indexes.last().unwrap())
     }
 
-    pub(crate) fn new(
+    pub fn new(
         name: TableName,
         columns: Vec<ColumnCatalog>,
     ) -> Result<TableCatalog, DatabaseError> {

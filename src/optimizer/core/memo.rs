@@ -115,12 +115,14 @@ mod tests {
         database.run("analyze table t1")?;
 
         let transaction = database.storage.transaction()?;
-        let functions = Default::default();
+        let scala_functions = Default::default();
+        let table_functions = Default::default();
         let mut binder = Binder::new(
             BinderContext::new(
                 &database.table_cache,
                 &transaction,
-                &functions,
+                &scala_functions,
+                &table_functions,
                 Arc::new(AtomicUsize::new(0)),
             ),
             None,

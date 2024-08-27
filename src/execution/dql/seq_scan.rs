@@ -1,14 +1,14 @@
 use crate::execution::{Executor, ReadExecutor};
-use crate::planner::operator::scan::ScanOperator;
+use crate::planner::operator::table_scan::TableScanOperator;
 use crate::storage::{Iter, StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 
 pub(crate) struct SeqScan {
-    op: ScanOperator,
+    op: TableScanOperator,
 }
 
-impl From<ScanOperator> for SeqScan {
-    fn from(op: ScanOperator) -> Self {
+impl From<TableScanOperator> for SeqScan {
+    fn from(op: TableScanOperator) -> Self {
         SeqScan { op }
     }
 }
@@ -22,7 +22,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SeqScan {
         Box::new(
             #[coroutine]
             move || {
-                let ScanOperator {
+                let TableScanOperator {
                     table_name,
                     columns,
                     limit,

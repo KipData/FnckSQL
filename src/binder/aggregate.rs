@@ -4,7 +4,7 @@ use sqlparser::ast::{Expr, OrderByExpr};
 use std::collections::HashSet;
 
 use crate::errors::DatabaseError;
-use crate::expression::function::ScalarFunction;
+use crate::expression::function::scala::ScalarFunction;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::{
@@ -153,7 +153,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef { .. } => (),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Tuple(args)
-            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::ScalaFunction(ScalarFunction { args, .. })
             | ScalarExpression::Coalesce { exprs: args, .. } => {
                 for expr in args {
                     self.visit_column_agg_expr(expr)?;
@@ -199,6 +199,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                     self.visit_column_agg_expr(expr)?;
                 }
             }
+            ScalarExpression::TableFunction(_) => unreachable!(),
         }
 
         Ok(())
@@ -389,7 +390,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             ScalarExpression::Constant(_) => Ok(()),
             ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
             ScalarExpression::Tuple(args)
-            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::ScalaFunction(ScalarFunction { args, .. })
             | ScalarExpression::Coalesce { exprs: args, .. } => {
                 for expr in args {
                     self.validate_having_orderby(expr)?;
@@ -442,6 +443,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
 
                 Ok(())
             }
+            ScalarExpression::TableFunction(_) => unreachable!(),
         }
     }
 }

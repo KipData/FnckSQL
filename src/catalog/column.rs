@@ -27,11 +27,7 @@ pub struct ColumnSummary {
 }
 
 impl ColumnCatalog {
-    pub(crate) fn new(
-        column_name: String,
-        nullable: bool,
-        column_desc: ColumnDesc,
-    ) -> ColumnCatalog {
+    pub fn new(column_name: String, nullable: bool, column_desc: ColumnDesc) -> ColumnCatalog {
         ColumnCatalog {
             summary: ColumnSummary {
                 id: None,
@@ -87,6 +83,10 @@ impl ColumnCatalog {
         self.summary.name = name;
     }
 
+    pub fn set_id(&mut self, id: ColumnId) {
+        self.summary.id = Some(id);
+    }
+
     pub fn set_table_name(&mut self, table_name: TableName) {
         self.summary.table_name = Some(table_name);
     }
@@ -119,7 +119,7 @@ pub struct ColumnDesc {
 }
 
 impl ColumnDesc {
-    pub(crate) const fn new(
+    pub const fn new(
         column_datatype: LogicalType,
         is_primary: bool,
         is_unique: bool,

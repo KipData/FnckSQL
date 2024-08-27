@@ -29,13 +29,13 @@ lazy_static! {
         Pattern {
             predicate: |op| matches!(op, Operator::Filter(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Scan(_)),
+                predicate: |op| matches!(op, Operator::TableScan(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
     };
 
-    // TODO
+    // TODO: 感觉是只是处理projection中的alias反向替换为filter中表达式
     static ref PUSH_PREDICATE_THROUGH_NON_JOIN: Pattern = {
         Pattern {
             predicate: |op| matches!(op, Operator::Filter(_)),
@@ -218,7 +218,7 @@ impl NormalizationRule for PushPredicateIntoScan {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Filter(op) = graph.operator(node_id).clone() {
             if let Some(child_id) = graph.eldest_child_at(node_id) {
-                if let Operator::Scan(child_op) = graph.operator_mut(child_id) {
+                if let Operator::TableScan(child_op) = graph.operator_mut(child_id) {
                     //FIXME: now only support `unique` and `primary key`
                     for IndexInfo { meta, range } in &mut child_op.index_infos {
                         if range.is_some() {
@@ -297,7 +297,7 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        if let Operator::Scan(op) = &best_plan.childrens[0].childrens[0].operator {
+        if let Operator::TableScan(op) = &best_plan.childrens[0].childrens[0].operator {
             let mock_range = Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
                 max: Bound::Unbounded,

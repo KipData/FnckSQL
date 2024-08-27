@@ -13,7 +13,8 @@ use sqlparser::ast::{
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
 use crate::errors::DatabaseError;
-use crate::expression::function::ScalarFunction;
+use crate::expression::function::scala::ScalarFunction;
+use crate::expression::function::table::TableFunction;
 use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory, UnaryEvaluatorBox};
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
@@ -101,7 +102,8 @@ pub enum ScalarExpression {
         pos: usize,
     },
     Tuple(Vec<ScalarExpression>),
-    Function(ScalarFunction),
+    ScalaFunction(ScalarFunction),
+    TableFunction(TableFunction),
     If {
         condition: Box<ScalarExpression>,
         left_expr: Box<ScalarExpression>,
@@ -246,7 +248,12 @@ impl ScalarExpression {
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)
             | ScalarExpression::Reference { .. } => (),
-            ScalarExpression::Function(function) => {
+            ScalarExpression::ScalaFunction(function) => {
+                for expr in function.args.iter_mut() {
+                    expr.try_reference(output_exprs);
+                }
+            }
+            ScalarExpression::TableFunction(function) => {
                 for expr in function.args.iter_mut() {
                     expr.try_reference(output_exprs);
                 }
@@ -409,7 +416,12 @@ impl ScalarExpression {
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)
             | ScalarExpression::Reference { .. } => (),
-            ScalarExpression::Function(function) => {
+            ScalarExpression::ScalaFunction(function) => {
+                for expr in function.args.iter_mut() {
+                    expr.bind_evaluator()?;
+                }
+            }
+            ScalarExpression::TableFunction(function) => {
                 for expr in function.args.iter_mut() {
                     expr.bind_evaluator()?;
                 }
@@ -471,10 +483,11 @@ impl ScalarExpression {
                 ..
             } => left_expr.has_count_star() || right_expr.has_count_star(),
             ScalarExpression::AggCall { args, .. }
-            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::ScalaFunction(ScalarFunction { args, .. })
             | ScalarExpression::Coalesce { exprs: args, .. } => {
                 args.iter().any(Self::has_count_star)
             }
+            ScalarExpression::TableFunction(_) => unreachable!(),
             ScalarExpression::Constant(_) | ScalarExpression::ColumnRef(_) => false,
             ScalarExpression::In { expr, args, .. } => {
                 expr.has_count_star() || args.iter().any(Self::has_count_star)
@@ -598,9 +611,9 @@ impl ScalarExpression {
             ScalarExpression::Alias { expr, .. } | ScalarExpression::Reference { expr, .. } => {
                 expr.return_type()
             }
-            ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Empty | ScalarExpression::TableFunction(_) => unreachable!(),
             ScalarExpression::Tuple(_) => LogicalType::Tuple,
-            ScalarExpression::Function(ScalarFunction { inner, .. }) => *inner.return_type(),
+            ScalarExpression::ScalaFunction(ScalarFunction { inner, .. }) => *inner.return_type(),
         }
     }
 
@@ -635,7 +648,8 @@ impl ScalarExpression {
                     columns_collect(right_expr, vec, only_column_ref);
                 }
                 ScalarExpression::AggCall { args, .. }
-                | ScalarExpression::Function(ScalarFunction { args, .. })
+                | ScalarExpression::ScalaFunction(ScalarFunction { args, .. })
+                | ScalarExpression::TableFunction(TableFunction { args, .. })
                 | ScalarExpression::Tuple(args)
                 | ScalarExpression::Coalesce { exprs: args, .. } => {
                     for expr in args {
@@ -785,9 +799,11 @@ impl ScalarExpression {
                 expr.has_agg_call()
                     || trim_what_expr.as_ref().map(|expr| expr.has_agg_call()) == Some(true)
             }
-            ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::Reference { .. }
+            | ScalarExpression::Empty
+            | ScalarExpression::TableFunction(_) => unreachable!(),
             ScalarExpression::Tuple(args)
-            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::ScalaFunction(ScalarFunction { args, .. })
             | ScalarExpression::Coalesce { exprs: args, .. } => args.iter().any(Self::has_agg_call),
             ScalarExpression::If {
                 condition,
@@ -957,7 +973,11 @@ impl ScalarExpression {
                 let args_str = args.iter().map(|expr| expr.output_name()).join(", ");
                 format!("({})", args_str)
             }
-            ScalarExpression::Function(ScalarFunction { args, inner }) => {
+            ScalarExpression::ScalaFunction(ScalarFunction { args, inner }) => {
+                let args_str = args.iter().map(|expr| expr.output_name()).join(", ");
+                format!("{}({})", inner.summary().name, args_str)
+            }
+            ScalarExpression::TableFunction(TableFunction { args, inner }) => {
                 let args_str = args.iter().map(|expr| expr.output_name()).join(", ");
                 format!("{}({})", inner.summary().name, args_str)
             }

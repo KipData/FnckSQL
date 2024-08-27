@@ -3,6 +3,7 @@ pub(crate) mod describe;
 pub(crate) mod dummy;
 pub(crate) mod explain;
 pub(crate) mod filter;
+pub(crate) mod function_scan;
 pub(crate) mod index_scan;
 pub(crate) mod join;
 pub(crate) mod limit;

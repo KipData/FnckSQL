@@ -84,8 +84,13 @@ impl ExpressionRemapper {
                     sort_field.expr.try_reference(output_exprs);
                 }
             }
+            Operator::FunctionScan(op) => {
+                for expr in op.table_function.args.iter_mut() {
+                    expr.try_reference(output_exprs);
+                }
+            }
             Operator::Dummy
-            | Operator::Scan(_)
+            | Operator::TableScan(_)
             | Operator::Limit(_)
             | Operator::Values(_)
             | Operator::Show
@@ -180,8 +185,13 @@ impl EvaluatorBind {
                     sort_field.expr.bind_evaluator()?;
                 }
             }
+            Operator::FunctionScan(op) => {
+                for expr in op.table_function.args.iter_mut() {
+                    expr.bind_evaluator()?;
+                }
+            }
             Operator::Dummy
-            | Operator::Scan(_)
+            | Operator::TableScan(_)
             | Operator::Limit(_)
             | Operator::Values(_)
             | Operator::Show

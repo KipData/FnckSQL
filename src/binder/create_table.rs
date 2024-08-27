@@ -158,14 +158,16 @@ mod tests {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let functions = Default::default();
+        let scala_functions = Default::default();
+        let table_functions = Default::default();
 
         let sql = "create table t1 (id int primary key, name varchar(10) null)";
         let mut binder = Binder::new(
             BinderContext::new(
                 &table_cache,
                 &transaction,
-                &functions,
+                &scala_functions,
+                &table_functions,
                 Arc::new(AtomicUsize::new(0)),
             ),
             None,

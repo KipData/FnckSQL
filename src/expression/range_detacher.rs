@@ -247,13 +247,14 @@ impl<'a> RangeDetacher<'a> {
                 | ScalarExpression::SubString { .. }
                 | ScalarExpression::Position { .. }
                 | ScalarExpression::Trim { .. }
-                | ScalarExpression::Function(_)
+                | ScalarExpression::ScalaFunction(_)
                 | ScalarExpression::If { .. }
                 | ScalarExpression::IfNull { .. }
                 | ScalarExpression::NullIf { .. }
                 | ScalarExpression::Coalesce { .. }
                 | ScalarExpression::CaseWhen { .. } => self.detach(expr),
                 ScalarExpression::Tuple(_)
+                | ScalarExpression::TableFunction(_)
                 | ScalarExpression::Reference { .. }
                 | ScalarExpression::Empty => unreachable!(),
             },
@@ -261,13 +262,15 @@ impl<'a> RangeDetacher<'a> {
             // FIXME: support [RangeDetacher::_detach]
             ScalarExpression::Tuple(_)
             | ScalarExpression::AggCall { .. }
-            | ScalarExpression::Function(_)
+            | ScalarExpression::ScalaFunction(_)
             | ScalarExpression::If { .. }
             | ScalarExpression::IfNull { .. }
             | ScalarExpression::NullIf { .. }
             | ScalarExpression::Coalesce { .. }
             | ScalarExpression::CaseWhen { .. } => None,
-            ScalarExpression::Reference { .. } | ScalarExpression::Empty => unreachable!(),
+            ScalarExpression::TableFunction(_)
+            | ScalarExpression::Reference { .. }
+            | ScalarExpression::Empty => unreachable!(),
         }
     }
 

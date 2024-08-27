@@ -81,4 +81,5 @@ pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
 [workspace]
 members = [
   "tests/sqllogictest",
+  "tests/macros-test"
 ]

@@ -11,7 +11,7 @@ use lazy_static::lazy_static;
 lazy_static! {
     static ref SCAN_PATTERN: Pattern = {
         Pattern {
-            predicate: |op| matches!(op, Operator::Scan(_)),
+            predicate: |op| matches!(op, Operator::TableScan(_)),
             children: PatternChildrenPredicate::None,
         }
     };
@@ -33,7 +33,7 @@ impl<T: Transaction> ImplementationRule<T> for SeqScanImplementation {
         loader: &StatisticMetaLoader<T>,
         group_expr: &mut GroupExpression,
     ) -> Result<(), DatabaseError> {
-        if let Operator::Scan(scan_op) = op {
+        if let Operator::TableScan(scan_op) = op {
             let cost = scan_op
                 .index_infos
                 .iter()
@@ -74,7 +74,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
         loader: &StatisticMetaLoader<'_, T>,
         group_expr: &mut GroupExpression,
     ) -> Result<(), DatabaseError> {
-        if let Operator::Scan(scan_op) = op {
+        if let Operator::TableScan(scan_op) = op {
             for index_info in scan_op.index_infos.iter() {
                 if index_info.range.is_none() {
                     continue;

@@ -11,7 +11,9 @@ use std::slice;
 use std::sync::Arc;
 
 use super::{lower_ident, Binder, BinderContext, QueryBindStep, SubQueryType};
-use crate::expression::function::{FunctionSummary, ScalarFunction};
+use crate::expression::function::scala::ScalarFunction;
+use crate::expression::function::table::TableFunction;
+use crate::expression::function::FunctionSummary;
 use crate::expression::{AliasType, ScalarExpression};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -219,9 +221,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                     ty,
                 })
             }
-            expr => {
-                todo!("{}", expr)
-            }
+            expr => Err(DatabaseError::UnsupportedStmt(expr.to_string())),
         }
     }
 
@@ -250,12 +250,19 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
         let BinderContext {
             table_cache,
             transaction,
-            functions,
+            scala_functions,
+            table_functions,
             temp_table_id,
             ..
         } = &self.context;
         let mut binder = Binder::new(
-            BinderContext::new(table_cache, *transaction, functions, temp_table_id.clone()),
+            BinderContext::new(
+                table_cache,
+                *transaction,
+                scala_functions,
+                table_functions,
+                temp_table_id.clone(),
+            ),
             Some(self),
         );
         let mut sub_query = binder.bind_query(subquery)?;
@@ -429,6 +436,11 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     }
 
     fn bind_function(&mut self, func: &Function) -> Result<ScalarExpression, DatabaseError> {
+        if !matches!(self.context.step_now(), QueryBindStep::From) {
+            return Err(DatabaseError::UnsupportedStmt(
+                "`TableFunction` cannot bind in non-From step".to_string(),
+            ));
+        }
         let mut args = Vec::with_capacity(func.args.len());
 
         for arg in func.args.iter() {
@@ -586,8 +598,14 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             name: function_name,
             arg_types,
         };
-        if let Some(function) = self.context.functions.get(&summary) {
-            return Ok(ScalarExpression::Function(ScalarFunction {
+        if let Some(function) = self.context.scala_functions.get(&summary) {
+            return Ok(ScalarExpression::ScalaFunction(ScalarFunction {
+                args,
+                inner: function.clone(),
+            }));
+        }
+        if let Some(function) = self.context.table_functions.get(&summary) {
+            return Ok(ScalarExpression::TableFunction(TableFunction {
                 args,
                 inner: function.clone(),
             }));

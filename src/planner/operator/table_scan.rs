@@ -10,18 +10,19 @@ use std::fmt::Formatter;
 use super::Operator;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct ScanOperator {
-    pub table_name: TableName,
-    pub primary_key: ColumnId,
-    pub columns: Vec<(usize, ColumnRef)>,
+pub struct TableScanOperator {
+    pub(crate) table_name: TableName,
+    pub(crate) primary_key: ColumnId,
+    pub(crate) columns: Vec<(usize, ColumnRef)>,
     // Support push down limit.
-    pub limit: Bounds,
+    pub(crate) limit: Bounds,
 
     // Support push down predicate.
     // If pre_where is simple predicate, for example:  a > 1 then can calculate directly when read data.
-    pub index_infos: Vec<IndexInfo>,
+    pub(crate) index_infos: Vec<IndexInfo>,
 }
-impl ScanOperator {
+
+impl TableScanOperator {
     pub fn build(table_name: TableName, table_catalog: &TableCatalog) -> LogicalPlan {
         let mut primary_key_option = None;
         // Fill all Columns in TableCatalog by default
@@ -46,7 +47,7 @@ impl ScanOperator {
             .collect_vec();
 
         LogicalPlan::new(
-            Operator::Scan(ScanOperator {
+            Operator::TableScan(TableScanOperator {
                 index_infos,
                 table_name,
                 primary_key: primary_key_option.unwrap(),
@@ -58,7 +59,7 @@ impl ScanOperator {
     }
 }
 
-impl fmt::Display for ScanOperator {
+impl fmt::Display for TableScanOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let projection_columns = self
             .columns
@@ -67,7 +68,11 @@ impl fmt::Display for ScanOperator {
             .join(", ");
         let (offset, limit) = self.limit;
 
-        write!(f, "Scan {} -> [{}]", self.table_name, projection_columns)?;
+        write!(
+            f,
+            "TableScan {} -> [{}]",
+            self.table_name, projection_columns
+        )?;
         if let Some(limit) = limit {
             write!(f, ", Limit: {}", limit)?;
         }
