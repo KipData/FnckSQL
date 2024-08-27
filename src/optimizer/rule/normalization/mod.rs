@@ -11,7 +11,7 @@ use crate::optimizer::rule::normalization::compilation_in_advance::{
     EvaluatorBind, ExpressionRemapper,
 };
 use crate::optimizer::rule::normalization::pushdown_limit::{
-    EliminateLimits, LimitProjectTranspose, PushLimitIntoScan, PushLimitThroughJoin,
+    LimitProjectTranspose, PushLimitIntoScan, PushLimitThroughJoin,
 };
 use crate::optimizer::rule::normalization::pushdown_predicates::PushPredicateIntoScan;
 use crate::optimizer::rule::normalization::pushdown_predicates::PushPredicateThroughJoin;
@@ -34,7 +34,6 @@ pub enum NormalizationRuleImpl {
     CombineFilter,
     // PushDown limit
     LimitProjectTranspose,
-    EliminateLimits,
     PushLimitThroughJoin,
     PushLimitIntoTableScan,
     // PushDown predicates
@@ -57,7 +56,6 @@ impl MatchPattern for NormalizationRuleImpl {
             NormalizationRuleImpl::CollapseGroupByAgg => CollapseGroupByAgg.pattern(),
             NormalizationRuleImpl::CombineFilter => CombineFilter.pattern(),
             NormalizationRuleImpl::LimitProjectTranspose => LimitProjectTranspose.pattern(),
-            NormalizationRuleImpl::EliminateLimits => EliminateLimits.pattern(),
             NormalizationRuleImpl::PushLimitThroughJoin => PushLimitThroughJoin.pattern(),
             NormalizationRuleImpl::PushLimitIntoTableScan => PushLimitIntoScan.pattern(),
             NormalizationRuleImpl::PushPredicateThroughJoin => PushPredicateThroughJoin.pattern(),
@@ -80,7 +78,6 @@ impl NormalizationRule for NormalizationRuleImpl {
             NormalizationRuleImpl::LimitProjectTranspose => {
                 LimitProjectTranspose.apply(node_id, graph)
             }
-            NormalizationRuleImpl::EliminateLimits => EliminateLimits.apply(node_id, graph),
             NormalizationRuleImpl::PushLimitThroughJoin => {
                 PushLimitThroughJoin.apply(node_id, graph)
             }
