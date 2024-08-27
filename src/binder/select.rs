@@ -9,7 +9,7 @@ use crate::{
             filter::FilterOperator, join::JoinOperator as LJoinOperator, limit::LimitOperator,
             project::ProjectOperator, Operator,
         },
-        operator::{join::JoinType, scan::ScanOperator},
+        operator::{join::JoinType, table_scan::TableScanOperator},
     },
     types::value::DataValue,
 };
@@ -20,6 +20,7 @@ use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
 use crate::execution::dql::join::joins_nullable;
 use crate::expression::{AliasType, BinaryOperator};
+use crate::planner::operator::function_scan::FunctionScanOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
@@ -129,7 +130,9 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
             plan = self.bind_sort(plan, orderby);
         }
 
-        plan = self.bind_project(plan, select_list)?;
+        if !select_list.is_empty() {
+            plan = self.bind_project(plan, select_list)?;
+        }
 
         if let Some(SelectInto {
             name,
@@ -284,6 +287,36 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                 }
                 plan
             }
+            TableFactor::TableFunction { expr, alias } => {
+                if let ScalarExpression::TableFunction(function) = self.bind_expr(expr)? {
+                    let mut table_alias = None;
+                    let table_name = Arc::new(function.summary().name.clone());
+                    let table = function.table();
+                    let mut plan = FunctionScanOperator::build(function);
+
+                    if let Some(TableAlias {
+                        name,
+                        columns: alias_column,
+                    }) = alias
+                    {
+                        table_alias = Some(Arc::new(name.value.to_lowercase()));
+
+                        plan = self.bind_alias(
+                            plan,
+                            alias_column,
+                            table_alias.clone().unwrap(),
+                            table_name.clone(),
+                        )?;
+                    }
+
+                    self.context
+                        .bind_table
+                        .insert((table_name, table_alias, joint_type), table);
+                    plan
+                } else {
+                    unreachable!()
+                }
+            }
             _ => unimplemented!(),
         };
 
@@ -356,7 +389,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         let table_catalog =
             self.context
                 .table_and_bind(table_name.clone(), table_alias.clone(), join_type)?;
-        let mut scan_op = ScanOperator::build(table_name.clone(), table_catalog);
+        let mut scan_op = TableScanOperator::build(table_name.clone(), table_catalog);
 
         if let Some(idents) = alias_idents {
             scan_op = self.bind_alias(scan_op, idents, table_alias.unwrap(), table_name.clone())?;
@@ -496,12 +529,19 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         let BinderContext {
             table_cache,
             transaction,
-            functions,
+            scala_functions,
+            table_functions,
             temp_table_id,
             ..
         } = &self.context;
         let mut binder = Binder::new(
-            BinderContext::new(table_cache, *transaction, functions, temp_table_id.clone()),
+            BinderContext::new(
+                table_cache,
+                *transaction,
+                scala_functions,
+                table_functions,
+                temp_table_id.clone(),
+            ),
             Some(self),
         );
         let mut right = binder.bind_single_table_ref(relation, Some(join_type))?;

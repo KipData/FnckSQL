@@ -34,7 +34,7 @@ impl LogicalPlan {
 
     pub fn referenced_table(&self) -> Vec<TableName> {
         fn collect_table(plan: &LogicalPlan, results: &mut Vec<TableName>) {
-            if let Operator::Scan(op) = &plan.operator {
+            if let Operator::TableScan(op) = &plan.operator {
                 results.push(op.table_name.clone());
             }
             for child in &plan.childrens {
@@ -81,7 +81,7 @@ impl LogicalPlan {
                         .collect_vec();
                     Arc::new(out_columns)
                 }
-                Operator::Scan(op) => {
+                Operator::TableScan(op) => {
                     let out_columns = op
                         .columns
                         .iter()
@@ -89,6 +89,8 @@ impl LogicalPlan {
                         .collect_vec();
                     Arc::new(out_columns)
                 }
+                // FIXME: redundant clone
+                Operator::FunctionScan(op) => op.table_function.output_schema().clone(),
                 Operator::Values(ValuesOperator { schema_ref, .. })
                 | Operator::Union(UnionOperator {
                     left_schema_ref: schema_ref,

@@ -101,7 +101,7 @@ impl ColumnPruning {
                     Self::recollect_apply(new_column_references, false, node_id, graph);
                 }
             }
-            Operator::Scan(op) => {
+            Operator::TableScan(op) => {
                 if !all_referenced {
                     op.columns
                         .retain(|(_, column)| column_references.contains(column.summary()));
@@ -125,7 +125,7 @@ impl ColumnPruning {
                 }
             }
             // Last Operator
-            Operator::Dummy | Operator::Values(_) => (),
+            Operator::Dummy | Operator::Values(_) | Operator::FunctionScan(_) => (),
             Operator::Explain => {
                 if let Some(child_id) = graph.eldest_child_at(node_id) {
                     Self::_apply(column_references, true, child_id, graph);
@@ -236,7 +236,7 @@ mod tests {
 
         for grandson_plan in &best_plan.childrens[0].childrens {
             match &grandson_plan.operator {
-                Operator::Scan(op) => {
+                Operator::TableScan(op) => {
                     assert_eq!(op.columns.len(), 1);
                 }
                 _ => unreachable!("Should be a scan operator"),

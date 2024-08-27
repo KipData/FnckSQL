@@ -1,5 +1,6 @@
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
+use crate::expression::function::FunctionSummary;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
@@ -35,13 +36,7 @@ impl Hash for ScalarFunction {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
-pub struct FunctionSummary {
-    pub(crate) name: String,
-    pub(crate) arg_types: Vec<LogicalType>,
-}
-
-#[typetag::serde(tag = "type")]
+#[typetag::serde(tag = "scala")]
 pub trait ScalarFunctionImpl: Debug + Send + Sync {
     fn eval(
         &self,

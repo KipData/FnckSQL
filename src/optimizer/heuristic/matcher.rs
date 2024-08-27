@@ -77,7 +77,7 @@ mod tests {
             },
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
                 predicate: |p| match p {
-                    Operator::Scan(_) => true,
+                    Operator::TableScan(_) => true,
                     _ => false,
                 },
                 children: PatternChildrenPredicate::None,

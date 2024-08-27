@@ -32,7 +32,7 @@
 //! [`Database::new_transaction`](db::Database::new_transaction) method.
 //!
 //! support UDF (User-Defined Function) so that users can customize internal calculation functions
-//! with the [`DataBaseBuilder::register_function`](db::DataBaseBuilder::register_function)
+//! with the [`DataBaseBuilder::register_function`](db::DataBaseBuilder::register_scala_function)
 //!
 //! # Examples
 //!
@@ -102,6 +102,7 @@ pub mod db;
 pub mod errors;
 pub mod execution;
 pub mod expression;
+mod function;
 #[cfg(feature = "marcos")]
 pub mod marcos;
 mod optimizer;
@@ -109,5 +110,4 @@ pub mod parser;
 pub mod planner;
 pub mod storage;
 pub mod types;
-mod udf;
 pub(crate) mod utils;

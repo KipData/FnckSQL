@@ -355,7 +355,6 @@ pub trait Transaction: Sized {
     ) -> Option<&TableCatalog> {
         table_cache
             .get_or_insert(table_name.to_string(), |_| {
-                // TODO: unify the data into a `Meta` prefix and use one iteration to collect all data
                 let (columns, indexes) = self.table_collect(table_name.clone())?;
 
                 TableCatalog::reload(table_name.clone(), columns, indexes)

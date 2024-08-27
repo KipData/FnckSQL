@@ -1,6 +1,6 @@
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
-use crate::expression::function::ScalarFunction;
+use crate::expression::function::scala::ScalarFunction;
 use crate::expression::{AliasType, BinaryOperator, ScalarExpression};
 use crate::types::evaluator::EvaluatorFactory;
 use crate::types::tuple::Tuple;
@@ -284,7 +284,7 @@ impl ScalarExpression {
                     (!values.is_empty()).then_some(values),
                 )))
             }
-            ScalarExpression::Function(ScalarFunction { inner, args, .. }) => Ok(Arc::new(
+            ScalarExpression::ScalaFunction(ScalarFunction { inner, args, .. }) => Ok(Arc::new(
                 inner.eval(args, tuple, schema)?.cast(inner.return_type())?,
             )),
             ScalarExpression::Empty => unreachable!(),
@@ -377,6 +377,7 @@ impl ScalarExpression {
                 }
                 check_cast(result.unwrap_or_else(|| NULL_VALUE.clone()), ty)
             }
+            ScalarExpression::TableFunction(_) => unreachable!(),
         }
     }
 }

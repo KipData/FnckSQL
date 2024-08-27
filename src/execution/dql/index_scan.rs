@@ -1,18 +1,18 @@
 use crate::execution::{Executor, ReadExecutor};
 use crate::expression::range_detacher::Range;
-use crate::planner::operator::scan::ScanOperator;
+use crate::planner::operator::table_scan::TableScanOperator;
 use crate::storage::{Iter, StatisticsMetaCache, TableCache, Transaction};
 use crate::throw;
 use crate::types::index::IndexMetaRef;
 
 pub(crate) struct IndexScan {
-    op: ScanOperator,
+    op: TableScanOperator,
     index_by: IndexMetaRef,
     ranges: Vec<Range>,
 }
 
-impl From<(ScanOperator, IndexMetaRef, Range)> for IndexScan {
-    fn from((op, index_by, range): (ScanOperator, IndexMetaRef, Range)) -> Self {
+impl From<(TableScanOperator, IndexMetaRef, Range)> for IndexScan {
+    fn from((op, index_by, range): (TableScanOperator, IndexMetaRef, Range)) -> Self {
         let ranges = match range {
             Range::SortedRanges(ranges) => ranges,
             range => vec![range],
@@ -35,7 +35,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for IndexScan {
         Box::new(
             #[coroutine]
             move || {
-                let ScanOperator {
+                let TableScanOperator {
                     table_name,
                     columns,
                     limit,

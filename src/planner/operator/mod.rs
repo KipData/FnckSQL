@@ -9,17 +9,23 @@ pub mod delete;
 pub mod describe;
 pub mod drop_table;
 pub mod filter;
+pub mod function_scan;
 pub mod insert;
 pub mod join;
 pub mod limit;
 pub mod project;
-pub mod scan;
 pub mod sort;
+pub mod table_scan;
 pub mod truncate;
 pub mod union;
 pub mod update;
 pub mod values;
 
+use self::{
+    aggregate::AggregateOperator, alter_table::add_column::AddColumnOperator,
+    filter::FilterOperator, join::JoinOperator, limit::LimitOperator, project::ProjectOperator,
+    sort::SortOperator, table_scan::TableScanOperator,
+};
 use crate::catalog::ColumnRef;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
@@ -31,6 +37,7 @@ use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::describe::DescribeOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
+use crate::planner::operator::function_scan::FunctionScanOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::truncate::TruncateOperator;
@@ -42,12 +49,6 @@ use itertools::Itertools;
 use std::fmt;
 use std::fmt::Formatter;
 
-use self::{
-    aggregate::AggregateOperator, alter_table::add_column::AddColumnOperator,
-    filter::FilterOperator, join::JoinOperator, limit::LimitOperator, project::ProjectOperator,
-    scan::ScanOperator, sort::SortOperator,
-};
-
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Operator {
     // DQL
@@ -56,7 +57,8 @@ pub enum Operator {
     Filter(FilterOperator),
     Join(JoinOperator),
     Project(ProjectOperator),
-    Scan(ScanOperator),
+    TableScan(TableScanOperator),
+    FunctionScan(FunctionScanOperator),
     Sort(SortOperator),
     Limit(LimitOperator),
     Values(ValuesOperator),
@@ -123,7 +125,7 @@ impl Operator {
             ),
             Operator::Filter(_) | Operator::Join(_) => None,
             Operator::Project(op) => Some(op.exprs.clone()),
-            Operator::Scan(op) => Some(
+            Operator::TableScan(op) => Some(
                 op.columns
                     .iter()
                     .cloned()
@@ -140,6 +142,14 @@ impl Operator {
                     .iter()
                     .cloned()
                     .map(ScalarExpression::ColumnRef)
+                    .collect_vec(),
+            ),
+            Operator::FunctionScan(op) => Some(
+                op.table_function
+                    .inner
+                    .output_schema()
+                    .iter()
+                    .map(|column| ScalarExpression::ColumnRef(column.clone()))
                     .collect_vec(),
             ),
             Operator::Show
@@ -189,11 +199,17 @@ impl Operator {
                 .iter()
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
-            Operator::Scan(op) => op
+            Operator::TableScan(op) => op
                 .columns
                 .iter()
                 .map(|(_, column)| column)
                 .cloned()
+                .collect_vec(),
+            Operator::FunctionScan(op) => op
+                .table_function
+                .args
+                .iter()
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
             Operator::Sort(op) => op
                 .sort_fields
@@ -239,7 +255,8 @@ impl fmt::Display for Operator {
             Operator::Filter(op) => write!(f, "{}", op),
             Operator::Join(op) => write!(f, "{}", op),
             Operator::Project(op) => write!(f, "{}", op),
-            Operator::Scan(op) => write!(f, "{}", op),
+            Operator::TableScan(op) => write!(f, "{}", op),
+            Operator::FunctionScan(op) => write!(f, "{}", op),
             Operator::Sort(op) => write!(f, "{}", op),
             Operator::Limit(op) => write!(f, "{}", op),
             Operator::Values(op) => write!(f, "{}", op),

@@ -1,7 +1,7 @@
 use crate::binder::{lower_case_name, Binder};
 use crate::errors::DatabaseError;
 use crate::planner::operator::analyze::AnalyzeOperator;
-use crate::planner::operator::scan::ScanOperator;
+use crate::planner::operator::table_scan::TableScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -17,7 +17,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             .table_and_bind(table_name.clone(), None, None)?;
         let index_metas = table_catalog.indexes.clone();
 
-        let scan_op = ScanOperator::build(table_name.clone(), table_catalog);
+        let scan_op = TableScanOperator::build(table_name.clone(), table_catalog);
         Ok(LogicalPlan::new(
             Operator::Analyze(AnalyzeOperator {
                 table_name,

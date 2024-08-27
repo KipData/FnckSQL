@@ -2,7 +2,7 @@ use crate::binder::{lower_case_name, Binder};
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::create_index::CreateIndexOperator;
-use crate::planner::operator::scan::ScanOperator;
+use crate::planner::operator::table_scan::TableScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
@@ -32,7 +32,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
         let table = self
             .context
             .table_and_bind(table_name.clone(), None, None)?;
-        let plan = ScanOperator::build(table_name.clone(), table);
+        let plan = TableScanOperator::build(table_name.clone(), table);
         let mut columns = Vec::with_capacity(exprs.len());
 
         for expr in exprs {

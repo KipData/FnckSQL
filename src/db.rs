@@ -2,7 +2,11 @@ use crate::binder::{command_type, Binder, BinderContext, CommandType};
 use crate::catalog::TableCatalog;
 use crate::errors::DatabaseError;
 use crate::execution::{build_write, try_collect};
-use crate::expression::function::{FunctionSummary, ScalarFunctionImpl};
+use crate::expression::function::scala::ScalarFunctionImpl;
+use crate::expression::function::table::TableFunctionImpl;
+use crate::expression::function::FunctionSummary;
+use crate::function::current_date::CurrentDate;
+use crate::function::numbers::Numbers;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
@@ -12,7 +16,6 @@ use crate::planner::LogicalPlan;
 use crate::storage::rocksdb::RocksStorage;
 use crate::storage::{StatisticsMetaCache, Storage, TableCache, Transaction};
 use crate::types::tuple::{SchemaRef, Tuple};
-use crate::udf::current_date::CurrentDate;
 use crate::utils::lru::ShardingLruCache;
 use ahash::HashMap;
 use parking_lot::{ArcRwLockReadGuard, ArcRwLockWriteGuard, RawRwLock, RwLock};
@@ -22,7 +25,8 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
-pub(crate) type Functions = HashMap<FunctionSummary, Arc<dyn ScalarFunctionImpl>>;
+pub(crate) type ScalaFunctions = HashMap<FunctionSummary, Arc<dyn ScalarFunctionImpl>>;
+pub(crate) type TableFunctions = HashMap<FunctionSummary, Arc<dyn TableFunctionImpl>>;
 
 #[allow(dead_code)]
 pub(crate) enum MetaDataLock {
@@ -32,34 +36,45 @@ pub(crate) enum MetaDataLock {
 
 pub struct DataBaseBuilder {
     path: PathBuf,
-    functions: Functions,
+    scala_functions: ScalaFunctions,
+    table_functions: TableFunctions,
 }
 
 impl DataBaseBuilder {
     pub fn path(path: impl Into<PathBuf> + Send) -> Self {
-        DataBaseBuilder {
+        let mut builder = DataBaseBuilder {
             path: path.into(),
-            functions: Default::default(),
-        }
+            scala_functions: Default::default(),
+            table_functions: Default::default(),
+        };
+        builder = builder.register_scala_function(CurrentDate::new());
+        builder = builder.register_table_function(Numbers::new());
+        builder
     }
 
-    pub fn register_function(mut self, function: Arc<dyn ScalarFunctionImpl>) -> Self {
+    pub fn register_scala_function(mut self, function: Arc<dyn ScalarFunctionImpl>) -> Self {
         let summary = function.summary().clone();
 
-        self.functions.insert(summary, function);
+        self.scala_functions.insert(summary, function);
         self
     }
 
-    pub fn build(mut self) -> Result<Database<RocksStorage>, DatabaseError> {
-        self = self.register_function(CurrentDate::new());
+    pub fn register_table_function(mut self, function: Arc<dyn TableFunctionImpl>) -> Self {
+        let summary = function.summary().clone();
 
+        self.table_functions.insert(summary, function);
+        self
+    }
+
+    pub fn build(self) -> Result<Database<RocksStorage>, DatabaseError> {
         let storage = RocksStorage::new(self.path)?;
         let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
 
         Ok(Database {
             storage,
-            functions: Arc::new(self.functions),
+            scala_functions: Arc::new(self.scala_functions),
+            table_functions: Arc::new(self.table_functions),
             mdl: Arc::new(RwLock::new(())),
             meta_cache,
             table_cache,
@@ -69,7 +84,8 @@ impl DataBaseBuilder {
 
 pub struct Database<S: Storage> {
     pub(crate) storage: S,
-    functions: Arc<Functions>,
+    scala_functions: Arc<ScalaFunctions>,
+    table_functions: Arc<TableFunctions>,
     mdl: Arc<RwLock<()>>,
     pub(crate) meta_cache: Arc<StatisticsMetaCache>,
     pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
@@ -95,7 +111,8 @@ impl<S: Storage> Database<S> {
             &self.table_cache,
             &self.meta_cache,
             &transaction,
-            &self.functions,
+            &self.scala_functions,
+            &self.table_functions,
         )?;
 
         let schema = plan.output_schema().clone();
@@ -117,7 +134,8 @@ impl<S: Storage> Database<S> {
 
         Ok(DBTransaction {
             inner: transaction,
-            functions: self.functions.clone(),
+            scala_functions: self.scala_functions.clone(),
+            table_functions: self.table_functions.clone(),
             _guard: guard,
             meta_cache: self.meta_cache.clone(),
             table_cache: self.table_cache.clone(),
@@ -129,13 +147,15 @@ impl<S: Storage> Database<S> {
         table_cache: &TableCache,
         meta_cache: &StatisticsMetaCache,
         transaction: &<S as Storage>::TransactionType<'_>,
-        functions: &Functions,
+        scala_functions: &ScalaFunctions,
+        table_functions: &TableFunctions,
     ) -> Result<LogicalPlan, DatabaseError> {
         let mut binder = Binder::new(
             BinderContext::new(
                 table_cache,
                 transaction,
-                functions,
+                scala_functions,
+                table_functions,
                 Arc::new(AtomicUsize::new(0)),
             ),
             None,
@@ -240,7 +260,8 @@ impl<S: Storage> Database<S> {
 
 pub struct DBTransaction<'a, S: Storage + 'a> {
     inner: S::TransactionType<'a>,
-    functions: Arc<Functions>,
+    scala_functions: Arc<ScalaFunctions>,
+    table_functions: Arc<TableFunctions>,
     _guard: ArcRwLockReadGuard<RawRwLock, ()>,
     pub(crate) meta_cache: Arc<StatisticsMetaCache>,
     pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
@@ -263,7 +284,8 @@ impl<S: Storage> DBTransaction<'_, S> {
             &self.table_cache,
             &self.meta_cache,
             &self.inner,
-            &self.functions,
+            &self.scala_functions,
+            &self.table_functions,
         )?;
 
         let schema = plan.output_schema().clone();
@@ -283,10 +305,11 @@ impl<S: Storage> DBTransaction<'_, S> {
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::db::{DataBaseBuilder, DatabaseError};
-    use crate::expression::function::{FuncMonotonicity, FunctionSummary, ScalarFunctionImpl};
+    use crate::expression::function::scala::{FuncMonotonicity, ScalarFunctionImpl};
+    use crate::expression::function::FunctionSummary;
     use crate::expression::ScalarExpression;
     use crate::expression::{BinaryOperator, UnaryOperator};
-    use crate::function;
+    use crate::scala_function;
     use crate::storage::{Storage, TableCache, Transaction};
     use crate::types::evaluator::EvaluatorFactory;
     use crate::types::tuple::{create_table, Tuple};
@@ -333,7 +356,7 @@ mod test {
         Ok(())
     }
 
-    function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: ValueRef, v2: ValueRef| {
+    scala_function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: ValueRef, v2: ValueRef| {
         let plus_binary_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
         let value = plus_binary_evaluator.binary_eval(&v1, &v2);
 
@@ -345,13 +368,24 @@ mod test {
     fn test_udf() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path())
-            .register_function(TestFunction::new())
+            .register_scala_function(TestFunction::new())
             .build()?;
         let _ = fnck_sql
             .run("CREATE TABLE test (id int primary key, c1 int, c2 int default test(1, 2));")?;
         let _ = fnck_sql
             .run("INSERT INTO test VALUES (1, 2, 2), (0, 1, 1), (2, 1, 1), (3, 3, default);")?;
         let (schema, tuples) = fnck_sql.run("select test(c1, 1), c2 from test")?;
+        println!("{}", create_table(&schema, &tuples));
+
+        Ok(())
+    }
+
+    /// use [Numbers](crate::function::numbers::Numbers) on this case
+    #[test]
+    fn test_udtf() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
+        let (schema, tuples) = fnck_sql.run("select number from table(numbers(10))")?;
         println!("{}", create_table(&schema, &tuples));
 
         Ok(())

@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::catalog::{TableCatalog, TableName};
-use crate::db::Functions;
+use crate::db::{ScalaFunctions, TableFunctions};
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::JoinType;
@@ -82,7 +82,8 @@ pub enum SubQueryType {
 
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
-    pub(crate) functions: &'a Functions,
+    pub(crate) scala_functions: &'a ScalaFunctions,
+    pub(crate) table_functions: &'a TableFunctions,
     pub(crate) table_cache: &'a TableCache,
     pub(crate) transaction: &'a T,
     // Tips: When there are multiple tables and Wildcard, use BTreeMap to ensure that the order of the output tables is certain.
@@ -108,11 +109,13 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
     pub fn new(
         table_cache: &'a TableCache,
         transaction: &'a T,
-        functions: &'a Functions,
+        scala_functions: &'a ScalaFunctions,
+        table_functions: &'a TableFunctions,
         temp_table_id: Arc<AtomicUsize>,
     ) -> Self {
         BinderContext {
-            functions,
+            scala_functions,
+            table_functions,
             table_cache,
             transaction,
             bind_table: Default::default(),
@@ -445,12 +448,14 @@ pub mod test {
         let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
         let storage = build_test_catalog(&table_cache, temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let functions = Default::default();
+        let scala_functions = Default::default();
+        let table_functions = Default::default();
         let mut binder = Binder::new(
             BinderContext::new(
                 &table_cache,
                 &transaction,
-                &functions,
+                &scala_functions,
+                &table_functions,
                 Arc::new(AtomicUsize::new(0)),
             ),
             None,

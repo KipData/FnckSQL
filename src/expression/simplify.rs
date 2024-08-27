@@ -1,6 +1,7 @@
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
-use crate::expression::function::ScalarFunction;
+use crate::expression::function::scala::ScalarFunction;
+use crate::expression::function::table::TableFunction;
 use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
 use crate::types::evaluator::EvaluatorFactory;
 use crate::types::value::{DataValue, ValueRef};
@@ -50,7 +51,8 @@ impl ScalarExpression {
             }
             ScalarExpression::AggCall { args, .. }
             | ScalarExpression::Tuple(args)
-            | ScalarExpression::Function(ScalarFunction { args, .. })
+            | ScalarExpression::ScalaFunction(ScalarFunction { args, .. })
+            | ScalarExpression::TableFunction(TableFunction { args, .. })
             | ScalarExpression::Coalesce { exprs: args, .. } => args
                 .iter()
                 .any(|expr| expr.exist_column(table_name, col_id)),
@@ -382,11 +384,16 @@ impl ScalarExpression {
                     else_expr.constant_calculation()?;
                 }
             }
+            ScalarExpression::ScalaFunction(ScalarFunction { args, .. })
+            | ScalarExpression::TableFunction(TableFunction { args, .. }) => {
+                for expr in args {
+                    expr.constant_calculation()?;
+                }
+            }
             ScalarExpression::Constant(_)
             | ScalarExpression::ColumnRef(_)
             | ScalarExpression::Empty
-            | ScalarExpression::Reference { .. }
-            | ScalarExpression::Function(_) => (),
+            | ScalarExpression::Reference { .. } => (),
         }
 
         Ok(())

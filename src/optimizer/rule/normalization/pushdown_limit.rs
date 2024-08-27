@@ -41,7 +41,7 @@ lazy_static! {
         Pattern {
             predicate: |op| matches!(op, Operator::Limit(_)),
             children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Scan(_)),
+                predicate: |op| matches!(op, Operator::TableScan(_)),
                 children: PatternChildrenPredicate::None,
             }]),
         }
@@ -168,13 +168,13 @@ impl NormalizationRule for PushLimitIntoScan {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Limit(limit_op) = graph.operator(node_id) {
             if let Some(child_index) = graph.eldest_child_at(node_id) {
-                if let Operator::Scan(scan_op) = graph.operator(child_index) {
+                if let Operator::TableScan(scan_op) = graph.operator(child_index) {
                     let mut new_scan_op = scan_op.clone();
 
                     new_scan_op.limit = (limit_op.offset, limit_op.limit);
 
                     graph.remove_node(node_id, false);
-                    graph.replace_node(child_index, Operator::Scan(new_scan_op));
+                    graph.replace_node(child_index, Operator::TableScan(new_scan_op));
                 }
             }
         }
@@ -296,7 +296,7 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        if let Operator::Scan(op) = &best_plan.childrens[0].operator {
+        if let Operator::TableScan(op) = &best_plan.childrens[0].operator {
             assert_eq!(op.limit, (Some(1), Some(1)))
         } else {
             unreachable!("Should be a project operator")
