@@ -147,14 +147,14 @@ impl SortBy {
                 };
                 // Extract the results of calculating SortFields to avoid double calculation
                 // of data during comparison
-                let mut eval_results = vec![Vec::with_capacity(sort_fields.len()); tuples.len()];
+                let mut eval_values = vec![Vec::with_capacity(sort_fields.len()); tuples.len()];
 
                 for (x, SortField { expr, .. }) in sort_fields.iter().enumerate() {
                     for tuple in tuples.0.iter() {
                         assert!(tuple.is_some());
 
                         let (_, tuple) = tuple.as_ref().unwrap();
-                        eval_results[x].push(expr.eval(tuple, schema)?);
+                        eval_values[x].push(expr.eval(tuple, schema)?);
                     }
                 }
 
@@ -173,8 +173,8 @@ impl SortBy {
                         },
                     ) in sort_fields.iter().enumerate()
                     {
-                        let value_1 = &eval_results[x][*i_1];
-                        let value_2 = &eval_results[x][*i_2];
+                        let value_1 = &eval_values[x][*i_1];
+                        let value_2 = &eval_values[x][*i_2];
 
                         ordering = match (value_1.is_null(), value_2.is_null()) {
                             (false, true) => fn_nulls_first(*nulls_first),
@@ -195,6 +195,7 @@ impl SortBy {
 
                     ordering
                 });
+                drop(eval_values);
 
                 Ok(Box::new(
                     tuples
