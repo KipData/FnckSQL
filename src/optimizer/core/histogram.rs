@@ -1,5 +1,5 @@
 use crate::errors::DatabaseError;
-use crate::execution::dql::sort::radix_sort;
+use crate::execution::dql::sort::{radix_sort, NullableVec};
 use crate::expression::range_detacher::Range;
 use crate::expression::BinaryOperator;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
@@ -17,7 +17,8 @@ pub struct HistogramBuilder {
     index_id: IndexId,
 
     null_count: usize,
-    values: Vec<((usize, ValueRef), Vec<u8>)>,
+    values: NullableVec<(usize, ValueRef)>,
+    sort_keys: Vec<(usize, Vec<u8>)>,
 
     value_index: usize,
 }
@@ -51,7 +52,8 @@ impl HistogramBuilder {
         Ok(Self {
             index_id: index_meta.id,
             null_count: 0,
-            values: capacity.map(Vec::with_capacity).unwrap_or_default(),
+            values: capacity.map(NullableVec::with_capacity).unwrap_or_default(),
+            sort_keys: capacity.map(Vec::with_capacity).unwrap_or_default(),
             value_index: 0,
         })
     }
@@ -63,7 +65,8 @@ impl HistogramBuilder {
             let mut bytes = Vec::new();
 
             value.memcomparable_encode(&mut bytes)?;
-            self.values.push(((self.value_index, value.clone()), bytes));
+            self.values.put((self.value_index, value.clone()));
+            self.sort_keys.push((self.value_index, bytes))
         }
 
         self.value_index += 1;
@@ -86,7 +89,8 @@ impl HistogramBuilder {
         let HistogramBuilder {
             index_id,
             null_count,
-            values,
+            mut values,
+            sort_keys,
             ..
         } = self;
         let mut buckets = Vec::with_capacity(number_of_buckets);
@@ -96,20 +100,24 @@ impl HistogramBuilder {
         } else {
             (values_len + number_of_buckets) / number_of_buckets
         };
-        let sorted_values = radix_sort(values);
+        let sorted_indices = radix_sort(sort_keys);
 
         for i in 0..number_of_buckets {
             let mut bucket = Bucket::empty();
             let j = (i + 1) * bucket_len;
 
-            bucket.upper = sorted_values[cmp::min(j, values_len) - 1].1.clone();
+            bucket.upper = values
+                .get(sorted_indices[cmp::min(j, values_len) - 1])
+                .1
+                .clone();
             buckets.push(bucket);
         }
         let mut corr_xy_sum = 0.0;
         let mut number_of_distinct_value = 0;
         let mut last_value: Option<ValueRef> = None;
 
-        for (i, (ordinal, value)) in sorted_values.into_iter().enumerate() {
+        for (i, index) in sorted_indices.into_iter().enumerate() {
+            let (ordinal, value) = values.take(index);
             sketch.increment(value.as_ref());
 
             if let None | Some(true) = last_value.as_ref().map(|last_value| last_value != &value) {

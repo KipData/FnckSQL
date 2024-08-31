@@ -61,5 +61,3 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Limit {
         )
     }
 }
-
-impl Limit {}

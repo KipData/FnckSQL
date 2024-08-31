@@ -15,6 +15,7 @@ use std::collections::HashMap;
 pub struct Expression {
     pub(crate) op: PhysicalOption,
     pub(crate) cost: Option<usize>,
+    // TODO: output rows
 }
 
 #[derive(Debug, Clone)]
@@ -46,7 +47,7 @@ impl Memo {
             return Err(DatabaseError::EmptyPlan);
         }
 
-        for node_id in graph.nodes_iter(HepMatchOrder::TopDown, None) {
+        for node_id in graph.nodes_iter(HepMatchOrder::BottomUp, None) {
             for rule in implementations {
                 if HepMatcher::new(rule.pattern(), node_id, graph).match_opt_expr() {
                     let op = graph.operator(node_id);

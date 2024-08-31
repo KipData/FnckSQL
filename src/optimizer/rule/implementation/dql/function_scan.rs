@@ -9,15 +9,19 @@ use crate::storage::Transaction;
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref SORT_PATTERN: Pattern = {
+    static ref FUNCTION_SCAN_PATTERN: Pattern = {
         Pattern {
-            predicate: |op| matches!(op, Operator::Sort(_)),
+            predicate: |op| matches!(op, Operator::FunctionScan(_)),
             children: PatternChildrenPredicate::None,
         }
     };
 }
 
 #[derive(Clone)]
-pub struct SortImplementation;
+pub struct FunctionScanImplementation;
 
-single_mapping!(SortImplementation, SORT_PATTERN, PhysicalOption::Sort);
+single_mapping!(
+    FunctionScanImplementation,
+    FUNCTION_SCAN_PATTERN,
+    PhysicalOption::FunctionScan
+);
