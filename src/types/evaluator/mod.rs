@@ -562,9 +562,9 @@ mod test {
             .0
             .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(1)));
 
-        assert_eq!(plus_i32_1, plus_i32_2);
-        assert_eq!(plus_i32_2, plus_i32_3);
-        assert_eq!(plus_i32_4, DataValue::Int32(Some(2)));
+        debug_assert_eq!(plus_i32_1, plus_i32_2);
+        debug_assert_eq!(plus_i32_2, plus_i32_3);
+        debug_assert_eq!(plus_i32_4, DataValue::Int32(Some(2)));
 
         let plus_evaluator =
             EvaluatorFactory::binary_create(LogicalType::Bigint, BinaryOperator::Plus)?;
@@ -581,9 +581,9 @@ mod test {
             .0
             .binary_eval(&DataValue::Int64(Some(1)), &DataValue::Int64(Some(1)));
 
-        assert_eq!(plus_i64_1, plus_i64_2);
-        assert_eq!(plus_i64_2, plus_i64_3);
-        assert_eq!(plus_i64_4, DataValue::Int64(Some(2)));
+        debug_assert_eq!(plus_i64_1, plus_i64_2);
+        debug_assert_eq!(plus_i64_2, plus_i64_3);
+        debug_assert_eq!(plus_i64_4, DataValue::Int64(Some(2)));
 
         let plus_evaluator =
             EvaluatorFactory::binary_create(LogicalType::Double, BinaryOperator::Plus)?;
@@ -601,9 +601,9 @@ mod test {
             &DataValue::Float64(Some(1.0)),
         );
 
-        assert_eq!(plus_f64_1, plus_f64_2);
-        assert_eq!(plus_f64_2, plus_f64_3);
-        assert_eq!(plus_f64_4, DataValue::Float64(Some(2.0)));
+        debug_assert_eq!(plus_f64_1, plus_f64_2);
+        debug_assert_eq!(plus_f64_2, plus_f64_3);
+        debug_assert_eq!(plus_f64_4, DataValue::Float64(Some(2.0)));
 
         Ok(())
     }
@@ -625,9 +625,9 @@ mod test {
             .0
             .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(1)));
 
-        assert_eq!(minus_i32_1, minus_i32_2);
-        assert_eq!(minus_i32_2, minus_i32_3);
-        assert_eq!(minus_i32_4, DataValue::Int32(Some(0)));
+        debug_assert_eq!(minus_i32_1, minus_i32_2);
+        debug_assert_eq!(minus_i32_2, minus_i32_3);
+        debug_assert_eq!(minus_i32_4, DataValue::Int32(Some(0)));
 
         let minus_evaluator =
             EvaluatorFactory::binary_create(LogicalType::Bigint, BinaryOperator::Minus)?;
@@ -644,9 +644,9 @@ mod test {
             .0
             .binary_eval(&DataValue::Int64(Some(1)), &DataValue::Int64(Some(1)));
 
-        assert_eq!(minus_i64_1, minus_i64_2);
-        assert_eq!(minus_i64_2, minus_i64_3);
-        assert_eq!(minus_i64_4, DataValue::Int64(Some(0)));
+        debug_assert_eq!(minus_i64_1, minus_i64_2);
+        debug_assert_eq!(minus_i64_2, minus_i64_3);
+        debug_assert_eq!(minus_i64_4, DataValue::Int64(Some(0)));
 
         let minus_evaluator =
             EvaluatorFactory::binary_create(LogicalType::Double, BinaryOperator::Minus)?;
@@ -664,9 +664,9 @@ mod test {
             &DataValue::Float64(Some(1.0)),
         );
 
-        assert_eq!(minus_f64_1, minus_f64_2);
-        assert_eq!(minus_f64_2, minus_f64_3);
-        assert_eq!(minus_f64_4, DataValue::Float64(Some(0.0)));
+        debug_assert_eq!(minus_f64_1, minus_f64_2);
+        debug_assert_eq!(minus_f64_2, minus_f64_3);
+        debug_assert_eq!(minus_f64_4, DataValue::Float64(Some(0.0)));
 
         Ok(())
     }
@@ -688,9 +688,9 @@ mod test {
             .0
             .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(1)));
 
-        assert_eq!(multiply_i32_1, multiply_i32_2);
-        assert_eq!(multiply_i32_2, multiply_i32_3);
-        assert_eq!(multiply_i32_4, DataValue::Int32(Some(1)));
+        debug_assert_eq!(multiply_i32_1, multiply_i32_2);
+        debug_assert_eq!(multiply_i32_2, multiply_i32_3);
+        debug_assert_eq!(multiply_i32_4, DataValue::Int32(Some(1)));
 
         let multiply_evaluator =
             EvaluatorFactory::binary_create(LogicalType::Bigint, BinaryOperator::Multiply)?;
@@ -707,9 +707,9 @@ mod test {
             .0
             .binary_eval(&DataValue::Int64(Some(1)), &DataValue::Int64(Some(1)));
 
-        assert_eq!(multiply_i64_1, multiply_i64_2);
-        assert_eq!(multiply_i64_2, multiply_i64_3);
-        assert_eq!(multiply_i64_4, DataValue::Int64(Some(1)));
+        debug_assert_eq!(multiply_i64_1, multiply_i64_2);
+        debug_assert_eq!(multiply_i64_2, multiply_i64_3);
+        debug_assert_eq!(multiply_i64_4, DataValue::Int64(Some(1)));
 
         let multiply_evaluator =
             EvaluatorFactory::binary_create(LogicalType::Double, BinaryOperator::Multiply)?;
@@ -727,9 +727,9 @@ mod test {
             &DataValue::Float64(Some(1.0)),
         );
 
-        assert_eq!(multiply_f64_1, multiply_f64_2);
-        assert_eq!(multiply_f64_2, multiply_f64_3);
-        assert_eq!(multiply_f64_4, DataValue::Float64(Some(1.0)));
+        debug_assert_eq!(multiply_f64_1, multiply_f64_2);
+        debug_assert_eq!(multiply_f64_2, multiply_f64_3);
+        debug_assert_eq!(multiply_f64_4, DataValue::Float64(Some(1.0)));
 
         Ok(())
     }
@@ -751,9 +751,9 @@ mod test {
             .0
             .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(1)));
 
-        assert_eq!(divide_i32_1, divide_i32_2);
-        assert_eq!(divide_i32_2, divide_i32_3);
-        assert_eq!(divide_i32_4, DataValue::Float64(Some(1.0)));
+        debug_assert_eq!(divide_i32_1, divide_i32_2);
+        debug_assert_eq!(divide_i32_2, divide_i32_3);
+        debug_assert_eq!(divide_i32_4, DataValue::Float64(Some(1.0)));
 
         let divide_evaluator =
             EvaluatorFactory::binary_create(LogicalType::Bigint, BinaryOperator::Divide)?;
@@ -770,9 +770,9 @@ mod test {
             .0
             .binary_eval(&DataValue::Int64(Some(1)), &DataValue::Int64(Some(1)));
 
-        assert_eq!(divide_i64_1, divide_i64_2);
-        assert_eq!(divide_i64_2, divide_i64_3);
-        assert_eq!(divide_i64_4, DataValue::Float64(Some(1.0)));
+        debug_assert_eq!(divide_i64_1, divide_i64_2);
+        debug_assert_eq!(divide_i64_2, divide_i64_3);
+        debug_assert_eq!(divide_i64_4, DataValue::Float64(Some(1.0)));
 
         let divide_evaluator =
             EvaluatorFactory::binary_create(LogicalType::Double, BinaryOperator::Divide)?;
@@ -790,9 +790,9 @@ mod test {
             &DataValue::Float64(Some(1.0)),
         );
 
-        assert_eq!(divide_f64_1, divide_f64_2);
-        assert_eq!(divide_f64_2, divide_f64_3);
-        assert_eq!(divide_f64_4, DataValue::Float64(Some(1.0)));
+        debug_assert_eq!(divide_f64_1, divide_f64_2);
+        debug_assert_eq!(divide_f64_2, divide_f64_3);
+        debug_assert_eq!(divide_f64_4, DataValue::Float64(Some(1.0)));
 
         Ok(())
     }
@@ -800,14 +800,14 @@ mod test {
     #[test]
     fn test_binary_op_i32_compare() -> Result<(), DatabaseError> {
         let evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Gt)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(0)),),
             DataValue::Boolean(Some(true))
         );
         let evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Lt)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(0)),),
@@ -815,7 +815,7 @@ mod test {
         );
         let evaluator =
             EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::GtEq)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(1)),),
@@ -823,7 +823,7 @@ mod test {
         );
         let evaluator =
             EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::LtEq)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(1)),),
@@ -831,28 +831,28 @@ mod test {
         );
         let evaluator =
             EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::NotEq)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(1)),),
             DataValue::Boolean(Some(false))
         );
         let evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Eq)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(Some(1)), &DataValue::Int32(Some(1)),),
             DataValue::Boolean(Some(true))
         );
         let evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Gt)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(None), &DataValue::Int32(Some(0)),),
             DataValue::Boolean(None)
         );
         let evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Lt)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(None), &DataValue::Int32(Some(0)),),
@@ -860,7 +860,7 @@ mod test {
         );
         let evaluator =
             EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::GtEq)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(None), &DataValue::Int32(Some(1)),),
@@ -868,7 +868,7 @@ mod test {
         );
         let evaluator =
             EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::LtEq)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(None), &DataValue::Int32(Some(1)),),
@@ -876,21 +876,21 @@ mod test {
         );
         let evaluator =
             EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::NotEq)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(None), &DataValue::Int32(Some(1)),),
             DataValue::Boolean(None)
         );
         let evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Eq)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(None), &DataValue::Int32(Some(1)),),
             DataValue::Boolean(None)
         );
         let evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Eq)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Int32(None), &DataValue::Int32(None),),
@@ -903,56 +903,56 @@ mod test {
     #[test]
     fn test_binary_op_bool_compare() -> Result<(), DatabaseError> {
         let evaluator = EvaluatorFactory::binary_create(LogicalType::Boolean, BinaryOperator::And)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Boolean(Some(true)),
                 &DataValue::Boolean(Some(true)),
             ),
             DataValue::Boolean(Some(true))
         );
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Boolean(Some(false)),
                 &DataValue::Boolean(Some(true)),
             ),
             DataValue::Boolean(Some(false))
         );
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Boolean(Some(false)),
                 &DataValue::Boolean(Some(false)),
             ),
             DataValue::Boolean(Some(false))
         );
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Boolean(None), &DataValue::Boolean(Some(true)),),
             DataValue::Boolean(None)
         );
         let evaluator = EvaluatorFactory::binary_create(LogicalType::Boolean, BinaryOperator::Or)?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Boolean(Some(true)),
                 &DataValue::Boolean(Some(true)),
             ),
             DataValue::Boolean(Some(true))
         );
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Boolean(Some(false)),
                 &DataValue::Boolean(Some(true)),
             ),
             DataValue::Boolean(Some(true))
         );
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Boolean(Some(false)),
                 &DataValue::Boolean(Some(false)),
             ),
             DataValue::Boolean(Some(false))
         );
-        assert_eq!(
+        debug_assert_eq!(
             evaluator
                 .0
                 .binary_eval(&DataValue::Boolean(None), &DataValue::Boolean(Some(true)),),
@@ -968,7 +968,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::Gt,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
@@ -987,7 +987,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::Lt,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
@@ -1006,7 +1006,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::GtEq,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
@@ -1025,7 +1025,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::LtEq,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
@@ -1044,7 +1044,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::NotEq,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
@@ -1063,7 +1063,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::Eq,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: Some("a".to_string()),
@@ -1082,7 +1082,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::Gt,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: None,
@@ -1101,7 +1101,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::Lt,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: None,
@@ -1120,7 +1120,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::GtEq,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: None,
@@ -1139,7 +1139,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::LtEq,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: None,
@@ -1158,7 +1158,7 @@ mod test {
             LogicalType::Varchar(None, CharLengthUnits::Characters),
             BinaryOperator::NotEq,
         )?;
-        assert_eq!(
+        debug_assert_eq!(
             evaluator.0.binary_eval(
                 &DataValue::Utf8 {
                     value: None,

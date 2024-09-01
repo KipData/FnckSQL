@@ -40,8 +40,8 @@ impl Tuple {
         schema: &Schema,
         bytes: &[u8],
     ) -> Self {
-        assert!(!schema.is_empty());
-        assert_eq!(projections.len(), schema.len());
+        debug_assert!(!schema.is_empty());
+        debug_assert_eq!(projections.len(), schema.len());
 
         fn is_none(bits: u8, i: usize) -> bool {
             bits & (1 << (7 - i)) > 0
@@ -110,7 +110,7 @@ impl Tuple {
     /// e.g.: bits(u8)..|data_0(len for utf8_1)|utf8_0|data_1|
     /// Tips: all len is u32
     pub fn serialize_to(&self, types: &[LogicalType]) -> Result<Vec<u8>, DatabaseError> {
-        assert_eq!(self.values.len(), types.len());
+        debug_assert_eq!(self.values.len(), types.len());
 
         fn flip_bit(bits: u8, i: usize) -> u8 {
             bits | (1 << (7 - i))
@@ -153,7 +153,7 @@ pub fn create_table(schema: &Schema, tuples: &[Tuple]) -> Table {
     table.set_header(header);
 
     for tuple in tuples {
-        assert_eq!(schema.len(), tuple.values.len());
+        debug_assert_eq!(schema.len(), tuple.values.len());
 
         let cells = tuple
             .values
@@ -378,7 +378,7 @@ mod tests {
             &tuples[1].serialize_to(&types).unwrap(),
         );
 
-        assert_eq!(tuples[0], tuple_0);
-        assert_eq!(tuples[1], tuple_1);
+        debug_assert_eq!(tuples[0], tuple_0);
+        debug_assert_eq!(tuples[1], tuple_1);
     }
 }

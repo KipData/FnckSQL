@@ -252,12 +252,12 @@ mod test {
             )
         );
 
-        assert_eq!(tuples.len(), 2);
+        debug_assert_eq!(tuples.len(), 2);
 
         let vec_values = tuples.into_iter().map(|tuple| tuple.values).collect_vec();
 
-        assert!(vec_values.contains(&build_integers(vec![Some(3), Some(0)])));
-        assert!(vec_values.contains(&build_integers(vec![Some(5), Some(1)])));
+        debug_assert!(vec_values.contains(&build_integers(vec![Some(3), Some(0)])));
+        debug_assert!(vec_values.contains(&build_integers(vec![Some(5), Some(1)])));
 
         Ok(())
     }

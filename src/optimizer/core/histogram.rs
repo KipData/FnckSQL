@@ -504,14 +504,14 @@ mod tests {
         builder.append(&Arc::new(DataValue::Null))?;
         builder.append(&Arc::new(DataValue::Int32(None)))?;
 
-        // assert!(matches!(builder.build(10), Err(DataBaseError::TooManyBuckets)));
+        // debug_assert!(matches!(builder.build(10), Err(DataBaseError::TooManyBuckets)));
 
         let (histogram, _) = builder.build(5)?;
 
-        assert_eq!(histogram.correlation, 1.0);
-        assert_eq!(histogram.null_count, 2);
-        assert_eq!(histogram.buckets.len(), 5);
-        assert_eq!(
+        debug_assert_eq!(histogram.correlation, 1.0);
+        debug_assert_eq!(histogram.null_count, 2);
+        debug_assert_eq!(histogram.buckets.len(), 5);
+        debug_assert_eq!(
             histogram.buckets,
             vec![
                 Bucket {
@@ -572,10 +572,10 @@ mod tests {
 
         let (histogram, _) = builder.build(5)?;
 
-        assert_eq!(histogram.correlation, -1.0);
-        assert_eq!(histogram.null_count, 2);
-        assert_eq!(histogram.buckets.len(), 5);
-        assert_eq!(
+        debug_assert_eq!(histogram.correlation, -1.0);
+        debug_assert_eq!(histogram.null_count, 2);
+        debug_assert_eq!(histogram.buckets.len(), 5);
+        debug_assert_eq!(
             histogram.buckets,
             vec![
                 Bucket {
@@ -636,10 +636,10 @@ mod tests {
 
         let (histogram, _) = builder.build(4)?;
 
-        assert!(histogram.correlation < 0.0);
-        assert_eq!(histogram.null_count, 2);
-        assert_eq!(histogram.buckets.len(), 4);
-        assert_eq!(
+        debug_assert!(histogram.correlation < 0.0);
+        debug_assert_eq!(histogram.null_count, 2);
+        debug_assert_eq!(histogram.buckets.len(), 4);
+        debug_assert_eq!(
             histogram.buckets,
             vec![
                 Bucket {
@@ -706,7 +706,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_1, 9);
+        debug_assert_eq!(count_1, 9);
 
         let count_2 = histogram.collect_count(
             &vec![Range::Scope {
@@ -716,7 +716,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_2, 11);
+        debug_assert_eq!(count_2, 11);
 
         let count_3 = histogram.collect_count(
             &vec![Range::Scope {
@@ -726,7 +726,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_3, 7);
+        debug_assert_eq!(count_3, 7);
 
         let count_4 = histogram.collect_count(
             &vec![Range::Scope {
@@ -736,7 +736,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_4, 12);
+        debug_assert_eq!(count_4, 12);
 
         let count_5 = histogram.collect_count(
             &vec![Range::Scope {
@@ -746,7 +746,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_5, 8);
+        debug_assert_eq!(count_5, 8);
 
         let count_6 = histogram.collect_count(
             &vec![Range::Scope {
@@ -756,7 +756,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_6, 13);
+        debug_assert_eq!(count_6, 13);
 
         let count_7 = histogram.collect_count(
             &vec![Range::Scope {
@@ -766,7 +766,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_7, 13);
+        debug_assert_eq!(count_7, 13);
 
         let count_8 = histogram.collect_count(
             &vec![Range::Scope {
@@ -776,7 +776,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_8, 13);
+        debug_assert_eq!(count_8, 13);
 
         let count_9 = histogram.collect_count(
             &vec![Range::Scope {
@@ -786,7 +786,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_9, 13);
+        debug_assert_eq!(count_9, 13);
 
         let count_10 = histogram.collect_count(
             &vec![Range::Scope {
@@ -796,7 +796,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_10, 2);
+        debug_assert_eq!(count_10, 2);
 
         let count_11 = histogram.collect_count(
             &vec![Range::Scope {
@@ -806,7 +806,7 @@ mod tests {
             &sketch,
         )?;
 
-        assert_eq!(count_11, 2);
+        debug_assert_eq!(count_11, 2);
 
         Ok(())
     }

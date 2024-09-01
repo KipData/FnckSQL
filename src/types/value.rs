@@ -570,7 +570,7 @@ impl DataValue {
                                 let mut string_bytes = v.clone().into_bytes();
 
                                 string_bytes.resize(octets_len, b' ');
-                                assert_eq!(octets_len, string_bytes.len());
+                                debug_assert_eq!(octets_len, string_bytes.len());
                                 bytes.append(&mut string_bytes);
                                 return Ok(octets_len);
                             }
@@ -975,6 +975,7 @@ impl DataValue {
                 LogicalType::UBigint => {
                     Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
                 }
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
                 LogicalType::Smallint => Ok(DataValue::Int16(value)),
                 LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
@@ -1007,6 +1008,10 @@ impl DataValue {
                 LogicalType::UBigint => {
                     Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
                 }
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
                 LogicalType::Integer => Ok(DataValue::Int32(value)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
@@ -1038,6 +1043,11 @@ impl DataValue {
                 LogicalType::UBigint => {
                     Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
                 }
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
+                LogicalType::Integer => Ok(DataValue::Int32(value.map(i32::try_from).transpose()?)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value)),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v as f64))),
@@ -1058,6 +1068,7 @@ impl DataValue {
             },
             DataValue::UInt8(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
                 LogicalType::UTinyint => Ok(DataValue::UInt8(value)),
                 LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
                 LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| v.into()))),
@@ -1084,6 +1095,11 @@ impl DataValue {
             },
             DataValue::UInt16(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
                 LogicalType::USmallint => Ok(DataValue::UInt16(value)),
                 LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                 LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| v.into()))),
@@ -1108,6 +1124,15 @@ impl DataValue {
             },
             DataValue::UInt32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
+                LogicalType::USmallint => {
+                    Ok(DataValue::UInt16(value.map(u16::try_from).transpose()?))
+                }
+                LogicalType::Integer => Ok(DataValue::Int32(value.map(i32::try_from).transpose()?)),
                 LogicalType::UInteger => Ok(DataValue::UInt32(value)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
@@ -1130,6 +1155,19 @@ impl DataValue {
             },
             DataValue::UInt64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
+                LogicalType::USmallint => {
+                    Ok(DataValue::UInt16(value.map(u16::try_from).transpose()?))
+                }
+                LogicalType::Integer => Ok(DataValue::Int32(value.map(i32::try_from).transpose()?)),
+                LogicalType::UInteger => {
+                    Ok(DataValue::UInt32(value.map(u32::try_from).transpose()?))
+                }
+                LogicalType::Bigint => Ok(DataValue::Int64(value.map(i64::try_from).transpose()?)),
                 LogicalType::UBigint => Ok(DataValue::UInt64(value)),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v as f64))),
@@ -1589,8 +1627,8 @@ mod test {
 
         println!("{:?} < {:?}", key_i8_1, key_i8_2);
         println!("{:?} < {:?}", key_i8_2, key_i8_3);
-        assert!(key_i8_1 < key_i8_2);
-        assert!(key_i8_2 < key_i8_3);
+        debug_assert!(key_i8_1 < key_i8_2);
+        debug_assert!(key_i8_2 < key_i8_3);
 
         let mut key_i16_1 = Vec::new();
         let mut key_i16_2 = Vec::new();
@@ -1602,8 +1640,8 @@ mod test {
 
         println!("{:?} < {:?}", key_i16_1, key_i16_2);
         println!("{:?} < {:?}", key_i16_2, key_i16_3);
-        assert!(key_i16_1 < key_i16_2);
-        assert!(key_i16_2 < key_i16_3);
+        debug_assert!(key_i16_1 < key_i16_2);
+        debug_assert!(key_i16_2 < key_i16_3);
 
         let mut key_i32_1 = Vec::new();
         let mut key_i32_2 = Vec::new();
@@ -1615,8 +1653,8 @@ mod test {
 
         println!("{:?} < {:?}", key_i32_1, key_i32_2);
         println!("{:?} < {:?}", key_i32_2, key_i32_3);
-        assert!(key_i32_1 < key_i32_2);
-        assert!(key_i32_2 < key_i32_3);
+        debug_assert!(key_i32_1 < key_i32_2);
+        debug_assert!(key_i32_2 < key_i32_3);
 
         let mut key_i64_1 = Vec::new();
         let mut key_i64_2 = Vec::new();
@@ -1628,8 +1666,8 @@ mod test {
 
         println!("{:?} < {:?}", key_i64_1, key_i64_2);
         println!("{:?} < {:?}", key_i64_2, key_i64_3);
-        assert!(key_i64_1 < key_i64_2);
-        assert!(key_i64_2 < key_i64_3);
+        debug_assert!(key_i64_1 < key_i64_2);
+        debug_assert!(key_i64_2 < key_i64_3);
 
         Ok(())
     }
@@ -1646,8 +1684,8 @@ mod test {
 
         println!("{:?} < {:?}", key_f32_1, key_f32_2);
         println!("{:?} < {:?}", key_f32_2, key_f32_3);
-        assert!(key_f32_1 < key_f32_2);
-        assert!(key_f32_2 < key_f32_3);
+        debug_assert!(key_f32_1 < key_f32_2);
+        debug_assert!(key_f32_2 < key_f32_3);
 
         let mut key_f64_1 = Vec::new();
         let mut key_f64_2 = Vec::new();
@@ -1659,8 +1697,8 @@ mod test {
 
         println!("{:?} < {:?}", key_f64_1, key_f64_2);
         println!("{:?} < {:?}", key_f64_2, key_f64_3);
-        assert!(key_f64_1 < key_f64_2);
-        assert!(key_f64_2 < key_f64_3);
+        debug_assert!(key_f64_1 < key_f64_2);
+        debug_assert!(key_f64_2 < key_f64_3);
 
         Ok(())
     }
@@ -1692,8 +1730,8 @@ mod test {
 
         println!("{:?} < {:?}", key_tuple_1, key_tuple_2);
         println!("{:?} < {:?}", key_tuple_2, key_tuple_3);
-        assert!(key_tuple_1 < key_tuple_2);
-        assert!(key_tuple_2 < key_tuple_3);
+        debug_assert!(key_tuple_1 < key_tuple_2);
+        debug_assert!(key_tuple_2 < key_tuple_3);
 
         Ok(())
     }

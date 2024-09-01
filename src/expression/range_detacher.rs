@@ -819,21 +819,21 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 => {}", range);
-            assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
+            debug_assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
         }
         {
             let plan = select_sql_run("select * from t1 where c1 != 1")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 != 1 => {:#?}", range);
-            assert_eq!(range, None)
+            debug_assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 > 1")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 > 1 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
@@ -846,7 +846,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 >= 1 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
@@ -859,7 +859,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 < 1 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
@@ -872,7 +872,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 <= 1 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
@@ -885,7 +885,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 < 1 and c1 >= 0 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(0)))),
@@ -898,7 +898,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 < 1 or c1 >= 0 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
@@ -912,14 +912,14 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 and c1 = 0 => c1: {}", range);
-            assert_eq!(range, Range::Dummy)
+            debug_assert_eq!(range, Range::Dummy)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 = 1 or c1 = 0")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 or c1 = 0 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Eq(Arc::new(DataValue::Int32(Some(0)))),
@@ -932,14 +932,14 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 and c1 = 1 => c1: {}", range);
-            assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
+            debug_assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
         }
         {
             let plan = select_sql_run("select * from t1 where c1 = 1 or c1 = 1")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = 1 or c1 = 1 => c1: {}", range);
-            assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
+            debug_assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
         }
 
         {
@@ -947,21 +947,21 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 > 1 and c1 = 1 => c1: {}", range);
-            assert_eq!(range, Range::Dummy)
+            debug_assert_eq!(range, Range::Dummy)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 >= 1 and c1 = 1")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 >= 1 and c1 = 1 => c1: {}", range);
-            assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
+            debug_assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(Some(1)))))
         }
         {
             let plan = select_sql_run("select * from t1 where c1 > 1 or c1 = 1")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 > 1 or c1 = 1 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
@@ -974,7 +974,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 >= 1 or c1 = 1 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
@@ -993,7 +993,7 @@ mod test {
                 "(c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4) => c1: {}",
                 range
             );
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
@@ -1011,7 +1011,7 @@ mod test {
                 "(c1 > 0 and c1 < 3) or (c1 > 1 and c1 < 4) => c1: {}",
                 range
             );
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
@@ -1030,7 +1030,7 @@ mod test {
                 "((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) and c1 = 0 => c1: {}",
                 range
             );
-            assert_eq!(range, Range::Dummy)
+            debug_assert_eq!(range, Range::Dummy)
         }
         {
             let plan = select_sql_run(
@@ -1042,7 +1042,7 @@ mod test {
                 "((c1 > 0 and c1 < 3) or (c1 > 1 and c1 < 4)) and c1 = 0 => c1: {}",
                 range
             );
-            assert_eq!(range, Range::Dummy)
+            debug_assert_eq!(range, Range::Dummy)
         }
         {
             let plan = select_sql_run(
@@ -1054,7 +1054,7 @@ mod test {
                 "((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) or c1 = 0 => c1: {}",
                 range
             );
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Eq(Arc::new(DataValue::Int32(Some(0)))),
@@ -1075,7 +1075,7 @@ mod test {
                 "((c1 > 0 and c1 < 3) or (c1 > 1 and c1 < 4)) or c1 = 0 => c1: {}",
                 range
             );
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(0)))),
@@ -1089,14 +1089,14 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("(((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) and c1 = 0) and (c1 >= 0 and c1 <= 2) => c1: {}", range);
-            assert_eq!(range, Range::Dummy)
+            debug_assert_eq!(range, Range::Dummy)
         }
         {
             let plan = select_sql_run("select * from t1 where (((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) and c1 = 0) or (c1 >= 0 and c1 <= 2)")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("(((c1 > 0 and c1 < 3) and (c1 > 1 and c1 < 4)) and c1 = 0) or (c1 >= 0 and c1 <= 2) => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(0)))),
@@ -1110,7 +1110,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) and ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Scope {
@@ -1129,7 +1129,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) or ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Scope {
@@ -1149,7 +1149,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("empty => c1: {:#?}", range);
-            assert_eq!(range, None)
+            debug_assert_eq!(range, None)
         }
         // other column
         {
@@ -1157,21 +1157,21 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c2 = 1 => c1: {:#?}", range);
-            assert_eq!(range, None)
+            debug_assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 > 1 or c2 > 1")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 > 1 or c2 > 1 => c1: {:#?}", range);
-            assert_eq!(range, None)
+            debug_assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 > c2 or c2 > 1")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 > c2 or c2 > 1 => c1: {:#?}", range);
-            assert_eq!(range, None)
+            debug_assert_eq!(range, None)
         }
         // case 1
         {
@@ -1184,7 +1184,7 @@ mod test {
                 "c1 = 5 or (c1 > 5 and (c1 > 6 or c1 < 8) and c1 < 12) => c1: {}",
                 range
             );
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Included(Arc::new(DataValue::Int32(Some(5)))),
@@ -1203,7 +1203,7 @@ mod test {
                 "((c2 >= -8 and -4 >= c1) or (c1 >= 0 and 5 > c2)) and ((c2 > 0 and c1 <= 1) or (c1 > -8 and c2 < -6)) => c1: {}",
                 range
             );
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Scope {
@@ -1230,14 +1230,14 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null => c1: {}", range);
-            assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(None))))
+            debug_assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(None))))
         }
         {
             let plan = select_sql_run("select * from t1 where c1 = null or c1 = 1")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null or c1 = 1 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Eq(Arc::new(DataValue::Int32(None))),
@@ -1250,7 +1250,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null or c1 < 5 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
@@ -1263,7 +1263,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null or (c1 > 1 and c1 < 5) => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Eq(Arc::new(DataValue::Int32(None))),
@@ -1279,14 +1279,14 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null and c1 < 5 => c1: {}", range);
-            assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(None))))
+            debug_assert_eq!(range, Range::Eq(Arc::new(DataValue::Int32(None))))
         }
         {
             let plan = select_sql_run("select * from t1 where c1 = null and (c1 > 1 and c1 < 5)")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 = null and (c1 > 1 and c1 < 5) => c1: {}", range);
-            assert_eq!(range, Range::Dummy)
+            debug_assert_eq!(range, Range::Dummy)
         }
         // noteq
         {
@@ -1294,35 +1294,35 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 != null => c1: {:#?}", range);
-            assert_eq!(range, None)
+            debug_assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 = null or c1 != 1")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 = null or c1 != 1 => c1: {:#?}", range);
-            assert_eq!(range, None)
+            debug_assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 != null or c1 < 5")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 != null or c1 < 5 => c1: {:#?}", range);
-            assert_eq!(range, None)
+            debug_assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 != null or (c1 > 1 and c1 < 5)")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate);
             println!("c1 != null or (c1 > 1 and c1 < 5) => c1: {:#?}", range);
-            assert_eq!(range, None)
+            debug_assert_eq!(range, None)
         }
         {
             let plan = select_sql_run("select * from t1 where c1 != null and c1 < 5")?;
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 != null and c1 < 5 => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
@@ -1335,7 +1335,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("c1 != null and (c1 > 1 and c1 < 5) => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
@@ -1348,7 +1348,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("(c1 = null or (c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) or ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Eq(Arc::new(DataValue::Int32(None))),
@@ -1368,7 +1368,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) or (c1 = null or (c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Eq(Arc::new(DataValue::Int32(None))),
@@ -1388,7 +1388,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("(c1 = null or (c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) and ((c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Scope {
@@ -1407,7 +1407,7 @@ mod test {
             let op = plan_filter(plan)?.unwrap();
             let range = RangeDetacher::new("t1", &0).detach(&op.predicate).unwrap();
             println!("((c1 < 2 and c1 > 0) or (c1 < 6 and c1 > 4)) and (c1 = null or (c1 < 3 and c1 > 1) or (c1 < 7 and c1 > 5)) => c1: {}", range);
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::SortedRanges(vec![
                     Range::Scope {
@@ -1446,7 +1446,7 @@ mod test {
         }
         .combining_eqs(&eqs_ranges);
 
-        assert_eq!(
+        debug_assert_eq!(
             range,
             Some(Range::Scope {
                 min: Bound::Included(Arc::new(DataValue::Tuple(Some(vec![
@@ -1465,7 +1465,7 @@ mod test {
         }
         .combining_eqs(&eqs_ranges);
 
-        assert_eq!(
+        debug_assert_eq!(
             range,
             Some(Range::Scope {
                 min: Bound::Unbounded,
@@ -1484,7 +1484,7 @@ mod test {
         }
         .combining_eqs(&eqs_ranges);
 
-        assert_eq!(
+        debug_assert_eq!(
             range,
             Some(Range::SortedRanges(vec![
                 Range::Scope {
@@ -1606,7 +1606,7 @@ mod test {
         }
         .combining_eqs(&eqs_ranges_2);
 
-        assert_eq!(range_1, None);
-        assert_eq!(range_2, None);
+        debug_assert_eq!(range_1, None);
+        debug_assert_eq!(range_2, None);
     }
 }

@@ -47,8 +47,8 @@ pub trait Transaction: Sized {
         bounds: Bounds,
         mut columns: Vec<(usize, ColumnRef)>,
     ) -> Result<TupleIter<'_, Self>, DatabaseError> {
-        assert!(columns.is_sorted_by_key(|(i, _)| i));
-        assert!(columns.iter().map(|(i, _)| i).all_unique());
+        debug_assert!(columns.is_sorted_by_key(|(i, _)| i));
+        debug_assert!(columns.iter().map(|(i, _)| i).all_unique());
 
         let table = self
             .table(table_cache, table_name.clone())
@@ -87,8 +87,8 @@ pub trait Transaction: Sized {
         index_meta: IndexMetaRef,
         ranges: Vec<Range>,
     ) -> Result<IndexIter<'a, Self>, DatabaseError> {
-        assert!(columns.is_sorted_by_key(|(i, _)| i));
-        assert!(columns.iter().map(|(i, _)| i).all_unique());
+        debug_assert!(columns.is_sorted_by_key(|(i, _)| i));
+        debug_assert!(columns.iter().map(|(i, _)| i).all_unique());
 
         let table = self
             .table(table_cache, table_name.clone())

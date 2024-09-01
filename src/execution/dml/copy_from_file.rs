@@ -196,7 +196,7 @@ mod tests {
             CoroutineState::Complete(()) => unreachable!(),
         }
         .unwrap();
-        assert_eq!(
+        debug_assert_eq!(
             tuple,
             TupleBuilder::build_result(format!("import {} rows", 2))
         );

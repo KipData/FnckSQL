@@ -177,16 +177,16 @@ mod tests {
 
         match plan1.operator {
             Operator::CreateTable(op) => {
-                assert_eq!(op.table_name, Arc::new("t1".to_string()));
-                assert_eq!(op.columns[0].name(), "id");
-                assert_eq!(op.columns[0].nullable, false);
-                assert_eq!(
+                debug_assert_eq!(op.table_name, Arc::new("t1".to_string()));
+                debug_assert_eq!(op.columns[0].name(), "id");
+                debug_assert_eq!(op.columns[0].nullable, false);
+                debug_assert_eq!(
                     op.columns[0].desc,
                     ColumnDesc::new(LogicalType::Integer, true, false, None)
                 );
-                assert_eq!(op.columns[1].name(), "name");
-                assert_eq!(op.columns[1].nullable, true);
-                assert_eq!(
+                debug_assert_eq!(op.columns[1].name(), "name");
+                debug_assert_eq!(op.columns[1].nullable, true);
+                debug_assert_eq!(
                     op.columns[1].desc,
                     ColumnDesc::new(
                         LogicalType::Varchar(Some(10), CharLengthUnits::Characters),

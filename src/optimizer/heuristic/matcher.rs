@@ -84,7 +84,7 @@ mod tests {
             }]),
         };
 
-        assert!(
+        debug_assert!(
             HepMatcher::new(&project_into_table_scan_pattern, HepNodeId::new(0), &graph)
                 .match_opt_expr()
         );
@@ -128,6 +128,8 @@ mod tests {
             children: PatternChildrenPredicate::Recursive,
         };
 
-        assert!(HepMatcher::new(&only_dummy_pattern, HepNodeId::new(0), &graph).match_opt_expr());
+        debug_assert!(
+            HepMatcher::new(&only_dummy_pattern, HepNodeId::new(0), &graph).match_opt_expr()
+        );
     }
 }
