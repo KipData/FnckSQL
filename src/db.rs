@@ -238,6 +238,7 @@ impl<S: Storage> Database<S> {
                 ImplementationRuleImpl::Projection,
                 ImplementationRuleImpl::SeqScan,
                 ImplementationRuleImpl::IndexScan,
+                ImplementationRuleImpl::FunctionScan,
                 ImplementationRuleImpl::Sort,
                 ImplementationRuleImpl::Values,
                 // DML

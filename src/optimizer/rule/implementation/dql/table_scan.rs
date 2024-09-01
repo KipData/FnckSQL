@@ -9,7 +9,7 @@ use crate::types::index::IndexType;
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref SCAN_PATTERN: Pattern = {
+    static ref TABLE_SCAN_PATTERN: Pattern = {
         Pattern {
             predicate: |op| matches!(op, Operator::TableScan(_)),
             children: PatternChildrenPredicate::None,
@@ -22,7 +22,7 @@ pub struct SeqScanImplementation;
 
 impl MatchPattern for SeqScanImplementation {
     fn pattern(&self) -> &Pattern {
-        &SCAN_PATTERN
+        &TABLE_SCAN_PATTERN
     }
 }
 
@@ -63,7 +63,7 @@ pub struct IndexScanImplementation;
 
 impl MatchPattern for IndexScanImplementation {
     fn pattern(&self) -> &Pattern {
-        &SCAN_PATTERN
+        &TABLE_SCAN_PATTERN
     }
 }
 

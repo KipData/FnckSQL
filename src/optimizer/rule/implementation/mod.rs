@@ -24,13 +24,14 @@ use crate::optimizer::rule::implementation::dql::aggregate::{
 };
 use crate::optimizer::rule::implementation::dql::dummy::DummyImplementation;
 use crate::optimizer::rule::implementation::dql::filter::FilterImplementation;
+use crate::optimizer::rule::implementation::dql::function_scan::FunctionScanImplementation;
 use crate::optimizer::rule::implementation::dql::join::JoinImplementation;
 use crate::optimizer::rule::implementation::dql::limit::LimitImplementation;
 use crate::optimizer::rule::implementation::dql::projection::ProjectionImplementation;
-use crate::optimizer::rule::implementation::dql::scan::{
+use crate::optimizer::rule::implementation::dql::sort::SortImplementation;
+use crate::optimizer::rule::implementation::dql::table_scan::{
     IndexScanImplementation, SeqScanImplementation,
 };
-use crate::optimizer::rule::implementation::dql::sort::SortImplementation;
 use crate::optimizer::rule::implementation::dql::values::ValuesImplementation;
 use crate::planner::operator::Operator;
 use crate::storage::Transaction;
@@ -46,6 +47,7 @@ pub enum ImplementationRuleImpl {
     Limit,
     Projection,
     SeqScan,
+    FunctionScan,
     IndexScan,
     Sort,
     Values,
@@ -76,6 +78,7 @@ impl MatchPattern for ImplementationRuleImpl {
             ImplementationRuleImpl::Projection => ProjectionImplementation.pattern(),
             ImplementationRuleImpl::SeqScan => SeqScanImplementation.pattern(),
             ImplementationRuleImpl::IndexScan => IndexScanImplementation.pattern(),
+            ImplementationRuleImpl::FunctionScan => FunctionScanImplementation.pattern(),
             ImplementationRuleImpl::Sort => SortImplementation.pattern(),
             ImplementationRuleImpl::Values => ValuesImplementation.pattern(),
             ImplementationRuleImpl::CopyFromFile => CopyFromFileImplementation.pattern(),
@@ -127,6 +130,9 @@ impl<T: Transaction> ImplementationRule<T> for ImplementationRuleImpl {
             }
             ImplementationRuleImpl::IndexScan => {
                 IndexScanImplementation.to_expression(operator, loader, group_expr)?
+            }
+            ImplementationRuleImpl::FunctionScan => {
+                FunctionScanImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Sort => {
                 SortImplementation.to_expression(operator, loader, group_expr)?
