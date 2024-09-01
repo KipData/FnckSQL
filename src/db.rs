@@ -306,9 +306,10 @@ mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::{DataBaseBuilder, DatabaseError};
     use crate::storage::{Storage, TableCache, Transaction};
-    use crate::types::tuple::create_table;
+    use crate::types::tuple::{create_table, Tuple};
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
+    use chrono::{Datelike, Local};
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -356,6 +357,23 @@ mod test {
         let (schema, tuples) = fnck_sql.run("select current_date()")?;
         println!("{}", create_table(&schema, &tuples));
 
+        assert_eq!(
+            tuples,
+            vec![Tuple {
+                id: None,
+                values: vec![Arc::new(DataValue::Date32(Some(
+                    Local::now().num_days_from_ce()
+                )))],
+            }]
+        );
+        assert_eq!(
+            schema,
+            Arc::new(vec![Arc::new(ColumnCatalog::new(
+                "current_date()".to_string(),
+                true,
+                ColumnDesc::new(LogicalType::Date, false, false, None)
+            ))])
+        );
         Ok(())
     }
 
@@ -369,6 +387,28 @@ mod test {
         )?;
         println!("{}", create_table(&schema, &tuples));
 
+        assert_eq!(
+            tuples,
+            vec![
+                Tuple {
+                    id: None,
+                    values: vec![Arc::new(DataValue::Int32(Some(3)))],
+                },
+                Tuple {
+                    id: None,
+                    values: vec![Arc::new(DataValue::Int32(Some(4)))],
+                },
+            ]
+        );
+        let mut column = ColumnCatalog::new(
+            "number".to_string(),
+            true,
+            ColumnDesc::new(LogicalType::Integer, false, false, None),
+        );
+        column.set_table_name(Arc::new("a".to_string()));
+        column.set_id(0);
+
+        assert_eq!(schema, Arc::new(vec![Arc::new(column)]));
         Ok(())
     }
 

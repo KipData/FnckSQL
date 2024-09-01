@@ -411,8 +411,8 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
     ) -> Result<Vec<ScalarExpression>, DatabaseError> {
         let mut select_items = vec![];
 
-        for item in items.iter().enumerate() {
-            match item.1 {
+        for item in items.iter() {
+            match item {
                 SelectItem::UnnamedExpr(expr) => select_items.push(self.bind_expr(expr)?),
                 SelectItem::ExprWithAlias { expr, alias } => {
                     let expr = self.bind_expr(expr)?;
@@ -428,7 +428,10 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                 }
                 SelectItem::Wildcard(_) => {
                     if let Operator::Project(op) = &plan.operator {
-                        return Ok(op.exprs.clone());
+                        for expr in op.exprs.iter() {
+                            select_items.push(expr.clone());
+                        }
+                        continue;
                     }
                     let mut join_used = HashSet::with_capacity(self.context.using.len());
 

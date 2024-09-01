@@ -975,6 +975,7 @@ impl DataValue {
                 LogicalType::UBigint => {
                     Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
                 }
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
                 LogicalType::Smallint => Ok(DataValue::Int16(value)),
                 LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
@@ -1007,6 +1008,10 @@ impl DataValue {
                 LogicalType::UBigint => {
                     Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
                 }
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
                 LogicalType::Integer => Ok(DataValue::Int32(value)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
@@ -1038,6 +1043,11 @@ impl DataValue {
                 LogicalType::UBigint => {
                     Ok(DataValue::UInt64(value.map(u64::try_from).transpose()?))
                 }
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
+                LogicalType::Integer => Ok(DataValue::Int32(value.map(i32::try_from).transpose()?)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value)),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v as f64))),
@@ -1058,6 +1068,7 @@ impl DataValue {
             },
             DataValue::UInt8(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
                 LogicalType::UTinyint => Ok(DataValue::UInt8(value)),
                 LogicalType::Smallint => Ok(DataValue::Int16(value.map(|v| v.into()))),
                 LogicalType::USmallint => Ok(DataValue::UInt16(value.map(|v| v.into()))),
@@ -1084,6 +1095,11 @@ impl DataValue {
             },
             DataValue::UInt16(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
                 LogicalType::USmallint => Ok(DataValue::UInt16(value)),
                 LogicalType::Integer => Ok(DataValue::Int32(value.map(|v| v.into()))),
                 LogicalType::UInteger => Ok(DataValue::UInt32(value.map(|v| v.into()))),
@@ -1108,6 +1124,15 @@ impl DataValue {
             },
             DataValue::UInt32(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
+                LogicalType::USmallint => {
+                    Ok(DataValue::UInt16(value.map(u16::try_from).transpose()?))
+                }
+                LogicalType::Integer => Ok(DataValue::Int32(value.map(i32::try_from).transpose()?)),
                 LogicalType::UInteger => Ok(DataValue::UInt32(value)),
                 LogicalType::Bigint => Ok(DataValue::Int64(value.map(|v| v.into()))),
                 LogicalType::UBigint => Ok(DataValue::UInt64(value.map(|v| v.into()))),
@@ -1130,6 +1155,19 @@ impl DataValue {
             },
             DataValue::UInt64(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
+                LogicalType::Tinyint => Ok(DataValue::Int8(value.map(i8::try_from).transpose()?)),
+                LogicalType::UTinyint => Ok(DataValue::UInt8(value.map(u8::try_from).transpose()?)),
+                LogicalType::Smallint => {
+                    Ok(DataValue::Int16(value.map(i16::try_from).transpose()?))
+                }
+                LogicalType::USmallint => {
+                    Ok(DataValue::UInt16(value.map(u16::try_from).transpose()?))
+                }
+                LogicalType::Integer => Ok(DataValue::Int32(value.map(i32::try_from).transpose()?)),
+                LogicalType::UInteger => {
+                    Ok(DataValue::UInt32(value.map(u32::try_from).transpose()?))
+                }
+                LogicalType::Bigint => Ok(DataValue::Int64(value.map(i64::try_from).transpose()?)),
                 LogicalType::UBigint => Ok(DataValue::UInt64(value)),
                 LogicalType::Float => Ok(DataValue::Float32(value.map(|v| v as f32))),
                 LogicalType::Double => Ok(DataValue::Float64(value.map(|v| v as f64))),
