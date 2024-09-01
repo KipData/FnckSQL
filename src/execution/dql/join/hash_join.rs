@@ -137,8 +137,8 @@ impl HashJoinStatus {
         if on_left_keys.is_empty() || on_right_keys.is_empty() {
             todo!("`NestLoopJoin` should be used when there is no equivalent condition")
         }
-        assert!(!on_left_keys.is_empty());
-        assert!(!on_right_keys.is_empty());
+        debug_assert!(!on_left_keys.is_empty());
+        debug_assert!(!on_right_keys.is_empty());
 
         let fn_process = |schema: &mut Vec<ColumnRef>, force_nullable| {
             for column in schema.iter_mut() {
@@ -543,17 +543,17 @@ mod test {
             HashJoin::from((op, left, right)).execute((&table_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
-        assert_eq!(tuples.len(), 3);
+        debug_assert_eq!(tuples.len(), 3);
 
-        assert_eq!(
+        debug_assert_eq!(
             tuples[0].values,
             build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples[1].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples[2].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
         );
@@ -582,21 +582,21 @@ mod test {
             let executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
             let tuples = try_collect(executor.execute((&table_cache, &meta_cache), &transaction))?;
 
-            assert_eq!(tuples.len(), 4);
+            debug_assert_eq!(tuples.len(), 4);
 
-            assert_eq!(
+            debug_assert_eq!(
                 tuples[0].values,
                 build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
             );
-            assert_eq!(
+            debug_assert_eq!(
                 tuples[1].values,
                 build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
             );
-            assert_eq!(
+            debug_assert_eq!(
                 tuples[2].values,
                 build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
             );
-            assert_eq!(
+            debug_assert_eq!(
                 tuples[3].values,
                 build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
             );
@@ -608,18 +608,18 @@ mod test {
             let mut tuples =
                 try_collect(executor.execute((&table_cache, &meta_cache), &transaction))?;
 
-            assert_eq!(tuples.len(), 2);
+            debug_assert_eq!(tuples.len(), 2);
             tuples.sort_by_key(|tuple| {
                 let mut bytes = Vec::new();
                 tuple.values[0].memcomparable_encode(&mut bytes).unwrap();
                 bytes
             });
 
-            assert_eq!(
+            debug_assert_eq!(
                 tuples[0].values,
                 build_integers(vec![Some(0), Some(2), Some(4)])
             );
-            assert_eq!(
+            debug_assert_eq!(
                 tuples[1].values,
                 build_integers(vec![Some(1), Some(3), Some(5)])
             );
@@ -630,8 +630,8 @@ mod test {
             executor.ty = JoinType::LeftAnti;
             let tuples = try_collect(executor.execute((&table_cache, &meta_cache), &transaction))?;
 
-            assert_eq!(tuples.len(), 1);
-            assert_eq!(
+            debug_assert_eq!(tuples.len(), 1);
+            debug_assert_eq!(
                 tuples[0].values,
                 build_integers(vec![Some(3), Some(5), Some(7)])
             );
@@ -660,21 +660,21 @@ mod test {
             HashJoin::from((op, left, right)).execute((&table_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
-        assert_eq!(tuples.len(), 4);
+        debug_assert_eq!(tuples.len(), 4);
 
-        assert_eq!(
+        debug_assert_eq!(
             tuples[0].values,
             build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples[1].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples[2].values,
             build_integers(vec![None, None, None, Some(4), Some(6), Some(8)])
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples[3].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
         );
@@ -702,25 +702,25 @@ mod test {
             HashJoin::from((op, left, right)).execute((&table_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
-        assert_eq!(tuples.len(), 5);
+        debug_assert_eq!(tuples.len(), 5);
 
-        assert_eq!(
+        debug_assert_eq!(
             tuples[0].values,
             build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples[1].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples[2].values,
             build_integers(vec![None, None, None, Some(4), Some(6), Some(8)])
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples[3].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples[4].values,
             build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
         );

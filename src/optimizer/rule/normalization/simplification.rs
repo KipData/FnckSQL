@@ -146,11 +146,11 @@ mod test {
         if let Operator::Project(project_op) = best_plan.clone().operator {
             let constant_expr = ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(3))));
             if let ScalarExpression::Binary { right_expr, .. } = &project_op.exprs[0] {
-                assert_eq!(right_expr.as_ref(), &constant_expr);
+                debug_assert_eq!(right_expr.as_ref(), &constant_expr);
             } else {
                 unreachable!();
             }
-            assert_eq!(&project_op.exprs[1], &constant_expr);
+            debug_assert_eq!(&project_op.exprs[1], &constant_expr);
         } else {
             unreachable!();
         }
@@ -158,7 +158,7 @@ mod test {
             let range = RangeDetacher::new("t1", &0)
                 .detach(&filter_op.predicate)
                 .unwrap();
-            assert_eq!(
+            debug_assert_eq!(
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
@@ -217,17 +217,17 @@ mod test {
         let op_4 = op(plan_4)?;
         let op_5 = op(plan_9)?;
 
-        assert!(op_1.is_some());
-        assert!(op_2.is_some());
-        assert!(op_3.is_some());
-        assert!(op_4.is_some());
-        assert!(op_5.is_some());
+        debug_assert!(op_1.is_some());
+        debug_assert!(op_2.is_some());
+        debug_assert!(op_3.is_some());
+        debug_assert!(op_4.is_some());
+        debug_assert!(op_5.is_some());
 
-        assert_eq!(op_1, op(plan_5)?);
-        assert_eq!(op_2, op(plan_6)?);
-        assert_eq!(op_3, op(plan_7)?);
-        assert_eq!(op_4, op(plan_8)?);
-        assert_eq!(op_5, op(plan_10)?);
+        debug_assert_eq!(op_1, op(plan_5)?);
+        debug_assert_eq!(op_2, op(plan_6)?);
+        debug_assert_eq!(op_3, op(plan_7)?);
+        debug_assert_eq!(op_4, op(plan_8)?);
+        debug_assert_eq!(op_5, op(plan_10)?);
 
         Ok(())
     }
@@ -274,7 +274,7 @@ mod test {
             };
 
             // -(c1 + 1) > c2 => c1 < -c2 - 1
-            assert_eq!(
+            debug_assert_eq!(
                 filter_op.predicate,
                 ScalarExpression::Binary {
                     op: BinaryOperator::Gt,
@@ -345,56 +345,56 @@ mod test {
         let range_4_c1 = plan_filter(&plan_4, &0)?.unwrap();
         let range_4_c2 = plan_filter(&plan_4, &1)?.unwrap();
 
-        assert_eq!(
+        debug_assert_eq!(
             range_1_c1,
             Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
             }
         );
-        assert_eq!(
+        debug_assert_eq!(
             range_1_c2,
             Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
                 max: Bound::Unbounded
             }
         );
-        assert_eq!(
+        debug_assert_eq!(
             range_2_c1,
             Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(2)))),
                 max: Bound::Unbounded
             }
         );
-        assert_eq!(
+        debug_assert_eq!(
             range_2_c2,
             Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-2))))
             }
         );
-        assert_eq!(
+        debug_assert_eq!(
             range_3_c1,
             Range::Scope {
                 min: Bound::Unbounded,
                 max: Bound::Excluded(Arc::new(DataValue::Int32(Some(-1))))
             }
         );
-        assert_eq!(
+        debug_assert_eq!(
             range_3_c2,
             Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
                 max: Bound::Unbounded
             }
         );
-        assert_eq!(
+        debug_assert_eq!(
             range_4_c1,
             Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
                 max: Bound::Unbounded
             }
         );
-        assert_eq!(
+        debug_assert_eq!(
             range_4_c2,
             Range::Scope {
                 min: Bound::Unbounded,
@@ -410,7 +410,7 @@ mod test {
         // c1 > c2 or c1 > 1
         let plan_1 = select_sql_run("select * from t1 where c1 > c2 or c1 > 1")?;
 
-        assert_eq!(plan_filter(&plan_1, &0)?, None);
+        debug_assert_eq!(plan_filter(&plan_1, &0)?, None);
 
         Ok(())
     }
@@ -419,7 +419,7 @@ mod test {
     fn test_simplify_filter_multiple_dispersed_same_column_in_or() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 = 4 and c1 > c2 or c1 > 1")?;
 
-        assert_eq!(
+        debug_assert_eq!(
             plan_filter(&plan_1, &0)?,
             Some(Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
@@ -434,7 +434,7 @@ mod test {
     fn test_simplify_filter_column_is_null() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 is null")?;
 
-        assert_eq!(
+        debug_assert_eq!(
             plan_filter(&plan_1, &0)?,
             Some(Range::Eq(Arc::new(DataValue::Null)))
         );
@@ -446,7 +446,7 @@ mod test {
     fn test_simplify_filter_column_is_not_null() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 is not null")?;
 
-        assert_eq!(plan_filter(&plan_1, &0)?, None);
+        debug_assert_eq!(plan_filter(&plan_1, &0)?, None);
 
         Ok(())
     }
@@ -455,7 +455,7 @@ mod test {
     fn test_simplify_filter_column_in() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 in (1, 2, 3)")?;
 
-        assert_eq!(
+        debug_assert_eq!(
             plan_filter(&plan_1, &0)?,
             Some(Range::SortedRanges(vec![
                 Range::Eq(Arc::new(DataValue::Int32(Some(1)))),
@@ -471,7 +471,7 @@ mod test {
     fn test_simplify_filter_column_not_in() -> Result<(), DatabaseError> {
         let plan_1 = select_sql_run("select * from t1 where c1 not in (1, 2, 3)")?;
 
-        assert_eq!(plan_filter(&plan_1, &0)?, None);
+        debug_assert_eq!(plan_filter(&plan_1, &0)?, None);
 
         Ok(())
     }

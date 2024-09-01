@@ -154,8 +154,8 @@ mod tests {
         StatisticsMeta::new(histogram.clone(), sketch.clone()).to_file(path.clone())?;
         let statistics_meta = StatisticsMeta::from_file(path)?;
 
-        assert_eq!(histogram, statistics_meta.histogram);
-        assert_eq!(
+        debug_assert_eq!(histogram, statistics_meta.histogram);
+        debug_assert_eq!(
             sketch.estimate(&DataValue::Null),
             statistics_meta.cm_sketch.estimate(&DataValue::Null)
         );

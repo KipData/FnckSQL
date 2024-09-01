@@ -400,35 +400,35 @@ mod tests {
     #[test]
     fn test_lru_cache() {
         let mut lru = LruCache::new(3).unwrap();
-        assert!(lru.is_empty());
-        assert_eq!(lru.put(1, 10), None);
-        assert_eq!(lru.put(2, 20), None);
-        assert_eq!(lru.put(3, 30), None);
-        assert_eq!(lru.get(&1), Some(&10));
-        assert_eq!(lru.put(2, 200), Some(20));
-        assert_eq!(lru.put(4, 40), None);
-        assert_eq!(lru.get(&2), Some(&200));
-        assert_eq!(lru.get(&3), None);
+        debug_assert!(lru.is_empty());
+        debug_assert_eq!(lru.put(1, 10), None);
+        debug_assert_eq!(lru.put(2, 20), None);
+        debug_assert_eq!(lru.put(3, 30), None);
+        debug_assert_eq!(lru.get(&1), Some(&10));
+        debug_assert_eq!(lru.put(2, 200), Some(20));
+        debug_assert_eq!(lru.put(4, 40), None);
+        debug_assert_eq!(lru.get(&2), Some(&200));
+        debug_assert_eq!(lru.get(&3), None);
 
-        assert_eq!(lru.get_or_insert(9, |_| Ok(9)).unwrap(), &9);
+        debug_assert_eq!(lru.get_or_insert(9, |_| Ok(9)).unwrap(), &9);
 
-        assert_eq!(lru.len(), 3);
-        assert!(!lru.is_empty());
+        debug_assert_eq!(lru.len(), 3);
+        debug_assert!(!lru.is_empty());
 
         let mut set = HashSet::from([(&9, &9), (&2, &200), (&4, &40)]);
 
         for item in lru.iter() {
-            assert!(set.remove(&item))
+            debug_assert!(set.remove(&item))
         }
     }
 
     #[test]
     fn test_sharding_cache() {
         let lru = ShardingLruCache::new(4, 2, RandomState::default()).unwrap();
-        assert!(lru.is_empty());
-        assert_eq!(lru.put(1, 10), None);
-        assert_eq!(lru.get(&1), Some(&10));
-        assert!(!lru.is_empty());
-        assert_eq!(lru.get_or_insert(9, |_| Ok(9)).unwrap(), &9);
+        debug_assert!(lru.is_empty());
+        debug_assert_eq!(lru.put(1, 10), None);
+        debug_assert_eq!(lru.get(&1), Some(&10));
+        debug_assert!(!lru.is_empty());
+        debug_assert_eq!(lru.get_or_insert(9, |_| Ok(9)).unwrap(), &9);
     }
 }

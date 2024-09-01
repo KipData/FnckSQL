@@ -401,7 +401,7 @@ mod tests {
         )?;
         let schema = table_catalog.schema_ref();
 
-        assert_eq!(
+        debug_assert_eq!(
             TableCodec::decode_tuple(&table_catalog.types(), &[0, 1], schema, &bytes),
             tuple
         );
@@ -419,7 +419,7 @@ mod tests {
 
         let table_meta = TableCodec::decode_root_table(&bytes).unwrap();
 
-        assert_eq!(table_meta.table_name.as_str(), table_catalog.name.as_str());
+        debug_assert_eq!(table_meta.table_name.as_str(), table_catalog.name.as_str());
     }
 
     #[test]
@@ -428,7 +428,7 @@ mod tests {
         let (_, bytes) = TableCodec::encode_statistics_path("t1", 0, path.clone());
         let decode_path = TableCodec::decode_statistics_path(&bytes).unwrap();
 
-        assert_eq!(path, decode_path);
+        debug_assert_eq!(path, decode_path);
     }
 
     #[test]
@@ -443,7 +443,7 @@ mod tests {
         };
         let (_, bytes) = TableCodec::encode_index_meta(&"T1".to_string(), &index_meta)?;
 
-        assert_eq!(TableCodec::decode_index_meta(&bytes)?, index_meta);
+        debug_assert_eq!(TableCodec::decode_index_meta(&bytes)?, index_meta);
 
         Ok(())
     }
@@ -456,7 +456,7 @@ mod tests {
         let tuple_id = Arc::new(DataValue::Int32(Some(0)));
         let (_, bytes) = TableCodec::encode_index(&table_catalog.name, &index, &tuple_id)?;
 
-        assert_eq!(
+        debug_assert_eq!(
             TableCodec::decode_index(&bytes, &tuple_id.logical_type()),
             tuple_id
         );
@@ -472,7 +472,7 @@ mod tests {
         let (_, bytes) = TableCodec::encode_column(&table_catalog.name, &col).unwrap();
         let decode_col = TableCodec::decode_column(&bytes).unwrap();
 
-        assert_eq!(&decode_col, col.as_ref());
+        debug_assert_eq!(&decode_col, col.as_ref());
     }
 
     #[test]
@@ -517,11 +517,11 @@ mod tests {
             ))
             .collect_vec();
 
-        assert_eq!(vec.len(), 3);
+        debug_assert_eq!(vec.len(), 3);
 
-        assert_eq!(vec[0], &op(0, "T1"));
-        assert_eq!(vec[1], &op(1, "T1"));
-        assert_eq!(vec[2], &op(2, "T1"));
+        debug_assert_eq!(vec[0], &op(0, "T1"));
+        debug_assert_eq!(vec[1], &op(1, "T1"));
+        debug_assert_eq!(vec[2], &op(2, "T1"));
     }
 
     #[test]
@@ -563,11 +563,11 @@ mod tests {
             ))
             .collect_vec();
 
-        assert_eq!(vec.len(), 3);
+        debug_assert_eq!(vec.len(), 3);
 
-        assert_eq!(vec[0], &op(0, "T1"));
-        assert_eq!(vec[1], &op(1, "T1"));
-        assert_eq!(vec[2], &op(2, "T1"));
+        debug_assert_eq!(vec[0], &op(0, "T1"));
+        debug_assert_eq!(vec[1], &op(1, "T1"));
+        debug_assert_eq!(vec[2], &op(2, "T1"));
     }
 
     #[test]
@@ -617,17 +617,17 @@ mod tests {
             ))
             .collect_vec();
 
-        assert_eq!(vec.len(), 3);
+        debug_assert_eq!(vec.len(), 3);
 
-        assert_eq!(
+        debug_assert_eq!(
             vec[0],
             &op(DataValue::Int32(Some(0)), 1, &table_catalog.name)
         );
-        assert_eq!(
+        debug_assert_eq!(
             vec[1],
             &op(DataValue::Int32(Some(1)), 1, &table_catalog.name)
         );
-        assert_eq!(
+        debug_assert_eq!(
             vec[2],
             &op(DataValue::Int32(Some(2)), 1, &table_catalog.name)
         );
@@ -668,11 +668,11 @@ mod tests {
             ))
             .collect_vec();
 
-        assert_eq!(vec.len(), 3);
+        debug_assert_eq!(vec.len(), 3);
 
-        assert_eq!(vec[0], &op(DataValue::Int32(Some(0)), 0, "T1"));
-        assert_eq!(vec[1], &op(DataValue::Int32(Some(1)), 0, "T1"));
-        assert_eq!(vec[2], &op(DataValue::Int32(Some(2)), 0, "T1"));
+        debug_assert_eq!(vec[0], &op(DataValue::Int32(Some(0)), 0, "T1"));
+        debug_assert_eq!(vec[1], &op(DataValue::Int32(Some(1)), 0, "T1"));
+        debug_assert_eq!(vec[2], &op(DataValue::Int32(Some(2)), 0, "T1"));
     }
 
     #[test]
@@ -703,11 +703,11 @@ mod tests {
             ))
             .collect_vec();
 
-        assert_eq!(vec.len(), 3);
+        debug_assert_eq!(vec.len(), 3);
 
-        assert_eq!(vec[0], &op(DataValue::Int32(Some(0)), "T1"));
-        assert_eq!(vec[1], &op(DataValue::Int32(Some(1)), "T1"));
-        assert_eq!(vec[2], &op(DataValue::Int32(Some(2)), "T1"));
+        debug_assert_eq!(vec[0], &op(DataValue::Int32(Some(0)), "T1"));
+        debug_assert_eq!(vec[1], &op(DataValue::Int32(Some(1)), "T1"));
+        debug_assert_eq!(vec[2], &op(DataValue::Int32(Some(2)), "T1"));
     }
 
     #[test]
@@ -732,8 +732,8 @@ mod tests {
             ))
             .collect_vec();
 
-        assert_eq!(vec[0], &op("T0"));
-        assert_eq!(vec[1], &op("T1"));
-        assert_eq!(vec[2], &op("T2"));
+        debug_assert_eq!(vec[0], &op("T0"));
+        debug_assert_eq!(vec[1], &op("T1"));
+        debug_assert_eq!(vec[2], &op("T2"));
     }
 }

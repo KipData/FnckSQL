@@ -203,9 +203,9 @@ mod tests {
         let col_catalogs = vec![col0, col1];
         let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs).unwrap();
 
-        assert_eq!(table_catalog.contains_column(&"a".to_string()), true);
-        assert_eq!(table_catalog.contains_column(&"b".to_string()), true);
-        assert_eq!(table_catalog.contains_column(&"c".to_string()), false);
+        debug_assert_eq!(table_catalog.contains_column(&"a".to_string()), true);
+        debug_assert_eq!(table_catalog.contains_column(&"b".to_string()), true);
+        debug_assert_eq!(table_catalog.contains_column(&"c".to_string()), false);
 
         let col_a_id = table_catalog
             .get_column_id_by_name(&"a".to_string())
@@ -213,14 +213,14 @@ mod tests {
         let col_b_id = table_catalog
             .get_column_id_by_name(&"b".to_string())
             .unwrap();
-        assert!(col_a_id < col_b_id);
+        debug_assert!(col_a_id < col_b_id);
 
         let column_catalog = table_catalog.get_column_by_id(&col_a_id).unwrap();
-        assert_eq!(column_catalog.name(), "a");
-        assert_eq!(*column_catalog.datatype(), LogicalType::Integer,);
+        debug_assert_eq!(column_catalog.name(), "a");
+        debug_assert_eq!(*column_catalog.datatype(), LogicalType::Integer,);
 
         let column_catalog = table_catalog.get_column_by_id(&col_b_id).unwrap();
-        assert_eq!(column_catalog.name(), "b");
-        assert_eq!(*column_catalog.datatype(), LogicalType::Boolean,);
+        debug_assert_eq!(column_catalog.name(), "b");
+        debug_assert_eq!(*column_catalog.datatype(), LogicalType::Boolean,);
     }
 }

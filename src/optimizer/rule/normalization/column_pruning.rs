@@ -214,30 +214,30 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        assert_eq!(best_plan.childrens.len(), 1);
+        debug_assert_eq!(best_plan.childrens.len(), 1);
         match best_plan.operator {
             Operator::Project(op) => {
-                assert_eq!(op.exprs.len(), 2);
+                debug_assert_eq!(op.exprs.len(), 2);
             }
             _ => unreachable!("Should be a project operator"),
         }
         match &best_plan.childrens[0].operator {
             Operator::Join(op) => match &op.on {
                 JoinCondition::On { on, filter } => {
-                    assert_eq!(on.len(), 1);
-                    assert!(filter.is_none());
+                    debug_assert_eq!(on.len(), 1);
+                    debug_assert!(filter.is_none());
                 }
                 _ => unreachable!("Should be a on condition"),
             },
             _ => unreachable!("Should be a join operator"),
         }
 
-        assert_eq!(best_plan.childrens[0].childrens.len(), 2);
+        debug_assert_eq!(best_plan.childrens[0].childrens.len(), 2);
 
         for grandson_plan in &best_plan.childrens[0].childrens {
             match &grandson_plan.operator {
                 Operator::TableScan(op) => {
-                    assert_eq!(op.columns.len(), 1);
+                    debug_assert_eq!(op.columns.len(), 1);
                 }
                 _ => unreachable!("Should be a scan operator"),
             }

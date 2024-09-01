@@ -125,8 +125,8 @@ impl<K: Hash> CountMinSketch<K> {
     }
 
     fn mask(width: usize) -> usize {
-        assert!(width > 1);
-        assert_eq!(width & (width - 1), 0);
+        debug_assert!(width > 1);
+        debug_assert_eq!(width & (width - 1), 0);
         width - 1
     }
 
@@ -171,7 +171,7 @@ mod tests {
         for _ in 0..300 {
             cms.increment("key");
         }
-        assert_eq!(cms.estimate("key"), 300);
+        debug_assert_eq!(cms.estimate("key"), 300);
     }
 
     #[test]
@@ -181,7 +181,7 @@ mod tests {
             cms.increment(&(i % 100));
         }
         for key in 0..100 {
-            assert!(cms.estimate(&key) >= 9_000);
+            debug_assert!(cms.estimate(&key) >= 9_000);
         }
     }
 
@@ -191,7 +191,7 @@ mod tests {
         for _ in 0..300 {
             cms.increment(&DataValue::Int32(Some(300)));
         }
-        assert_eq!(
+        debug_assert_eq!(
             cms.collect_count(&vec![
                 Range::Eq(Arc::new(DataValue::Int32(Some(300)))),
                 Range::Scope {

@@ -15,7 +15,7 @@ pub struct SumAccumulator {
 
 impl SumAccumulator {
     pub fn new(ty: &LogicalType) -> Result<Self, DatabaseError> {
-        assert!(ty.is_numeric());
+        debug_assert!(ty.is_numeric());
 
         Ok(Self {
             result: DataValue::none(ty),

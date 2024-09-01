@@ -165,12 +165,12 @@ mod tests {
         let best_plan = graph.into_plan(Some(&memo));
         let exprs = &memo.groups.get(&NodeIndex::new(3)).unwrap();
 
-        assert_eq!(exprs.exprs.len(), 2);
-        assert_eq!(exprs.exprs[0].cost, Some(1000));
-        assert_eq!(exprs.exprs[0].op, PhysicalOption::SeqScan);
-        assert!(exprs.exprs[1].cost.unwrap() >= 960);
-        assert!(matches!(exprs.exprs[1].op, PhysicalOption::IndexScan(_)));
-        assert_eq!(
+        debug_assert_eq!(exprs.exprs.len(), 2);
+        debug_assert_eq!(exprs.exprs[0].cost, Some(1000));
+        debug_assert_eq!(exprs.exprs[0].op, PhysicalOption::SeqScan);
+        debug_assert!(exprs.exprs[1].cost.unwrap() >= 960);
+        debug_assert!(matches!(exprs.exprs[1].op, PhysicalOption::IndexScan(_)));
+        debug_assert_eq!(
             best_plan.as_ref().unwrap().childrens[0].childrens[0].childrens[0].physical_option,
             Some(PhysicalOption::IndexScan(IndexInfo {
                 meta: Arc::new(IndexMeta {

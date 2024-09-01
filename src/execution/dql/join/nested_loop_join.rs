@@ -478,7 +478,7 @@ mod test {
     }
 
     fn valid_result(expected: &mut HashSet<Vec<Arc<DataValue>>>, actual: &[Tuple]) {
-        assert_eq!(actual.len(), expected.len());
+        debug_assert_eq!(actual.len(), expected.len());
 
         for tuple in actual {
             let values = tuple
@@ -492,10 +492,10 @@ mod test {
                     }
                 })
                 .collect_vec();
-            assert!(expected.remove(&values));
+            debug_assert!(expected.remove(&values));
         }
 
-        assert!(expected.is_empty());
+        debug_assert!(expected.is_empty());
     }
 
     #[test]
@@ -545,7 +545,7 @@ mod test {
             .execute((&table_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
-        assert_eq!(
+        debug_assert_eq!(
             tuples[0].values,
             build_integers(vec![Some(0), Some(2), Some(4), None, None, None])
         );
@@ -646,7 +646,7 @@ mod test {
             .execute((&table_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
-        assert_eq!(tuples.len(), 16);
+        debug_assert_eq!(tuples.len(), 16);
 
         Ok(())
     }

@@ -357,7 +357,15 @@ mod test {
         let (schema, tuples) = fnck_sql.run("select current_date()")?;
         println!("{}", create_table(&schema, &tuples));
 
-        assert_eq!(
+        debug_assert_eq!(
+            schema,
+            Arc::new(vec![Arc::new(ColumnCatalog::new(
+                "current_date()".to_string(),
+                true,
+                ColumnDesc::new(LogicalType::Date, false, false, None)
+            ))])
+        );
+        debug_assert_eq!(
             tuples,
             vec![Tuple {
                 id: None,
@@ -365,14 +373,6 @@ mod test {
                     Local::now().num_days_from_ce()
                 )))],
             }]
-        );
-        assert_eq!(
-            schema,
-            Arc::new(vec![Arc::new(ColumnCatalog::new(
-                "current_date()".to_string(),
-                true,
-                ColumnDesc::new(LogicalType::Date, false, false, None)
-            ))])
         );
         Ok(())
     }
@@ -387,7 +387,16 @@ mod test {
         )?;
         println!("{}", create_table(&schema, &tuples));
 
-        assert_eq!(
+        let mut column = ColumnCatalog::new(
+            "number".to_string(),
+            true,
+            ColumnDesc::new(LogicalType::Integer, false, false, None),
+        );
+        column.set_table_name(Arc::new("a".to_string()));
+        column.set_id(0);
+
+        debug_assert_eq!(schema, Arc::new(vec![Arc::new(column)]));
+        debug_assert_eq!(
             tuples,
             vec![
                 Tuple {
@@ -400,15 +409,6 @@ mod test {
                 },
             ]
         );
-        let mut column = ColumnCatalog::new(
-            "number".to_string(),
-            true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None),
-        );
-        column.set_table_name(Arc::new("a".to_string()));
-        column.set_id(0);
-
-        assert_eq!(schema, Arc::new(vec![Arc::new(column)]));
         Ok(())
     }
 
@@ -431,17 +431,17 @@ mod test {
         let (_, tuples_1) = tx_1.run("select * from t1")?;
         let (_, tuples_2) = tx_2.run("select * from t1")?;
 
-        assert_eq!(tuples_1.len(), 2);
-        assert_eq!(tuples_2.len(), 2);
+        debug_assert_eq!(tuples_1.len(), 2);
+        debug_assert_eq!(tuples_2.len(), 2);
 
-        assert_eq!(
+        debug_assert_eq!(
             tuples_1[0].values,
             vec![
                 Arc::new(DataValue::Int32(Some(0))),
                 Arc::new(DataValue::Int32(Some(0)))
             ]
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples_1[1].values,
             vec![
                 Arc::new(DataValue::Int32(Some(1))),
@@ -449,14 +449,14 @@ mod test {
             ]
         );
 
-        assert_eq!(
+        debug_assert_eq!(
             tuples_2[0].values,
             vec![
                 Arc::new(DataValue::Int32(Some(0))),
                 Arc::new(DataValue::Int32(Some(0)))
             ]
         );
-        assert_eq!(
+        debug_assert_eq!(
             tuples_2[1].values,
             vec![
                 Arc::new(DataValue::Int32(Some(3))),
@@ -466,11 +466,11 @@ mod test {
 
         tx_1.commit()?;
 
-        assert!(tx_2.commit().is_err());
+        debug_assert!(tx_2.commit().is_err());
 
         let mut tx_3 = fnck_sql.new_transaction()?;
         let res = tx_3.run("create table t2 (a int primary key, b int)");
-        assert!(res.is_err());
+        debug_assert!(res.is_err());
 
         Ok(())
     }

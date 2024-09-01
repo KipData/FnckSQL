@@ -303,7 +303,7 @@ mod tests {
                 max: Bound::Unbounded,
             };
 
-            assert_eq!(op.index_infos[1].range, Some(mock_range));
+            debug_assert_eq!(op.index_infos[1].range, Some(mock_range));
         } else {
             unreachable!("Should be a filter operator")
         }

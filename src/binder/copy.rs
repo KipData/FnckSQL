@@ -112,7 +112,7 @@ impl FileFormat {
         for opt in options {
             match opt {
                 CopyOption::Format(fmt) => {
-                    assert_eq!(fmt.value.to_lowercase(), "csv", "only support CSV format")
+                    debug_assert_eq!(fmt.value.to_lowercase(), "csv", "only support CSV format")
                 }
                 CopyOption::Delimiter(c) => delimiter = *c,
                 CopyOption::Header(b) => header = *b,

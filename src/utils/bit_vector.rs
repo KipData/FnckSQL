@@ -79,9 +79,9 @@ mod tests {
         let vector = BitVector::from_raw(&bytes);
 
         for i in 0..98 {
-            assert!(!vector.get_bit(i));
+            debug_assert!(!vector.get_bit(i));
         }
-        assert!(vector.get_bit(99));
+        debug_assert!(vector.get_bit(99));
     }
 
     #[test]
@@ -91,8 +91,8 @@ mod tests {
         vector.set_bit(99, true);
 
         for i in 0..98 {
-            assert!(!vector.get_bit(i));
+            debug_assert!(!vector.get_bit(i));
         }
-        assert!(vector.get_bit(99));
+        debug_assert!(vector.get_bit(99));
     }
 }
