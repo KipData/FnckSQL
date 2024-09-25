@@ -13,13 +13,13 @@ use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type};
 use itertools::Itertools;
 use sqlparser::ast::CharLengthUnits;
+use std::collections::HashSet;
 use std::fmt::Formatter;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::{fmt, fs};
-use std::collections::HashSet;
 
 const DEFAULT_NUM_OF_BUCKETS: usize = 100;
 const DEFAULT_STATISTICS_META_PATH: &str = "fnck_sql_statistics_metas";
@@ -108,9 +108,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                 for (index_id, _, builder) in builders {
                     let path = dir_path.join(index_id.to_string());
                     let temp_path = path.with_extension("tmp");
-                    let path_str: String = path
-                        .to_string_lossy()
-                        .into();
+                    let path_str: String = path.to_string_lossy().into();
                     let (histogram, sketch) = throw!(builder.build(DEFAULT_NUM_OF_BUCKETS));
                     let meta = StatisticsMeta::new(histogram, sketch);
 
@@ -158,13 +156,13 @@ impl fmt::Display for AnalyzeOperator {
 
 #[cfg(test)]
 mod test {
-    use std::ffi::OsStr;
-    use std::fs;
-    use tempfile::TempDir;
     use crate::db::DataBaseBuilder;
     use crate::errors::DatabaseError;
     use crate::execution::dml::analyze::{DEFAULT_NUM_OF_BUCKETS, DEFAULT_STATISTICS_META_PATH};
     use crate::optimizer::core::statistics_meta::StatisticsMeta;
+    use std::ffi::OsStr;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_statistics_meta() -> Result<(), DatabaseError> {
