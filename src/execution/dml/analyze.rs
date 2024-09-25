@@ -14,7 +14,9 @@ use crate::types::value::{DataValue, Utf8Type};
 use itertools::Itertools;
 use sqlparser::ast::CharLengthUnits;
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::fmt::Formatter;
+use std::fs::DirEntry;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
@@ -106,9 +108,11 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                 let mut active_index_paths = HashSet::new();
 
                 for (index_id, _, builder) in builders {
-                    let path = dir_path.join(index_id.to_string());
+                    let index_file = OsStr::new(&index_id.to_string()).to_os_string();
+                    let path = dir_path.join(&index_file);
                     let temp_path = path.with_extension("tmp");
                     let path_str: String = path.to_string_lossy().into();
+
                     let (histogram, sketch) = throw!(builder.build(DEFAULT_NUM_OF_BUCKETS));
                     let meta = StatisticsMeta::new(histogram, sketch);
 
@@ -121,20 +125,15 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                     throw!(transaction.save_table_meta(cache.1, &table_name, path_str, meta));
                     throw!(fs::rename(&temp_path, &path).map_err(DatabaseError::IO));
 
-                    if let Some(file_name) = path.file_name() {
-                        active_index_paths.insert(file_name.to_os_string());
-                    }
+                    active_index_paths.insert(index_file);
                 }
 
                 // clean expired index
                 for entry in throw!(fs::read_dir(dir_path).map_err(DatabaseError::IO)) {
-                    let entry = throw!(entry.map_err(DatabaseError::IO));
-                    let path = entry.path();
+                    let entry: DirEntry = throw!(entry.map_err(DatabaseError::IO));
 
-                    if let Some(file_name) = path.file_name() {
-                        if !active_index_paths.remove(&file_name.to_os_string()) {
-                            throw!(fs::remove_file(&path).map_err(DatabaseError::IO));
-                        }
+                    if !active_index_paths.remove(&entry.file_name()) {
+                        throw!(fs::remove_file(&entry.path()).map_err(DatabaseError::IO));
                     }
                 }
 
@@ -165,6 +164,13 @@ mod test {
     use tempfile::TempDir;
 
     #[test]
+    fn test_analyze() -> Result<(), DatabaseError> {
+        test_statistics_meta()?;
+        test_clean_expired_index()?;
+
+        Ok(())
+    }
+
     fn test_statistics_meta() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
@@ -183,19 +189,24 @@ mod test {
             .join(DEFAULT_STATISTICS_META_PATH)
             .join("t1");
 
-        let mut paths = fs::read_dir(&dir_path)?;
+        let mut paths = Vec::new();
 
-        let statistics_meta_pk_index = StatisticsMeta::from_file(paths.next().unwrap()?.path())?;
+        for entry in fs::read_dir(&dir_path)? {
+            paths.push(entry?.path());
+        }
+        paths.sort();
+
+        let statistics_meta_pk_index = StatisticsMeta::from_file(&paths[0])?;
 
         assert_eq!(statistics_meta_pk_index.index_id(), 0);
         assert_eq!(statistics_meta_pk_index.histogram().values_len(), 101);
 
-        let statistics_meta_b_index = StatisticsMeta::from_file(paths.next().unwrap()?.path())?;
+        let statistics_meta_b_index = StatisticsMeta::from_file(&paths[1])?;
 
         assert_eq!(statistics_meta_b_index.index_id(), 1);
         assert_eq!(statistics_meta_b_index.histogram().values_len(), 101);
 
-        let statistics_meta_p_index = StatisticsMeta::from_file(paths.next().unwrap()?.path())?;
+        let statistics_meta_p_index = StatisticsMeta::from_file(&paths[2])?;
 
         assert_eq!(statistics_meta_p_index.index_id(), 2);
         assert_eq!(statistics_meta_p_index.histogram().values_len(), 101);
@@ -203,7 +214,6 @@ mod test {
         Ok(())
     }
 
-    #[test]
     fn test_clean_expired_index() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
@@ -222,20 +232,25 @@ mod test {
             .join(DEFAULT_STATISTICS_META_PATH)
             .join("t1");
 
-        let mut paths = fs::read_dir(&dir_path)?;
+        let mut file_names = Vec::new();
 
-        assert_eq!(paths.next().unwrap()?.file_name(), OsStr::new("0"));
-        assert_eq!(paths.next().unwrap()?.file_name(), OsStr::new("1"));
-        assert_eq!(paths.next().unwrap()?.file_name(), OsStr::new("2"));
-        assert!(paths.next().is_none());
+        for entry in fs::read_dir(&dir_path)? {
+            file_names.push(entry?.file_name());
+        }
+        file_names.sort();
+
+        assert_eq!(file_names.len(), 3);
+        assert_eq!(file_names[0], OsStr::new("0"));
+        assert_eq!(file_names[1], OsStr::new("1"));
+        assert_eq!(file_names[2], OsStr::new("2"));
 
         let _ = fnck_sql.run("alter table t1 drop column b")?;
         let _ = fnck_sql.run("analyze table t1")?;
 
-        let mut paths = fs::read_dir(&dir_path)?;
+        let mut entries = fs::read_dir(&dir_path)?;
 
-        assert_eq!(paths.next().unwrap()?.file_name(), OsStr::new("0"));
-        assert!(paths.next().is_none());
+        assert_eq!(entries.next().unwrap()?.file_name(), OsStr::new("0"));
+        assert!(entries.next().is_none());
 
         Ok(())
     }
