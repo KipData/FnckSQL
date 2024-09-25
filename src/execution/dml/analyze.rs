@@ -18,8 +18,8 @@ use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fmt, fs};
+use std::collections::HashSet;
 
 const DEFAULT_NUM_OF_BUCKETS: usize = 100;
 const DEFAULT_STATISTICS_META_PATH: &str = "fnck_sql_statistics_metas";
@@ -95,30 +95,51 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                 }
                 drop(coroutine);
                 let mut values = Vec::with_capacity(builders.len());
-                let ts = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("It's the end of the world!")
-                    .as_secs();
                 let dir_path = dirs::config_dir()
                     .expect("Your system does not have a Config directory!")
                     .join(DEFAULT_STATISTICS_META_PATH)
-                    .join(table_name.as_str())
-                    .join(ts.to_string());
+                    .join(table_name.as_str());
+                // For DEBUG
+                // println!("Statistics Path: {:#?}", dir_path);
                 throw!(fs::create_dir_all(&dir_path).map_err(DatabaseError::IO));
 
+                let mut active_index_paths = HashSet::new();
+
                 for (index_id, _, builder) in builders {
-                    let path: String = dir_path.join(index_id.to_string()).to_string_lossy().into();
+                    let path = dir_path.join(index_id.to_string());
+                    let temp_path = path.with_extension("tmp");
+                    let path_str: String = path
+                        .to_string_lossy()
+                        .into();
                     let (histogram, sketch) = throw!(builder.build(DEFAULT_NUM_OF_BUCKETS));
                     let meta = StatisticsMeta::new(histogram, sketch);
 
-                    throw!(meta.to_file(&path));
+                    throw!(meta.to_file(&temp_path));
                     values.push(Arc::new(DataValue::Utf8 {
-                        value: Some(path.clone()),
+                        value: Some(path_str.clone()),
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
                     }));
-                    throw!(transaction.save_table_meta(cache.1, &table_name, path, meta));
+                    throw!(transaction.save_table_meta(cache.1, &table_name, path_str, meta));
+                    throw!(fs::rename(&temp_path, &path).map_err(DatabaseError::IO));
+
+                    if let Some(file_name) = path.file_name() {
+                        active_index_paths.insert(file_name.to_os_string());
+                    }
                 }
+
+                // clean expired index
+                for entry in throw!(fs::read_dir(dir_path).map_err(DatabaseError::IO)) {
+                    let entry = throw!(entry.map_err(DatabaseError::IO));
+                    let path = entry.path();
+
+                    if let Some(file_name) = path.file_name() {
+                        if !active_index_paths.remove(&file_name.to_os_string()) {
+                            throw!(fs::remove_file(&path).map_err(DatabaseError::IO));
+                        }
+                    }
+                }
+
                 yield Ok(Tuple { id: None, values });
             },
         )
@@ -130,6 +151,93 @@ impl fmt::Display for AnalyzeOperator {
         let indexes = self.index_metas.iter().map(|index| &index.name).join(", ");
 
         write!(f, "Analyze {} -> [{}]", self.table_name, indexes)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::ffi::OsStr;
+    use std::fs;
+    use tempfile::TempDir;
+    use crate::db::DataBaseBuilder;
+    use crate::errors::DatabaseError;
+    use crate::execution::dml::analyze::{DEFAULT_NUM_OF_BUCKETS, DEFAULT_STATISTICS_META_PATH};
+    use crate::optimizer::core::statistics_meta::StatisticsMeta;
+
+    #[test]
+    fn test_statistics_meta() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
+
+        let _ = fnck_sql.run("create table t1 (a int primary key, b int)")?;
+        let _ = fnck_sql.run("create index b_index on t1 (b)")?;
+        let _ = fnck_sql.run("create index p_index on t1 (a, b)")?;
+
+        for i in 0..DEFAULT_NUM_OF_BUCKETS + 1 {
+            let _ = fnck_sql.run(format!("insert into t1 values({i}, {})", i % 20))?;
+        }
+        let _ = fnck_sql.run("analyze table t1")?;
+
+        let dir_path = dirs::config_dir()
+            .expect("Your system does not have a Config directory!")
+            .join(DEFAULT_STATISTICS_META_PATH)
+            .join("t1");
+
+        let mut paths = fs::read_dir(&dir_path)?;
+
+        let statistics_meta_pk_index = StatisticsMeta::from_file(paths.next().unwrap()?.path())?;
+
+        assert_eq!(statistics_meta_pk_index.index_id(), 0);
+        assert_eq!(statistics_meta_pk_index.histogram().values_len(), 101);
+
+        let statistics_meta_b_index = StatisticsMeta::from_file(paths.next().unwrap()?.path())?;
+
+        assert_eq!(statistics_meta_b_index.index_id(), 1);
+        assert_eq!(statistics_meta_b_index.histogram().values_len(), 101);
+
+        let statistics_meta_p_index = StatisticsMeta::from_file(paths.next().unwrap()?.path())?;
+
+        assert_eq!(statistics_meta_p_index.index_id(), 2);
+        assert_eq!(statistics_meta_p_index.histogram().values_len(), 101);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_clean_expired_index() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
+
+        let _ = fnck_sql.run("create table t1 (a int primary key, b int)")?;
+        let _ = fnck_sql.run("create index b_index on t1 (b)")?;
+        let _ = fnck_sql.run("create index p_index on t1 (a, b)")?;
+
+        for i in 0..DEFAULT_NUM_OF_BUCKETS + 1 {
+            let _ = fnck_sql.run(format!("insert into t1 values({i}, {i})"))?;
+        }
+        let _ = fnck_sql.run("analyze table t1")?;
+
+        let dir_path = dirs::config_dir()
+            .expect("Your system does not have a Config directory!")
+            .join(DEFAULT_STATISTICS_META_PATH)
+            .join("t1");
+
+        let mut paths = fs::read_dir(&dir_path)?;
+
+        assert_eq!(paths.next().unwrap()?.file_name(), OsStr::new("0"));
+        assert_eq!(paths.next().unwrap()?.file_name(), OsStr::new("1"));
+        assert_eq!(paths.next().unwrap()?.file_name(), OsStr::new("2"));
+        assert!(paths.next().is_none());
+
+        let _ = fnck_sql.run("alter table t1 drop column b")?;
+        let _ = fnck_sql.run("analyze table t1")?;
+
+        let mut paths = fs::read_dir(&dir_path)?;
+
+        assert_eq!(paths.next().unwrap()?.file_name(), OsStr::new("0"));
+        assert!(paths.next().is_none());
 
         Ok(())
     }

@@ -161,6 +161,17 @@ impl TableCodec {
         (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
     }
 
+    pub fn statistics_bound(table_name: &str) -> (Vec<u8>, Vec<u8>) {
+        let op = |bound_id| {
+            let mut key_prefix = Self::key_prefix(CodecType::Statistics, table_name);
+
+            key_prefix.push(bound_id);
+            key_prefix
+        };
+
+        (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
+    }
+
     /// Key: {TableName}{TUPLE_TAG}{BOUND_MIN_TAG}{RowID}(Sorted)
     /// Value: Tuple
     pub fn encode_tuple(
