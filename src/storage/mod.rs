@@ -252,6 +252,7 @@ pub trait Transaction: Sized {
     fn drop_column(
         &mut self,
         table_cache: &TableCache,
+        meta_cache: &StatisticsMetaCache,
         table_name: &TableName,
         column_name: &str,
     ) -> Result<(), DatabaseError> {
@@ -270,6 +271,8 @@ pub trait Transaction: Sized {
 
                 let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id);
                 self._drop_data(&index_min, &index_max)?;
+
+                self.remove_table_meta(meta_cache, table_name, index_meta.id)?;
             }
             table_cache.remove(table_name);
 
@@ -332,6 +335,9 @@ pub trait Transaction: Sized {
         let (index_meta_min, index_meta_max) = TableCodec::index_meta_bound(table_name.as_str());
         self._drop_data(&index_meta_min, &index_meta_max)?;
 
+        let (statistics_min, statistics_max) = TableCodec::statistics_bound(table_name.as_str());
+        self._drop_data(&statistics_min, &statistics_max)?;
+
         self.remove(&TableCodec::encode_root_table_key(table_name.as_str()))?;
         table_cache.remove(&table_name);
 
@@ -383,11 +389,10 @@ pub trait Transaction: Sized {
         path: String,
         statistics_meta: StatisticsMeta,
     ) -> Result<(), DatabaseError> {
-        // TODO: clean old meta file
         let index_id = statistics_meta.index_id();
         meta_cache.put((table_name.clone(), index_id), statistics_meta);
-        let (key, value) = TableCodec::encode_statistics_path(table_name.as_str(), index_id, path);
 
+        let (key, value) = TableCodec::encode_statistics_path(table_name.as_str(), index_id, path);
         self.set(key, value)?;
 
         Ok(())
@@ -402,6 +407,20 @@ pub trait Transaction: Sized {
         self.get(&key)?
             .map(|bytes| TableCodec::decode_statistics_path(&bytes))
             .transpose()
+    }
+
+    fn remove_table_meta(
+        &mut self,
+        meta_cache: &StatisticsMetaCache,
+        table_name: &TableName,
+        index_id: IndexId,
+    ) -> Result<(), DatabaseError> {
+        let key = TableCodec::encode_statistics_path_key(table_name, index_id);
+        self.remove(&key)?;
+
+        meta_cache.remove(&(table_name.clone(), index_id));
+
+        Ok(())
     }
 
     fn meta_loader<'a>(&'a self, meta_cache: &'a StatisticsMetaCache) -> StatisticMetaLoader<Self>

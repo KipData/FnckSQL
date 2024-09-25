@@ -69,7 +69,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                     for tuple in tuples {
                         throw!(transaction.append(&table_name, tuple, &types, true));
                     }
-                    throw!(transaction.drop_column(cache.0, &table_name, &column_name));
+                    throw!(transaction.drop_column(cache.0, cache.1, &table_name, &column_name));
 
                     yield Ok(TupleBuilder::build_result("1".to_string()));
                 } else if if_exists {
