@@ -69,8 +69,8 @@ impl DataBaseBuilder {
 
     pub fn build(self) -> Result<Database<RocksStorage>, DatabaseError> {
         let storage = RocksStorage::new(self.path)?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(256, 8, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(48, 4, RandomState::new())?);
 
         Ok(Database {
             storage,
@@ -303,7 +303,7 @@ impl<S: Storage> DBTransaction<'_, S> {
 }
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc};
     use crate::db::{DataBaseBuilder, DatabaseError};
     use crate::storage::{Storage, TableCache, Transaction};
@@ -314,9 +314,9 @@ mod test {
     use std::sync::Arc;
     use tempfile::TempDir;
 
-    fn build_table(
+    pub(crate) fn build_table<T: Transaction>(
         table_cache: &TableCache,
-        mut transaction: impl Transaction,
+        transaction: &mut T,
     ) -> Result<(), DatabaseError> {
         let columns = vec![
             ColumnCatalog::new(
@@ -329,10 +329,14 @@ mod test {
                 false,
                 ColumnDesc::new(LogicalType::Boolean, false, false, None),
             ),
+            ColumnCatalog::new(
+                "c3".to_string(),
+                false,
+                ColumnDesc::new(LogicalType::Integer, false, false, None),
+            ),
         ];
         let _ =
             transaction.create_table(table_cache, Arc::new("t1".to_string()), columns, false)?;
-        transaction.commit()?;
 
         Ok(())
     }
@@ -341,8 +345,10 @@ mod test {
     fn test_run_sql() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let database = DataBaseBuilder::path(temp_dir.path()).build()?;
-        let transaction = database.storage.transaction()?;
-        build_table(&database.table_cache, transaction)?;
+        let mut transaction = database.storage.transaction()?;
+
+        build_table(&database.table_cache, &mut transaction)?;
+        transaction.commit()?;
 
         let batch = database.run("select * from t1")?;
 

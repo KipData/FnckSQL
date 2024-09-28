@@ -445,7 +445,7 @@ pub mod test {
 
     pub fn select_sql_run<S: AsRef<str>>(sql: S) -> Result<LogicalPlan, DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let storage = build_test_catalog(&table_cache, temp_dir.path())?;
         let transaction = storage.transaction()?;
         let scala_functions = Default::default();

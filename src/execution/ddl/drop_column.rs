@@ -67,7 +67,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                     }
                     drop(coroutine);
                     for tuple in tuples {
-                        throw!(transaction.append(&table_name, tuple, &types, true));
+                        throw!(transaction.append_tuple(&table_name, tuple, &types, true));
                     }
                     throw!(transaction.drop_column(cache.0, cache.1, &table_name, &column_name));
 

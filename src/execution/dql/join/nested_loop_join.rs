@@ -536,8 +536,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -564,8 +564,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -604,8 +604,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -633,8 +633,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, _) = build_join_values(true);
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -665,8 +665,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, _) = build_join_values(false);
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -689,8 +689,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -716,8 +716,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -745,8 +745,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
             on: JoinCondition::On {
@@ -779,8 +779,8 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
             on: JoinCondition::On {

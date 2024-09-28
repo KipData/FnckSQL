@@ -74,7 +74,9 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
                             );
                         }
                     }
-                    tuple_ids.push(tuple.id.unwrap());
+                    if let Some(tuple_id) = tuple.id {
+                        tuple_ids.push(tuple_id);
+                    }
                 }
                 drop(coroutine);
                 for (
@@ -95,7 +97,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
                     }
                 }
                 for tuple_id in tuple_ids {
-                    throw!(transaction.delete(&table_name, tuple_id));
+                    throw!(transaction.remove_tuple(&table_name, &tuple_id));
                 }
                 yield Ok(TupleBuilder::build_result("1".to_string()));
             },

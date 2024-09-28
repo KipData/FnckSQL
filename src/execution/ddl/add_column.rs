@@ -68,7 +68,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
                 drop(coroutine);
 
                 for tuple in tuples {
-                    throw!(transaction.append(table_name, tuple, &types, true));
+                    throw!(transaction.append_tuple(table_name, tuple, &types, true));
                 }
                 let col_id =
                     throw!(transaction.add_column(cache.0, table_name, column, *if_not_exists));
