@@ -153,7 +153,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let mut transaction = storage.transaction()?;
-        let table_cache = Arc::new(ShardingLruCache::new(128, 16, RandomState::new())?);
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let columns = Arc::new(vec![
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
@@ -185,7 +185,7 @@ mod test {
             .get_column_id_by_name(&"c1".to_string())
             .is_some());
 
-        transaction.append(
+        transaction.append_tuple(
             &"test".to_string(),
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(1)))),
@@ -197,7 +197,7 @@ mod test {
             &[LogicalType::Integer, LogicalType::Boolean],
             false,
         )?;
-        transaction.append(
+        transaction.append_tuple(
             &"test".to_string(),
             Tuple {
                 id: Some(Arc::new(DataValue::Int32(Some(2)))),

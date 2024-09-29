@@ -181,7 +181,7 @@ pub trait Transaction: Sized {
         Ok(())
     }
 
-    fn append(
+    fn append_tuple(
         &mut self,
         table_name: &str,
         tuple: Tuple,
@@ -198,8 +198,8 @@ pub trait Transaction: Sized {
         Ok(())
     }
 
-    fn delete(&mut self, table_name: &str, tuple_id: TupleId) -> Result<(), DatabaseError> {
-        let key = TableCodec::encode_tuple_key(table_name, &tuple_id)?;
+    fn remove_tuple(&mut self, table_name: &str, tuple_id: &TupleId) -> Result<(), DatabaseError> {
+        let key = TableCodec::encode_tuple_key(table_name, tuple_id)?;
         self.remove(&key)?;
 
         Ok(())
@@ -302,7 +302,7 @@ pub trait Transaction: Sized {
             }
             return Err(DatabaseError::TableExists);
         }
-        self.create_index_meta_for_table(&mut table_catalog)?;
+        self.create_index_meta_from_column(&mut table_catalog)?;
         self.set(table_key, value)?;
 
         for column in table_catalog.columns() {
@@ -335,9 +335,6 @@ pub trait Transaction: Sized {
         let (index_meta_min, index_meta_max) = TableCodec::index_meta_bound(table_name.as_str());
         self._drop_data(&index_meta_min, &index_meta_max)?;
 
-        let (statistics_min, statistics_max) = TableCodec::statistics_bound(table_name.as_str());
-        self._drop_data(&statistics_min, &statistics_max)?;
-
         self.remove(&TableCodec::encode_root_table_key(table_name.as_str()))?;
         table_cache.remove(&table_name);
 
@@ -350,6 +347,9 @@ pub trait Transaction: Sized {
 
         let (index_min, index_max) = TableCodec::all_index_bound(table_name);
         self._drop_data(&index_min, &index_max)?;
+
+        let (statistics_min, statistics_max) = TableCodec::statistics_bound(table_name);
+        self._drop_data(&statistics_min, &statistics_max)?;
 
         Ok(())
     }
@@ -469,7 +469,7 @@ pub trait Transaction: Sized {
         Ok(())
     }
 
-    fn create_index_meta_for_table(
+    fn create_index_meta_from_column(
         &mut self,
         table: &mut TableCatalog,
     ) -> Result<(), DatabaseError> {
@@ -977,4 +977,489 @@ pub trait InnerIter {
 
 pub trait Iter {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, DatabaseError>;
+}
+
+#[cfg(test)]
+mod test {
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnSummary, TableCatalog};
+    use crate::db::test::build_table;
+    use crate::errors::DatabaseError;
+    use crate::expression::range_detacher::Range;
+    use crate::storage::rocksdb::{RocksStorage, RocksTransaction};
+    use crate::storage::table_codec::TableCodec;
+    use crate::storage::{
+        IndexIter, InnerIter, Iter, StatisticsMetaCache, Storage, TableCache, Transaction,
+    };
+    use crate::types::index::{Index, IndexMeta, IndexType};
+    use crate::types::tuple::Tuple;
+    use crate::types::value::DataValue;
+    use crate::types::LogicalType;
+    use crate::utils::lru::ShardingLruCache;
+    use std::collections::Bound;
+    use std::hash::RandomState;
+    use std::slice;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+
+    fn full_columns() -> Vec<(usize, ColumnRef)> {
+        vec![
+            (
+                0,
+                Arc::new(ColumnCatalog::new(
+                    "c1".to_string(),
+                    false,
+                    ColumnDesc::new(LogicalType::Integer, true, false, None),
+                )),
+            ),
+            (
+                1,
+                Arc::new(ColumnCatalog::new(
+                    "c2".to_string(),
+                    false,
+                    ColumnDesc::new(LogicalType::Boolean, false, false, None),
+                )),
+            ),
+            (
+                2,
+                Arc::new(ColumnCatalog::new(
+                    "c3".to_string(),
+                    false,
+                    ColumnDesc::new(LogicalType::Integer, false, false, None),
+                )),
+            ),
+        ]
+    }
+    fn build_tuples() -> Vec<Tuple> {
+        vec![
+            Tuple {
+                id: Some(Arc::new(DataValue::Int32(Some(0)))),
+                values: vec![
+                    Arc::new(DataValue::Int32(Some(0))),
+                    Arc::new(DataValue::Boolean(Some(true))),
+                    Arc::new(DataValue::Int32(Some(0))),
+                ],
+            },
+            Tuple {
+                id: Some(Arc::new(DataValue::Int32(Some(1)))),
+                values: vec![
+                    Arc::new(DataValue::Int32(Some(1))),
+                    Arc::new(DataValue::Boolean(Some(true))),
+                    Arc::new(DataValue::Int32(Some(1))),
+                ],
+            },
+            Tuple {
+                id: Some(Arc::new(DataValue::Int32(Some(2)))),
+                values: vec![
+                    Arc::new(DataValue::Int32(Some(2))),
+                    Arc::new(DataValue::Boolean(Some(false))),
+                    Arc::new(DataValue::Int32(Some(0))),
+                ],
+            },
+        ]
+    }
+
+    #[test]
+    fn test_table_create_drop() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = RocksStorage::new(temp_dir.path())?;
+        let mut transaction = storage.transaction()?;
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+
+        build_table(&table_cache, &mut transaction)?;
+
+        let fn_assert = |transaction: &mut RocksTransaction,
+                         table_cache: &TableCache|
+         -> Result<(), DatabaseError> {
+            let table = transaction
+                .table(&table_cache, Arc::new("t1".to_string()))
+                .unwrap();
+            assert_eq!(table.name.as_str(), "t1");
+            assert_eq!(table.indexes.len(), 1);
+
+            let primary_key_index_meta = &table.indexes[0];
+            assert_eq!(primary_key_index_meta.id, 0);
+            assert_eq!(primary_key_index_meta.column_ids, vec![0]);
+            assert_eq!(
+                primary_key_index_meta.table_name,
+                Arc::new("t1".to_string())
+            );
+            assert_eq!(primary_key_index_meta.pk_ty, LogicalType::Integer);
+            assert_eq!(primary_key_index_meta.name, "pk_c1".to_string());
+            assert_eq!(primary_key_index_meta.ty, IndexType::PrimaryKey);
+
+            let mut column_iter = table.columns();
+            let c1_column = column_iter.next().unwrap();
+            assert_eq!(c1_column.nullable, false);
+            assert_eq!(
+                c1_column.summary(),
+                &ColumnSummary {
+                    id: Some(0),
+                    name: "c1".to_string(),
+                    table_name: Some(Arc::new("t1".to_string())),
+                }
+            );
+            assert_eq!(
+                c1_column.desc,
+                ColumnDesc::new(LogicalType::Integer, true, false, None)
+            );
+
+            let c2_column = column_iter.next().unwrap();
+            assert_eq!(c2_column.nullable, false);
+            assert_eq!(
+                c2_column.summary(),
+                &ColumnSummary {
+                    id: Some(1),
+                    name: "c2".to_string(),
+                    table_name: Some(Arc::new("t1".to_string())),
+                }
+            );
+            assert_eq!(
+                c2_column.desc,
+                ColumnDesc::new(LogicalType::Boolean, false, false, None)
+            );
+
+            let c3_column = column_iter.next().unwrap();
+            assert_eq!(c3_column.nullable, false);
+            assert_eq!(
+                c3_column.summary(),
+                &ColumnSummary {
+                    id: Some(2),
+                    name: "c3".to_string(),
+                    table_name: Some(Arc::new("t1".to_string())),
+                }
+            );
+            assert_eq!(
+                c3_column.desc,
+                ColumnDesc::new(LogicalType::Integer, false, false, None)
+            );
+
+            Ok(())
+        };
+        fn_assert(&mut transaction, &table_cache)?;
+        fn_assert(
+            &mut transaction,
+            &Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?),
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_tuple_append_delete() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = RocksStorage::new(temp_dir.path())?;
+        let mut transaction = storage.transaction()?;
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+
+        assert!(transaction
+            .add_index_meta(
+                &table_cache,
+                &Arc::new("t1".to_string()),
+                "i1".to_string(),
+                vec![2],
+                IndexType::Normal
+            )
+            .is_err());
+
+        build_table(&table_cache, &mut transaction)?;
+
+        let tuples = build_tuples();
+        for tuple in tuples.iter().cloned() {
+            transaction.append_tuple(
+                "t1",
+                tuple,
+                &[
+                    LogicalType::Integer,
+                    LogicalType::Boolean,
+                    LogicalType::Integer,
+                ],
+                false,
+            )?;
+        }
+        {
+            let mut tuple_iter = transaction.read(
+                &table_cache,
+                Arc::new("t1".to_string()),
+                (None, None),
+                full_columns(),
+            )?;
+
+            assert_eq!(tuple_iter.next_tuple()?.unwrap(), tuples[0]);
+            assert_eq!(tuple_iter.next_tuple()?.unwrap(), tuples[1]);
+            assert_eq!(tuple_iter.next_tuple()?.unwrap(), tuples[2]);
+
+            let (min, max) = TableCodec::tuple_bound("t1");
+            let mut iter = transaction.range(Bound::Included(&min), Bound::Included(&max))?;
+
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            assert!(iter.try_next()?.is_none());
+        }
+
+        transaction.remove_tuple("t1", &tuples[1].values[0])?;
+        {
+            let mut tuple_iter = transaction.read(
+                &table_cache,
+                Arc::new("t1".to_string()),
+                (None, None),
+                full_columns(),
+            )?;
+
+            assert_eq!(tuple_iter.next_tuple()?.unwrap(), tuples[0]);
+            assert_eq!(tuple_iter.next_tuple()?.unwrap(), tuples[2]);
+
+            let (min, max) = TableCodec::tuple_bound("t1");
+            let mut iter = transaction.range(Bound::Included(&min), Bound::Included(&max))?;
+
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            assert!(iter.try_next()?.is_none());
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_index_meta() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = RocksStorage::new(temp_dir.path())?;
+        let mut transaction = storage.transaction()?;
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+
+        assert!(transaction
+            .add_index_meta(
+                &table_cache,
+                &Arc::new("t1".to_string()),
+                "i1".to_string(),
+                vec![2],
+                IndexType::Normal
+            )
+            .is_err());
+
+        build_table(&table_cache, &mut transaction)?;
+
+        let _ = transaction.add_index_meta(
+            &table_cache,
+            &Arc::new("t1".to_string()),
+            "i1".to_string(),
+            vec![2],
+            IndexType::Normal,
+        )?;
+        let _ = transaction.add_index_meta(
+            &table_cache,
+            &Arc::new("t1".to_string()),
+            "i2".to_string(),
+            vec![2, 1],
+            IndexType::Composite,
+        )?;
+
+        let fn_assert = |transaction: &mut RocksTransaction,
+                         table_cache: &TableCache|
+         -> Result<(), DatabaseError> {
+            let table = transaction
+                .table(&table_cache, Arc::new("t1".to_string()))
+                .unwrap();
+
+            let i1_meta = table.indexes[1].clone();
+            assert_eq!(i1_meta.id, 1);
+            assert_eq!(i1_meta.column_ids, vec![2]);
+            assert_eq!(i1_meta.table_name, Arc::new("t1".to_string()));
+            assert_eq!(i1_meta.pk_ty, LogicalType::Integer);
+            assert_eq!(i1_meta.name, "i1".to_string());
+            assert_eq!(i1_meta.ty, IndexType::Normal);
+
+            let i2_meta = table.indexes[2].clone();
+            assert_eq!(i2_meta.id, 2);
+            assert_eq!(i2_meta.column_ids, vec![2, 1]);
+            assert_eq!(i2_meta.table_name, Arc::new("t1".to_string()));
+            assert_eq!(i2_meta.pk_ty, LogicalType::Integer);
+            assert_eq!(i2_meta.name, "i2".to_string());
+            assert_eq!(i2_meta.ty, IndexType::Composite);
+
+            Ok(())
+        };
+        fn_assert(&mut transaction, &table_cache)?;
+        fn_assert(
+            &mut transaction,
+            &Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?),
+        )?;
+        {
+            let (min, max) = TableCodec::index_meta_bound("t1");
+            let mut iter = transaction.range(Bound::Included(&min), Bound::Included(&max))?;
+
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            assert!(iter.try_next()?.is_none());
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_index_insert_delete() -> Result<(), DatabaseError> {
+        fn build_index_iter<'a>(
+            transaction: &'a RocksTransaction<'a>,
+            table_cache: &'a Arc<ShardingLruCache<String, TableCatalog>>,
+        ) -> Result<IndexIter<'a, RocksTransaction<'a>>, DatabaseError> {
+            transaction.read_by_index(
+                &table_cache,
+                Arc::new("t1".to_string()),
+                (None, None),
+                full_columns(),
+                Arc::new(IndexMeta {
+                    id: 1,
+                    column_ids: vec![2],
+                    table_name: Arc::new("t1".to_string()),
+                    pk_ty: LogicalType::Integer,
+                    name: "i1".to_string(),
+                    ty: IndexType::Normal,
+                }),
+                vec![Range::Scope {
+                    min: Bound::Unbounded,
+                    max: Bound::Unbounded,
+                }],
+            )
+        }
+
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = RocksStorage::new(temp_dir.path())?;
+        let mut transaction = storage.transaction()?;
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+
+        build_table(&table_cache, &mut transaction)?;
+
+        let _ = transaction.add_index_meta(
+            &table_cache,
+            &Arc::new("t1".to_string()),
+            "i1".to_string(),
+            vec![2],
+            IndexType::Normal,
+        )?;
+
+        let tuples = build_tuples();
+        let indexes = vec![
+            (
+                Arc::new(DataValue::Int32(Some(0))),
+                Index::new(1, slice::from_ref(&tuples[0].values[2]), IndexType::Normal),
+            ),
+            (
+                Arc::new(DataValue::Int32(Some(1))),
+                Index::new(1, slice::from_ref(&tuples[1].values[2]), IndexType::Normal),
+            ),
+            (
+                Arc::new(DataValue::Int32(Some(2))),
+                Index::new(1, slice::from_ref(&tuples[2].values[2]), IndexType::Normal),
+            ),
+        ];
+        for (tuple_id, index) in indexes.iter().cloned() {
+            transaction.add_index("t1", index, &tuple_id)?;
+        }
+        for tuple in tuples.iter().cloned() {
+            transaction.append_tuple(
+                "t1",
+                tuple,
+                &[
+                    LogicalType::Integer,
+                    LogicalType::Boolean,
+                    LogicalType::Integer,
+                ],
+                false,
+            )?;
+        }
+        {
+            let mut index_iter = build_index_iter(&transaction, &table_cache)?;
+
+            assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[0]);
+            assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[2]);
+            assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[1]);
+
+            let (min, max) = TableCodec::index_bound("t1", &1);
+            let mut iter = transaction.range(Bound::Included(&min), Bound::Included(&max))?;
+
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            let (_, value) = iter.try_next()?.unwrap();
+            dbg!(value);
+            assert!(iter.try_next()?.is_none());
+        }
+        transaction.del_index("t1", &indexes[0].1, Some(&indexes[0].0))?;
+
+        let mut index_iter = build_index_iter(&transaction, &table_cache)?;
+
+        assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[2]);
+        assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[1]);
+
+        let (min, max) = TableCodec::index_bound("t1", &1);
+        let mut iter = transaction.range(Bound::Included(&min), Bound::Included(&max))?;
+
+        let (_, value) = iter.try_next()?.unwrap();
+        dbg!(value);
+        let (_, value) = iter.try_next()?.unwrap();
+        dbg!(value);
+        assert!(iter.try_next()?.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_column_add_drop() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = RocksStorage::new(temp_dir.path())?;
+        let mut transaction = storage.transaction()?;
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let meta_cache = StatisticsMetaCache::new(4, 1, RandomState::new())?;
+
+        build_table(&table_cache, &mut transaction)?;
+        let table_name = Arc::new("t1".to_string());
+
+        let new_column = ColumnCatalog::new(
+            "c4".to_string(),
+            true,
+            ColumnDesc::new(LogicalType::Integer, false, false, None),
+        );
+        let new_column_id =
+            transaction.add_column(&table_cache, &table_name, &new_column, false)?;
+        {
+            assert!(transaction
+                .add_column(&table_cache, &table_name, &new_column, false,)
+                .is_err());
+            assert_eq!(
+                new_column_id,
+                transaction.add_column(&table_cache, &table_name, &new_column, true,)?
+            );
+        }
+        {
+            let table = transaction.table(&table_cache, table_name.clone()).unwrap();
+            assert!(table.contains_column("c4"));
+
+            let mut new_column = ColumnCatalog::new(
+                "c4".to_string(),
+                true,
+                ColumnDesc::new(LogicalType::Integer, false, false, None),
+            );
+            new_column.set_table_name(table_name.clone());
+            new_column.set_id(3);
+            assert_eq!(table.get_column_by_name("c4"), Some(&Arc::new(new_column)));
+        }
+        transaction.drop_column(&table_cache, &meta_cache, &table_name, "c4")?;
+        {
+            let table = transaction.table(&table_cache, table_name.clone()).unwrap();
+            assert!(!table.contains_column("c4"));
+            assert!(table.get_column_by_name("c4").is_none());
+        }
+
+        Ok(())
+    }
 }

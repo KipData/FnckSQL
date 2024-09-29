@@ -57,7 +57,7 @@ impl IndexMeta {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Index<'a> {
     pub id: IndexId,
     pub column_values: &'a [ValueRef],

@@ -98,7 +98,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                                 if column.desc.is_primary {
                                     let old_key = tuple.id.replace(value.clone()).unwrap();
 
-                                    throw!(transaction.delete(&table_name, old_key));
+                                    throw!(transaction.remove_tuple(&table_name, &old_key));
                                     is_overwrite = false;
                                 }
                                 tuple.values[i] = value.clone();
@@ -115,7 +115,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                             ));
                         }
 
-                        throw!(transaction.append(&table_name, tuple, &types, is_overwrite));
+                        throw!(transaction.append_tuple(&table_name, tuple, &types, is_overwrite));
                     }
                 }
                 yield Ok(TupleBuilder::build_result("1".to_string()));

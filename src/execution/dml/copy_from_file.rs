@@ -42,7 +42,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CopyFromFile {
                 let handle = thread::spawn(|| self.read_file_blocking(tx));
                 let mut size = 0_usize;
                 while let Ok(chunk) = rx.recv() {
-                    throw!(transaction.append(&table_name, chunk, &types, false));
+                    throw!(transaction.append_tuple(&table_name, chunk, &types, false));
                     size += 1;
                 }
                 throw!(handle.join().unwrap());

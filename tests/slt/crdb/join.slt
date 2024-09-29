@@ -167,15 +167,12 @@ null 16
 null 42
 null 43
 
-# TODO: Full Join on nested loop join
 # query
 # SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY x
 
-# TODO: Full Join on nested loop join
 # query
 # SELECT x AS s, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY s
 
-# TODO: Full Join on nested loop join
 # query
 # SELECT * FROM onecolumn AS a NATURAL FULL OUTER JOIN othercolumn AS b ORDER BY x
 
@@ -244,27 +241,23 @@ null null 1 null
 statement ok
 SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 
-# TODO: Full Join on nested loop join
-# query II
-# SELECT * FROM onecolumn AS a(x) FULL OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
-# ----
-# 42 NULL
-# 44 NULL
-# NULL NULL
+query II
+SELECT * FROM onecolumn AS a(aid, x) FULL OUTER JOIN empty AS b(bid, y) ON a.x = b.y ORDER BY a.x
+----
+null null 2 42
+null null 0 44
+null null 1 null
 
-# TODO: Full Join on nested loop join
 # query
 # SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x) ORDER BY x
 
-# TODO: Full Join on nested loop join
-# query II
-# SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y ORDER BY b.y
-# ----
-# NULL 42
-# NULL 44
-# NULL NULL
+query II
+SELECT * FROM empty AS a(aid, x) FULL OUTER JOIN onecolumn AS b(bid, y) ON a.x = b.y ORDER BY b.y
+----
+null null 2 42
+null null 0 44
+null null 1 null
 
-# TODO: Full Join on nested loop join
 # query
 # SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 
@@ -317,7 +310,6 @@ SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x
 44 51
 null null
 
-# TODO: Full Join on nested loop join
 # query
 # SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
 

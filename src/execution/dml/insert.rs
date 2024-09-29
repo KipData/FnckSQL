@@ -118,7 +118,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                         }
                     }
                     for tuple in tuples {
-                        throw!(transaction.append(&table_name, tuple, &types, is_overwrite));
+                        throw!(transaction.append_tuple(&table_name, tuple, &types, is_overwrite));
                     }
                 }
                 yield Ok(TupleBuilder::build_result("1".to_string()));
