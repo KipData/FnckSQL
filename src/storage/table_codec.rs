@@ -1,5 +1,7 @@
-use crate::catalog::{ColumnCatalog, TableMeta};
+use crate::catalog::{ColumnRef, ColumnRelation, TableMeta};
 use crate::errors::DatabaseError;
+use crate::serdes::{ReferenceSerialization, ReferenceTables};
+use crate::storage::Transaction;
 use crate::types::index::{Index, IndexId, IndexMeta, IndexType};
 use crate::types::tuple::{Schema, Tuple, TupleId};
 use crate::types::value::DataValue;
@@ -7,6 +9,7 @@ use crate::types::LogicalType;
 use bytes::Bytes;
 use integer_encoding::FixedInt;
 use lazy_static::lazy_static;
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
 const BOUND_MIN_TAG: u8 = 0;
@@ -302,22 +305,40 @@ impl TableCodec {
     ///
     /// Tips: the `0` for bound range
     pub fn encode_column(
-        table_name: &str,
-        col: &ColumnCatalog,
+        col: &ColumnRef,
+        reference_tables: &mut ReferenceTables,
     ) -> Result<(Bytes, Bytes), DatabaseError> {
-        let mut key_prefix = Self::key_prefix(CodecType::Column, table_name);
+        if let ColumnRelation::Table {
+            column_id,
+            table_name,
+        } = &col.summary.relation
+        {
+            let mut key_prefix = Cursor::new(Self::key_prefix(CodecType::Column, table_name));
+            key_prefix.seek(SeekFrom::End(0))?;
 
-        key_prefix.push(BOUND_MIN_TAG);
-        key_prefix.append(&mut col.id().unwrap().to_be_bytes().to_vec());
+            key_prefix.write_all(&[BOUND_MIN_TAG])?;
+            key_prefix.write_all(&column_id.to_be_bytes())?;
 
-        Ok((
-            Bytes::from(key_prefix),
-            Bytes::from(bincode::serialize(col)?),
-        ))
+            let mut column_bytes = Cursor::new(Vec::new());
+            col.encode(&mut column_bytes, true, reference_tables)?;
+
+            Ok((
+                Bytes::from(key_prefix.into_inner()),
+                Bytes::from(column_bytes.into_inner()),
+            ))
+        } else {
+            Err(DatabaseError::InvalidColumn(
+                "column does not belong to table".to_string(),
+            ))
+        }
     }
 
-    pub fn decode_column(bytes: &[u8]) -> Result<ColumnCatalog, DatabaseError> {
-        Ok(bincode::deserialize::<ColumnCatalog>(bytes)?)
+    pub fn decode_column<T: Transaction, R: Read>(
+        reader: &mut R,
+        reference_tables: &ReferenceTables,
+    ) -> Result<ColumnRef, DatabaseError> {
+        // `TableCache` is not theoretically used in `table_collect` because `ColumnCatalog` should not depend on other Column
+        ColumnRef::decode::<T, R>(reader, None, reference_tables)
     }
 
     /// Key: {TableName}{STATISTICS_TAG}{BOUND_MIN_TAG}{INDEX_ID}
@@ -363,8 +384,10 @@ impl TableCodec {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog, TableMeta};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRelation, TableCatalog, TableMeta};
     use crate::errors::DatabaseError;
+    use crate::serdes::ReferenceTables;
+    use crate::storage::rocksdb::RocksTransaction;
     use crate::storage::table_codec::TableCodec;
     use crate::types::index::{Index, IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
@@ -374,6 +397,7 @@ mod tests {
     use itertools::Itertools;
     use rust_decimal::Decimal;
     use std::collections::BTreeSet;
+    use std::io::Cursor;
     use std::ops::Bound;
     use std::slice;
     use std::sync::Arc;
@@ -383,12 +407,12 @@ mod tests {
             ColumnCatalog::new(
                 "c1".into(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None),
+                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             ),
             ColumnCatalog::new(
                 "c2".into(),
                 false,
-                ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None),
+                ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None).unwrap(),
             ),
         ];
         TableCatalog::new(Arc::new("t1".to_string()), columns).unwrap()
@@ -476,14 +500,29 @@ mod tests {
     }
 
     #[test]
-    fn test_table_codec_column() {
-        let table_catalog = build_table_codec();
-        let col = table_catalog.columns().next().cloned().unwrap();
+    fn test_table_codec_column() -> Result<(), DatabaseError> {
+        let mut col: ColumnCatalog = ColumnCatalog::new(
+            "c2".to_string(),
+            false,
+            ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+        );
+        col.summary.relation = ColumnRelation::Table {
+            column_id: 1,
+            table_name: Arc::new("t1".to_string()),
+        };
+        let col = Arc::new(col);
 
-        let (_, bytes) = TableCodec::encode_column(&table_catalog.name, &col).unwrap();
-        let decode_col = TableCodec::decode_column(&bytes).unwrap();
+        let mut reference_tables = ReferenceTables::new();
 
-        debug_assert_eq!(&decode_col, col.as_ref());
+        let (_, bytes) = TableCodec::encode_column(&col, &mut reference_tables).unwrap();
+        let mut cursor = Cursor::new(bytes.as_ref());
+        let decode_col =
+            TableCodec::decode_column::<RocksTransaction, _>(&mut cursor, &reference_tables)
+                .unwrap();
+
+        debug_assert_eq!(decode_col, col);
+
+        Ok(())
     }
 
     #[test]
@@ -501,9 +540,13 @@ mod tests {
                 },
             );
 
-            col.summary.id = Some(col_id as u32);
+            col.summary.relation = ColumnRelation::Table {
+                column_id: col_id as u32,
+                table_name: Arc::new(table_name.to_string()),
+            };
 
-            let (key, _) = TableCodec::encode_column(&table_name.to_string(), &col).unwrap();
+            let (key, _) =
+                TableCodec::encode_column(&Arc::new(col), &mut ReferenceTables::new()).unwrap();
             key
         };
 
@@ -587,7 +630,7 @@ mod tests {
         let column = ColumnCatalog::new(
             "".to_string(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false, false, None),
+            ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
         );
         let table_catalog = TableCatalog::new(Arc::new("T0".to_string()), vec![column]).unwrap();
 

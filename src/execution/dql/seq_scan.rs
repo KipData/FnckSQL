@@ -29,9 +29,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SeqScan {
                     ..
                 } = self.op;
 
-                let mut iter = transaction
-                    .read(table_cache, table_name, limit, columns)
-                    .unwrap();
+                let mut iter = throw!(transaction.read(table_cache, table_name, limit, columns));
 
                 while let Some(tuple) = throw!(iter.next_tuple()) {
                     yield Ok(tuple);

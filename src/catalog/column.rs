@@ -1,18 +1,17 @@
 use crate::catalog::TableName;
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
+use crate::types::tuple::EMPTY_TUPLE;
+use crate::types::value::ValueRef;
+use crate::types::{ColumnId, LogicalType};
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::CharLengthUnits;
 use std::hash::Hash;
 use std::sync::Arc;
 
-use crate::types::tuple::EMPTY_TUPLE;
-use crate::types::value::ValueRef;
-use crate::types::{ColumnId, LogicalType};
-
 pub type ColumnRef = Arc<ColumnCatalog>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct ColumnCatalog {
     pub summary: ColumnSummary,
     pub nullable: bool,
@@ -20,19 +19,26 @@ pub struct ColumnCatalog {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub enum ColumnRelation {
+    None,
+    Table {
+        column_id: ColumnId,
+        table_name: TableName,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct ColumnSummary {
-    pub id: Option<ColumnId>,
     pub name: String,
-    pub table_name: Option<TableName>,
+    pub relation: ColumnRelation,
 }
 
 impl ColumnCatalog {
     pub fn new(column_name: String, nullable: bool, column_desc: ColumnDesc) -> ColumnCatalog {
         ColumnCatalog {
             summary: ColumnSummary {
-                id: None,
                 name: column_name,
-                table_name: None,
+                relation: ColumnRelation::None,
             },
             nullable,
             desc: column_desc,
@@ -42,17 +48,18 @@ impl ColumnCatalog {
     pub(crate) fn new_dummy(column_name: String) -> ColumnCatalog {
         ColumnCatalog {
             summary: ColumnSummary {
-                id: None,
                 name: column_name,
-                table_name: None,
+                relation: ColumnRelation::None,
             },
             nullable: true,
+            // SAFETY: default expr must not be [`ScalarExpression::ColumnRef`]
             desc: ColumnDesc::new(
                 LogicalType::Varchar(None, CharLengthUnits::Characters),
                 false,
                 false,
                 None,
-            ),
+            )
+            .unwrap(),
         }
     }
 
@@ -61,7 +68,10 @@ impl ColumnCatalog {
     }
 
     pub(crate) fn id(&self) -> Option<ColumnId> {
-        self.summary.id
+        match &self.summary.relation {
+            ColumnRelation::None => None,
+            ColumnRelation::Table { column_id, .. } => Some(*column_id),
+        }
     }
 
     pub fn name(&self) -> &str {
@@ -76,19 +86,21 @@ impl ColumnCatalog {
     }
 
     pub fn table_name(&self) -> Option<&TableName> {
-        self.summary.table_name.as_ref()
+        match &self.summary.relation {
+            ColumnRelation::None => None,
+            ColumnRelation::Table { table_name, .. } => Some(table_name),
+        }
     }
 
     pub fn set_name(&mut self, name: String) {
         self.summary.name = name;
     }
 
-    pub fn set_id(&mut self, id: ColumnId) {
-        self.summary.id = Some(id);
-    }
-
-    pub fn set_table_name(&mut self, table_name: TableName) {
-        self.summary.table_name = Some(table_name);
+    pub fn set_ref_table(&mut self, table_name: TableName, column_id: ColumnId) {
+        self.summary.relation = ColumnRelation::Table {
+            column_id,
+            table_name,
+        };
     }
 
     pub fn datatype(&self) -> &LogicalType {
@@ -110,7 +122,7 @@ impl ColumnCatalog {
 }
 
 /// The descriptor of a column.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
     pub(crate) is_primary: bool,
@@ -119,17 +131,23 @@ pub struct ColumnDesc {
 }
 
 impl ColumnDesc {
-    pub const fn new(
+    pub fn new(
         column_datatype: LogicalType,
         is_primary: bool,
         is_unique: bool,
         default: Option<ScalarExpression>,
-    ) -> ColumnDesc {
-        ColumnDesc {
+    ) -> Result<ColumnDesc, DatabaseError> {
+        if let Some(expr) = &default {
+            if expr.has_table_ref_column() {
+                return Err(DatabaseError::DefaultNotColumnRef);
+            }
+        }
+
+        Ok(ColumnDesc {
             column_datatype,
             is_primary,
             is_unique,
             default,
-        }
+        })
     }
 }

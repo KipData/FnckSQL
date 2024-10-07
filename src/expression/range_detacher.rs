@@ -3,6 +3,7 @@ use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
 use crate::types::ColumnId;
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::Bound;
 use std::fmt::Formatter;
@@ -12,7 +13,7 @@ use std::{fmt, mem};
 /// Used to represent binary relationships between fields and constants
 /// Tips: The NotEq case is ignored because it makes expression composition very complex
 /// - [`Range::Scope`]:
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub enum Range {
     Scope {
         min: Bound<ValueRef>,

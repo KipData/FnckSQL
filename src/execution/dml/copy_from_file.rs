@@ -108,7 +108,7 @@ fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), DatabaseError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRelation, ColumnSummary};
     use crate::db::DataBaseBuilder;
     use sqlparser::ast::CharLengthUnits;
     use std::io::Write;
@@ -133,27 +133,33 @@ mod tests {
         let columns = vec![
             Arc::new(ColumnCatalog {
                 summary: ColumnSummary {
-                    id: Some(0),
                     name: "a".to_string(),
-                    table_name: None,
+                    relation: ColumnRelation::Table {
+                        column_id: 0,
+                        table_name: Arc::new("t1".to_string()),
+                    },
                 },
                 nullable: false,
-                desc: ColumnDesc::new(LogicalType::Integer, true, false, None),
+                desc: ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             }),
             Arc::new(ColumnCatalog {
                 summary: ColumnSummary {
-                    id: Some(1),
                     name: "b".to_string(),
-                    table_name: None,
+                    relation: ColumnRelation::Table {
+                        column_id: 1,
+                        table_name: Arc::new("t1".to_string()),
+                    },
                 },
                 nullable: false,
-                desc: ColumnDesc::new(LogicalType::Float, false, false, None),
+                desc: ColumnDesc::new(LogicalType::Float, false, false, None).unwrap(),
             }),
             Arc::new(ColumnCatalog {
                 summary: ColumnSummary {
-                    id: Some(1),
                     name: "c".to_string(),
-                    table_name: None,
+                    relation: ColumnRelation::Table {
+                        column_id: 2,
+                        table_name: Arc::new("t1".to_string()),
+                    },
                 },
                 nullable: false,
                 desc: ColumnDesc::new(
@@ -161,7 +167,8 @@ mod tests {
                     false,
                     false,
                     None,
-                ),
+                )
+                .unwrap(),
             }),
         ];
 

@@ -322,17 +322,17 @@ pub(crate) mod test {
             ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None),
+                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             ),
             ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None),
+                ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
             ),
             ColumnCatalog::new(
                 "c3".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, false, false, None),
+                ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
             ),
         ];
         let _ =
@@ -369,7 +369,7 @@ pub(crate) mod test {
             Arc::new(vec![Arc::new(ColumnCatalog::new(
                 "current_date()".to_string(),
                 true,
-                ColumnDesc::new(LogicalType::Date, false, false, None)
+                ColumnDesc::new(LogicalType::Date, false, false, None).unwrap()
             ))])
         );
         debug_assert_eq!(
@@ -397,10 +397,9 @@ pub(crate) mod test {
         let mut column = ColumnCatalog::new(
             "number".to_string(),
             true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None),
+            ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
         );
-        column.set_table_name(Arc::new("a".to_string()));
-        column.set_id(0);
+        column.set_ref_table(Arc::new("a".to_string()), 0);
 
         debug_assert_eq!(schema, Arc::new(vec![Arc::new(column)]));
         debug_assert_eq!(

@@ -5,6 +5,7 @@ use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableNam
 use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
 use crate::optimizer::core::statistics_meta::{StatisticMetaLoader, StatisticsMeta};
+use crate::serdes::ReferenceTables;
 use crate::storage::table_codec::TableCodec;
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
@@ -14,6 +15,7 @@ use crate::utils::lru::ShardingLruCache;
 use bytes::Bytes;
 use itertools::Itertools;
 use std::collections::{Bound, VecDeque};
+use std::io::Cursor;
 use std::ops::SubAssign;
 use std::sync::Arc;
 use std::{mem, slice};
@@ -239,7 +241,7 @@ pub trait Transaction: Sized {
             }
 
             let column = table.get_column_by_id(&col_id).unwrap();
-            let (key, value) = TableCodec::encode_column(table_name, column)?;
+            let (key, value) = TableCodec::encode_column(column, &mut ReferenceTables::new())?;
             self.set(key, value)?;
             table_cache.remove(table_name);
 
@@ -259,7 +261,7 @@ pub trait Transaction: Sized {
         if let Some(table_catalog) = self.table(table_cache, table_name.clone()).cloned() {
             let column = table_catalog.get_column_by_name(column_name).unwrap();
 
-            let (key, _) = TableCodec::encode_column(table_name, column)?;
+            let (key, _) = TableCodec::encode_column(column, &mut ReferenceTables::new())?;
             self.remove(&key)?;
 
             for index_meta in table_catalog.indexes.iter() {
@@ -305,10 +307,12 @@ pub trait Transaction: Sized {
         self.create_index_meta_from_column(&mut table_catalog)?;
         self.set(table_key, value)?;
 
+        let mut reference_tables = ReferenceTables::new();
         for column in table_catalog.columns() {
-            let (key, value) = TableCodec::encode_column(&table_name, column)?;
+            let (key, value) = TableCodec::encode_column(column, &mut reference_tables)?;
             self.set(key, value)?;
         }
+        debug_assert_eq!(reference_tables.len(), 1);
         table_cache.put(table_name.to_string(), table_catalog);
 
         Ok(table_name)
@@ -361,6 +365,7 @@ pub trait Transaction: Sized {
     ) -> Option<&TableCatalog> {
         table_cache
             .get_or_insert(table_name.to_string(), |_| {
+                // `TableCache` is not theoretically used in `table_collect` because ColumnCatalog should not depend on other Column
                 let (columns, indexes) = self.table_collect(table_name.clone())?;
 
                 TableCatalog::reload(table_name.clone(), columns, indexes)
@@ -433,18 +438,24 @@ pub trait Transaction: Sized {
     fn table_collect(
         &self,
         table_name: TableName,
-    ) -> Result<(Vec<ColumnCatalog>, Vec<IndexMetaRef>), DatabaseError> {
+    ) -> Result<(Vec<ColumnRef>, Vec<IndexMetaRef>), DatabaseError> {
         let (table_min, table_max) = TableCodec::table_bound(&table_name);
         let mut column_iter =
             self.range(Bound::Included(&table_min), Bound::Included(&table_max))?;
 
         let mut columns = Vec::new();
         let mut index_metas = Vec::new();
+        let mut reference_tables = ReferenceTables::new();
+        let _ = reference_tables.push_or_replace(&table_name);
 
         // Tips: only `Column`, `IndexMeta`, `TableMeta`
         while let Some((key, value)) = column_iter.try_next().ok().flatten() {
             if key.starts_with(&table_min) {
-                columns.push(TableCodec::decode_column(&value)?);
+                let mut cursor = Cursor::new(value.as_ref());
+                columns.push(TableCodec::decode_column::<Self, _>(
+                    &mut cursor,
+                    &reference_tables,
+                )?);
             } else {
                 index_metas.push(Arc::new(TableCodec::decode_index_meta(&value)?));
             }
@@ -981,7 +992,9 @@ pub trait Iter {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnSummary, TableCatalog};
+    use crate::catalog::{
+        ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary, TableCatalog,
+    };
     use crate::db::test::build_table;
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
@@ -1008,7 +1021,7 @@ mod test {
                 Arc::new(ColumnCatalog::new(
                     "c1".to_string(),
                     false,
-                    ColumnDesc::new(LogicalType::Integer, true, false, None),
+                    ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
                 )),
             ),
             (
@@ -1016,7 +1029,7 @@ mod test {
                 Arc::new(ColumnCatalog::new(
                     "c2".to_string(),
                     false,
-                    ColumnDesc::new(LogicalType::Boolean, false, false, None),
+                    ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
                 )),
             ),
             (
@@ -1024,7 +1037,7 @@ mod test {
                 Arc::new(ColumnCatalog::new(
                     "c3".to_string(),
                     false,
-                    ColumnDesc::new(LogicalType::Integer, false, false, None),
+                    ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
                 )),
             ),
         ]
@@ -1093,14 +1106,16 @@ mod test {
             assert_eq!(
                 c1_column.summary(),
                 &ColumnSummary {
-                    id: Some(0),
                     name: "c1".to_string(),
-                    table_name: Some(Arc::new("t1".to_string())),
+                    relation: ColumnRelation::Table {
+                        column_id: 0,
+                        table_name: Arc::new("t1".to_string())
+                    },
                 }
             );
             assert_eq!(
                 c1_column.desc,
-                ColumnDesc::new(LogicalType::Integer, true, false, None)
+                ColumnDesc::new(LogicalType::Integer, true, false, None)?
             );
 
             let c2_column = column_iter.next().unwrap();
@@ -1108,14 +1123,16 @@ mod test {
             assert_eq!(
                 c2_column.summary(),
                 &ColumnSummary {
-                    id: Some(1),
                     name: "c2".to_string(),
-                    table_name: Some(Arc::new("t1".to_string())),
+                    relation: ColumnRelation::Table {
+                        column_id: 1,
+                        table_name: Arc::new("t1".to_string())
+                    },
                 }
             );
             assert_eq!(
                 c2_column.desc,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None)
+                ColumnDesc::new(LogicalType::Boolean, false, false, None)?
             );
 
             let c3_column = column_iter.next().unwrap();
@@ -1123,14 +1140,16 @@ mod test {
             assert_eq!(
                 c3_column.summary(),
                 &ColumnSummary {
-                    id: Some(2),
                     name: "c3".to_string(),
-                    table_name: Some(Arc::new("t1".to_string())),
+                    relation: ColumnRelation::Table {
+                        column_id: 2,
+                        table_name: Arc::new("t1".to_string())
+                    },
                 }
             );
             assert_eq!(
                 c3_column.desc,
-                ColumnDesc::new(LogicalType::Integer, false, false, None)
+                ColumnDesc::new(LogicalType::Integer, false, false, None)?
             );
 
             Ok(())
@@ -1427,7 +1446,7 @@ mod test {
         let new_column = ColumnCatalog::new(
             "c4".to_string(),
             true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None),
+            ColumnDesc::new(LogicalType::Integer, false, false, None)?,
         );
         let new_column_id =
             transaction.add_column(&table_cache, &table_name, &new_column, false)?;
@@ -1447,10 +1466,12 @@ mod test {
             let mut new_column = ColumnCatalog::new(
                 "c4".to_string(),
                 true,
-                ColumnDesc::new(LogicalType::Integer, false, false, None),
+                ColumnDesc::new(LogicalType::Integer, false, false, None)?,
             );
-            new_column.set_table_name(table_name.clone());
-            new_column.set_id(3);
+            new_column.summary.relation = ColumnRelation::Table {
+                column_id: 3,
+                table_name: table_name.clone(),
+            };
             assert_eq!(table.get_column_by_name("c4"), Some(&Arc::new(new_column)));
         }
         transaction.drop_column(&table_cache, &meta_cache, &table_name, "c4")?;

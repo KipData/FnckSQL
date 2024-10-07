@@ -352,7 +352,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         for (alias, column) in aliases_with_columns {
             let mut alias_column = ColumnCatalog::clone(&column);
             alias_column.set_name(alias.clone());
-            alias_column.set_table_name(table_alias.clone());
+            alias_column.set_ref_table(table_alias.clone(), column.id().unwrap_or(0));
 
             let alias_column_expr = ScalarExpression::Alias {
                 expr: Box::new(ScalarExpression::ColumnRef(column)),

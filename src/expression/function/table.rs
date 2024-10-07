@@ -3,12 +3,11 @@ use crate::errors::DatabaseError;
 use crate::expression::function::FunctionSummary;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::{SchemaRef, Tuple};
-use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TableFunction {
     pub(crate) args: Vec<ScalarExpression>,
     pub(crate) inner: Arc<dyn TableFunctionImpl>,

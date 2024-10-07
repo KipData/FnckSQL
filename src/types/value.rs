@@ -1,20 +1,20 @@
+use crate::errors::DatabaseError;
 use chrono::format::{DelayedFormat, StrftimeItems};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use integer_encoding::{FixedInt, FixedIntWriter};
 use lazy_static::lazy_static;
+use ordered_float::OrderedFloat;
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use sqlparser::ast::CharLengthUnits;
 use std::cmp::Ordering;
 use std::fmt::Formatter;
 use std::hash::Hash;
+use std::io::Write;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::{cmp, fmt, mem};
-
-use crate::errors::DatabaseError;
-use ordered_float::OrderedFloat;
-use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
-use serde::{Deserialize, Serialize};
-use sqlparser::ast::CharLengthUnits;
 
 use super::LogicalType;
 
@@ -485,64 +485,64 @@ impl DataValue {
         }
     }
 
-    pub fn to_raw(&self, bytes: &mut Vec<u8>) -> Result<usize, DatabaseError> {
+    pub fn to_raw<W: Write>(&self, writer: &mut W) -> Result<usize, DatabaseError> {
         match self {
             DataValue::Null => (),
             DataValue::Boolean(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v as u8)?);
+                    return Ok(writer.write_fixedint(*v as u8)?);
                 }
             }
             DataValue::Float32(v) => {
                 if let Some(v) = v {
-                    bytes.extend_from_slice(&v.to_ne_bytes());
+                    writer.write_all(&v.to_ne_bytes())?;
                     return Ok(4);
                 }
             }
             DataValue::Float64(v) => {
                 if let Some(v) = v {
-                    bytes.extend_from_slice(&v.to_ne_bytes());
+                    writer.write_all(&v.to_ne_bytes())?;
                     return Ok(8);
                 }
             }
             DataValue::Int8(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::Int16(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::Int32(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::Int64(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::UInt8(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::UInt16(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::UInt32(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::UInt64(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::Utf8 { value: v, ty, unit } => {
@@ -552,17 +552,17 @@ impl DataValue {
                             let string_bytes = v.as_bytes();
                             let len = string_bytes.len();
 
-                            bytes.extend_from_slice(string_bytes);
+                            writer.write_all(string_bytes)?;
                             return Ok(len);
                         }
                         Utf8Type::Fixed(len) => match unit {
                             CharLengthUnits::Characters => {
                                 let chars_len = *len as usize;
-                                let mut string_bytes =
+                                let string_bytes =
                                     format!("{:len$}", v, len = chars_len).into_bytes();
                                 let octets_len = string_bytes.len();
 
-                                bytes.append(&mut string_bytes);
+                                writer.write_all(&string_bytes)?;
                                 return Ok(octets_len);
                             }
                             CharLengthUnits::Octets => {
@@ -571,7 +571,7 @@ impl DataValue {
 
                                 string_bytes.resize(octets_len, b' ');
                                 debug_assert_eq!(octets_len, string_bytes.len());
-                                bytes.append(&mut string_bytes);
+                                writer.write_all(&string_bytes)?;
                                 return Ok(octets_len);
                             }
                         },
@@ -580,22 +580,22 @@ impl DataValue {
             }
             DataValue::Date32(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::Date64(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::Time(v) => {
                 if let Some(v) = v {
-                    return Ok(bytes.write_fixedint(*v)?);
+                    return Ok(writer.write_fixedint(*v)?);
                 }
             }
             DataValue::Decimal(v) => {
                 if let Some(v) = v {
-                    bytes.extend_from_slice(&v.serialize());
+                    writer.write_all(&v.serialize())?;
                     return Ok(16);
                 }
             }

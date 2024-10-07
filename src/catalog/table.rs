@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::{slice, vec};
 
-use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::catalog::{ColumnCatalog, ColumnRef, ColumnRelation};
 use crate::errors::DatabaseError;
 use crate::types::index::{IndexMeta, IndexMetaRef, IndexType};
 use crate::types::tuple::SchemaRef;
@@ -99,8 +99,10 @@ impl TableCatalog {
             .map(|(column_id, _)| column_id + 1)
             .unwrap_or(0);
 
-        col.summary.table_name = Some(self.name.clone());
-        col.summary.id = Some(col_id);
+        col.summary.relation = ColumnRelation::Table {
+            column_id: col_id,
+            table_name: self.name.clone(),
+        };
 
         self.column_idxs
             .insert(col.name().to_string(), (col_id, self.schema_ref.len()));
@@ -162,13 +164,29 @@ impl TableCatalog {
 
     pub(crate) fn reload(
         name: TableName,
-        columns: Vec<ColumnCatalog>,
+        column_refs: Vec<ColumnRef>,
         indexes: Vec<IndexMetaRef>,
     ) -> Result<TableCatalog, DatabaseError> {
-        let mut catalog = TableCatalog::new(name, columns)?;
-        catalog.indexes = indexes;
+        let mut column_idxs = BTreeMap::new();
+        let mut columns = BTreeMap::new();
 
-        Ok(catalog)
+        for (i, column_ref) in column_refs.iter().enumerate() {
+            let column_id = column_ref.id().ok_or(DatabaseError::InvalidColumn(
+                "column does not belong to table".to_string(),
+            ))?;
+
+            column_idxs.insert(column_ref.name().to_string(), (column_id, i));
+            columns.insert(column_id, i);
+        }
+        let schema_ref = Arc::new(column_refs.clone());
+
+        Ok(TableCatalog {
+            name,
+            column_idxs,
+            columns,
+            indexes,
+            schema_ref,
+        })
     }
 }
 
@@ -193,12 +211,12 @@ mod tests {
         let col0 = ColumnCatalog::new(
             "a".into(),
             false,
-            ColumnDesc::new(LogicalType::Integer, false, false, None),
+            ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
         );
         let col1 = ColumnCatalog::new(
             "b".into(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false, false, None),
+            ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
         );
         let col_catalogs = vec![col0, col1];
         let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs).unwrap();

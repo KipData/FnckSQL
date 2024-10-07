@@ -96,7 +96,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             false,
             false,
             None,
-        );
+        )?;
         let mut nullable = true;
 
         // TODO: 这里可以对更多字段可设置内容进行补充
@@ -182,7 +182,7 @@ mod tests {
                 debug_assert_eq!(op.columns[0].nullable, false);
                 debug_assert_eq!(
                     op.columns[0].desc,
-                    ColumnDesc::new(LogicalType::Integer, true, false, None)
+                    ColumnDesc::new(LogicalType::Integer, true, false, None)?
                 );
                 debug_assert_eq!(op.columns[1].name(), "name");
                 debug_assert_eq!(op.columns[1].nullable, true);
@@ -193,7 +193,7 @@ mod tests {
                         false,
                         false,
                         None
-                    )
+                    )?
                 );
             }
             _ => unreachable!(),

@@ -184,12 +184,12 @@ mod tests {
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None),
+                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UInteger, false, false, None),
+                ColumnDesc::new(LogicalType::UInteger, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c3".to_string(),
@@ -199,57 +199,58 @@ mod tests {
                     false,
                     false,
                     None,
-                ),
+                )
+                .unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c4".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Smallint, false, false, None),
+                ColumnDesc::new(LogicalType::Smallint, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c5".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::USmallint, false, false, None),
+                ColumnDesc::new(LogicalType::USmallint, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c6".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Float, false, false, None),
+                ColumnDesc::new(LogicalType::Float, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c7".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Double, false, false, None),
+                ColumnDesc::new(LogicalType::Double, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c8".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Tinyint, false, false, None),
+                ColumnDesc::new(LogicalType::Tinyint, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c9".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UTinyint, false, false, None),
+                ColumnDesc::new(LogicalType::UTinyint, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c10".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None),
+                ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c11".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::DateTime, false, false, None),
+                ColumnDesc::new(LogicalType::DateTime, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c12".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Date, false, false, None),
+                ColumnDesc::new(LogicalType::Date, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c13".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None),
+                ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c14".to_string(),
@@ -259,7 +260,8 @@ mod tests {
                     false,
                     false,
                     None,
-                ),
+                )
+                .unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c15".to_string(),
@@ -269,7 +271,8 @@ mod tests {
                     false,
                     false,
                     None,
-                ),
+                )
+                .unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c16".to_string(),
@@ -279,7 +282,8 @@ mod tests {
                     false,
                     false,
                     None,
-                ),
+                )
+                .unwrap(),
             )),
         ]);
 
