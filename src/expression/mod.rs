@@ -1,14 +1,12 @@
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use sqlparser::ast::TrimWhereField;
+use sqlparser::ast::{
+    BinaryOperator as SqlBinaryOperator, CharLengthUnits, UnaryOperator as SqlUnaryOperator,
+};
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
 use std::sync::Arc;
 use std::{fmt, mem};
-
-use sqlparser::ast::{
-    BinaryOperator as SqlBinaryOperator, CharLengthUnits, UnaryOperator as SqlUnaryOperator,
-};
 
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
@@ -25,7 +23,7 @@ pub mod function;
 pub mod range_detacher;
 pub mod simplify;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum AliasType {
     Name(String),
     Expr(Box<ScalarExpression>),
@@ -35,7 +33,7 @@ pub enum AliasType {
 /// SELECT a+1, b FROM t1.
 /// a+1 -> ScalarExpression::Unary(a + 1)
 /// b   -> ScalarExpression::ColumnRef()
-#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum ScalarExpression {
     Constant(ValueRef),
     ColumnRef(ColumnRef),
@@ -174,8 +172,15 @@ impl ScalarExpression {
         }
 
         match self {
-            ScalarExpression::Alias { expr, .. } => {
+            ScalarExpression::Alias { expr, alias } => {
                 expr.try_reference(output_exprs);
+
+                match alias {
+                    AliasType::Name(_) => (),
+                    AliasType::Expr(alias_expr) => {
+                        alias_expr.try_reference(output_exprs);
+                    }
+                }
             }
             ScalarExpression::TypeCast { expr, .. } => {
                 expr.try_reference(output_exprs);
@@ -473,7 +478,13 @@ impl ScalarExpression {
 
     pub fn has_count_star(&self) -> bool {
         match self {
-            ScalarExpression::Alias { expr, .. } => expr.has_count_star(),
+            ScalarExpression::Alias { expr, alias } => {
+                expr.has_count_star()
+                    || match alias {
+                        AliasType::Name(_) => false,
+                        AliasType::Expr(alias_expr) => alias_expr.has_count_star(),
+                    }
+            }
             ScalarExpression::TypeCast { expr, .. } => expr.has_count_star(),
             ScalarExpression::IsNull { expr, .. } => expr.has_count_star(),
             ScalarExpression::Unary { expr, .. } => expr.has_count_star(),
@@ -631,7 +642,16 @@ impl ScalarExpression {
                 ScalarExpression::ColumnRef(col) => {
                     vec.push(col.clone());
                 }
-                ScalarExpression::Alias { expr, .. } => columns_collect(expr, vec, only_column_ref),
+                ScalarExpression::Alias { expr, alias } => {
+                    columns_collect(expr, vec, only_column_ref);
+
+                    match alias {
+                        AliasType::Name(_) => (),
+                        AliasType::Expr(alias_expr) => {
+                            columns_collect(alias_expr, vec, only_column_ref);
+                        }
+                    }
+                }
                 ScalarExpression::TypeCast { expr, .. } => {
                     columns_collect(expr, vec, only_column_ref)
                 }
@@ -750,12 +770,143 @@ impl ScalarExpression {
         exprs
     }
 
+    pub fn has_table_ref_column(&self) -> bool {
+        match self {
+            ScalarExpression::Constant(_) => false,
+            ScalarExpression::ColumnRef(column) => {
+                column.table_name().is_some() && column.id().is_some()
+            }
+            ScalarExpression::Alias { expr, alias } => {
+                expr.has_table_ref_column()
+                    || match alias {
+                        AliasType::Name(_) => false,
+                        AliasType::Expr(expr) => expr.has_table_ref_column(),
+                    }
+            }
+            ScalarExpression::TypeCast { expr, .. } | ScalarExpression::IsNull { expr, .. } => {
+                expr.has_table_ref_column()
+            }
+            ScalarExpression::Unary { expr, .. } => expr.has_table_ref_column(),
+            ScalarExpression::Binary {
+                left_expr,
+                right_expr,
+                ..
+            } => left_expr.has_table_ref_column() || right_expr.has_table_ref_column(),
+            ScalarExpression::AggCall { args, .. } => {
+                args.iter().any(ScalarExpression::has_table_ref_column)
+            }
+            ScalarExpression::In { expr, args, .. } => {
+                expr.has_table_ref_column()
+                    || args.iter().any(ScalarExpression::has_table_ref_column)
+            }
+            ScalarExpression::Between {
+                expr,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                expr.has_table_ref_column()
+                    || left_expr.has_table_ref_column()
+                    || right_expr.has_table_ref_column()
+            }
+            ScalarExpression::SubString {
+                expr,
+                for_expr,
+                from_expr,
+            } => {
+                expr.has_table_ref_column()
+                    || for_expr
+                        .as_deref()
+                        .map(ScalarExpression::has_table_ref_column)
+                        .unwrap_or(false)
+                    || from_expr
+                        .as_deref()
+                        .map(ScalarExpression::has_table_ref_column)
+                        .unwrap_or(false)
+            }
+            ScalarExpression::Position { expr, in_expr } => {
+                expr.has_table_ref_column() || in_expr.has_table_ref_column()
+            }
+            ScalarExpression::Trim {
+                expr,
+                trim_what_expr,
+                ..
+            } => {
+                expr.has_table_ref_column()
+                    || trim_what_expr
+                        .as_deref()
+                        .map(ScalarExpression::has_table_ref_column)
+                        .unwrap_or(false)
+            }
+            ScalarExpression::Empty => false,
+            ScalarExpression::Reference { expr, .. } => expr.has_table_ref_column(),
+            ScalarExpression::Tuple(exprs) => {
+                exprs.iter().any(ScalarExpression::has_table_ref_column)
+            }
+            ScalarExpression::ScalaFunction(function) => function
+                .args
+                .iter()
+                .any(ScalarExpression::has_table_ref_column),
+            ScalarExpression::TableFunction(function) => function
+                .args
+                .iter()
+                .any(ScalarExpression::has_table_ref_column),
+            ScalarExpression::If {
+                condition,
+                left_expr,
+                right_expr,
+                ..
+            } => {
+                condition.has_table_ref_column()
+                    || left_expr.has_table_ref_column()
+                    || right_expr.has_table_ref_column()
+            }
+            ScalarExpression::IfNull {
+                left_expr,
+                right_expr,
+                ..
+            } => left_expr.has_table_ref_column() || right_expr.has_table_ref_column(),
+            ScalarExpression::NullIf {
+                left_expr,
+                right_expr,
+                ..
+            } => left_expr.has_table_ref_column() || right_expr.has_table_ref_column(),
+            ScalarExpression::Coalesce { exprs, .. } => {
+                exprs.iter().any(ScalarExpression::has_table_ref_column)
+            }
+            ScalarExpression::CaseWhen {
+                operand_expr,
+                expr_pairs,
+                else_expr,
+                ..
+            } => {
+                operand_expr
+                    .as_deref()
+                    .map(ScalarExpression::has_table_ref_column)
+                    .unwrap_or(false)
+                    || else_expr
+                        .as_deref()
+                        .map(ScalarExpression::has_table_ref_column)
+                        .unwrap_or(false)
+                    || expr_pairs.iter().any(|(left_expr, right_expr)| {
+                        left_expr.has_table_ref_column() || right_expr.has_table_ref_column()
+                    })
+            }
+        }
+    }
+
     pub fn has_agg_call(&self) -> bool {
         match self {
             ScalarExpression::AggCall { .. } => true,
             ScalarExpression::Constant(_) => false,
             ScalarExpression::ColumnRef(_) => false,
-            ScalarExpression::Alias { expr, .. } => expr.has_agg_call(),
+            ScalarExpression::Alias { expr, alias } => {
+                expr.has_agg_call()
+                    || match alias {
+                        AliasType::Name(_) => false,
+                        AliasType::Expr(alias_expr) => alias_expr.has_agg_call(),
+                    }
+            }
             ScalarExpression::TypeCast { expr, .. } => expr.has_agg_call(),
             ScalarExpression::IsNull { expr, .. } => expr.has_agg_call(),
             ScalarExpression::Unary { expr, .. } => expr.has_agg_call(),
@@ -1044,13 +1195,14 @@ impl ScalarExpression {
             _ => Arc::new(ColumnCatalog::new(
                 self.output_name(),
                 true,
-                ColumnDesc::new(self.return_type(), false, false, None),
+                // SAFETY: default expr must not be [`ScalarExpression::ColumnRef`]
+                ColumnDesc::new(self.return_type(), false, false, None).unwrap(),
             )),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
     Plus,
     Minus,
@@ -1068,7 +1220,7 @@ impl From<SqlUnaryOperator> for UnaryOperator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinaryOperator {
     Plus,
     Minus,

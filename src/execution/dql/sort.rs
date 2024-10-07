@@ -307,7 +307,7 @@ mod test {
         let schema = Arc::new(vec![Arc::new(ColumnCatalog::new(
             "c1".to_string(),
             true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None),
+            ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
         ))]);
         let tuples = NullableVec(vec![
             Some((
@@ -476,12 +476,12 @@ mod test {
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 true,
-                ColumnDesc::new(LogicalType::Integer, false, false, None),
+                ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
                 true,
-                ColumnDesc::new(LogicalType::Integer, false, false, None),
+                ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
             )),
         ]);
         let tuples = NullableVec(vec![

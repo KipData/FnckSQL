@@ -189,7 +189,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path()).unwrap();
         let transaction = storage.transaction()?;
-        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None);
+        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None)?;
 
         let t1_schema = Arc::new(vec![
             Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),

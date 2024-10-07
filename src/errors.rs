@@ -30,6 +30,8 @@ pub enum DatabaseError {
         #[source]
         csv::Error,
     ),
+    #[error("default cannot be a column related to the table")]
+    DefaultNotColumnRef,
     #[error("default does not exist")]
     DefaultNotExist,
     #[error("column: {0} already exists")]

@@ -406,7 +406,7 @@ mod test {
         LogicalPlan,
         ScalarExpression,
     ) {
-        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None);
+        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap();
 
         let t1_columns = vec![
             Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),

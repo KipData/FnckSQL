@@ -112,7 +112,7 @@ impl NormalizationRule for SimplifyFilter {
 #[cfg(test)]
 mod test {
     use crate::binder::test::select_sql_run;
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnSummary};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRelation, ColumnSummary};
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::{Range, RangeDetacher};
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
@@ -246,9 +246,11 @@ mod test {
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
             let c1_col = ColumnCatalog {
                 summary: ColumnSummary {
-                    id: Some(0),
                     name: "c1".to_string(),
-                    table_name: Some(Arc::new("t1".to_string())),
+                    relation: ColumnRelation::Table {
+                        column_id: 0,
+                        table_name: Arc::new("t1".to_string()),
+                    },
                 },
                 nullable: false,
                 desc: ColumnDesc {
@@ -260,9 +262,11 @@ mod test {
             };
             let c2_col = ColumnCatalog {
                 summary: ColumnSummary {
-                    id: Some(1),
                     name: "c2".to_string(),
-                    table_name: Some(Arc::new("t1".to_string())),
+                    relation: ColumnRelation::Table {
+                        column_id: 1,
+                        table_name: Arc::new("t1".to_string()),
+                    },
                 },
                 nullable: false,
                 desc: ColumnDesc {

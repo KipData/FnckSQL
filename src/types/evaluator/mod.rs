@@ -52,12 +52,12 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-#[typetag::serde(tag = "type")]
+#[typetag::serde(tag = "binary")]
 pub trait BinaryEvaluator: Send + Sync + Debug {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue;
 }
 
-#[typetag::serde(tag = "type")]
+#[typetag::serde(tag = "unary")]
 pub trait UnaryEvaluator: Send + Sync + Debug {
     fn unary_eval(&self, value: &DataValue) -> DataValue;
 }

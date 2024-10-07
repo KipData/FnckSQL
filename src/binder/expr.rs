@@ -231,7 +231,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
         sub_query: LogicalPlan,
     ) -> Result<(ScalarExpression, LogicalPlan), DatabaseError> {
         let mut alias_column = ColumnCatalog::clone(&column);
-        alias_column.set_table_name(self.context.temp_table());
+        alias_column.set_ref_table(self.context.temp_table(), 0);
 
         let alias_expr = ScalarExpression::Alias {
             expr: Box::new(ScalarExpression::ColumnRef(column)),
