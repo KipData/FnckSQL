@@ -312,6 +312,7 @@ pub trait Transaction: Sized {
             let (key, value) = TableCodec::encode_column(column, &mut reference_tables)?;
             self.set(key, value)?;
         }
+        debug_assert_eq!(reference_tables.len(), 1);
         table_cache.put(table_name.to_string(), table_catalog);
 
         Ok(table_name)

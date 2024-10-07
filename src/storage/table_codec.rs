@@ -385,27 +385,22 @@ impl TableCodec {
 #[cfg(test)]
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRelation, TableCatalog, TableMeta};
-    use crate::db::test::build_table;
     use crate::errors::DatabaseError;
     use crate::serdes::ReferenceTables;
-    use crate::storage::rocksdb::{RocksStorage, RocksTransaction};
+    use crate::storage::rocksdb::RocksTransaction;
     use crate::storage::table_codec::TableCodec;
-    use crate::storage::Storage;
     use crate::types::index::{Index, IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
-    use crate::utils::lru::ShardingLruCache;
     use bytes::Bytes;
     use itertools::Itertools;
     use rust_decimal::Decimal;
     use std::collections::BTreeSet;
-    use std::hash::RandomState;
     use std::io::Cursor;
     use std::ops::Bound;
     use std::slice;
     use std::sync::Arc;
-    use tempfile::TempDir;
 
     fn build_table_codec() -> TableCatalog {
         let columns = vec![
@@ -506,13 +501,6 @@ mod tests {
 
     #[test]
     fn test_table_codec_column() -> Result<(), DatabaseError> {
-        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let storage = RocksStorage::new(temp_dir.path())?;
-        let mut transaction = storage.transaction()?;
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-
-        build_table(&table_cache, &mut transaction)?;
-
         let mut col: ColumnCatalog = ColumnCatalog::new(
             "c2".to_string(),
             false,

@@ -2,7 +2,7 @@ fn main() {}
 
 #[cfg(test)]
 mod test {
-    use fnck_sql::catalog::column::{ColumnCatalog, ColumnDesc};
+    use fnck_sql::catalog::column::{ColumnCatalog, ColumnDesc, ColumnRelation};
     use fnck_sql::errors::DatabaseError;
     use fnck_sql::expression::function::scala::ScalarFunctionImpl;
     use fnck_sql::expression::function::table::TableFunctionImpl;
@@ -23,7 +23,7 @@ mod test {
             Arc::new(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None),
+                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             )),
             Arc::new(ColumnCatalog::new(
                 "c2".to_string(),
@@ -33,7 +33,7 @@ mod test {
                     false,
                     false,
                     None,
-                ),
+                ).unwrap(),
             )),
         ]);
         let values = vec![
@@ -174,17 +174,21 @@ mod test {
         let mut c1 = ColumnCatalog::new(
             "c1".to_string(),
             true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None),
+            ColumnDesc::new(LogicalType::Integer, false, false, None)?,
         );
-        c1.set_id(0);
-        c1.set_table_name(table_name.clone());
+        c1.summary.relation = ColumnRelation::Table {
+            column_id: 0,
+            table_name: table_name.clone(),
+        };
         let mut c2 = ColumnCatalog::new(
             "c2".to_string(),
             true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None),
+            ColumnDesc::new(LogicalType::Integer, false, false, None)?,
         );
-        c2.set_id(1);
-        c2.set_table_name(table_name.clone());
+        c2.summary.relation = ColumnRelation::Table {
+            column_id: 1,
+            table_name: table_name.clone(),
+        };
 
         assert_eq!(
             function.output_schema(),

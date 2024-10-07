@@ -55,6 +55,14 @@ impl ReferenceTables {
         ReferenceTables { tables: vec![] }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.tables.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.tables.len()
+    }
+
     pub fn get(&self, i: usize) -> &TableName {
         &self.tables[i]
     }
