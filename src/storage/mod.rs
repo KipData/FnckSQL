@@ -241,7 +241,7 @@ pub trait Transaction: Sized {
             }
 
             let column = table.get_column_by_id(&col_id).unwrap();
-            let (key, value) = TableCodec::encode_column(column, &mut ReferenceTables::single())?;
+            let (key, value) = TableCodec::encode_column(column, &mut ReferenceTables::new())?;
             self.set(key, value)?;
             table_cache.remove(table_name);
 
@@ -261,7 +261,7 @@ pub trait Transaction: Sized {
         if let Some(table_catalog) = self.table(table_cache, table_name.clone()).cloned() {
             let column = table_catalog.get_column_by_name(column_name).unwrap();
 
-            let (key, _) = TableCodec::encode_column(column, &mut ReferenceTables::single())?;
+            let (key, _) = TableCodec::encode_column(column, &mut ReferenceTables::new())?;
             self.remove(&key)?;
 
             for index_meta in table_catalog.indexes.iter() {
@@ -307,7 +307,7 @@ pub trait Transaction: Sized {
         self.create_index_meta_from_column(&mut table_catalog)?;
         self.set(table_key, value)?;
 
-        let mut reference_tables = ReferenceTables::single();
+        let mut reference_tables = ReferenceTables::new();
         for column in table_catalog.columns() {
             let (key, value) = TableCodec::encode_column(column, &mut reference_tables)?;
             self.set(key, value)?;
@@ -444,7 +444,7 @@ pub trait Transaction: Sized {
 
         let mut columns = Vec::new();
         let mut index_metas = Vec::new();
-        let mut reference_tables = ReferenceTables::single();
+        let mut reference_tables = ReferenceTables::new();
         let _ = reference_tables.push_or_replace(&table_name);
 
         // Tips: only `Column`, `IndexMeta`, `TableMeta`

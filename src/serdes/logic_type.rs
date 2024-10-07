@@ -96,11 +96,10 @@ impl Serialization for LogicalType {
 #[cfg(test)]
 pub(crate) mod test {
     use crate::errors::DatabaseError;
-    use crate::serdes::{ReferenceTables, Serialization};
+    use crate::serdes::Serialization;
     use crate::types::LogicalType;
     use sqlparser::ast::CharLengthUnits;
-    use std::io::{Cursor, Read, Seek, SeekFrom, Write};
-    use std::sync::Arc;
+    use std::io::{Cursor, Seek, SeekFrom};
 
     #[test]
     fn test_logic_type_serialization() -> Result<(), DatabaseError> {

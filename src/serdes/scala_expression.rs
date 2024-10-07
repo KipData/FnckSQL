@@ -566,7 +566,7 @@ pub(crate) mod test {
         build_table(&table_cache, &mut transaction)?;
 
         let mut cursor = Cursor::new(Vec::new());
-        let mut reference_tables = ReferenceTables::single();
+        let mut reference_tables = ReferenceTables::new();
 
         fn_assert(
             &mut cursor,

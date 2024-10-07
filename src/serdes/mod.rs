@@ -19,8 +19,8 @@ mod unary_operator;
 use crate::catalog::TableName;
 use crate::errors::DatabaseError;
 use crate::storage::{TableCache, Transaction};
+use std::io;
 use std::io::{Read, Write};
-use std::{io, mem};
 
 pub trait ReferenceSerialization: Sized {
     fn encode<W: Write>(
@@ -45,42 +45,27 @@ pub trait Serialization: Sized {
     fn decode<R: Read>(reader: &mut R) -> Result<Self, Self::Error>;
 }
 
-pub enum ReferenceTables {
-    Single(Option<TableName>),
-    Multiple(Vec<TableName>),
+#[derive(Default)]
+pub struct ReferenceTables {
+    tables: Vec<TableName>,
 }
 
 impl ReferenceTables {
-    pub fn single() -> Self {
-        ReferenceTables::Single(None)
-    }
-
-    pub fn multiple() -> Self {
-        ReferenceTables::Multiple(Vec::new())
+    pub fn new() -> Self {
+        ReferenceTables { tables: vec![] }
     }
 
     pub fn get(&self, i: usize) -> &TableName {
-        match self {
-            ReferenceTables::Single(table_name) => table_name.as_ref().unwrap(),
-            ReferenceTables::Multiple(tables) => &tables[i],
-        }
+        &self.tables[i]
     }
 
     pub fn push_or_replace(&mut self, table_name: &TableName) -> usize {
-        match self {
-            ReferenceTables::Single(table) => {
-                let _ = mem::replace(table, Some(table_name.clone()));
-                0
-            }
-            ReferenceTables::Multiple(tables) => {
-                for (i, item) in tables.iter().enumerate() {
-                    if item == table_name {
-                        return i;
-                    }
-                }
-                tables.push(table_name.clone());
-                tables.len() - 1
+        for (i, item) in self.tables.iter().enumerate() {
+            if item == table_name {
+                return i;
             }
         }
+        self.tables.push(table_name.clone());
+        self.tables.len() - 1
     }
 }

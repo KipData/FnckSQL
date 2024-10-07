@@ -50,7 +50,7 @@ impl ReferenceSerialization for AliasType {
 #[cfg(test)]
 pub(crate) mod test {
     use crate::errors::DatabaseError;
-    use crate::expression::AliasType;
+    use crate::expression::{AliasType, ScalarExpression};
     use crate::serdes::{ReferenceSerialization, ReferenceTables};
     use crate::storage::rocksdb::RocksTransaction;
     use std::io::{Cursor, Seek, SeekFrom};
@@ -59,14 +59,22 @@ pub(crate) mod test {
     fn test_serialization() -> Result<(), DatabaseError> {
         let mut bytes = Vec::new();
         let mut cursor = Cursor::new(&mut bytes);
-        let mut reference_tables = ReferenceTables::single();
+        let mut reference_tables = ReferenceTables::new();
 
-        let source = AliasType::Name("hello".to_string());
-        source.encode(&mut cursor, false, &mut reference_tables)?;
+        let name_source = AliasType::Name("hello".to_string());
+        name_source.encode(&mut cursor, false, &mut reference_tables)?;
         cursor.seek(SeekFrom::Start(0))?;
         assert_eq!(
             AliasType::decode::<RocksTransaction, _>(&mut cursor, None, &reference_tables)?,
-            source
+            name_source
+        );
+        cursor.seek(SeekFrom::Start(0))?;
+        let expr_source = AliasType::Expr(Box::new(ScalarExpression::Empty));
+        expr_source.encode(&mut cursor, false, &mut reference_tables)?;
+        cursor.seek(SeekFrom::Start(0))?;
+        assert_eq!(
+            AliasType::decode::<RocksTransaction, _>(&mut cursor, None, &reference_tables)?,
+            expr_source
         );
 
         Ok(())

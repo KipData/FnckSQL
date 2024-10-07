@@ -98,9 +98,7 @@ impl ReferenceSerialization for ColumnRelation {
             0 => ColumnRelation::None,
             1 => {
                 let column_id = ColumnId::decode(reader)?;
-                let table_name = reference_tables
-                    .get(u32::decode(reader)? as usize)
-                    .clone();
+                let table_name = reference_tables.get(u32::decode(reader)? as usize).clone();
 
                 ColumnRelation::Table {
                     column_id,
@@ -162,12 +160,7 @@ impl ReferenceSerialization for ColumnDesc {
         let column_datatype = LogicalType::decode(reader)?;
         let default = Option::<ScalarExpression>::decode(reader, drive, reference_tables)?;
 
-        ColumnDesc::new(
-            column_datatype,
-            is_primary,
-            is_unique,
-            default,
-        )
+        ColumnDesc::new(column_datatype, is_primary, is_unique, default)
     }
 }
 
@@ -201,7 +194,7 @@ pub(crate) mod test {
         build_table(&table_cache, &mut transaction)?;
 
         let mut cursor = Cursor::new(Vec::new());
-        let mut reference_tables = ReferenceTables::single();
+        let mut reference_tables = ReferenceTables::new();
 
         {
             let ref_column = Arc::new(ColumnCatalog {
@@ -278,7 +271,7 @@ pub(crate) mod test {
     #[test]
     fn test_column_summary_serialization() -> Result<(), DatabaseError> {
         let mut cursor = Cursor::new(Vec::new());
-        let mut reference_tables = ReferenceTables::single();
+        let mut reference_tables = ReferenceTables::new();
         let summary = ColumnSummary {
             name: "c1".to_string(),
             relation: ColumnRelation::Table {
@@ -304,7 +297,7 @@ pub(crate) mod test {
     #[test]
     fn test_column_relation_serialization() -> Result<(), DatabaseError> {
         let mut cursor = Cursor::new(Vec::new());
-        let mut reference_tables = ReferenceTables::single();
+        let mut reference_tables = ReferenceTables::new();
         let none_relation = ColumnRelation::None;
         none_relation.encode(&mut cursor, false, &mut reference_tables)?;
         cursor.seek(SeekFrom::Start(0))?;
@@ -328,6 +321,7 @@ pub(crate) mod test {
             None,
             &reference_tables,
         )?;
+        assert_eq!(table_relation, decode_relation);
 
         Ok(())
     }
@@ -335,7 +329,7 @@ pub(crate) mod test {
     #[test]
     fn test_column_desc_serialization() -> Result<(), DatabaseError> {
         let mut cursor = Cursor::new(Vec::new());
-        let mut reference_tables = ReferenceTables::single();
+        let mut reference_tables = ReferenceTables::new();
         let desc = ColumnDesc {
             column_datatype: LogicalType::Integer,
             is_primary: false,

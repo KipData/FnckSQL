@@ -172,15 +172,8 @@ impl ScalarExpression {
         }
 
         match self {
-            ScalarExpression::Alias { expr, alias } => {
+            ScalarExpression::Alias { expr, .. } => {
                 expr.try_reference(output_exprs);
-
-                match alias {
-                    AliasType::Name(_) => (),
-                    AliasType::Expr(alias_expr) => {
-                        alias_expr.try_reference(output_exprs);
-                    }
-                }
             }
             ScalarExpression::TypeCast { expr, .. } => {
                 expr.try_reference(output_exprs);
@@ -478,13 +471,7 @@ impl ScalarExpression {
 
     pub fn has_count_star(&self) -> bool {
         match self {
-            ScalarExpression::Alias { expr, alias } => {
-                expr.has_count_star()
-                    || match alias {
-                        AliasType::Name(_) => false,
-                        AliasType::Expr(alias_expr) => alias_expr.has_count_star(),
-                    }
-            }
+            ScalarExpression::Alias { expr, .. } => expr.has_count_star(),
             ScalarExpression::TypeCast { expr, .. } => expr.has_count_star(),
             ScalarExpression::IsNull { expr, .. } => expr.has_count_star(),
             ScalarExpression::Unary { expr, .. } => expr.has_count_star(),
@@ -642,15 +629,8 @@ impl ScalarExpression {
                 ScalarExpression::ColumnRef(col) => {
                     vec.push(col.clone());
                 }
-                ScalarExpression::Alias { expr, alias } => {
+                ScalarExpression::Alias { expr, .. } => {
                     columns_collect(expr, vec, only_column_ref);
-
-                    match alias {
-                        AliasType::Name(_) => (),
-                        AliasType::Expr(alias_expr) => {
-                            columns_collect(alias_expr, vec, only_column_ref);
-                        }
-                    }
                 }
                 ScalarExpression::TypeCast { expr, .. } => {
                     columns_collect(expr, vec, only_column_ref)
@@ -776,13 +756,7 @@ impl ScalarExpression {
             ScalarExpression::ColumnRef(column) => {
                 column.table_name().is_some() && column.id().is_some()
             }
-            ScalarExpression::Alias { expr, alias } => {
-                expr.has_table_ref_column()
-                    || match alias {
-                        AliasType::Name(_) => false,
-                        AliasType::Expr(expr) => expr.has_table_ref_column(),
-                    }
-            }
+            ScalarExpression::Alias { expr, .. } => expr.has_table_ref_column(),
             ScalarExpression::TypeCast { expr, .. } | ScalarExpression::IsNull { expr, .. } => {
                 expr.has_table_ref_column()
             }
@@ -900,13 +874,7 @@ impl ScalarExpression {
             ScalarExpression::AggCall { .. } => true,
             ScalarExpression::Constant(_) => false,
             ScalarExpression::ColumnRef(_) => false,
-            ScalarExpression::Alias { expr, alias } => {
-                expr.has_agg_call()
-                    || match alias {
-                        AliasType::Name(_) => false,
-                        AliasType::Expr(alias_expr) => alias_expr.has_agg_call(),
-                    }
-            }
+            ScalarExpression::Alias { expr, .. } => expr.has_agg_call(),
             ScalarExpression::TypeCast { expr, .. } => expr.has_agg_call(),
             ScalarExpression::IsNull { expr, .. } => expr.has_agg_call(),
             ScalarExpression::Unary { expr, .. } => expr.has_agg_call(),

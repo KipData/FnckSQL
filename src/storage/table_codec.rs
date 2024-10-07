@@ -524,7 +524,7 @@ mod tests {
         };
         let col = Arc::new(col);
 
-        let mut reference_tables = ReferenceTables::single();
+        let mut reference_tables = ReferenceTables::new();
 
         let (_, bytes) = TableCodec::encode_column(&col, &mut reference_tables).unwrap();
         let mut cursor = Cursor::new(bytes.as_ref());
@@ -558,7 +558,7 @@ mod tests {
             };
 
             let (key, _) =
-                TableCodec::encode_column(&Arc::new(col), &mut ReferenceTables::single()).unwrap();
+                TableCodec::encode_column(&Arc::new(col), &mut ReferenceTables::new()).unwrap();
             key
         };
 
