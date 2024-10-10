@@ -84,3 +84,6 @@ members = [
   "tests/sqllogictest",
   "tests/macros-test"
 ]
+
+[profile.release]
+lto = true
