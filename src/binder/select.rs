@@ -16,7 +16,7 @@ use crate::{
 
 use super::{lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep, SubQueryType};
 
-use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
+use crate::catalog::{ColumnCatalog, ColumnRef, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
 use crate::execution::dql::join::joins_nullable;
 use crate::expression::{AliasType, BinaryOperator};
@@ -356,7 +356,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
 
             let alias_column_expr = ScalarExpression::Alias {
                 expr: Box::new(ScalarExpression::ColumnRef(column)),
-                alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
+                alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
                     alias_column,
                 )))),
             };
@@ -736,7 +736,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                         let mut new_col = ColumnCatalog::clone(col);
                         new_col.nullable = *nullable;
 
-                        *col = Arc::new(new_col);
+                        *col = ColumnRef::from(new_col);
                     });
             }
         }

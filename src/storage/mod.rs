@@ -1018,7 +1018,7 @@ mod test {
         vec![
             (
                 0,
-                Arc::new(ColumnCatalog::new(
+                ColumnRef::from(ColumnCatalog::new(
                     "c1".to_string(),
                     false,
                     ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
@@ -1026,7 +1026,7 @@ mod test {
             ),
             (
                 1,
-                Arc::new(ColumnCatalog::new(
+                ColumnRef::from(ColumnCatalog::new(
                     "c2".to_string(),
                     false,
                     ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
@@ -1034,7 +1034,7 @@ mod test {
             ),
             (
                 2,
-                Arc::new(ColumnCatalog::new(
+                ColumnRef::from(ColumnCatalog::new(
                     "c3".to_string(),
                     false,
                     ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
@@ -1472,7 +1472,10 @@ mod test {
                 column_id: 3,
                 table_name: table_name.clone(),
             };
-            assert_eq!(table.get_column_by_name("c4"), Some(&Arc::new(new_column)));
+            assert_eq!(
+                table.get_column_by_name("c4"),
+                Some(&ColumnRef::from(new_column))
+            );
         }
         transaction.drop_column(&table_cache, &meta_cache, &table_name, "c4")?;
         {

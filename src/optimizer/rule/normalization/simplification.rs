@@ -112,7 +112,7 @@ impl NormalizationRule for SimplifyFilter {
 #[cfg(test)]
 mod test {
     use crate::binder::test::select_sql_run;
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRelation, ColumnSummary};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::{Range, RangeDetacher};
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
@@ -286,7 +286,9 @@ mod test {
                         op: UnaryOperator::Minus,
                         expr: Box::new(ScalarExpression::Binary {
                             op: BinaryOperator::Plus,
-                            left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c1_col))),
+                            left_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
+                                c1_col
+                            ))),
                             right_expr: Box::new(ScalarExpression::Constant(Arc::new(
                                 DataValue::Int32(Some(1))
                             ))),
@@ -296,7 +298,7 @@ mod test {
                         evaluator: None,
                         ty: LogicalType::Integer,
                     }),
-                    right_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
+                    right_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(c2_col))),
                     evaluator: None,
                     ty: LogicalType::Boolean,
                 }

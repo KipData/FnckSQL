@@ -1,15 +1,16 @@
 pub mod operator;
 
-use crate::catalog::{ColumnCatalog, TableName};
+use crate::catalog::{ColumnCatalog, ColumnRef, TableName};
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::union::UnionOperator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::types::tuple::SchemaRef;
 use itertools::Itertools;
+use serde_macros::ReferenceSerialization;
 use std::sync::Arc;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct LogicalPlan {
     pub(crate) operator: Operator,
     pub(crate) childrens: Vec<LogicalPlan>,
@@ -97,53 +98,53 @@ impl LogicalPlan {
                     ..
                 }) => schema_ref.clone(),
                 Operator::Dummy => Arc::new(vec![]),
-                Operator::Show => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
+                Operator::Show => Arc::new(vec![ColumnRef::from(ColumnCatalog::new_dummy(
                     "TABLE".to_string(),
                 ))]),
-                Operator::Explain => {
-                    Arc::new(vec![Arc::new(ColumnCatalog::new_dummy("PLAN".to_string()))])
-                }
+                Operator::Explain => Arc::new(vec![ColumnRef::from(ColumnCatalog::new_dummy(
+                    "PLAN".to_string(),
+                ))]),
                 Operator::Describe(_) => Arc::new(vec![
-                    Arc::new(ColumnCatalog::new_dummy("FIELD".to_string())),
-                    Arc::new(ColumnCatalog::new_dummy("TYPE".to_string())),
-                    Arc::new(ColumnCatalog::new_dummy("LEN".to_string())),
-                    Arc::new(ColumnCatalog::new_dummy("NULL".to_string())),
-                    Arc::new(ColumnCatalog::new_dummy("Key".to_string())),
-                    Arc::new(ColumnCatalog::new_dummy("DEFAULT".to_string())),
+                    ColumnRef::from(ColumnCatalog::new_dummy("FIELD".to_string())),
+                    ColumnRef::from(ColumnCatalog::new_dummy("TYPE".to_string())),
+                    ColumnRef::from(ColumnCatalog::new_dummy("LEN".to_string())),
+                    ColumnRef::from(ColumnCatalog::new_dummy("NULL".to_string())),
+                    ColumnRef::from(ColumnCatalog::new_dummy("Key".to_string())),
+                    ColumnRef::from(ColumnCatalog::new_dummy("DEFAULT".to_string())),
                 ]),
-                Operator::Insert(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
+                Operator::Insert(_) => Arc::new(vec![ColumnRef::from(ColumnCatalog::new_dummy(
                     "INSERTED".to_string(),
                 ))]),
-                Operator::Update(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
+                Operator::Update(_) => Arc::new(vec![ColumnRef::from(ColumnCatalog::new_dummy(
                     "UPDATED".to_string(),
                 ))]),
-                Operator::Delete(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
+                Operator::Delete(_) => Arc::new(vec![ColumnRef::from(ColumnCatalog::new_dummy(
                     "DELETED".to_string(),
                 ))]),
-                Operator::Analyze(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
+                Operator::Analyze(_) => Arc::new(vec![ColumnRef::from(ColumnCatalog::new_dummy(
                     "STATISTICS_META_PATH".to_string(),
                 ))]),
-                Operator::AddColumn(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
-                    "ADD COLUMN SUCCESS".to_string(),
-                ))]),
-                Operator::DropColumn(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
-                    "DROP COLUMN SUCCESS".to_string(),
-                ))]),
-                Operator::CreateTable(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
-                    "CREATE TABLE SUCCESS".to_string(),
-                ))]),
-                Operator::CreateIndex(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
-                    "CREATE INDEX SUCCESS".to_string(),
-                ))]),
-                Operator::DropTable(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
-                    "DROP TABLE SUCCESS".to_string(),
-                ))]),
-                Operator::Truncate(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
+                Operator::AddColumn(_) => Arc::new(vec![ColumnRef::from(
+                    ColumnCatalog::new_dummy("ADD COLUMN SUCCESS".to_string()),
+                )]),
+                Operator::DropColumn(_) => Arc::new(vec![ColumnRef::from(
+                    ColumnCatalog::new_dummy("DROP COLUMN SUCCESS".to_string()),
+                )]),
+                Operator::CreateTable(_) => Arc::new(vec![ColumnRef::from(
+                    ColumnCatalog::new_dummy("CREATE TABLE SUCCESS".to_string()),
+                )]),
+                Operator::CreateIndex(_) => Arc::new(vec![ColumnRef::from(
+                    ColumnCatalog::new_dummy("CREATE INDEX SUCCESS".to_string()),
+                )]),
+                Operator::DropTable(_) => Arc::new(vec![ColumnRef::from(
+                    ColumnCatalog::new_dummy("DROP TABLE SUCCESS".to_string()),
+                )]),
+                Operator::Truncate(_) => Arc::new(vec![ColumnRef::from(ColumnCatalog::new_dummy(
                     "TRUNCATE TABLE SUCCESS".to_string(),
                 ))]),
-                Operator::CopyFromFile(_) => Arc::new(vec![Arc::new(ColumnCatalog::new_dummy(
-                    "COPY FROM SOURCE".to_string(),
-                ))]),
+                Operator::CopyFromFile(_) => Arc::new(vec![ColumnRef::from(
+                    ColumnCatalog::new_dummy("COPY FROM SOURCE".to_string()),
+                )]),
                 Operator::CopyToFile(_) => todo!(),
             })
     }

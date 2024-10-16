@@ -1,14 +1,18 @@
+use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
+use crate::serdes::{ReferenceSerialization, ReferenceTables};
+use crate::storage::{TableCache, Transaction};
 use crate::types::value::DataValue;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use siphasher::sip::SipHasher13;
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
+use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::{cmp, mem};
 
-type FastHasher = SipHasher13;
+pub(crate) type FastHasher = SipHasher13;
 
 // https://github.com/jedisct1/rust-count-min-sketch
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,6 +158,46 @@ impl<K: Hash> CountMinSketch<K> {
                 as usize
                 & self.mask
         }
+    }
+}
+
+impl<K> ReferenceSerialization for CountMinSketch<K> {
+    fn encode<W: Write>(
+        &self,
+        writer: &mut W,
+        is_direct: bool,
+        reference_tables: &mut ReferenceTables,
+    ) -> Result<(), DatabaseError> {
+        self.counters.encode(writer, is_direct, reference_tables)?;
+        self.offsets.encode(writer, is_direct, reference_tables)?;
+        self.hashers[0].encode(writer, is_direct, reference_tables)?;
+        self.hashers[1].encode(writer, is_direct, reference_tables)?;
+        self.mask.encode(writer, is_direct, reference_tables)?;
+        self.k_num.encode(writer, is_direct, reference_tables)?;
+
+        Ok(())
+    }
+
+    fn decode<T: Transaction, R: Read>(
+        reader: &mut R,
+        drive: Option<(&T, &TableCache)>,
+        reference_tables: &ReferenceTables,
+    ) -> Result<Self, DatabaseError> {
+        let counters = Vec::<Vec<usize>>::decode(reader, drive, reference_tables)?;
+        let offsets = Vec::<usize>::decode(reader, drive, reference_tables)?;
+        let hasher_0 = FastHasher::decode(reader, drive, reference_tables)?;
+        let hasher_1 = FastHasher::decode(reader, drive, reference_tables)?;
+        let mask = usize::decode(reader, drive, reference_tables)?;
+        let k_num = usize::decode(reader, drive, reference_tables)?;
+
+        Ok(CountMinSketch {
+            counters,
+            offsets,
+            hashers: [hasher_0, hasher_1],
+            mask,
+            k_num,
+            phantom_k: Default::default(),
+        })
     }
 }
 

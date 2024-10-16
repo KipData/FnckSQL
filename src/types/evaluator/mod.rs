@@ -540,10 +540,15 @@ macro_rules! numeric_binary_evaluator_definition {
 mod test {
     use crate::errors::DatabaseError;
     use crate::expression::BinaryOperator;
-    use crate::types::evaluator::EvaluatorFactory;
+    use crate::serdes::{ReferenceSerialization, ReferenceTables};
+    use crate::storage::rocksdb::RocksTransaction;
+    use crate::types::evaluator::boolean::{BooleanNotEqBinaryEvaluator, BooleanNotUnaryEvaluator};
+    use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory, UnaryEvaluatorBox};
     use crate::types::value::{DataValue, Utf8Type};
     use crate::types::LogicalType;
     use sqlparser::ast::CharLengthUnits;
+    use std::io::{Cursor, Seek, SeekFrom};
+    use std::sync::Arc;
 
     #[test]
     fn test_binary_op_arithmetic_plus() -> Result<(), DatabaseError> {
@@ -1172,6 +1177,35 @@ mod test {
                 },
             ),
             DataValue::Boolean(None)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reference_serialization() -> Result<(), DatabaseError> {
+        let mut cursor = Cursor::new(Vec::new());
+        let mut reference_tables = ReferenceTables::new();
+
+        let binary_evaluator = BinaryEvaluatorBox(Arc::new(BooleanNotEqBinaryEvaluator));
+        binary_evaluator.encode(&mut cursor, false, &mut reference_tables)?;
+
+        cursor.seek(SeekFrom::Start(0))?;
+        assert_eq!(
+            BinaryEvaluatorBox::decode::<RocksTransaction, _>(
+                &mut cursor,
+                None,
+                &reference_tables
+            )?,
+            binary_evaluator
+        );
+        cursor.seek(SeekFrom::Start(0))?;
+        let unary_evaluator = UnaryEvaluatorBox(Arc::new(BooleanNotUnaryEvaluator));
+        unary_evaluator.encode(&mut cursor, false, &mut reference_tables)?;
+        cursor.seek(SeekFrom::Start(0))?;
+        assert_eq!(
+            UnaryEvaluatorBox::decode::<RocksTransaction, _>(&mut cursor, None, &reference_tables)?,
+            unary_evaluator
         );
 
         Ok(())

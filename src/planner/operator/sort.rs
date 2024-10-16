@@ -1,9 +1,10 @@
 use crate::expression::ScalarExpression;
 use itertools::Itertools;
+use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct SortField {
     pub expr: ScalarExpression,
     pub asc: bool,
@@ -20,7 +21,7 @@ impl SortField {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct SortOperator {
     pub sort_fields: Vec<SortField>,
     /// Support push down limit to sort plan.

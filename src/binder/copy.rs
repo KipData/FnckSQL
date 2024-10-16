@@ -2,23 +2,45 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use super::*;
 use crate::errors::DatabaseError;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::Operator;
 use serde::{Deserialize, Serialize};
+use serde_macros::ReferenceSerialization;
 use sqlparser::ast::{CopyOption, CopySource, CopyTarget};
 
-use super::*;
-
-#[derive(Debug, PartialEq, PartialOrd, Ord, Hash, Eq, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Eq,
+    Clone,
+    Serialize,
+    Deserialize,
+    ReferenceSerialization,
+)]
 pub struct ExtSource {
     pub path: PathBuf,
     pub format: FileFormat,
 }
 
 /// File format.
-#[derive(Debug, PartialEq, PartialOrd, Ord, Hash, Eq, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Eq,
+    Clone,
+    Serialize,
+    Deserialize,
+    ReferenceSerialization,
+)]
 pub enum FileFormat {
     Csv {
         /// Delimiter to parse.

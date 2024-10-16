@@ -2,8 +2,9 @@ use crate::errors::DatabaseError;
 use crate::serdes::{ReferenceSerialization, ReferenceTables};
 use crate::storage::{TableCache, Transaction};
 use std::io::{Read, Write};
+use std::ops::Bound;
 
-impl<V> ReferenceSerialization for Option<V>
+impl<V> ReferenceSerialization for Bound<V>
 where
     V: ReferenceSerialization,
 {
@@ -14,10 +15,18 @@ where
         reference_tables: &mut ReferenceTables,
     ) -> Result<(), DatabaseError> {
         match self {
-            None => 0u8.encode(writer, is_direct, reference_tables)?,
-            Some(v) => {
-                1u8.encode(writer, is_direct, reference_tables)?;
+            Bound::Included(v) => {
+                writer.write_all(&[0])?;
+
                 v.encode(writer, is_direct, reference_tables)?;
+            }
+            Bound::Excluded(v) => {
+                writer.write_all(&[1])?;
+
+                v.encode(writer, is_direct, reference_tables)?;
+            }
+            Bound::Unbounded => {
+                writer.write_all(&[2])?;
             }
         }
 
@@ -29,10 +38,14 @@ where
         drive: Option<(&T, &TableCache)>,
         reference_tables: &ReferenceTables,
     ) -> Result<Self, DatabaseError> {
-        match u8::decode(reader, drive, reference_tables)? {
-            0 => Ok(None),
-            1 => Ok(Some(V::decode(reader, drive, reference_tables)?)),
+        let mut type_bytes = [0u8; 1];
+        reader.read_exact(&mut type_bytes)?;
+
+        Ok(match type_bytes[0] {
+            0 => Bound::Included(V::decode(reader, drive, reference_tables)?),
+            1 => Bound::Excluded(V::decode(reader, drive, reference_tables)?),
+            2 => Bound::Unbounded,
             _ => unreachable!(),
-        }
+        })
     }
 }

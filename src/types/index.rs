@@ -5,6 +5,7 @@ use crate::expression::ScalarExpression;
 use crate::types::value::ValueRef;
 use crate::types::{ColumnId, LogicalType};
 use serde::{Deserialize, Serialize};
+use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 use std::sync::Arc;
@@ -12,7 +13,9 @@ use std::sync::Arc;
 pub type IndexId = u32;
 pub type IndexMetaRef = Arc<IndexMeta>;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(
+    Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize, ReferenceSerialization,
+)]
 pub enum IndexType {
     PrimaryKey,
     Unique,
@@ -20,13 +23,13 @@ pub enum IndexType {
     Composite,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, ReferenceSerialization)]
 pub struct IndexInfo {
     pub(crate) meta: IndexMetaRef,
     pub(crate) range: Option<Range>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, ReferenceSerialization)]
 pub struct IndexMeta {
     pub id: IndexId,
     pub column_ids: Vec<ColumnId>,

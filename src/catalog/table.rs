@@ -109,7 +109,7 @@ impl TableCatalog {
         self.columns.insert(col_id, self.schema_ref.len());
 
         let mut schema = Vec::clone(&self.schema_ref);
-        schema.push(Arc::new(col));
+        schema.push(ColumnRef::from(col));
         self.schema_ref = Arc::new(schema);
 
         Ok(col_id)

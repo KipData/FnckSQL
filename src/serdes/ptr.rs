@@ -1,7 +1,7 @@
 use crate::serdes::DatabaseError;
 use crate::serdes::TableCache;
 use crate::serdes::Transaction;
-use crate::serdes::{ReferenceSerialization, ReferenceTables, Serialization};
+use crate::serdes::{ReferenceSerialization, ReferenceTables};
 use std::io::{Read, Write};
 use std::sync::Arc;
 
@@ -31,21 +31,6 @@ macro_rules! implement_ptr_serialization {
                     drive,
                     reference_tables,
                 )?))
-            }
-        }
-
-        impl<V> Serialization for $struct_name<V>
-        where
-            V: Serialization,
-        {
-            type Error = V::Error;
-
-            fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
-                self.as_ref().encode(writer)
-            }
-
-            fn decode<R: Read>(reader: &mut R) -> Result<Self, Self::Error> {
-                Ok($struct_name::from(V::decode(reader)?))
             }
         }
     };

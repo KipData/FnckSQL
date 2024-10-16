@@ -11,8 +11,8 @@ use std::slice;
 use std::sync::Arc;
 
 use super::{lower_ident, Binder, BinderContext, QueryBindStep, SubQueryType};
-use crate::expression::function::scala::ScalarFunction;
-use crate::expression::function::table::TableFunction;
+use crate::expression::function::scala::{ArcScalarFunctionImpl, ScalarFunction};
+use crate::expression::function::table::{ArcTableFunctionImpl, TableFunction};
 use crate::expression::function::FunctionSummary;
 use crate::expression::{AliasType, ScalarExpression};
 use crate::planner::LogicalPlan;
@@ -235,7 +235,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
 
         let alias_expr = ScalarExpression::Alias {
             expr: Box::new(ScalarExpression::ColumnRef(column)),
-            alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
+            alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
                 alias_column,
             )))),
         };
@@ -246,7 +246,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     fn bind_subquery(
         &mut self,
         subquery: &Query,
-    ) -> Result<(LogicalPlan, Arc<ColumnCatalog>), DatabaseError> {
+    ) -> Result<(LogicalPlan, ColumnRef), DatabaseError> {
         let BinderContext {
             table_cache,
             transaction,
@@ -601,13 +601,13 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
         if let Some(function) = self.context.scala_functions.get(&summary) {
             return Ok(ScalarExpression::ScalaFunction(ScalarFunction {
                 args,
-                inner: function.clone(),
+                inner: ArcScalarFunctionImpl(function.clone()),
             }));
         }
         if let Some(function) = self.context.table_functions.get(&summary) {
             return Ok(ScalarExpression::TableFunction(TableFunction {
                 args,
-                inner: function.clone(),
+                inner: ArcTableFunctionImpl(function.clone()),
             }));
         }
 

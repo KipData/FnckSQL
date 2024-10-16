@@ -5,13 +5,30 @@ use crate::types::tuple::EMPTY_TUPLE;
 use crate::types::value::ValueRef;
 use crate::types::{ColumnId, LogicalType};
 use serde::{Deserialize, Serialize};
+use serde_macros::ReferenceSerialization;
 use sqlparser::ast::CharLengthUnits;
 use std::hash::Hash;
+use std::ops::Deref;
 use std::sync::Arc;
 
-pub type ColumnRef = Arc<ColumnCatalog>;
-
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct ColumnRef(pub Arc<ColumnCatalog>);
+
+impl Deref for ColumnRef {
+    type Target = ColumnCatalog;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+impl From<ColumnCatalog> for ColumnRef {
+    fn from(c: ColumnCatalog) -> Self {
+        ColumnRef(Arc::new(c))
+    }
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, ReferenceSerialization)]
 pub struct ColumnCatalog {
     pub summary: ColumnSummary,
     pub nullable: bool,
@@ -27,7 +44,7 @@ pub enum ColumnRelation {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, ReferenceSerialization)]
 pub struct ColumnSummary {
     pub name: String,
     pub relation: ColumnRelation,
@@ -122,7 +139,7 @@ impl ColumnCatalog {
 }
 
 /// The descriptor of a column.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, ReferenceSerialization)]
 pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
     pub(crate) is_primary: bool,

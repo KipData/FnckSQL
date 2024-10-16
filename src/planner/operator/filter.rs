@@ -1,12 +1,12 @@
+use crate::expression::ScalarExpression;
+use crate::planner::LogicalPlan;
+use serde_macros::ReferenceSerialization;
 use std::fmt::Formatter;
 use std::{fmt, vec};
 
-use crate::expression::ScalarExpression;
-use crate::planner::LogicalPlan;
-
 use super::Operator;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct FilterOperator {
     pub predicate: ScalarExpression,
     pub having: bool,

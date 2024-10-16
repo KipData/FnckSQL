@@ -384,7 +384,9 @@ impl TableCodec {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRelation, TableCatalog, TableMeta};
+    use crate::catalog::{
+        ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, TableCatalog, TableMeta,
+    };
     use crate::errors::DatabaseError;
     use crate::serdes::ReferenceTables;
     use crate::storage::rocksdb::RocksTransaction;
@@ -510,7 +512,7 @@ mod tests {
             column_id: 1,
             table_name: Arc::new("t1".to_string()),
         };
-        let col = Arc::new(col);
+        let col = ColumnRef::from(col);
 
         let mut reference_tables = ReferenceTables::new();
 
@@ -546,7 +548,8 @@ mod tests {
             };
 
             let (key, _) =
-                TableCodec::encode_column(&Arc::new(col), &mut ReferenceTables::new()).unwrap();
+                TableCodec::encode_column(&ColumnRef::from(col), &mut ReferenceTables::new())
+                    .unwrap();
             key
         };
 

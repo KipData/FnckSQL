@@ -2,7 +2,7 @@ fn main() {}
 
 #[cfg(test)]
 mod test {
-    use fnck_sql::catalog::column::{ColumnCatalog, ColumnDesc, ColumnRelation};
+    use fnck_sql::catalog::column::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation};
     use fnck_sql::errors::DatabaseError;
     use fnck_sql::expression::function::scala::ScalarFunctionImpl;
     use fnck_sql::expression::function::table::TableFunctionImpl;
@@ -20,12 +20,12 @@ mod test {
 
     fn build_tuple() -> (Tuple, SchemaRef) {
         let schema_ref = Arc::new(vec![
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
                 ColumnDesc::new(
@@ -33,7 +33,8 @@ mod test {
                     false,
                     false,
                     None,
-                ).unwrap(),
+                )
+                .unwrap(),
             )),
         ]);
         let values = vec![
@@ -192,7 +193,7 @@ mod test {
 
         assert_eq!(
             function.output_schema(),
-            &Arc::new(vec![Arc::new(c1), Arc::new(c2)])
+            &Arc::new(vec![ColumnRef::from(c1), ColumnRef::from(c2)])
         );
 
         Ok(())

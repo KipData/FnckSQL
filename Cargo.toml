@@ -59,6 +59,7 @@ regex                 = { version = "1" }
 rocksdb               = { version = "0.22.0" }
 rust_decimal          = { version = "1" }
 serde                 = { version = "1", features = ["derive", "rc"] }
+serde_macros          = { path = "serde_macros" }
 siphasher             = { version = "1", features = ["serde"] }
 sqlparser             = { version = "0.34", features = ["serde"] }
 strum_macros          = { version = "0.26.2" }
@@ -83,7 +84,7 @@ pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
 members = [
   "tests/sqllogictest",
   "tests/macros-test"
-]
+, "serde_macros"]
 
 [profile.release]
 lto = true

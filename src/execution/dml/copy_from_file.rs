@@ -108,7 +108,7 @@ fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), DatabaseError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRelation, ColumnSummary};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
     use crate::db::DataBaseBuilder;
     use sqlparser::ast::CharLengthUnits;
     use std::io::Write;
@@ -131,7 +131,7 @@ mod tests {
         write!(file, "{}", csv).expect("failed to write file");
 
         let columns = vec![
-            Arc::new(ColumnCatalog {
+            ColumnRef::from(ColumnCatalog {
                 summary: ColumnSummary {
                     name: "a".to_string(),
                     relation: ColumnRelation::Table {
@@ -142,7 +142,7 @@ mod tests {
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             }),
-            Arc::new(ColumnCatalog {
+            ColumnRef::from(ColumnCatalog {
                 summary: ColumnSummary {
                     name: "b".to_string(),
                     relation: ColumnRelation::Table {
@@ -153,7 +153,7 @@ mod tests {
                 nullable: false,
                 desc: ColumnDesc::new(LogicalType::Float, false, false, None).unwrap(),
             }),
-            Arc::new(ColumnCatalog {
+            ColumnRef::from(ColumnCatalog {
                 summary: ColumnSummary {
                     name: "c".to_string(),
                     relation: ColumnRelation::Table {

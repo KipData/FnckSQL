@@ -270,7 +270,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Sort {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::errors::DatabaseError;
     use crate::execution::dql::sort::{radix_sort, NullableVec, SortBy};
     use crate::expression::ScalarExpression;
@@ -304,7 +304,7 @@ mod test {
                 nulls_first,
             }]
         };
-        let schema = Arc::new(vec![Arc::new(ColumnCatalog::new(
+        let schema = Arc::new(vec![ColumnRef::from(ColumnCatalog::new(
             "c1".to_string(),
             true,
             ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
@@ -473,12 +473,12 @@ mod test {
                 ]
             };
         let schema = Arc::new(vec![
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c1".to_string(),
                 true,
                 ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c2".to_string(),
                 true,
                 ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),

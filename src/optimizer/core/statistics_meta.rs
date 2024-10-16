@@ -7,6 +7,7 @@ use crate::storage::{StatisticsMetaCache, Transaction};
 use crate::types::index::IndexId;
 use crate::types::value::DataValue;
 use serde::{Deserialize, Serialize};
+use serde_macros::ReferenceSerialization;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
@@ -44,7 +45,7 @@ impl<'a, T: Transaction> StatisticMetaLoader<'a, T> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ReferenceSerialization)]
 pub struct StatisticsMeta {
     index_id: IndexId,
     histogram: Histogram,
