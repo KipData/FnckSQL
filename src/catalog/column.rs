@@ -84,7 +84,7 @@ impl ColumnCatalog {
         &self.summary
     }
 
-    pub(crate) fn id(&self) -> Option<ColumnId> {
+    pub fn id(&self) -> Option<ColumnId> {
         match &self.summary.relation {
             ColumnRelation::None => None,
             ColumnRelation::Table { column_id, .. } => Some(*column_id),
@@ -135,17 +135,6 @@ impl ColumnCatalog {
     #[allow(dead_code)]
     pub(crate) fn desc(&self) -> &ColumnDesc {
         &self.desc
-    }
-}
-
-#[cfg(test)]
-impl ColumnSummary {
-    pub(crate) fn column_id(&self) -> Option<&ColumnId> {
-        if let ColumnRelation::Table { column_id, .. } = &self.relation {
-            Some(column_id)
-        } else {
-            None
-        }
     }
 }
 

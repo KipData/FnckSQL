@@ -274,7 +274,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                 ..
             } => {
                 if let SetExpr::Values(values) = source.body.as_ref() {
-                    self.bind_insert(table_name, columns, &values.rows, *overwrite)?
+                    self.bind_insert(table_name, columns, &values.rows, *overwrite, false)?
                 } else {
                     todo!()
                 }

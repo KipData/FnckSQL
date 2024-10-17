@@ -171,6 +171,7 @@ mod test {
         );
         assert!(numbers.next().is_none());
 
+        let function_schema = function.output_schema();
         let table_name = Arc::new("test_numbers".to_string());
         let mut c1 = ColumnCatalog::new(
             "c1".to_string(),
@@ -178,7 +179,7 @@ mod test {
             ColumnDesc::new(LogicalType::Integer, false, false, None)?,
         );
         c1.summary.relation = ColumnRelation::Table {
-            column_id: 0,
+            column_id: function_schema[0].id().unwrap(),
             table_name: table_name.clone(),
         };
         let mut c2 = ColumnCatalog::new(
@@ -187,12 +188,12 @@ mod test {
             ColumnDesc::new(LogicalType::Integer, false, false, None)?,
         );
         c2.summary.relation = ColumnRelation::Table {
-            column_id: 1,
+            column_id: function_schema[1].id().unwrap(),
             table_name: table_name.clone(),
         };
 
         assert_eq!(
-            function.output_schema(),
+            function_schema,
             &Arc::new(vec![ColumnRef::from(c1), ColumnRef::from(c2)])
         );
 

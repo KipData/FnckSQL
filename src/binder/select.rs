@@ -148,6 +148,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                 Operator::Insert(InsertOperator {
                     table_name: Arc::new(lower_case_name(name)?),
                     is_overwrite: false,
+                    is_mapping_by_name: true,
                 }),
                 vec![plan],
             )
