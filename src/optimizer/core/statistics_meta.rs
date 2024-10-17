@@ -113,13 +113,14 @@ mod tests {
     use crate::types::LogicalType;
     use std::sync::Arc;
     use tempfile::TempDir;
+    use ulid::Ulid;
 
     #[test]
     fn test_to_file_and_from_file() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let index = IndexMeta {
             id: 0,
-            column_ids: vec![0],
+            column_ids: vec![Ulid::new()],
             table_name: Arc::new("t1".to_string()),
             pk_ty: LogicalType::Integer,
             name: "pk_c1".to_string(),

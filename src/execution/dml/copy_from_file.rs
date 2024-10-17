@@ -108,20 +108,20 @@ fn return_result(size: usize, tx: Sender<Tuple>) -> Result<(), DatabaseError> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::binder::copy::ExtSource;
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
     use crate::db::DataBaseBuilder;
+    use crate::errors::DatabaseError;
+    use crate::storage::Storage;
+    use crate::types::LogicalType;
     use sqlparser::ast::CharLengthUnits;
     use std::io::Write;
     use std::ops::{Coroutine, CoroutineState};
     use std::pin::Pin;
     use std::sync::Arc;
     use tempfile::TempDir;
-
-    use super::*;
-    use crate::binder::copy::ExtSource;
-    use crate::errors::DatabaseError;
-    use crate::storage::Storage;
-    use crate::types::LogicalType;
+    use ulid::Ulid;
 
     #[test]
     fn read_csv() -> Result<(), DatabaseError> {
@@ -135,7 +135,7 @@ mod tests {
                 summary: ColumnSummary {
                     name: "a".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 0,
+                        column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
                     },
                 },
@@ -146,7 +146,7 @@ mod tests {
                 summary: ColumnSummary {
                     name: "b".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 1,
+                        column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
                     },
                 },
@@ -157,7 +157,7 @@ mod tests {
                 summary: ColumnSummary {
                     name: "c".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 2,
+                        column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
                     },
                 },

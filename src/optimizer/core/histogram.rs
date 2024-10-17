@@ -468,11 +468,12 @@ mod tests {
     use crate::types::LogicalType;
     use std::ops::Bound;
     use std::sync::Arc;
+    use ulid::Ulid;
 
     fn index_meta() -> IndexMeta {
         IndexMeta {
             id: 0,
-            column_ids: vec![0],
+            column_ids: vec![Ulid::new()],
             table_name: Arc::new("t1".to_string()),
             pk_ty: LogicalType::Integer,
             name: "pk_c1".to_string(),

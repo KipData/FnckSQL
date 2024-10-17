@@ -16,6 +16,7 @@ mod ptr;
 mod slice;
 mod string;
 mod trim;
+mod ulid;
 mod vec;
 
 use crate::catalog::TableName;

@@ -1,14 +1,14 @@
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::{slice, vec};
-
 use crate::catalog::{ColumnCatalog, ColumnRef, ColumnRelation};
 use crate::errors::DatabaseError;
 use crate::types::index::{IndexMeta, IndexMetaRef, IndexType};
 use crate::types::tuple::SchemaRef;
 use crate::types::{ColumnId, LogicalType};
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::{slice, vec};
+use ulid::Generator;
 
 pub type TableName = Arc<String>;
 
@@ -41,9 +41,9 @@ impl TableCatalog {
         self.columns.get(id).map(|i| &self.schema_ref[*i])
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<ColumnId> {
-        self.column_idxs.get(name).map(|(id, _)| id).cloned()
+    #[cfg(test)]
+    pub(crate) fn get_column_id_by_name(&self, name: &str) -> Option<&ColumnId> {
+        self.column_idxs.get(name).map(|(id, _)| id)
     }
 
     pub(crate) fn get_column_by_name(&self, name: &str) -> Option<&ColumnRef> {
@@ -87,17 +87,15 @@ impl TableCatalog {
     }
 
     /// Add a column to the table catalog.
-    pub(crate) fn add_column(&mut self, mut col: ColumnCatalog) -> Result<ColumnId, DatabaseError> {
+    pub(crate) fn add_column(
+        &mut self,
+        mut col: ColumnCatalog,
+        generator: &mut Generator,
+    ) -> Result<ColumnId, DatabaseError> {
         if self.column_idxs.contains_key(col.name()) {
             return Err(DatabaseError::DuplicateColumn(col.name().to_string()));
         }
-
-        let col_id = self
-            .columns
-            .iter()
-            .last()
-            .map(|(column_id, _)| column_id + 1)
-            .unwrap_or(0);
+        let col_id = generator.generate().unwrap();
 
         col.summary.relation = ColumnRelation::Table {
             column_id: col_id,
@@ -155,8 +153,11 @@ impl TableCatalog {
             indexes: vec![],
             schema_ref: Arc::new(vec![]),
         };
+        let mut generator = Generator::new();
         for col_catalog in columns.into_iter() {
-            let _ = table_catalog.add_column(col_catalog)?;
+            let _ = table_catalog
+                .add_column(col_catalog, &mut generator)
+                .unwrap();
         }
 
         Ok(table_catalog)

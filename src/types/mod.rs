@@ -14,8 +14,9 @@ use crate::errors::DatabaseError;
 use serde_macros::ReferenceSerialization;
 use sqlparser::ast::{CharLengthUnits, ExactNumberInfo, TimezoneInfo};
 use strum_macros::AsRefStr;
+use ulid::Ulid;
 
-pub type ColumnId = u32;
+pub type ColumnId = Ulid;
 
 /// Sqlrs type conversion:
 /// sqlparser::ast::DataType -> LogicalType -> arrow::datatypes::DataType

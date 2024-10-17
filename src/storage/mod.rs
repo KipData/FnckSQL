@@ -19,6 +19,7 @@ use std::io::Cursor;
 use std::ops::SubAssign;
 use std::sync::Arc;
 use std::{mem, slice};
+use ulid::Generator;
 
 pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), StatisticsMeta>;
 pub(crate) type TableCache = ShardingLruCache<String, TableCatalog>;
@@ -228,7 +229,8 @@ pub trait Transaction: Sized {
                     };
                 }
             }
-            let col_id = table.add_column(column.clone())?;
+            let mut generator = Generator::new();
+            let col_id = table.add_column(column.clone(), &mut generator)?;
 
             if column.desc.is_unique {
                 let meta_ref = table.add_index_meta(
@@ -1006,7 +1008,7 @@ mod test {
     use crate::types::index::{Index, IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
-    use crate::types::LogicalType;
+    use crate::types::{ColumnId, LogicalType};
     use crate::utils::lru::ShardingLruCache;
     use std::collections::Bound;
     use std::hash::RandomState;
@@ -1086,12 +1088,16 @@ mod test {
             let table = transaction
                 .table(&table_cache, Arc::new("t1".to_string()))
                 .unwrap();
+            let c1_column_id = *table.get_column_id_by_name("c1").unwrap();
+            let c2_column_id = *table.get_column_id_by_name("c2").unwrap();
+            let c3_column_id = *table.get_column_id_by_name("c3").unwrap();
+
             assert_eq!(table.name.as_str(), "t1");
             assert_eq!(table.indexes.len(), 1);
 
             let primary_key_index_meta = &table.indexes[0];
             assert_eq!(primary_key_index_meta.id, 0);
-            assert_eq!(primary_key_index_meta.column_ids, vec![0]);
+            assert_eq!(primary_key_index_meta.column_ids, vec![c1_column_id]);
             assert_eq!(
                 primary_key_index_meta.table_name,
                 Arc::new("t1".to_string())
@@ -1108,7 +1114,7 @@ mod test {
                 &ColumnSummary {
                     name: "c1".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 0,
+                        column_id: c1_column_id,
                         table_name: Arc::new("t1".to_string())
                     },
                 }
@@ -1125,7 +1131,7 @@ mod test {
                 &ColumnSummary {
                     name: "c2".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 1,
+                        column_id: c2_column_id,
                         table_name: Arc::new("t1".to_string())
                     },
                 }
@@ -1142,7 +1148,7 @@ mod test {
                 &ColumnSummary {
                     name: "c3".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 2,
+                        column_id: c3_column_id,
                         table_name: Arc::new("t1".to_string())
                     },
                 }
@@ -1169,16 +1175,6 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let mut transaction = storage.transaction()?;
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-
-        assert!(transaction
-            .add_index_meta(
-                &table_cache,
-                &Arc::new("t1".to_string()),
-                "i1".to_string(),
-                vec![2],
-                IndexType::Normal
-            )
-            .is_err());
 
         build_table(&table_cache, &mut transaction)?;
 
@@ -1251,30 +1247,30 @@ mod test {
         let mut transaction = storage.transaction()?;
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
 
-        assert!(transaction
-            .add_index_meta(
-                &table_cache,
-                &Arc::new("t1".to_string()),
-                "i1".to_string(),
-                vec![2],
-                IndexType::Normal
-            )
-            .is_err());
-
         build_table(&table_cache, &mut transaction)?;
+        let (c2_column_id, c3_column_id) = {
+            let t1_table = transaction
+                .table(&table_cache, Arc::new("t1".to_string()))
+                .unwrap();
+
+            (
+                *t1_table.get_column_id_by_name("c2").unwrap(),
+                *t1_table.get_column_id_by_name("c3").unwrap(),
+            )
+        };
 
         let _ = transaction.add_index_meta(
             &table_cache,
             &Arc::new("t1".to_string()),
             "i1".to_string(),
-            vec![2],
+            vec![c3_column_id],
             IndexType::Normal,
         )?;
         let _ = transaction.add_index_meta(
             &table_cache,
             &Arc::new("t1".to_string()),
             "i2".to_string(),
-            vec![2, 1],
+            vec![c3_column_id, c2_column_id],
             IndexType::Composite,
         )?;
 
@@ -1287,7 +1283,7 @@ mod test {
 
             let i1_meta = table.indexes[1].clone();
             assert_eq!(i1_meta.id, 1);
-            assert_eq!(i1_meta.column_ids, vec![2]);
+            assert_eq!(i1_meta.column_ids, vec![c3_column_id]);
             assert_eq!(i1_meta.table_name, Arc::new("t1".to_string()));
             assert_eq!(i1_meta.pk_ty, LogicalType::Integer);
             assert_eq!(i1_meta.name, "i1".to_string());
@@ -1295,7 +1291,7 @@ mod test {
 
             let i2_meta = table.indexes[2].clone();
             assert_eq!(i2_meta.id, 2);
-            assert_eq!(i2_meta.column_ids, vec![2, 1]);
+            assert_eq!(i2_meta.column_ids, vec![c3_column_id, c2_column_id]);
             assert_eq!(i2_meta.table_name, Arc::new("t1".to_string()));
             assert_eq!(i2_meta.pk_ty, LogicalType::Integer);
             assert_eq!(i2_meta.name, "i2".to_string());
@@ -1329,6 +1325,7 @@ mod test {
         fn build_index_iter<'a>(
             transaction: &'a RocksTransaction<'a>,
             table_cache: &'a Arc<ShardingLruCache<String, TableCatalog>>,
+            index_column_id: ColumnId,
         ) -> Result<IndexIter<'a, RocksTransaction<'a>>, DatabaseError> {
             transaction.read_by_index(
                 &table_cache,
@@ -1337,7 +1334,7 @@ mod test {
                 full_columns(),
                 Arc::new(IndexMeta {
                     id: 1,
-                    column_ids: vec![2],
+                    column_ids: vec![index_column_id],
                     table_name: Arc::new("t1".to_string()),
                     pk_ty: LogicalType::Integer,
                     name: "i1".to_string(),
@@ -1356,12 +1353,16 @@ mod test {
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
 
         build_table(&table_cache, &mut transaction)?;
+        let t1_table = transaction
+            .table(&table_cache, Arc::new("t1".to_string()))
+            .unwrap();
+        let c3_column_id = *t1_table.get_column_id_by_name("c3").unwrap();
 
         let _ = transaction.add_index_meta(
             &table_cache,
             &Arc::new("t1".to_string()),
             "i1".to_string(),
-            vec![2],
+            vec![c3_column_id],
             IndexType::Normal,
         )?;
 
@@ -1396,7 +1397,7 @@ mod test {
             )?;
         }
         {
-            let mut index_iter = build_index_iter(&transaction, &table_cache)?;
+            let mut index_iter = build_index_iter(&transaction, &table_cache, c3_column_id)?;
 
             assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[0]);
             assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[2]);
@@ -1415,7 +1416,7 @@ mod test {
         }
         transaction.del_index("t1", &indexes[0].1, Some(&indexes[0].0))?;
 
-        let mut index_iter = build_index_iter(&transaction, &table_cache)?;
+        let mut index_iter = build_index_iter(&transaction, &table_cache, c3_column_id)?;
 
         assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[2]);
         assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[1]);
@@ -1469,7 +1470,7 @@ mod test {
                 ColumnDesc::new(LogicalType::Integer, false, false, None)?,
             );
             new_column.summary.relation = ColumnRelation::Table {
-                column_id: 3,
+                column_id: *table.get_column_id_by_name("c4").unwrap(),
                 table_name: table_name.clone(),
             };
             assert_eq!(

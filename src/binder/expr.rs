@@ -18,7 +18,7 @@ use crate::expression::{AliasType, ScalarExpression};
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::value::{DataValue, Utf8Type};
-use crate::types::LogicalType;
+use crate::types::{ColumnId, LogicalType};
 
 macro_rules! try_alias {
     ($context:expr, $full_name:expr) => {
@@ -231,7 +231,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
         sub_query: LogicalPlan,
     ) -> Result<(ScalarExpression, LogicalPlan), DatabaseError> {
         let mut alias_column = ColumnCatalog::clone(&column);
-        alias_column.set_ref_table(self.context.temp_table(), 0);
+        alias_column.set_ref_table(self.context.temp_table(), ColumnId::new());
 
         let alias_expr = ScalarExpression::Alias {
             expr: Box::new(ScalarExpression::ColumnRef(column)),

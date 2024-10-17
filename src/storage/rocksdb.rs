@@ -30,7 +30,8 @@ impl RocksStorage {
 
 impl Storage for RocksStorage {
     type TransactionType<'a>
-    = RocksTransaction<'a> where
+        = RocksTransaction<'a>
+    where
         Self: 'a;
 
     fn transaction(&self) -> Result<Self::TransactionType<'_>, DatabaseError> {
@@ -46,7 +47,8 @@ pub struct RocksTransaction<'db> {
 
 impl<'txn> Transaction for RocksTransaction<'txn> {
     type IterType<'iter>
-    = RocksIter<'txn, 'iter> where
+        = RocksIter<'txn, 'iter>
+    where
         Self: 'iter;
 
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, DatabaseError> {
@@ -243,6 +245,7 @@ mod test {
             .table(&fnck_sql.table_cache, table_name.clone())
             .unwrap()
             .clone();
+        let a_column_id = table.get_column_id_by_name("a").unwrap();
         let tuple_ids = vec![
             Arc::new(DataValue::Int32(Some(0))),
             Arc::new(DataValue::Int32(Some(2))),
@@ -257,7 +260,7 @@ mod test {
                 projections: vec![0],
                 index_meta: Arc::new(IndexMeta {
                     id: 0,
-                    column_ids: vec![0],
+                    column_ids: vec![*a_column_id],
                     table_name,
                     pk_ty: LogicalType::Integer,
                     name: "pk_a".to_string(),

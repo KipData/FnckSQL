@@ -138,6 +138,17 @@ impl ColumnCatalog {
     }
 }
 
+#[cfg(test)]
+impl ColumnSummary {
+    pub(crate) fn column_id(&self) -> Option<&ColumnId> {
+        if let ColumnRelation::Table { column_id, .. } = &self.relation {
+            Some(column_id)
+        } else {
+            None
+        }
+    }
+}
+
 /// The descriptor of a column.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, ReferenceSerialization)]
 pub struct ColumnDesc {

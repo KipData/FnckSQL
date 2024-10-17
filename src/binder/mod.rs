@@ -382,11 +382,12 @@ pub(crate) fn is_valid_identifier(s: &str) -> bool {
 #[cfg(test)]
 pub mod test {
     use crate::binder::{is_valid_identifier, Binder, BinderContext};
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, TableCatalog};
     use crate::errors::DatabaseError;
     use crate::planner::LogicalPlan;
     use crate::storage::rocksdb::RocksStorage;
     use crate::storage::{Storage, TableCache, Transaction};
+    use crate::types::ColumnId;
     use crate::types::LogicalType::Integer;
     use crate::utils::lru::ShardingLruCache;
     use std::hash::RandomState;
@@ -394,6 +395,56 @@ pub mod test {
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
     use tempfile::TempDir;
+
+    pub(crate) struct TableState<S: Storage> {
+        pub(crate) table: TableCatalog,
+        pub(crate) table_cache: Arc<TableCache>,
+        pub(crate) storage: S,
+    }
+
+    impl<S: Storage> TableState<S> {
+        pub(crate) fn plan<T: AsRef<str>>(&self, sql: T) -> Result<LogicalPlan, DatabaseError> {
+            let scala_functions = Default::default();
+            let table_functions = Default::default();
+            let transaction = self.storage.transaction()?;
+            let mut binder = Binder::new(
+                BinderContext::new(
+                    &self.table_cache,
+                    &transaction,
+                    &scala_functions,
+                    &table_functions,
+                    Arc::new(AtomicUsize::new(0)),
+                ),
+                None,
+            );
+            let stmt = crate::parser::parse_sql(sql)?;
+
+            Ok(binder.bind(&stmt[0])?)
+        }
+
+        pub(crate) fn column_id_by_name(&self, name: &str) -> &ColumnId {
+            self.table.get_column_id_by_name(name).unwrap()
+        }
+    }
+
+    pub(crate) fn build_t1_table() -> Result<TableState<RocksStorage>, DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let storage = build_test_catalog(&table_cache, temp_dir.path())?;
+        let table = {
+            let transaction = storage.transaction()?;
+            transaction
+                .table(&table_cache, Arc::new("t1".to_string()))
+                .unwrap()
+                .clone()
+        };
+
+        Ok(TableState {
+            table,
+            table_cache,
+            storage,
+        })
+    }
 
     pub(crate) fn build_test_catalog(
         table_cache: &TableCache,
@@ -441,28 +492,6 @@ pub mod test {
         transaction.commit()?;
 
         Ok(storage)
-    }
-
-    pub fn select_sql_run<S: AsRef<str>>(sql: S) -> Result<LogicalPlan, DatabaseError> {
-        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let storage = build_test_catalog(&table_cache, temp_dir.path())?;
-        let transaction = storage.transaction()?;
-        let scala_functions = Default::default();
-        let table_functions = Default::default();
-        let mut binder = Binder::new(
-            BinderContext::new(
-                &table_cache,
-                &transaction,
-                &scala_functions,
-                &table_functions,
-                Arc::new(AtomicUsize::new(0)),
-            ),
-            None,
-        );
-        let stmt = crate::parser::parse_sql(sql)?;
-
-        Ok(binder.bind(&stmt[0])?)
     }
 
     #[test]

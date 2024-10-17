@@ -1303,7 +1303,7 @@ mod test {
     use crate::function::numbers::Numbers;
     use crate::serdes::{ReferenceSerialization, ReferenceTables};
     use crate::storage::rocksdb::{RocksStorage, RocksTransaction};
-    use crate::storage::{Storage, TableCache};
+    use crate::storage::{Storage, TableCache, Transaction};
     use crate::types::evaluator::boolean::BooleanNotUnaryEvaluator;
     use crate::types::evaluator::int32::Int32PlusBinaryEvaluator;
     use crate::types::evaluator::{BinaryEvaluatorBox, UnaryEvaluatorBox};
@@ -1345,6 +1345,12 @@ mod test {
 
         let mut cursor = Cursor::new(Vec::new());
         let mut reference_tables = ReferenceTables::new();
+        let c3_column_id = {
+            let table = transaction
+                .table(&table_cache, Arc::new("t1".to_string()))
+                .unwrap();
+            *table.get_column_id_by_name("c3").unwrap()
+        };
 
         fn_assert(
             &mut cursor,
@@ -1374,7 +1380,7 @@ mod test {
                 summary: ColumnSummary {
                     name: "c3".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 2,
+                        column_id: c3_column_id,
                         table_name: Arc::new("t1".to_string()),
                     },
                 },

@@ -193,7 +193,7 @@ impl NormalizationRule for ColumnPruning {
 
 #[cfg(test)]
 mod tests {
-    use crate::binder::test::select_sql_run;
+    use crate::binder::test::build_t1_table;
     use crate::errors::DatabaseError;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -204,7 +204,8 @@ mod tests {
 
     #[test]
     fn test_column_pruning() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select c1, c3 from t1 left join t2 on c1 = c3")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select c1, c3 from t1 left join t2 on c1 = c3")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(

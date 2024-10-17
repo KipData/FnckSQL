@@ -137,6 +137,7 @@ pub(crate) mod test {
     use std::io::{Cursor, Seek, SeekFrom};
     use std::sync::Arc;
     use tempfile::TempDir;
+    use ulid::Ulid;
 
     #[test]
     fn test_column_serialization() -> Result<(), DatabaseError> {
@@ -151,13 +152,19 @@ pub(crate) mod test {
 
         let mut cursor = Cursor::new(Vec::new());
         let mut reference_tables = ReferenceTables::new();
+        let c3_column_id = {
+            let table = transaction
+                .table(&table_cache, Arc::new("t1".to_string()))
+                .unwrap();
+            *table.get_column_id_by_name("c3").unwrap()
+        };
 
         {
             let ref_column = ColumnRef(Arc::new(ColumnCatalog {
                 summary: ColumnSummary {
                     name: "c3".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 2,
+                        column_id: c3_column_id,
                         table_name: table_name.clone(),
                     },
                 },
@@ -231,7 +238,7 @@ pub(crate) mod test {
         let summary = ColumnSummary {
             name: "c1".to_string(),
             relation: ColumnRelation::Table {
-                column_id: 0,
+                column_id: Ulid::new(),
                 table_name: Arc::new("t1".to_string()),
             },
         };
@@ -266,7 +273,7 @@ pub(crate) mod test {
         assert_eq!(none_relation, decode_relation);
         cursor.seek(SeekFrom::Start(0))?;
         let table_relation = ColumnRelation::Table {
-            column_id: 0,
+            column_id: Ulid::new(),
             table_name: Arc::new("t1".to_string()),
         };
         table_relation.encode(&mut cursor, false, &mut reference_tables)?;

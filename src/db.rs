@@ -399,7 +399,8 @@ pub(crate) mod test {
             true,
             ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
         );
-        column.set_ref_table(Arc::new("a".to_string()), 0);
+        let number_column_id = schema[0].summary.column_id().unwrap();
+        column.set_ref_table(Arc::new("a".to_string()), *number_column_id);
 
         debug_assert_eq!(schema, Arc::new(vec![ColumnRef::from(column)]));
         debug_assert_eq!(
