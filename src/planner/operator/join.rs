@@ -1,13 +1,15 @@
+use super::Operator;
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use itertools::Itertools;
+use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 use strum_macros::Display;
 
-use super::Operator;
-
-#[derive(Debug, Display, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
+#[derive(
+    Debug, Display, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd, ReferenceSerialization,
+)]
 pub enum JoinType {
     Inner,
     LeftOuter,
@@ -17,7 +19,7 @@ pub enum JoinType {
     Full,
     Cross,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, ReferenceSerialization)]
 pub enum JoinCondition {
     On {
         /// Equijoin clause expressed as pairs of (left, right) join columns
@@ -28,7 +30,7 @@ pub enum JoinCondition {
     None,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct JoinOperator {
     pub on: JoinCondition,
     pub join_type: JoinType,

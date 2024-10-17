@@ -1,10 +1,11 @@
 use crate::expression::function::table::TableFunction;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
+use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct FunctionScanOperator {
     pub table_function: TableFunction,
 }

@@ -1,9 +1,8 @@
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
 use crate::errors::DatabaseError;
-use crate::expression::ScalarExpression;
-use crate::serdes::{ReferenceSerialization, ReferenceTables, Serialization};
+use crate::serdes::{ReferenceSerialization, ReferenceTables};
 use crate::storage::{TableCache, Transaction};
-use crate::types::{ColumnId, LogicalType};
+use crate::types::ColumnId;
 use std::io::{Read, Write};
 use std::sync::Arc;
 
@@ -16,7 +15,7 @@ impl ReferenceSerialization for ColumnRef {
     ) -> Result<(), DatabaseError> {
         self.summary.encode(writer, is_direct, reference_tables)?;
         if is_direct || matches!(self.summary.relation, ColumnRelation::None) {
-            self.nullable.encode(writer)?;
+            self.nullable.encode(writer, is_direct, reference_tables)?;
             self.desc.encode(writer, is_direct, reference_tables)?;
         }
 
@@ -49,14 +48,14 @@ impl ReferenceSerialization for ColumnRef {
                 )))?;
             Ok(column.clone())
         } else {
-            let nullable = bool::decode(reader)?;
+            let nullable = bool::decode(reader, drive, reference_tables)?;
             let desc = ColumnDesc::decode(reader, drive, reference_tables)?;
 
-            Ok(Arc::new(ColumnCatalog {
+            Ok(Self(Arc::new(ColumnCatalog {
                 summary,
                 nullable,
                 desc,
-            }))
+            })))
         }
     }
 }
@@ -65,7 +64,7 @@ impl ReferenceSerialization for ColumnRelation {
     fn encode<W: Write>(
         &self,
         writer: &mut W,
-        _: bool,
+        is_direct: bool,
         reference_tables: &mut ReferenceTables,
     ) -> Result<(), DatabaseError> {
         match self {
@@ -78,74 +77,15 @@ impl ReferenceSerialization for ColumnRelation {
             } => {
                 writer.write_all(&[1])?;
 
-                column_id.encode(writer)?;
-                (reference_tables.push_or_replace(table_name) as u32).encode(writer)?;
+                column_id.encode(writer, is_direct, reference_tables)?;
+
+                reference_tables.push_or_replace(table_name).encode(
+                    writer,
+                    is_direct,
+                    reference_tables,
+                )?;
             }
         }
-
-        Ok(())
-    }
-
-    fn decode<T: Transaction, R: Read>(
-        reader: &mut R,
-        _: Option<(&T, &TableCache)>,
-        reference_tables: &ReferenceTables,
-    ) -> Result<Self, DatabaseError> {
-        let mut type_bytes = [0u8; 1];
-        reader.read_exact(&mut type_bytes)?;
-
-        Ok(match type_bytes[0] {
-            0 => ColumnRelation::None,
-            1 => {
-                let column_id = ColumnId::decode(reader)?;
-                let table_name = reference_tables.get(u32::decode(reader)? as usize).clone();
-
-                ColumnRelation::Table {
-                    column_id,
-                    table_name,
-                }
-            }
-            _ => unreachable!(),
-        })
-    }
-}
-
-impl ReferenceSerialization for ColumnSummary {
-    fn encode<W: Write>(
-        &self,
-        writer: &mut W,
-        is_direct: bool,
-        reference_tables: &mut ReferenceTables,
-    ) -> Result<(), DatabaseError> {
-        self.name.encode(writer)?;
-        self.relation.encode(writer, is_direct, reference_tables)?;
-
-        Ok(())
-    }
-
-    fn decode<T: Transaction, R: Read>(
-        reader: &mut R,
-        _: Option<(&T, &TableCache)>,
-        reference_tables: &ReferenceTables,
-    ) -> Result<Self, DatabaseError> {
-        let name = String::decode(reader)?;
-        let relation = ColumnRelation::decode::<T, R>(reader, None, reference_tables)?;
-
-        Ok(ColumnSummary { name, relation })
-    }
-}
-
-impl ReferenceSerialization for ColumnDesc {
-    fn encode<W: Write>(
-        &self,
-        writer: &mut W,
-        is_direct: bool,
-        reference_tables: &mut ReferenceTables,
-    ) -> Result<(), DatabaseError> {
-        self.is_unique.encode(writer)?;
-        self.is_primary.encode(writer)?;
-        self.column_datatype.encode(writer)?;
-        self.default.encode(writer, is_direct, reference_tables)?;
 
         Ok(())
     }
@@ -155,12 +95,28 @@ impl ReferenceSerialization for ColumnDesc {
         drive: Option<(&T, &TableCache)>,
         reference_tables: &ReferenceTables,
     ) -> Result<Self, DatabaseError> {
-        let is_unique = bool::decode(reader)?;
-        let is_primary = bool::decode(reader)?;
-        let column_datatype = LogicalType::decode(reader)?;
-        let default = Option::<ScalarExpression>::decode(reader, drive, reference_tables)?;
+        let mut type_bytes = [0u8; 1];
+        reader.read_exact(&mut type_bytes)?;
 
-        ColumnDesc::new(column_datatype, is_primary, is_unique, default)
+        Ok(match type_bytes[0] {
+            0 => ColumnRelation::None,
+            1 => {
+                let column_id = ColumnId::decode(reader, drive, reference_tables)?;
+                let table_name = reference_tables
+                    .get(<usize as ReferenceSerialization>::decode(
+                        reader,
+                        drive,
+                        reference_tables,
+                    )?)
+                    .clone();
+
+                ColumnRelation::Table {
+                    column_id,
+                    table_name,
+                }
+            }
+            _ => unreachable!(),
+        })
     }
 }
 
@@ -181,6 +137,7 @@ pub(crate) mod test {
     use std::io::{Cursor, Seek, SeekFrom};
     use std::sync::Arc;
     use tempfile::TempDir;
+    use ulid::Ulid;
 
     #[test]
     fn test_column_serialization() -> Result<(), DatabaseError> {
@@ -195,13 +152,19 @@ pub(crate) mod test {
 
         let mut cursor = Cursor::new(Vec::new());
         let mut reference_tables = ReferenceTables::new();
+        let c3_column_id = {
+            let table = transaction
+                .table(&table_cache, Arc::new("t1".to_string()))
+                .unwrap();
+            *table.get_column_id_by_name("c3").unwrap()
+        };
 
         {
-            let ref_column = Arc::new(ColumnCatalog {
+            let ref_column = ColumnRef(Arc::new(ColumnCatalog {
                 summary: ColumnSummary {
                     name: "c3".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 2,
+                        column_id: c3_column_id,
                         table_name: table_name.clone(),
                     },
                 },
@@ -212,7 +175,7 @@ pub(crate) mod test {
                     is_unique: false,
                     default: None,
                 },
-            });
+            }));
 
             ref_column.encode(&mut cursor, false, &mut reference_tables)?;
             cursor.seek(SeekFrom::Start(0))?;
@@ -237,7 +200,7 @@ pub(crate) mod test {
             cursor.seek(SeekFrom::Start(0))?;
         }
         {
-            let not_ref_column = Arc::new(ColumnCatalog {
+            let not_ref_column = ColumnRef(Arc::new(ColumnCatalog {
                 summary: ColumnSummary {
                     name: "c3".to_string(),
                     relation: ColumnRelation::None,
@@ -251,7 +214,7 @@ pub(crate) mod test {
                         Some(42),
                     )))),
                 },
-            });
+            }));
             not_ref_column.encode(&mut cursor, false, &mut reference_tables)?;
             cursor.seek(SeekFrom::Start(0))?;
 
@@ -275,7 +238,7 @@ pub(crate) mod test {
         let summary = ColumnSummary {
             name: "c1".to_string(),
             relation: ColumnRelation::Table {
-                column_id: 0,
+                column_id: Ulid::new(),
                 table_name: Arc::new("t1".to_string()),
             },
         };
@@ -310,7 +273,7 @@ pub(crate) mod test {
         assert_eq!(none_relation, decode_relation);
         cursor.seek(SeekFrom::Start(0))?;
         let table_relation = ColumnRelation::Table {
-            column_id: 0,
+            column_id: Ulid::new(),
             table_name: Arc::new("t1".to_string()),
         };
         table_relation.encode(&mut cursor, false, &mut reference_tables)?;

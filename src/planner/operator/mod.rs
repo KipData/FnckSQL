@@ -46,10 +46,11 @@ use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::types::index::IndexInfo;
 use itertools::Itertools;
+use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub enum Operator {
     // DQL
     Dummy,
@@ -83,7 +84,7 @@ pub enum Operator {
     CopyToFile(CopyToFileOperator),
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub enum PhysicalOption {
     Dummy,
     SimpleAggregate,

@@ -1,8 +1,9 @@
 use crate::catalog::TableName;
+use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct DropColumnOperator {
     pub table_name: TableName,
     pub column_name: String,

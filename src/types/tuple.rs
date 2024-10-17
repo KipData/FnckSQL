@@ -169,7 +169,7 @@ pub fn create_table(schema: &Schema, tuples: &[Tuple]) -> Table {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::types::tuple::Tuple;
     use crate::types::value::{DataValue, Utf8Type};
     use crate::types::LogicalType;
@@ -181,17 +181,17 @@ mod tests {
     #[test]
     fn test_tuple_serialize_to_and_deserialize_from() {
         let columns = Arc::new(vec![
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::UInteger, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c3".to_string(),
                 false,
                 ColumnDesc::new(
@@ -202,57 +202,57 @@ mod tests {
                 )
                 .unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c4".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Smallint, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c5".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::USmallint, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c6".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Float, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c7".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Double, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c8".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Tinyint, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c9".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::UTinyint, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c10".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c11".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::DateTime, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c12".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Date, false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c13".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c14".to_string(),
                 false,
                 ColumnDesc::new(
@@ -263,7 +263,7 @@ mod tests {
                 )
                 .unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c15".to_string(),
                 false,
                 ColumnDesc::new(
@@ -274,7 +274,7 @@ mod tests {
                 )
                 .unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c16".to_string(),
                 false,
                 ColumnDesc::new(

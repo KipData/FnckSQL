@@ -1,26 +1,71 @@
-mod alias_type;
-mod binary_operator;
 mod boolean;
+mod bound;
 mod char;
 mod char_length_units;
 mod column;
+mod data_value;
 mod evaluator;
-mod logic_type;
+mod function;
+mod hasher;
 mod num;
 mod option;
+mod pair;
+mod path_buf;
+mod phantom;
 mod ptr;
-mod scala_expression;
-mod scala_function;
+mod slice;
 mod string;
-mod table_function;
 mod trim;
-mod unary_operator;
+mod ulid;
+mod vec;
 
 use crate::catalog::TableName;
 use crate::errors::DatabaseError;
 use crate::storage::{TableCache, Transaction};
-use std::io;
 use std::io::{Read, Write};
+
+#[macro_export]
+macro_rules! implement_serialization_by_bincode {
+    ($struct_name:ident) => {
+        impl $crate::serdes::ReferenceSerialization for $struct_name {
+            fn encode<W: std::io::Write>(
+                &self,
+                writer: &mut W,
+                is_direct: bool,
+                reference_tables: &mut $crate::serdes::ReferenceTables,
+            ) -> Result<(), $crate::errors::DatabaseError> {
+                let bytes = bincode::serialize(self)?;
+                $crate::serdes::ReferenceSerialization::encode(
+                    &bytes.len(),
+                    writer,
+                    is_direct,
+                    reference_tables,
+                )?;
+                std::io::Write::write_all(writer, &bytes)?;
+
+                Ok(())
+            }
+
+            fn decode<T: $crate::storage::Transaction, R: std::io::Read>(
+                reader: &mut R,
+                drive: Option<(&T, &$crate::storage::TableCache)>,
+                reference_tables: &$crate::serdes::ReferenceTables,
+            ) -> Result<Self, $crate::errors::DatabaseError> {
+                let mut buf = vec![
+                    0u8;
+                    <usize as $crate::serdes::ReferenceSerialization>::decode(
+                        reader,
+                        drive,
+                        reference_tables
+                    )?
+                ];
+                std::io::Read::read_exact(reader, &mut buf)?;
+
+                Ok(bincode::deserialize::<Self>(&buf)?)
+            }
+        }
+    };
+}
 
 pub trait ReferenceSerialization: Sized {
     fn encode<W: Write>(
@@ -35,14 +80,6 @@ pub trait ReferenceSerialization: Sized {
         drive: Option<(&T, &TableCache)>,
         reference_tables: &ReferenceTables,
     ) -> Result<Self, DatabaseError>;
-}
-
-pub trait Serialization: Sized {
-    type Error: From<io::Error> + std::error::Error + Send + Sync + 'static;
-
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error>;
-
-    fn decode<R: Read>(reader: &mut R) -> Result<Self, Self::Error>;
 }
 
 #[derive(Default)]

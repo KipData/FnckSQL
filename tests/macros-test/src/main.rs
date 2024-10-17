@@ -2,7 +2,7 @@ fn main() {}
 
 #[cfg(test)]
 mod test {
-    use fnck_sql::catalog::column::{ColumnCatalog, ColumnDesc, ColumnRelation};
+    use fnck_sql::catalog::column::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation};
     use fnck_sql::errors::DatabaseError;
     use fnck_sql::expression::function::scala::ScalarFunctionImpl;
     use fnck_sql::expression::function::table::TableFunctionImpl;
@@ -20,12 +20,12 @@ mod test {
 
     fn build_tuple() -> (Tuple, SchemaRef) {
         let schema_ref = Arc::new(vec![
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
                 ColumnDesc::new(
@@ -33,7 +33,8 @@ mod test {
                     false,
                     false,
                     None,
-                ).unwrap(),
+                )
+                .unwrap(),
             )),
         ]);
         let values = vec![
@@ -170,6 +171,7 @@ mod test {
         );
         assert!(numbers.next().is_none());
 
+        let function_schema = function.output_schema();
         let table_name = Arc::new("test_numbers".to_string());
         let mut c1 = ColumnCatalog::new(
             "c1".to_string(),
@@ -177,7 +179,7 @@ mod test {
             ColumnDesc::new(LogicalType::Integer, false, false, None)?,
         );
         c1.summary.relation = ColumnRelation::Table {
-            column_id: 0,
+            column_id: function_schema[0].id().unwrap(),
             table_name: table_name.clone(),
         };
         let mut c2 = ColumnCatalog::new(
@@ -186,13 +188,13 @@ mod test {
             ColumnDesc::new(LogicalType::Integer, false, false, None)?,
         );
         c2.summary.relation = ColumnRelation::Table {
-            column_id: 1,
+            column_id: function_schema[1].id().unwrap(),
             table_name: table_name.clone(),
         };
 
         assert_eq!(
-            function.output_schema(),
-            &Arc::new(vec![Arc::new(c1), Arc::new(c2)])
+            function_schema,
+            &Arc::new(vec![ColumnRef::from(c1), ColumnRef::from(c2)])
         );
 
         Ok(())

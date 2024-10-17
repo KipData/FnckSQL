@@ -5,8 +5,11 @@ use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
+use serde::{Deserialize, Serialize};
+use serde_macros::ReferenceSerialization;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 use std::sync::Arc;
 
 /// for `datafusion`
@@ -15,10 +18,21 @@ use std::sync::Arc;
 /// - `Some(false)` monotonically decreasing
 pub type FuncMonotonicity = Vec<Option<bool>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArcScalarFunctionImpl(pub Arc<dyn ScalarFunctionImpl>);
+
+impl Deref for ArcScalarFunctionImpl {
+    type Target = dyn ScalarFunctionImpl;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+#[derive(Debug, Clone, ReferenceSerialization)]
 pub struct ScalarFunction {
     pub(crate) args: Vec<ScalarExpression>,
-    pub(crate) inner: Arc<dyn ScalarFunctionImpl>,
+    pub(crate) inner: ArcScalarFunctionImpl,
 }
 
 impl PartialEq for ScalarFunction {

@@ -317,7 +317,7 @@ impl TableCodec {
             key_prefix.seek(SeekFrom::End(0))?;
 
             key_prefix.write_all(&[BOUND_MIN_TAG])?;
-            key_prefix.write_all(&column_id.to_be_bytes())?;
+            key_prefix.write_all(&column_id.to_bytes()[..])?;
 
             let mut column_bytes = Cursor::new(Vec::new());
             col.encode(&mut column_bytes, true, reference_tables)?;
@@ -384,7 +384,9 @@ impl TableCodec {
 
 #[cfg(test)]
 mod tests {
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRelation, TableCatalog, TableMeta};
+    use crate::catalog::{
+        ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, TableCatalog, TableMeta,
+    };
     use crate::errors::DatabaseError;
     use crate::serdes::ReferenceTables;
     use crate::storage::rocksdb::RocksTransaction;
@@ -401,6 +403,7 @@ mod tests {
     use std::ops::Bound;
     use std::slice;
     use std::sync::Arc;
+    use ulid::Ulid;
 
     fn build_table_codec() -> TableCatalog {
         let columns = vec![
@@ -470,7 +473,7 @@ mod tests {
     fn test_table_codec_index_meta() -> Result<(), DatabaseError> {
         let index_meta = IndexMeta {
             id: 0,
-            column_ids: vec![0],
+            column_ids: vec![Ulid::new()],
             table_name: Arc::new("T1".to_string()),
             pk_ty: LogicalType::Integer,
             name: "index_1".to_string(),
@@ -507,10 +510,10 @@ mod tests {
             ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
         );
         col.summary.relation = ColumnRelation::Table {
-            column_id: 1,
+            column_id: Ulid::new(),
             table_name: Arc::new("t1".to_string()),
         };
-        let col = Arc::new(col);
+        let col = ColumnRef::from(col);
 
         let mut reference_tables = ReferenceTables::new();
 
@@ -541,12 +544,13 @@ mod tests {
             );
 
             col.summary.relation = ColumnRelation::Table {
-                column_id: col_id as u32,
+                column_id: Ulid::from(col_id as u128),
                 table_name: Arc::new(table_name.to_string()),
             };
 
             let (key, _) =
-                TableCodec::encode_column(&Arc::new(col), &mut ReferenceTables::new()).unwrap();
+                TableCodec::encode_column(&ColumnRef::from(col), &mut ReferenceTables::new())
+                    .unwrap();
             key
         };
 

@@ -111,8 +111,8 @@ impl NormalizationRule for SimplifyFilter {
 
 #[cfg(test)]
 mod test {
-    use crate::binder::test::select_sql_run;
-    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRelation, ColumnSummary};
+    use crate::binder::test::build_t1_table;
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::{Range, RangeDetacher};
     use crate::expression::{BinaryOperator, ScalarExpression, UnaryOperator};
@@ -129,9 +129,10 @@ mod test {
 
     #[test]
     fn test_constant_calculation_omitted() -> Result<(), DatabaseError> {
+        let table_state = build_t1_table()?;
         // (2 + (-1)) < -(c1 + 1)
         let plan =
-            select_sql_run("select c1 + (2 + 1), 2 + 1 from t1 where (2 + (-1)) < -(c1 + 1)")?;
+            table_state.plan("select c1 + (2 + 1), 2 + 1 from t1 where (2 + (-1)) < -(c1 + 1)")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -155,7 +156,7 @@ mod test {
             unreachable!();
         }
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-            let range = RangeDetacher::new("t1", &0)
+            let range = RangeDetacher::new("t1", table_state.column_id_by_name("c1"))
                 .detach(&filter_op.predicate)
                 .unwrap();
             debug_assert_eq!(
@@ -174,27 +175,28 @@ mod test {
 
     #[test]
     fn test_simplify_filter_single_column() -> Result<(), DatabaseError> {
+        let table_state = build_t1_table()?;
         // c1 + 1 < -1 => c1 < -2
-        let plan_1 = select_sql_run("select * from t1 where -(c1 + 1) > 1")?;
+        let plan_1 = table_state.plan("select * from t1 where -(c1 + 1) > 1")?;
         // 1 - c1 < -1 => c1 > 2
-        let plan_2 = select_sql_run("select * from t1 where -(1 - c1) > 1")?;
+        let plan_2 = table_state.plan("select * from t1 where -(1 - c1) > 1")?;
         // c1 < -1
-        let plan_3 = select_sql_run("select * from t1 where -c1 > 1")?;
+        let plan_3 = table_state.plan("select * from t1 where -c1 > 1")?;
         // c1 > 0
-        let plan_4 = select_sql_run("select * from t1 where c1 + 1 > 1")?;
+        let plan_4 = table_state.plan("select * from t1 where c1 + 1 > 1")?;
 
         // c1 + 1 < -1 => c1 < -2
-        let plan_5 = select_sql_run("select * from t1 where 1 < -(c1 + 1)")?;
+        let plan_5 = table_state.plan("select * from t1 where 1 < -(c1 + 1)")?;
         // 1 - c1 < -1 => c1 > 2
-        let plan_6 = select_sql_run("select * from t1 where 1 < -(1 - c1)")?;
+        let plan_6 = table_state.plan("select * from t1 where 1 < -(1 - c1)")?;
         // c1 < -1
-        let plan_7 = select_sql_run("select * from t1 where 1 < -c1")?;
+        let plan_7 = table_state.plan("select * from t1 where 1 < -c1")?;
         // c1 > 0
-        let plan_8 = select_sql_run("select * from t1 where 1 < c1 + 1")?;
+        let plan_8 = table_state.plan("select * from t1 where 1 < c1 + 1")?;
         // c1 < 24
-        let plan_9 = select_sql_run("select * from t1 where (-1 - c1) + 1 > 24")?;
+        let plan_9 = table_state.plan("select * from t1 where (-1 - c1) + 1 > 24")?;
         // c1 < 24
-        let plan_10 = select_sql_run("select * from t1 where 24 < (-1 - c1) + 1")?;
+        let plan_10 = table_state.plan("select * from t1 where 24 < (-1 - c1) + 1")?;
 
         let op = |plan: LogicalPlan| -> Result<Option<Range>, DatabaseError> {
             let best_plan = HepOptimizer::new(plan.clone())
@@ -205,7 +207,10 @@ mod test {
                 )
                 .find_best::<RocksTransaction>(None)?;
             if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-                Ok(RangeDetacher::new("t1", &0).detach(&filter_op.predicate))
+                Ok(
+                    RangeDetacher::new("t1", table_state.column_id_by_name("c1"))
+                        .detach(&filter_op.predicate),
+                )
             } else {
                 Ok(None)
             }
@@ -234,7 +239,8 @@ mod test {
 
     #[test]
     fn test_simplify_filter_repeating_column() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 where -(c1 + 1) > c2")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 where -(c1 + 1) > c2")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -248,7 +254,7 @@ mod test {
                 summary: ColumnSummary {
                     name: "c1".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 0,
+                        column_id: *table_state.column_id_by_name("c1"),
                         table_name: Arc::new("t1".to_string()),
                     },
                 },
@@ -264,7 +270,7 @@ mod test {
                 summary: ColumnSummary {
                     name: "c2".to_string(),
                     relation: ColumnRelation::Table {
-                        column_id: 1,
+                        column_id: *table_state.column_id_by_name("c2"),
                         table_name: Arc::new("t1".to_string()),
                     },
                 },
@@ -286,7 +292,9 @@ mod test {
                         op: UnaryOperator::Minus,
                         expr: Box::new(ScalarExpression::Binary {
                             op: BinaryOperator::Plus,
-                            left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c1_col))),
+                            left_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
+                                c1_col
+                            ))),
                             right_expr: Box::new(ScalarExpression::Constant(Arc::new(
                                 DataValue::Int32(Some(1))
                             ))),
@@ -296,7 +304,7 @@ mod test {
                         evaluator: None,
                         ty: LogicalType::Integer,
                     }),
-                    right_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(c2_col))),
+                    right_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(c2_col))),
                     evaluator: None,
                     ty: LogicalType::Boolean,
                 }
@@ -328,26 +336,27 @@ mod test {
 
     #[test]
     fn test_simplify_filter_multiple_column() -> Result<(), DatabaseError> {
+        let table_state = build_t1_table()?;
         // c1 + 1 < -1 => c1 < -2
-        let plan_1 = select_sql_run("select * from t1 where -(c1 + 1) > 1 and -(1 - c2) > 1")?;
+        let plan_1 = table_state.plan("select * from t1 where -(c1 + 1) > 1 and -(1 - c2) > 1")?;
         // 1 - c1 < -1 => c1 > 2
-        let plan_2 = select_sql_run("select * from t1 where -(1 - c1) > 1 and -(c2 + 1) > 1")?;
+        let plan_2 = table_state.plan("select * from t1 where -(1 - c1) > 1 and -(c2 + 1) > 1")?;
         // c1 < -1
-        let plan_3 = select_sql_run("select * from t1 where -c1 > 1 and c2 + 1 > 1")?;
+        let plan_3 = table_state.plan("select * from t1 where -c1 > 1 and c2 + 1 > 1")?;
         // c1 > 0
-        let plan_4 = select_sql_run("select * from t1 where c1 + 1 > 1 and -c2 > 1")?;
+        let plan_4 = table_state.plan("select * from t1 where c1 + 1 > 1 and -c2 > 1")?;
 
-        let range_1_c1 = plan_filter(&plan_1, &0)?.unwrap();
-        let range_1_c2 = plan_filter(&plan_1, &1)?.unwrap();
+        let range_1_c1 = plan_filter(&plan_1, table_state.column_id_by_name("c1"))?.unwrap();
+        let range_1_c2 = plan_filter(&plan_1, table_state.column_id_by_name("c2"))?.unwrap();
 
-        let range_2_c1 = plan_filter(&plan_2, &0)?.unwrap();
-        let range_2_c2 = plan_filter(&plan_2, &1)?.unwrap();
+        let range_2_c1 = plan_filter(&plan_2, table_state.column_id_by_name("c1"))?.unwrap();
+        let range_2_c2 = plan_filter(&plan_2, table_state.column_id_by_name("c2"))?.unwrap();
 
-        let range_3_c1 = plan_filter(&plan_3, &0)?.unwrap();
-        let range_3_c2 = plan_filter(&plan_3, &1)?.unwrap();
+        let range_3_c1 = plan_filter(&plan_3, table_state.column_id_by_name("c1"))?.unwrap();
+        let range_3_c2 = plan_filter(&plan_3, table_state.column_id_by_name("c2"))?.unwrap();
 
-        let range_4_c1 = plan_filter(&plan_4, &0)?.unwrap();
-        let range_4_c2 = plan_filter(&plan_4, &1)?.unwrap();
+        let range_4_c1 = plan_filter(&plan_4, table_state.column_id_by_name("c1"))?.unwrap();
+        let range_4_c2 = plan_filter(&plan_4, table_state.column_id_by_name("c2"))?.unwrap();
 
         debug_assert_eq!(
             range_1_c1,
@@ -411,20 +420,25 @@ mod test {
 
     #[test]
     fn test_simplify_filter_multiple_column_in_or() -> Result<(), DatabaseError> {
+        let table_state = build_t1_table()?;
         // c1 > c2 or c1 > 1
-        let plan_1 = select_sql_run("select * from t1 where c1 > c2 or c1 > 1")?;
+        let plan_1 = table_state.plan("select * from t1 where c1 > c2 or c1 > 1")?;
 
-        debug_assert_eq!(plan_filter(&plan_1, &0)?, None);
+        debug_assert_eq!(
+            plan_filter(&plan_1, table_state.column_id_by_name("c1"))?,
+            None
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_simplify_filter_multiple_dispersed_same_column_in_or() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1 where c1 = 4 and c1 > c2 or c1 > 1")?;
+        let table_state = build_t1_table()?;
+        let plan_1 = table_state.plan("select * from t1 where c1 = 4 and c1 > c2 or c1 > 1")?;
 
         debug_assert_eq!(
-            plan_filter(&plan_1, &0)?,
+            plan_filter(&plan_1, table_state.column_id_by_name("c1"))?,
             Some(Range::Scope {
                 min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
                 max: Bound::Unbounded,
@@ -436,10 +450,11 @@ mod test {
 
     #[test]
     fn test_simplify_filter_column_is_null() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1 where c1 is null")?;
+        let table_state = build_t1_table()?;
+        let plan_1 = table_state.plan("select * from t1 where c1 is null")?;
 
         debug_assert_eq!(
-            plan_filter(&plan_1, &0)?,
+            plan_filter(&plan_1, table_state.column_id_by_name("c1"))?,
             Some(Range::Eq(Arc::new(DataValue::Null)))
         );
 
@@ -448,19 +463,24 @@ mod test {
 
     #[test]
     fn test_simplify_filter_column_is_not_null() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1 where c1 is not null")?;
+        let table_state = build_t1_table()?;
+        let plan_1 = table_state.plan("select * from t1 where c1 is not null")?;
 
-        debug_assert_eq!(plan_filter(&plan_1, &0)?, None);
+        debug_assert_eq!(
+            plan_filter(&plan_1, table_state.column_id_by_name("c1"))?,
+            None
+        );
 
         Ok(())
     }
 
     #[test]
     fn test_simplify_filter_column_in() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1 where c1 in (1, 2, 3)")?;
+        let table_state = build_t1_table()?;
+        let plan_1 = table_state.plan("select * from t1 where c1 in (1, 2, 3)")?;
 
         debug_assert_eq!(
-            plan_filter(&plan_1, &0)?,
+            plan_filter(&plan_1, table_state.column_id_by_name("c1"))?,
             Some(Range::SortedRanges(vec![
                 Range::Eq(Arc::new(DataValue::Int32(Some(1)))),
                 Range::Eq(Arc::new(DataValue::Int32(Some(2)))),
@@ -473,9 +493,13 @@ mod test {
 
     #[test]
     fn test_simplify_filter_column_not_in() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1 where c1 not in (1, 2, 3)")?;
+        let table_state = build_t1_table()?;
+        let plan_1 = table_state.plan("select * from t1 where c1 not in (1, 2, 3)")?;
 
-        debug_assert_eq!(plan_filter(&plan_1, &0)?, None);
+        debug_assert_eq!(
+            plan_filter(&plan_1, table_state.column_id_by_name("c1"))?,
+            None
+        );
 
         Ok(())
     }

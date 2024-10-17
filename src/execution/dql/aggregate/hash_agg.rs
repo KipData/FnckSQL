@@ -159,7 +159,7 @@ impl HashAggStatus {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::errors::DatabaseError;
     use crate::execution::dql::aggregate::hash_agg::HashAggExecutor;
     use crate::execution::dql::test::build_integers;
@@ -192,9 +192,9 @@ mod test {
         let desc = ColumnDesc::new(LogicalType::Integer, false, false, None)?;
 
         let t1_schema = Arc::new(vec![
-            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
         ]);
 
         let operator = AggregateOperator {

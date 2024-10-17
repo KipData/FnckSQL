@@ -16,7 +16,7 @@ use crate::{
 
 use super::{lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep, SubQueryType};
 
-use crate::catalog::{ColumnCatalog, ColumnSummary, TableName};
+use crate::catalog::{ColumnCatalog, ColumnRef, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
 use crate::execution::dql::join::joins_nullable;
 use crate::expression::{AliasType, BinaryOperator};
@@ -28,7 +28,7 @@ use crate::planner::operator::union::UnionOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::{Schema, SchemaRef};
-use crate::types::LogicalType;
+use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
 use sqlparser::ast::{
     Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
@@ -148,6 +148,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                 Operator::Insert(InsertOperator {
                     table_name: Arc::new(lower_case_name(name)?),
                     is_overwrite: false,
+                    is_mapping_by_name: true,
                 }),
                 vec![plan],
             )
@@ -352,11 +353,11 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         for (alias, column) in aliases_with_columns {
             let mut alias_column = ColumnCatalog::clone(&column);
             alias_column.set_name(alias.clone());
-            alias_column.set_ref_table(table_alias.clone(), column.id().unwrap_or(0));
+            alias_column.set_ref_table(table_alias.clone(), column.id().unwrap_or(ColumnId::new()));
 
             let alias_column_expr = ScalarExpression::Alias {
                 expr: Box::new(ScalarExpression::ColumnRef(column)),
-                alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(Arc::new(
+                alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
                     alias_column,
                 )))),
             };
@@ -736,7 +737,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                         let mut new_col = ColumnCatalog::clone(col);
                         new_col.nullable = *nullable;
 
-                        *col = Arc::new(new_col);
+                        *col = ColumnRef::from(new_col);
                     });
             }
         }
@@ -983,31 +984,34 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::binder::test::select_sql_run;
+    use crate::binder::test::build_t1_table;
     use crate::errors::DatabaseError;
 
     #[test]
     fn test_select_bind() -> Result<(), DatabaseError> {
-        let plan_1 = select_sql_run("select * from t1")?;
+        let table_states = build_t1_table()?;
+
+        let plan_1 = table_states.plan("select * from t1")?;
         println!("just_col:\n {:#?}", plan_1);
-        let plan_2 = select_sql_run("select t1.c1, t1.c2 from t1")?;
+        let plan_2 = table_states.plan("select t1.c1, t1.c2 from t1")?;
         println!("table_with_col:\n {:#?}", plan_2);
-        let plan_3 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > 2")?;
+        let plan_3 = table_states.plan("select t1.c1, t1.c2 from t1 where c1 > 2")?;
         println!("table_with_col_and_c1_compare_constant:\n {:#?}", plan_3);
-        let plan_4 = select_sql_run("select t1.c1, t1.c2 from t1 where c1 > c2")?;
+        let plan_4 = table_states.plan("select t1.c1, t1.c2 from t1 where c1 > c2")?;
         println!("table_with_col_and_c1_compare_c2:\n {:#?}", plan_4);
-        let plan_5 = select_sql_run("select avg(t1.c1) from t1")?;
+        let plan_5 = table_states.plan("select avg(t1.c1) from t1")?;
         println!("table_with_col_and_c1_avg:\n {:#?}", plan_5);
-        let plan_6 = select_sql_run("select t1.c1, t1.c2 from t1 where (t1.c1 - t1.c2) > 1")?;
+        let plan_6 = table_states.plan("select t1.c1, t1.c2 from t1 where (t1.c1 - t1.c2) > 1")?;
         println!("table_with_col_nested:\n {:#?}", plan_6);
 
-        let plan_7 = select_sql_run("select * from t1 limit 1")?;
+        let plan_7 = table_states.plan("select * from t1 limit 1")?;
         println!("limit:\n {:#?}", plan_7);
 
-        let plan_8 = select_sql_run("select * from t1 offset 2")?;
+        let plan_8 = table_states.plan("select * from t1 offset 2")?;
         println!("offset:\n {:#?}", plan_8);
 
-        let plan_9 = select_sql_run("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1")?;
+        let plan_9 =
+            table_states.plan("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1")?;
         println!("join:\n {:#?}", plan_9);
 
         Ok(())

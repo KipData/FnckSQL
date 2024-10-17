@@ -265,7 +265,7 @@ impl NormalizationRule for PushPredicateIntoScan {
 
 #[cfg(test)]
 mod tests {
-    use crate::binder::test::select_sql_run;
+    use crate::binder::test::build_t1_table;
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
     use crate::expression::{BinaryOperator, ScalarExpression};
@@ -281,8 +281,9 @@ mod tests {
 
     #[test]
     fn test_push_predicate_into_scan() -> Result<(), DatabaseError> {
+        let table_state = build_t1_table()?;
         // 1 - c2 < 0 => c2 > 1
-        let plan = select_sql_run("select * from t1 where -(1 - c2) > 0")?;
+        let plan = table_state.plan("select * from t1 where -(1 - c2) > 0")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -313,8 +314,9 @@ mod tests {
 
     #[test]
     fn test_push_predicate_through_join_in_left_join() -> Result<(), DatabaseError> {
+        let table_state = build_t1_table()?;
         let plan =
-            select_sql_run("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
+            table_state.plan("select * from t1 left join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -355,8 +357,9 @@ mod tests {
 
     #[test]
     fn test_push_predicate_through_join_in_right_join() -> Result<(), DatabaseError> {
-        let plan =
-            select_sql_run("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state
+            .plan("select * from t1 right join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(
@@ -397,8 +400,9 @@ mod tests {
 
     #[test]
     fn test_push_predicate_through_join_in_inner_join() -> Result<(), DatabaseError> {
-        let plan =
-            select_sql_run("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state
+            .plan("select * from t1 inner join t2 on c1 = c3 where c1 > 1 and c3 < 2")?;
 
         let best_plan = HepOptimizer::new(plan)
             .batch(

@@ -116,6 +116,13 @@ mod tests {
         database.run("analyze table t1")?;
 
         let transaction = database.storage.transaction()?;
+        let c1_column_id = {
+            transaction
+                .table(&database.table_cache, Arc::new("t1".to_string()))
+                .unwrap()
+                .get_column_id_by_name("c1")
+                .unwrap()
+        };
         let scala_functions = Default::default();
         let table_functions = Default::default();
         let mut binder = Binder::new(
@@ -175,7 +182,7 @@ mod tests {
             Some(PhysicalOption::IndexScan(IndexInfo {
                 meta: Arc::new(IndexMeta {
                     id: 0,
-                    column_ids: vec![0],
+                    column_ids: vec![*c1_column_id],
                     table_name: Arc::new("t1".to_string()),
                     pk_ty: LogicalType::Integer,
                     name: "pk_c1".to_string(),

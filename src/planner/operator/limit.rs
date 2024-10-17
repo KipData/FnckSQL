@@ -1,10 +1,10 @@
+use super::Operator;
 use crate::planner::LogicalPlan;
+use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 
-use super::Operator;
-
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct LimitOperator {
     pub offset: Option<usize>,
     pub limit: Option<usize>,
