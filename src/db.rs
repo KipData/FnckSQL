@@ -6,7 +6,9 @@ use crate::expression::function::scala::ScalarFunctionImpl;
 use crate::expression::function::table::TableFunctionImpl;
 use crate::expression::function::FunctionSummary;
 use crate::function::current_date::CurrentDate;
+use crate::function::lower::Lower;
 use crate::function::numbers::Numbers;
+use crate::function::upper::Upper;
 use crate::optimizer::heuristic::batch::HepBatchStrategy;
 use crate::optimizer::heuristic::optimizer::HepOptimizer;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
@@ -49,6 +51,8 @@ impl DataBaseBuilder {
             table_functions: Default::default(),
         };
         builder = builder.register_scala_function(CurrentDate::new());
+        builder = builder.register_scala_function(Lower::new());
+        builder = builder.register_scala_function(Upper::new());
         builder = builder.register_table_function(Numbers::new());
         builder
     }
