@@ -55,7 +55,6 @@ impl ScalarFunctionImpl for Lower {
             *value = value.to_lowercase();
         }
         Ok(value)
-
     }
 
     fn monotonicity(&self) -> Option<FuncMonotonicity> {
