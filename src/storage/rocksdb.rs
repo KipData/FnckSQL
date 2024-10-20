@@ -30,7 +30,8 @@ impl RocksStorage {
 
 impl Storage for RocksStorage {
     type TransactionType<'a>
-    = RocksTransaction<'a> where
+        = RocksTransaction<'a>
+    where
         Self: 'a;
 
     fn transaction(&self) -> Result<Self::TransactionType<'_>, DatabaseError> {
@@ -46,7 +47,8 @@ pub struct RocksTransaction<'db> {
 
 impl<'txn> Transaction for RocksTransaction<'txn> {
     type IterType<'iter>
-    = RocksIter<'txn, 'iter> where
+        = RocksIter<'txn, 'iter>
+    where
         Self: 'iter;
 
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, DatabaseError> {
@@ -129,7 +131,7 @@ impl InnerIter for RocksIter<'_, '_> {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::db::DataBaseBuilder;
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
@@ -155,12 +157,12 @@ mod test {
         let mut transaction = storage.transaction()?;
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let columns = Arc::new(vec![
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
             )),
-            Arc::new(ColumnCatalog::new(
+            ColumnRef::from(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
                 ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
@@ -243,6 +245,7 @@ mod test {
             .table(&fnck_sql.table_cache, table_name.clone())
             .unwrap()
             .clone();
+        let a_column_id = table.get_column_id_by_name("a").unwrap();
         let tuple_ids = vec![
             Arc::new(DataValue::Int32(Some(0))),
             Arc::new(DataValue::Int32(Some(2))),
@@ -257,7 +260,7 @@ mod test {
                 projections: vec![0],
                 index_meta: Arc::new(IndexMeta {
                     id: 0,
-                    column_ids: vec![0],
+                    column_ids: vec![*a_column_id],
                     table_name,
                     pk_ty: LogicalType::Integer,
                     name: "pk_a".to_string(),

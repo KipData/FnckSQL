@@ -1,10 +1,11 @@
 use crate::catalog::{ColumnRef, TableName};
 use crate::types::index::IndexType;
 use itertools::Itertools;
+use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct CreateIndexOperator {
     pub table_name: TableName,
     /// List of columns of the index

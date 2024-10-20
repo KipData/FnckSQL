@@ -7,6 +7,7 @@ use crate::storage::{StatisticsMetaCache, Transaction};
 use crate::types::index::IndexId;
 use crate::types::value::DataValue;
 use serde::{Deserialize, Serialize};
+use serde_macros::ReferenceSerialization;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
@@ -44,7 +45,7 @@ impl<'a, T: Transaction> StatisticMetaLoader<'a, T> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ReferenceSerialization)]
 pub struct StatisticsMeta {
     index_id: IndexId,
     histogram: Histogram,
@@ -112,13 +113,14 @@ mod tests {
     use crate::types::LogicalType;
     use std::sync::Arc;
     use tempfile::TempDir;
+    use ulid::Ulid;
 
     #[test]
     fn test_to_file_and_from_file() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let index = IndexMeta {
             id: 0,
-            column_ids: vec![0],
+            column_ids: vec![Ulid::new()],
             table_name: Arc::new("t1".to_string()),
             pk_ty: LogicalType::Integer,
             name: "pk_c1".to_string(),

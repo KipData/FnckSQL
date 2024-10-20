@@ -1,13 +1,3 @@
-use itertools::Itertools;
-use sqlparser::ast::TrimWhereField;
-use sqlparser::ast::{
-    BinaryOperator as SqlBinaryOperator, CharLengthUnits, UnaryOperator as SqlUnaryOperator,
-};
-use std::fmt::{Debug, Formatter};
-use std::hash::Hash;
-use std::sync::Arc;
-use std::{fmt, mem};
-
 use self::agg::AggKind;
 use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
 use crate::errors::DatabaseError;
@@ -16,6 +6,15 @@ use crate::expression::function::table::TableFunction;
 use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory, UnaryEvaluatorBox};
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
+use itertools::Itertools;
+use serde_macros::ReferenceSerialization;
+use sqlparser::ast::TrimWhereField;
+use sqlparser::ast::{
+    BinaryOperator as SqlBinaryOperator, CharLengthUnits, UnaryOperator as SqlUnaryOperator,
+};
+use std::fmt::{Debug, Formatter};
+use std::hash::Hash;
+use std::{fmt, mem};
 
 pub mod agg;
 mod evaluator;
@@ -23,7 +22,7 @@ pub mod function;
 pub mod range_detacher;
 pub mod simplify;
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub enum AliasType {
     Name(String),
     Expr(Box<ScalarExpression>),
@@ -33,7 +32,7 @@ pub enum AliasType {
 /// SELECT a+1, b FROM t1.
 /// a+1 -> ScalarExpression::Unary(a + 1)
 /// b   -> ScalarExpression::ColumnRef()
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub enum ScalarExpression {
     Constant(ValueRef),
     ColumnRef(ColumnRef),
@@ -1160,7 +1159,7 @@ impl ScalarExpression {
                 ..
             }
             | ScalarExpression::Reference { expr, .. } => expr.output_column(),
-            _ => Arc::new(ColumnCatalog::new(
+            _ => ColumnRef::from(ColumnCatalog::new(
                 self.output_name(),
                 true,
                 // SAFETY: default expr must not be [`ScalarExpression::ColumnRef`]
@@ -1170,7 +1169,7 @@ impl ScalarExpression {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ReferenceSerialization)]
 pub enum UnaryOperator {
     Plus,
     Minus,
@@ -1188,7 +1187,7 @@ impl From<SqlUnaryOperator> for UnaryOperator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ReferenceSerialization)]
 pub enum BinaryOperator {
     Plus,
     Minus,
@@ -1288,5 +1287,409 @@ impl From<SqlBinaryOperator> for BinaryOperator {
             SqlBinaryOperator::Xor => BinaryOperator::Xor,
             _ => unimplemented!("not support!"),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
+    use crate::db::test::build_table;
+    use crate::errors::DatabaseError;
+    use crate::expression::agg::AggKind;
+    use crate::expression::function::scala::{ArcScalarFunctionImpl, ScalarFunction};
+    use crate::expression::function::table::{ArcTableFunctionImpl, TableFunction};
+    use crate::expression::{AliasType, BinaryOperator, ScalarExpression, UnaryOperator};
+    use crate::function::current_date::CurrentDate;
+    use crate::function::numbers::Numbers;
+    use crate::serdes::{ReferenceSerialization, ReferenceTables};
+    use crate::storage::rocksdb::{RocksStorage, RocksTransaction};
+    use crate::storage::{Storage, TableCache, Transaction};
+    use crate::types::evaluator::boolean::BooleanNotUnaryEvaluator;
+    use crate::types::evaluator::int32::Int32PlusBinaryEvaluator;
+    use crate::types::evaluator::{BinaryEvaluatorBox, UnaryEvaluatorBox};
+    use crate::types::value::{DataValue, Utf8Type};
+    use crate::types::LogicalType;
+    use crate::utils::lru::ShardingLruCache;
+    use sqlparser::ast::{CharLengthUnits, TrimWhereField};
+    use std::hash::RandomState;
+    use std::io::{Cursor, Seek, SeekFrom};
+    use std::sync::Arc;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_serialization() -> Result<(), DatabaseError> {
+        fn fn_assert(
+            cursor: &mut Cursor<Vec<u8>>,
+            expr: ScalarExpression,
+            drive: Option<(&RocksTransaction, &TableCache)>,
+            reference_tables: &mut ReferenceTables,
+        ) -> Result<(), DatabaseError> {
+            expr.encode(cursor, false, reference_tables)?;
+
+            cursor.seek(SeekFrom::Start(0))?;
+            assert_eq!(
+                ScalarExpression::decode(cursor, drive, reference_tables)?,
+                expr
+            );
+            cursor.seek(SeekFrom::Start(0))?;
+
+            Ok(())
+        }
+
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let storage = RocksStorage::new(temp_dir.path())?;
+        let mut transaction = storage.transaction()?;
+        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+
+        build_table(&table_cache, &mut transaction)?;
+
+        let mut cursor = Cursor::new(Vec::new());
+        let mut reference_tables = ReferenceTables::new();
+        let c3_column_id = {
+            let table = transaction
+                .table(&table_cache, Arc::new("t1".to_string()))
+                .unwrap();
+            *table.get_column_id_by_name("c3").unwrap()
+        };
+
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Constant(Arc::new(DataValue::Int32(None))),
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(42)))),
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Constant(Arc::new(DataValue::Utf8 {
+                value: Some("hello".to_string()),
+                ty: Utf8Type::Variable(None),
+                unit: CharLengthUnits::Characters,
+            })),
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog {
+                summary: ColumnSummary {
+                    name: "c3".to_string(),
+                    relation: ColumnRelation::Table {
+                        column_id: c3_column_id,
+                        table_name: Arc::new("t1".to_string()),
+                    },
+                },
+                nullable: false,
+                desc: ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+            })),
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog {
+                summary: ColumnSummary {
+                    name: "c4".to_string(),
+                    relation: ColumnRelation::None,
+                },
+                nullable: false,
+                desc: ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+            })),
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Alias {
+                expr: Box::new(ScalarExpression::Empty),
+                alias: AliasType::Name("Hello".to_string()),
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Alias {
+                expr: Box::new(ScalarExpression::Empty),
+                alias: AliasType::Expr(Box::new(ScalarExpression::Empty)),
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::TypeCast {
+                expr: Box::new(ScalarExpression::Empty),
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::IsNull {
+                negated: true,
+                expr: Box::new(ScalarExpression::Empty),
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Unary {
+                op: UnaryOperator::Plus,
+                expr: Box::new(ScalarExpression::Empty),
+                evaluator: Some(UnaryEvaluatorBox(Arc::new(BooleanNotUnaryEvaluator))),
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Unary {
+                op: UnaryOperator::Plus,
+                expr: Box::new(ScalarExpression::Empty),
+                evaluator: None,
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Binary {
+                op: BinaryOperator::Plus,
+                left_expr: Box::new(ScalarExpression::Empty),
+                right_expr: Box::new(ScalarExpression::Empty),
+                evaluator: Some(BinaryEvaluatorBox(Arc::new(Int32PlusBinaryEvaluator))),
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Binary {
+                op: BinaryOperator::Plus,
+                left_expr: Box::new(ScalarExpression::Empty),
+                right_expr: Box::new(ScalarExpression::Empty),
+                evaluator: None,
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::AggCall {
+                distinct: true,
+                kind: AggKind::Avg,
+                args: vec![ScalarExpression::Empty],
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::In {
+                negated: true,
+                expr: Box::new(ScalarExpression::Empty),
+                args: vec![ScalarExpression::Empty],
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Between {
+                negated: true,
+                expr: Box::new(ScalarExpression::Empty),
+                left_expr: Box::new(ScalarExpression::Empty),
+                right_expr: Box::new(ScalarExpression::Empty),
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::SubString {
+                expr: Box::new(ScalarExpression::Empty),
+                for_expr: Some(Box::new(ScalarExpression::Empty)),
+                from_expr: Some(Box::new(ScalarExpression::Empty)),
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::SubString {
+                expr: Box::new(ScalarExpression::Empty),
+                for_expr: None,
+                from_expr: Some(Box::new(ScalarExpression::Empty)),
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::SubString {
+                expr: Box::new(ScalarExpression::Empty),
+                for_expr: None,
+                from_expr: None,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Position {
+                expr: Box::new(ScalarExpression::Empty),
+                in_expr: Box::new(ScalarExpression::Empty),
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Trim {
+                expr: Box::new(ScalarExpression::Empty),
+                trim_what_expr: Some(Box::new(ScalarExpression::Empty)),
+                trim_where: Some(TrimWhereField::Both),
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Trim {
+                expr: Box::new(ScalarExpression::Empty),
+                trim_what_expr: None,
+                trim_where: Some(TrimWhereField::Both),
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Trim {
+                expr: Box::new(ScalarExpression::Empty),
+                trim_what_expr: None,
+                trim_where: None,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Empty,
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Tuple(vec![ScalarExpression::Empty]),
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::ScalaFunction(ScalarFunction {
+                args: vec![ScalarExpression::Empty],
+                inner: ArcScalarFunctionImpl(CurrentDate::new()),
+            }),
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::TableFunction(TableFunction {
+                args: vec![ScalarExpression::Empty],
+                inner: ArcTableFunctionImpl(Numbers::new()),
+            }),
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::If {
+                condition: Box::new(ScalarExpression::Empty),
+                left_expr: Box::new(ScalarExpression::Empty),
+                right_expr: Box::new(ScalarExpression::Empty),
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::IfNull {
+                left_expr: Box::new(ScalarExpression::Empty),
+                right_expr: Box::new(ScalarExpression::Empty),
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::NullIf {
+                left_expr: Box::new(ScalarExpression::Empty),
+                right_expr: Box::new(ScalarExpression::Empty),
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::Coalesce {
+                exprs: vec![ScalarExpression::Empty],
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::CaseWhen {
+                operand_expr: Some(Box::new(ScalarExpression::Empty)),
+                expr_pairs: vec![(ScalarExpression::Empty, ScalarExpression::Empty)],
+                else_expr: Some(Box::new(ScalarExpression::Empty)),
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::CaseWhen {
+                operand_expr: None,
+                expr_pairs: vec![(ScalarExpression::Empty, ScalarExpression::Empty)],
+                else_expr: Some(Box::new(ScalarExpression::Empty)),
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+        fn_assert(
+            &mut cursor,
+            ScalarExpression::CaseWhen {
+                operand_expr: None,
+                expr_pairs: vec![(ScalarExpression::Empty, ScalarExpression::Empty)],
+                else_expr: None,
+                ty: LogicalType::Integer,
+            },
+            Some((&transaction, &table_cache)),
+            &mut reference_tables,
+        )?;
+
+        Ok(())
     }
 }

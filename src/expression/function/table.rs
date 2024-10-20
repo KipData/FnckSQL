@@ -3,14 +3,28 @@ use crate::errors::DatabaseError;
 use crate::expression::function::FunctionSummary;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::{SchemaRef, Tuple};
+use serde::{Deserialize, Serialize};
+use serde_macros::ReferenceSerialization;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 use std::sync::Arc;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArcTableFunctionImpl(pub Arc<dyn TableFunctionImpl>);
+
+impl Deref for ArcTableFunctionImpl {
+    type Target = dyn TableFunctionImpl;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+#[derive(Debug, Clone, ReferenceSerialization)]
 pub struct TableFunction {
     pub(crate) args: Vec<ScalarExpression>,
-    pub(crate) inner: Arc<dyn TableFunctionImpl>,
+    pub(crate) inner: ArcTableFunctionImpl,
 }
 
 impl PartialEq for TableFunction {

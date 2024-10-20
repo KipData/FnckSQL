@@ -214,7 +214,7 @@ impl HepGraph {
 
 #[cfg(test)]
 mod tests {
-    use crate::binder::test::select_sql_run;
+    use crate::binder::test::build_t1_table;
     use crate::errors::DatabaseError;
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;
@@ -223,7 +223,8 @@ mod tests {
 
     #[test]
     fn test_graph_for_plan() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
         let graph = HepGraph::new(plan);
 
         debug_assert!(graph
@@ -245,7 +246,8 @@ mod tests {
 
     #[test]
     fn test_graph_add_node() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.add_node(HepNodeId::new(1), None, Operator::Dummy);
@@ -273,7 +275,8 @@ mod tests {
 
     #[test]
     fn test_graph_replace_node() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.replace_node(HepNodeId::new(1), Operator::Dummy);
@@ -285,7 +288,8 @@ mod tests {
 
     #[test]
     fn test_graph_remove_middle_node_by_single() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.remove_node(HepNodeId::new(1), false);
@@ -304,7 +308,8 @@ mod tests {
 
     #[test]
     fn test_graph_remove_middle_node_with_childrens() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.remove_node(HepNodeId::new(1), true);
@@ -316,7 +321,8 @@ mod tests {
 
     #[test]
     fn test_graph_swap_node() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         let before_op_0 = graph.operator(HepNodeId::new(0)).clone();
@@ -335,7 +341,8 @@ mod tests {
 
     #[test]
     fn test_graph_add_root() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
         let mut graph = HepGraph::new(plan);
 
         graph.add_root(Operator::Dummy);
@@ -358,7 +365,9 @@ mod tests {
                 clear_output_schema_buf(child);
             }
         }
-        let mut plan = select_sql_run("select * from t1 left join t2 on c1 = c3")?;
+
+        let table_state = build_t1_table()?;
+        let mut plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
         clear_output_schema_buf(&mut plan);
 
         let graph = HepGraph::new(plan.clone());

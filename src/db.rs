@@ -312,7 +312,7 @@ impl<S: Storage> DBTransaction<'_, S> {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::db::{DataBaseBuilder, DatabaseError};
     use crate::storage::{Storage, TableCache, Transaction};
     use crate::types::tuple::{create_table, Tuple};
@@ -374,7 +374,7 @@ pub(crate) mod test {
 
         debug_assert_eq!(
             schema,
-            Arc::new(vec![Arc::new(ColumnCatalog::new(
+            Arc::new(vec![ColumnRef::from(ColumnCatalog::new(
                 "current_date()".to_string(),
                 true,
                 ColumnDesc::new(LogicalType::Date, false, false, None).unwrap()
@@ -407,9 +407,10 @@ pub(crate) mod test {
             true,
             ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
         );
-        column.set_ref_table(Arc::new("a".to_string()), 0);
+        let number_column_id = schema[0].id().unwrap();
+        column.set_ref_table(Arc::new("a".to_string()), number_column_id);
 
-        debug_assert_eq!(schema, Arc::new(vec![Arc::new(column)]));
+        debug_assert_eq!(schema, Arc::new(vec![ColumnRef::from(column)]));
         debug_assert_eq!(
             tuples,
             vec![

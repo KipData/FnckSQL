@@ -1,15 +1,15 @@
+use super::Operator;
 use crate::catalog::{ColumnRef, TableCatalog, TableName};
 use crate::planner::LogicalPlan;
 use crate::storage::Bounds;
 use crate::types::index::IndexInfo;
 use crate::types::ColumnId;
 use itertools::Itertools;
+use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 
-use super::Operator;
-
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct TableScanOperator {
     pub(crate) table_name: TableName,
     pub(crate) primary_key: ColumnId,

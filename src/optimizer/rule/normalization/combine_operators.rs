@@ -145,7 +145,7 @@ impl NormalizationRule for CollapseGroupByAgg {
 
 #[cfg(test)]
 mod tests {
-    use crate::binder::test::select_sql_run;
+    use crate::binder::test::build_t1_table;
     use crate::errors::DatabaseError;
     use crate::expression::ScalarExpression::Constant;
     use crate::expression::{BinaryOperator, ScalarExpression};
@@ -161,7 +161,8 @@ mod tests {
 
     #[test]
     fn test_collapse_project() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select c1, c2 from t1")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select c1, c2 from t1")?;
 
         let mut optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_collapse_project".to_string(),
@@ -198,7 +199,8 @@ mod tests {
 
     #[test]
     fn test_combine_filter() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 where c1 > 1")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 where c1 > 1")?;
 
         let mut optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_combine_filter".to_string(),
@@ -241,7 +243,8 @@ mod tests {
 
     #[test]
     fn test_collapse_group_by_agg() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select distinct c1, c2 from t1 group by c1, c2")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select distinct c1, c2 from t1 group by c1, c2")?;
 
         let optimizer = HepOptimizer::new(plan.clone()).batch(
             "test_collapse_group_by_agg".to_string(),

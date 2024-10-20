@@ -365,12 +365,12 @@ impl NestedLoopJoin {
         for column in left_schema.iter() {
             let mut temp = ColumnCatalog::clone(column);
             temp.nullable = left_force_nullable;
-            join_schema.push(Arc::new(temp));
+            join_schema.push(ColumnRef::from(temp));
         }
         for column in right_schema.iter() {
             let mut temp = ColumnCatalog::clone(column);
             temp.nullable = right_force_nullable;
-            join_schema.push(Arc::new(temp));
+            join_schema.push(ColumnRef::from(temp));
         }
         Arc::new(join_schema)
     }
@@ -409,15 +409,15 @@ mod test {
         let desc = ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap();
 
         let t1_columns = vec![
-            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
         ];
 
         let t2_columns = vec![
-            Arc::new(ColumnCatalog::new("c4".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c5".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c6".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c4".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c5".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c6".to_string(), true, desc.clone())),
         ];
 
         let on_keys = if eq {
@@ -493,16 +493,12 @@ mod test {
 
         let filter = ScalarExpression::Binary {
             op: crate::expression::BinaryOperator::Gt,
-            left_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(ColumnCatalog::new(
-                "c1".to_owned(),
-                true,
-                desc.clone(),
-            )))),
-            right_expr: Box::new(ScalarExpression::ColumnRef(Arc::new(ColumnCatalog::new(
-                "c4".to_owned(),
-                true,
-                desc.clone(),
-            )))),
+            left_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
+                ColumnCatalog::new("c1".to_owned(), true, desc.clone()),
+            ))),
+            right_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
+                ColumnCatalog::new("c4".to_owned(), true, desc.clone()),
+            ))),
             evaluator: Some(BinaryEvaluatorBox(Arc::new(Int32GtBinaryEvaluator))),
             ty: LogicalType::Boolean,
         };

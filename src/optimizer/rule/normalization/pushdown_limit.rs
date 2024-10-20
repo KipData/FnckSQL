@@ -139,7 +139,7 @@ impl NormalizationRule for PushLimitIntoScan {
 
 #[cfg(test)]
 mod tests {
-    use crate::binder::test::select_sql_run;
+    use crate::binder::test::build_t1_table;
     use crate::errors::DatabaseError;
     use crate::optimizer::heuristic::batch::HepBatchStrategy;
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
@@ -149,7 +149,8 @@ mod tests {
 
     #[test]
     fn test_limit_project_transpose() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select c1, c2 from t1 limit 1")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select c1, c2 from t1 limit 1")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -174,7 +175,8 @@ mod tests {
 
     #[test]
     fn test_push_limit_through_join() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 left join t2 on c1 = c3 limit 1")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 left join t2 on c1 = c3 limit 1")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(
@@ -203,7 +205,8 @@ mod tests {
 
     #[test]
     fn test_push_limit_into_table_scan() -> Result<(), DatabaseError> {
-        let plan = select_sql_run("select * from t1 limit 1 offset 1")?;
+        let table_state = build_t1_table()?;
+        let plan = table_state.plan("select * from t1 limit 1 offset 1")?;
 
         let best_plan = HepOptimizer::new(plan.clone())
             .batch(

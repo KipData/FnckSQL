@@ -145,7 +145,7 @@ impl HashJoinStatus {
                 let mut temp = ColumnCatalog::clone(column);
                 temp.nullable = force_nullable;
 
-                *column = Arc::new(temp);
+                *column = ColumnRef::from(temp);
             }
         };
         let (left_force_nullable, right_force_nullable) = joins_nullable(&ty);
@@ -420,7 +420,7 @@ impl HashJoinStatus {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{ColumnCatalog, ColumnDesc};
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::errors::DatabaseError;
     use crate::execution::dql::join::hash_join::HashJoin;
     use crate::execution::dql::test::build_integers;
@@ -447,15 +447,15 @@ mod test {
         let desc = ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap();
 
         let t1_columns = vec![
-            Arc::new(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c2".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c3".to_string(), true, desc.clone())),
         ];
 
         let t2_columns = vec![
-            Arc::new(ColumnCatalog::new("c4".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c5".to_string(), true, desc.clone())),
-            Arc::new(ColumnCatalog::new("c6".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c4".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c5".to_string(), true, desc.clone())),
+            ColumnRef::from(ColumnCatalog::new("c6".to_string(), true, desc.clone())),
         ];
 
         let on_keys = vec![(

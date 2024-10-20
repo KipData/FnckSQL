@@ -19,6 +19,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
         idents: &[Ident],
         expr_rows: &Vec<Vec<Expr>>,
         is_overwrite: bool,
+        is_mapping_by_name: bool,
     ) -> Result<LogicalPlan, DatabaseError> {
         // FIXME: Make it better to detect the current BindStep
         self.context.allow_default = true;
@@ -97,6 +98,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             Operator::Insert(InsertOperator {
                 table_name,
                 is_overwrite,
+                is_mapping_by_name,
             }),
             vec![values_plan],
         ))
