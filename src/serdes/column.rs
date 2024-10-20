@@ -13,10 +13,15 @@ impl ReferenceSerialization for ColumnRef {
         is_direct: bool,
         reference_tables: &mut ReferenceTables,
     ) -> Result<(), DatabaseError> {
-        self.summary.encode(writer, is_direct, reference_tables)?;
-        if is_direct || matches!(self.summary.relation, ColumnRelation::None) {
-            self.nullable.encode(writer, is_direct, reference_tables)?;
-            self.desc.encode(writer, is_direct, reference_tables)?;
+        self.summary().encode(writer, is_direct, reference_tables)?;
+        self.in_join()
+            .then(|| self.nullable())
+            .encode(writer, is_direct, reference_tables)?;
+
+        if is_direct || matches!(self.summary().relation, ColumnRelation::None) {
+            self.nullable()
+                .encode(writer, is_direct, reference_tables)?;
+            self.desc().encode(writer, is_direct, reference_tables)?;
         }
 
         Ok(())
@@ -28,6 +33,7 @@ impl ReferenceSerialization for ColumnRef {
         reference_tables: &ReferenceTables,
     ) -> Result<Self, DatabaseError> {
         let summary = ColumnSummary::decode(reader, drive, reference_tables)?;
+        let nullable_for_join = Option::<bool>::decode(reader, drive, reference_tables)?;
 
         if let (
             ColumnRelation::Table {
@@ -46,16 +52,21 @@ impl ReferenceSerialization for ColumnRef {
                     "column id: {} not found",
                     column_id
                 )))?;
-            Ok(column.clone())
+            Ok(nullable_for_join
+                .and_then(|nullable| column.nullable_for_join(nullable))
+                .unwrap_or_else(|| column.clone()))
         } else {
-            let nullable = bool::decode(reader, drive, reference_tables)?;
+            let mut nullable = bool::decode(reader, drive, reference_tables)?;
             let desc = ColumnDesc::decode(reader, drive, reference_tables)?;
+            let mut in_join = false;
+            if let Some(nullable_for_join) = nullable_for_join {
+                in_join = true;
+                nullable = nullable_for_join;
+            }
 
-            Ok(Self(Arc::new(ColumnCatalog {
-                summary,
-                nullable,
-                desc,
-            })))
+            Ok(Self(Arc::new(ColumnCatalog::direct_new(
+                summary, nullable, desc, in_join,
+            ))))
         }
     }
 }
@@ -160,22 +171,23 @@ pub(crate) mod test {
         };
 
         {
-            let ref_column = ColumnRef(Arc::new(ColumnCatalog {
-                summary: ColumnSummary {
+            let ref_column = ColumnRef(Arc::new(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "c3".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: c3_column_id,
                         table_name: table_name.clone(),
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc {
+                false,
+                ColumnDesc {
                     column_datatype: LogicalType::Integer,
                     is_primary: false,
                     is_unique: false,
                     default: None,
                 },
-            }));
+                false,
+            )));
 
             ref_column.encode(&mut cursor, false, &mut reference_tables)?;
             cursor.seek(SeekFrom::Start(0))?;
@@ -200,13 +212,13 @@ pub(crate) mod test {
             cursor.seek(SeekFrom::Start(0))?;
         }
         {
-            let not_ref_column = ColumnRef(Arc::new(ColumnCatalog {
-                summary: ColumnSummary {
+            let not_ref_column = ColumnRef(Arc::new(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "c3".to_string(),
                     relation: ColumnRelation::None,
                 },
-                nullable: false,
-                desc: ColumnDesc {
+                false,
+                ColumnDesc {
                     column_datatype: LogicalType::Integer,
                     is_primary: false,
                     is_unique: false,
@@ -214,7 +226,8 @@ pub(crate) mod test {
                         Some(42),
                     )))),
                 },
-            }));
+                false,
+            )));
             not_ref_column.encode(&mut cursor, false, &mut reference_tables)?;
             cursor.seek(SeekFrom::Start(0))?;
 

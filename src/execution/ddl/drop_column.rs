@@ -41,7 +41,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                     .iter()
                     .enumerate()
                     .find(|(_, column)| column.name() == column_name)
-                    .map(|(i, column)| (i, column.desc.is_primary))
+                    .map(|(i, column)| (i, column.desc().is_primary))
                 {
                     if is_primary {
                         throw!(Err(DatabaseError::InvalidColumn(

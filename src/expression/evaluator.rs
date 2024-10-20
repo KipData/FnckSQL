@@ -64,7 +64,7 @@ impl ScalarExpression {
                             tul_col.table_name().is_none() && tul_col.name() == alias
                         }
                         AliasType::Expr(alias_expr) => {
-                            alias_expr.output_column().summary == tul_col.summary
+                            alias_expr.output_column().summary() == tul_col.summary()
                         }
                     })
                     .map(|(i, _)| &tuple.values[i])

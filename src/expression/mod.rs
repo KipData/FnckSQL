@@ -1376,30 +1376,32 @@ mod test {
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog {
-                summary: ColumnSummary {
+            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "c3".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: c3_column_id,
                         table_name: Arc::new("t1".to_string()),
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
-            })),
+                false,
+                ColumnDesc::new(LogicalType::Integer, false, false, None)?,
+                false,
+            ))),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog {
-                summary: ColumnSummary {
+            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "c4".to_string(),
                     relation: ColumnRelation::None,
                 },
-                nullable: false,
-                desc: ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
-            })),
+                false,
+                ColumnDesc::new(LogicalType::Boolean, false, false, None)?,
+                false,
+            ))),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;

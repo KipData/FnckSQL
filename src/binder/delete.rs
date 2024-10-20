@@ -28,7 +28,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                     .table_and_bind(table_name.clone(), table_alias.clone(), None)?;
             let primary_key_column = table_catalog
                 .columns()
-                .find(|column| column.desc.is_primary)
+                .find(|column| column.desc().is_primary)
                 .cloned()
                 .unwrap();
             let mut plan = TableScanOperator::build(table_name.clone(), table_catalog);

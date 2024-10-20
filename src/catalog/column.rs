@@ -4,7 +4,6 @@ use crate::expression::ScalarExpression;
 use crate::types::tuple::EMPTY_TUPLE;
 use crate::types::value::ValueRef;
 use crate::types::{ColumnId, LogicalType};
-use serde::{Deserialize, Serialize};
 use serde_macros::ReferenceSerialization;
 use sqlparser::ast::CharLengthUnits;
 use std::hash::Hash;
@@ -30,12 +29,13 @@ impl From<ColumnCatalog> for ColumnRef {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, ReferenceSerialization)]
 pub struct ColumnCatalog {
-    pub summary: ColumnSummary,
-    pub nullable: bool,
-    pub desc: ColumnDesc,
+    summary: ColumnSummary,
+    nullable: bool,
+    desc: ColumnDesc,
+    in_join: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum ColumnRelation {
     None,
     Table {
@@ -44,10 +44,22 @@ pub enum ColumnRelation {
     },
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize, ReferenceSerialization)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, ReferenceSerialization)]
 pub struct ColumnSummary {
     pub name: String,
     pub relation: ColumnRelation,
+}
+
+impl ColumnRef {
+    pub(crate) fn nullable_for_join(&self, nullable: bool) -> Option<ColumnRef> {
+        if self.nullable == nullable {
+            return None;
+        }
+        let mut temp = ColumnCatalog::clone(self);
+        temp.nullable = nullable;
+        temp.in_join = true;
+        Some(ColumnRef::from(temp))
+    }
 }
 
 impl ColumnCatalog {
@@ -59,6 +71,21 @@ impl ColumnCatalog {
             },
             nullable,
             desc: column_desc,
+            in_join: false,
+        }
+    }
+
+    pub(crate) fn direct_new(
+        summary: ColumnSummary,
+        nullable: bool,
+        column_desc: ColumnDesc,
+        in_join: bool,
+    ) -> ColumnCatalog {
+        ColumnCatalog {
+            summary,
+            nullable,
+            desc: column_desc,
+            in_join,
         }
     }
 
@@ -77,11 +104,16 @@ impl ColumnCatalog {
                 None,
             )
             .unwrap(),
+            in_join: false,
         }
     }
 
     pub(crate) fn summary(&self) -> &ColumnSummary {
         &self.summary
+    }
+
+    pub(crate) fn summary_mut(&mut self) -> &mut ColumnSummary {
+        &mut self.summary
     }
 
     pub fn id(&self) -> Option<ColumnId> {
@@ -120,6 +152,14 @@ impl ColumnCatalog {
         };
     }
 
+    pub fn in_join(&self) -> bool {
+        self.in_join
+    }
+
+    pub fn nullable(&self) -> bool {
+        self.nullable
+    }
+
     pub fn datatype(&self) -> &LogicalType {
         &self.desc.column_datatype
     }
@@ -132,9 +172,12 @@ impl ColumnCatalog {
             .transpose()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn desc(&self) -> &ColumnDesc {
         &self.desc
+    }
+
+    pub(crate) fn desc_mut(&mut self) -> &mut ColumnDesc {
+        &mut self.desc
     }
 }
 

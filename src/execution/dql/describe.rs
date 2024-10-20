@@ -53,9 +53,9 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Describe {
                     .table(cache.0, self.table_name.clone())
                     .ok_or(DatabaseError::TableNotFound));
                 let key_fn = |column: &ColumnCatalog| {
-                    if column.desc.is_primary {
+                    if column.desc().is_primary {
                         PRIMARY_KEY_TYPE.clone()
-                    } else if column.desc.is_unique {
+                    } else if column.desc().is_unique {
                         UNIQUE_KEY_TYPE.clone()
                     } else {
                         EMPTY_KEY_TYPE.clone()
@@ -65,7 +65,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Describe {
                 for column in table.columns() {
                     let datatype = column.datatype();
                     let default = column
-                        .desc
+                        .desc()
                         .default
                         .as_ref()
                         .map(|expr| format!("{}", expr))
@@ -87,7 +87,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Describe {
                             unit: CharLengthUnits::Characters,
                         }),
                         Arc::new(DataValue::Utf8 {
-                            value: Some(column.nullable.to_string()),
+                            value: Some(column.nullable().to_string()),
                             ty: Utf8Type::Variable(None),
                             unit: CharLengthUnits::Characters,
                         }),

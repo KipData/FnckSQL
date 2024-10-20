@@ -2,7 +2,7 @@
 //! [`JoinType::LeftSemi`], [`JoinType::LeftAnti`], [`JoinType::RightOuter`], [`JoinType::Cross`], [`JoinType::Full`].
 
 use super::joins_nullable;
-use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
 use crate::execution::dql::projection::Projection;
 use crate::execution::{build_read, Executor, ReadExecutor};
@@ -363,14 +363,18 @@ impl NestedLoopJoin {
 
         let mut join_schema = vec![];
         for column in left_schema.iter() {
-            let mut temp = ColumnCatalog::clone(column);
-            temp.nullable = left_force_nullable;
-            join_schema.push(ColumnRef::from(temp));
+            join_schema.push(
+                column
+                    .nullable_for_join(left_force_nullable)
+                    .unwrap_or_else(|| column.clone()),
+            );
         }
         for column in right_schema.iter() {
-            let mut temp = ColumnCatalog::clone(column);
-            temp.nullable = right_force_nullable;
-            join_schema.push(ColumnRef::from(temp));
+            join_schema.push(
+                column
+                    .nullable_for_join(right_force_nullable)
+                    .unwrap_or_else(|| column.clone()),
+            );
         }
         Arc::new(join_schema)
     }

@@ -95,7 +95,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
 
                         for (i, column) in input_schema.iter().enumerate() {
                             if let Some(value) = value_map.get(&column.id()) {
-                                if column.desc.is_primary {
+                                if column.desc().is_primary {
                                     let old_key = tuple.id.replace(value.clone()).unwrap();
 
                                     throw!(transaction.remove_tuple(&table_name, &old_key));

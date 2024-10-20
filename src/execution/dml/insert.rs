@@ -81,7 +81,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
 
                 let pk_key = throw!(schema
                     .iter()
-                    .find(|col| col.desc.is_primary)
+                    .find(|col| col.desc().is_primary)
                     .map(|col| col.key(is_mapping_by_name))
                     .ok_or_else(|| DatabaseError::NotNull));
 
@@ -112,7 +112,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                                 }
                                 value.unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())))
                             };
-                            if value.is_null() && !col.nullable {
+                            if value.is_null() && !col.nullable() {
                                 yield Err(DatabaseError::NotNull);
                                 return;
                             }

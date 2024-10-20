@@ -11,18 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_macros::ReferenceSerialization;
 use sqlparser::ast::{CopyOption, CopySource, CopyTarget};
 
-#[derive(
-    Debug,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Eq,
-    Clone,
-    Serialize,
-    Deserialize,
-    ReferenceSerialization,
-)]
+#[derive(Debug, PartialEq, PartialOrd, Ord, Hash, Eq, Clone, ReferenceSerialization)]
 pub struct ExtSource {
     pub path: PathBuf,
     pub format: FileFormat,

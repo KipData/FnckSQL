@@ -39,6 +39,7 @@ pub enum Utf8Type {
     Fixed(u32),
 }
 
+/// FIXME: Tuple cannot use regular `DataValue::to_raw`, so `DataValue` implements serde's `Serialize` & `Deserialize` for StatisticsMeta
 #[derive(Clone, Serialize, Deserialize)]
 pub enum DataValue {
     Null,

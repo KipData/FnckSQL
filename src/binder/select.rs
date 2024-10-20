@@ -734,10 +734,9 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                     .iter()
                     .find(|(table, _)| table.contains_column(col.name()))
                     .map(|(_, nullable)| {
-                        let mut new_col = ColumnCatalog::clone(col);
-                        new_col.nullable = *nullable;
-
-                        *col = ColumnRef::from(new_col);
+                        if let Some(new_column) = col.nullable_for_join(*nullable) {
+                            *col = new_column;
+                        }
                     });
             }
         }
@@ -852,7 +851,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         right_schema: &Schema,
     ) -> Result<(), DatabaseError> {
         let fn_contains = |schema: &Schema, summary: &ColumnSummary| {
-            schema.iter().any(|column| summary == &column.summary)
+            schema.iter().any(|column| summary == column.summary())
         };
         let fn_or_contains =
             |left_schema: &Schema, right_schema: &Schema, summary: &ColumnSummary| {

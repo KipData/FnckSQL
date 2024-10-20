@@ -1,4 +1,4 @@
-use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
 use crate::execution::dql::join::joins_nullable;
 use crate::execution::{build_read, Executor, ReadExecutor};
@@ -142,10 +142,9 @@ impl HashJoinStatus {
 
         let fn_process = |schema: &mut Vec<ColumnRef>, force_nullable| {
             for column in schema.iter_mut() {
-                let mut temp = ColumnCatalog::clone(column);
-                temp.nullable = force_nullable;
-
-                *column = ColumnRef::from(temp);
+                if let Some(new_column) = column.nullable_for_join(force_nullable) {
+                    *column = new_column;
+                }
             }
         };
         let (left_force_nullable, right_force_nullable) = joins_nullable(&ty);

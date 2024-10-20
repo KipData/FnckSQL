@@ -131,45 +131,47 @@ mod tests {
         write!(file, "{}", csv).expect("failed to write file");
 
         let columns = vec![
-            ColumnRef::from(ColumnCatalog {
-                summary: ColumnSummary {
+            ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "a".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
-            }),
-            ColumnRef::from(ColumnCatalog {
-                summary: ColumnSummary {
+                false,
+                ColumnDesc::new(LogicalType::Integer, true, false, None)?,
+                false,
+            )),
+            ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "b".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc::new(LogicalType::Float, false, false, None).unwrap(),
-            }),
-            ColumnRef::from(ColumnCatalog {
-                summary: ColumnSummary {
+                false,
+                ColumnDesc::new(LogicalType::Float, false, false, None)?,
+                false,
+            )),
+            ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "c".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc::new(
+                false,
+                ColumnDesc::new(
                     LogicalType::Varchar(Some(10), CharLengthUnits::Characters),
                     false,
                     false,
                     None,
-                )
-                .unwrap(),
-            }),
+                )?,
+                false,
+            )),
         ];
 
         let op = CopyFromFileOperator {

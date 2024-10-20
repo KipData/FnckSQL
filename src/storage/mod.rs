@@ -1,6 +1,7 @@
 pub mod rocksdb;
 mod table_codec;
 
+use crate::catalog::view::View;
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
@@ -23,6 +24,7 @@ use ulid::Generator;
 
 pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), StatisticsMeta>;
 pub(crate) type TableCache = ShardingLruCache<String, TableCatalog>;
+pub(crate) type ViewCache = ShardingLruCache<String, View>;
 
 pub trait Storage: Clone {
     type TransactionType<'a>: Transaction
@@ -216,7 +218,7 @@ pub trait Transaction: Sized {
         if_not_exists: bool,
     ) -> Result<ColumnId, DatabaseError> {
         if let Some(mut table) = self.table(table_cache, table_name.clone()).cloned() {
-            if !column.nullable && column.default_value()?.is_none() {
+            if !column.nullable() && column.default_value()?.is_none() {
                 return Err(DatabaseError::NeedNullAbleOrDefault);
             }
 
@@ -232,7 +234,7 @@ pub trait Transaction: Sized {
             let mut generator = Generator::new();
             let col_id = table.add_column(column.clone(), &mut generator)?;
 
-            if column.desc.is_unique {
+            if column.desc().is_unique {
                 let meta_ref = table.add_index_meta(
                     format!("uk_{}", column.name()),
                     vec![col_id],
@@ -273,7 +275,7 @@ pub trait Transaction: Sized {
                 let (index_meta_key, _) = TableCodec::encode_index_meta(table_name, index_meta)?;
                 self.remove(&index_meta_key)?;
 
-                let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id);
+                let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id)?;
                 self._drop_data(&index_min, &index_max)?;
 
                 self.remove_table_meta(meta_cache, table_name, index_meta.id)?;
@@ -381,7 +383,7 @@ pub trait Transaction: Sized {
         let mut iter = self.range(Bound::Included(&min), Bound::Included(&max))?;
 
         while let Some((_, value)) = iter.try_next().ok().flatten() {
-            let meta = TableCodec::decode_root_table(&value)?;
+            let meta = TableCodec::decode_root_table::<Self>(&value)?;
 
             metas.push(meta);
         }
@@ -459,7 +461,7 @@ pub trait Transaction: Sized {
                     &reference_tables,
                 )?);
             } else {
-                index_metas.push(Arc::new(TableCodec::decode_index_meta(&value)?));
+                index_metas.push(Arc::new(TableCodec::decode_index_meta::<Self>(&value)?));
             }
         }
 
@@ -489,15 +491,15 @@ pub trait Transaction: Sized {
         let table_name = table.name.clone();
         let index_column = table
             .columns()
-            .filter(|column| column.desc.is_primary || column.desc.is_unique)
+            .filter(|column| column.desc().is_primary || column.desc().is_unique)
             .map(|column| (column.id().unwrap(), column.clone()))
             .collect_vec();
 
         for (col_id, col) in index_column {
-            let is_primary = col.desc.is_primary;
+            let is_primary = col.desc().is_primary;
             let index_ty = if is_primary {
                 IndexType::PrimaryKey
-            } else if col.desc.is_unique {
+            } else if col.desc().is_unique {
                 IndexType::Unique
             } else {
                 continue;
@@ -947,7 +949,7 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                     let (bound_min, bound_max) = if matches!(index_meta.ty, IndexType::PrimaryKey) {
                         TableCodec::tuple_bound(table_name)
                     } else {
-                        TableCodec::index_bound(table_name, &index_meta.id)
+                        TableCodec::index_bound(table_name, &index_meta.id)?
                     };
                     let check_bound = |value: &mut Bound<Vec<u8>>, bound: Vec<u8>| {
                         if matches!(value, Bound::Unbounded) {
@@ -1108,7 +1110,7 @@ mod test {
 
             let mut column_iter = table.columns();
             let c1_column = column_iter.next().unwrap();
-            assert_eq!(c1_column.nullable, false);
+            assert_eq!(c1_column.nullable(), false);
             assert_eq!(
                 c1_column.summary(),
                 &ColumnSummary {
@@ -1120,12 +1122,12 @@ mod test {
                 }
             );
             assert_eq!(
-                c1_column.desc,
-                ColumnDesc::new(LogicalType::Integer, true, false, None)?
+                c1_column.desc(),
+                &ColumnDesc::new(LogicalType::Integer, true, false, None)?
             );
 
             let c2_column = column_iter.next().unwrap();
-            assert_eq!(c2_column.nullable, false);
+            assert_eq!(c2_column.nullable(), false);
             assert_eq!(
                 c2_column.summary(),
                 &ColumnSummary {
@@ -1137,12 +1139,12 @@ mod test {
                 }
             );
             assert_eq!(
-                c2_column.desc,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None)?
+                c2_column.desc(),
+                &ColumnDesc::new(LogicalType::Boolean, false, false, None)?
             );
 
             let c3_column = column_iter.next().unwrap();
-            assert_eq!(c3_column.nullable, false);
+            assert_eq!(c3_column.nullable(), false);
             assert_eq!(
                 c3_column.summary(),
                 &ColumnSummary {
@@ -1154,8 +1156,8 @@ mod test {
                 }
             );
             assert_eq!(
-                c3_column.desc,
-                ColumnDesc::new(LogicalType::Integer, false, false, None)?
+                c3_column.desc(),
+                &ColumnDesc::new(LogicalType::Integer, false, false, None)?
             );
 
             Ok(())
@@ -1403,7 +1405,7 @@ mod test {
             assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[2]);
             assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[1]);
 
-            let (min, max) = TableCodec::index_bound("t1", &1);
+            let (min, max) = TableCodec::index_bound("t1", &1)?;
             let mut iter = transaction.range(Bound::Included(&min), Bound::Included(&max))?;
 
             let (_, value) = iter.try_next()?.unwrap();
@@ -1421,7 +1423,7 @@ mod test {
         assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[2]);
         assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[1]);
 
-        let (min, max) = TableCodec::index_bound("t1", &1);
+        let (min, max) = TableCodec::index_bound("t1", &1)?;
         let mut iter = transaction.range(Bound::Included(&min), Bound::Included(&max))?;
 
         let (_, value) = iter.try_next()?.unwrap();
@@ -1469,7 +1471,7 @@ mod test {
                 true,
                 ColumnDesc::new(LogicalType::Integer, false, false, None)?,
             );
-            new_column.summary.relation = ColumnRelation::Table {
+            new_column.summary_mut().relation = ColumnRelation::Table {
                 column_id: *table.get_column_id_by_name("c4").unwrap(),
                 table_name: table_name.clone(),
             };
