@@ -256,6 +256,7 @@ mod test {
                     relation: ColumnRelation::Table {
                         column_id: *table_state.column_id_by_name("c1"),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
                 false,
@@ -273,6 +274,7 @@ mod test {
                     relation: ColumnRelation::Table {
                         column_id: *table_state.column_id_by_name("c2"),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
                 false,

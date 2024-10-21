@@ -159,6 +159,7 @@ mod test {
     use crate::errors::DatabaseError;
     use crate::execution::dml::analyze::{DEFAULT_NUM_OF_BUCKETS, DEFAULT_STATISTICS_META_PATH};
     use crate::optimizer::core::statistics_meta::StatisticsMeta;
+    use crate::storage::rocksdb::RocksTransaction;
     use std::ffi::OsStr;
     use std::fs;
     use tempfile::TempDir;
@@ -196,17 +197,17 @@ mod test {
         }
         paths.sort();
 
-        let statistics_meta_pk_index = StatisticsMeta::from_file(&paths[0])?;
+        let statistics_meta_pk_index = StatisticsMeta::from_file::<RocksTransaction>(&paths[0])?;
 
         assert_eq!(statistics_meta_pk_index.index_id(), 0);
         assert_eq!(statistics_meta_pk_index.histogram().values_len(), 101);
 
-        let statistics_meta_b_index = StatisticsMeta::from_file(&paths[1])?;
+        let statistics_meta_b_index = StatisticsMeta::from_file::<RocksTransaction>(&paths[1])?;
 
         assert_eq!(statistics_meta_b_index.index_id(), 1);
         assert_eq!(statistics_meta_b_index.histogram().values_len(), 101);
 
-        let statistics_meta_p_index = StatisticsMeta::from_file(&paths[2])?;
+        let statistics_meta_p_index = StatisticsMeta::from_file::<RocksTransaction>(&paths[2])?;
 
         assert_eq!(statistics_meta_p_index.index_id(), 2);
         assert_eq!(statistics_meta_p_index.histogram().values_len(), 101);

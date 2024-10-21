@@ -100,6 +100,7 @@ impl TableCatalog {
         col.summary_mut().relation = ColumnRelation::Table {
             column_id: col_id,
             table_name: self.name.clone(),
+            is_temp: false,
         };
 
         self.column_idxs

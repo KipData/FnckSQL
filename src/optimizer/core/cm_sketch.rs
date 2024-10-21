@@ -4,7 +4,6 @@ use crate::serdes::{ReferenceSerialization, ReferenceTables};
 use crate::storage::{TableCache, Transaction};
 use crate::types::value::DataValue;
 use rand::RngCore;
-use serde::{Deserialize, Serialize};
 use siphasher::sip::SipHasher13;
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
@@ -15,7 +14,7 @@ use std::{cmp, mem};
 pub(crate) type FastHasher = SipHasher13;
 
 // https://github.com/jedisct1/rust-count-min-sketch
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CountMinSketch<K> {
     counters: Vec<Vec<usize>>,
     offsets: Vec<usize>,

@@ -8,7 +8,6 @@ use crate::types::index::{IndexId, IndexMeta};
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
 use ordered_float::OrderedFloat;
-use serde::{Deserialize, Serialize};
 use serde_macros::ReferenceSerialization;
 use std::collections::Bound;
 use std::sync::Arc;
@@ -25,7 +24,7 @@ pub struct HistogramBuilder {
 }
 
 // Equal depth histogram
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ReferenceSerialization)]
+#[derive(Debug, Clone, PartialEq, ReferenceSerialization)]
 pub struct Histogram {
     index_id: IndexId,
 
@@ -40,7 +39,7 @@ pub struct Histogram {
     correlation: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ReferenceSerialization)]
+#[derive(Debug, Clone, PartialEq, ReferenceSerialization)]
 struct Bucket {
     lower: ValueRef,
     upper: ValueRef,

@@ -3,10 +3,10 @@ use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
 use crate::optimizer::core::histogram::Histogram;
+use crate::serdes::{ReferenceSerialization, ReferenceTables};
 use crate::storage::{StatisticsMetaCache, Transaction};
 use crate::types::index::IndexId;
 use crate::types::value::DataValue;
-use serde::{Deserialize, Serialize};
 use serde_macros::ReferenceSerialization;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -35,17 +35,16 @@ impl<'a, T: Transaction> StatisticMetaLoader<'a, T> {
             return Ok(Some(statistics_meta));
         }
         if let Some(path) = self.tx.table_meta_path(table_name.as_str(), index_id)? {
-            Ok(Some(
-                self.cache
-                    .get_or_insert(key, |_| StatisticsMeta::from_file(path))?,
-            ))
+            Ok(Some(self.cache.get_or_insert(key, |_| {
+                StatisticsMeta::from_file::<T>(path)
+            })?))
         } else {
             Ok(None)
         }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, ReferenceSerialization)]
+#[derive(Debug, ReferenceSerialization)]
 pub struct StatisticsMeta {
     index_id: IndexId,
     histogram: Histogram,
@@ -86,20 +85,20 @@ impl StatisticsMeta {
             .read(true)
             .truncate(false)
             .open(path)?;
-        bincode::serialize_into(&mut file, self)?;
+        self.encode(&mut file, true, &mut ReferenceTables::new())?;
         file.flush()?;
 
         Ok(())
     }
 
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, DatabaseError> {
-        let file = OpenOptions::new()
+    pub fn from_file<T: Transaction>(path: impl AsRef<Path>) -> Result<Self, DatabaseError> {
+        let mut file = OpenOptions::new()
             .create(true)
             .write(true)
             .read(true)
             .truncate(false)
             .open(path)?;
-        Ok(bincode::deserialize_from(file)?)
+        Self::decode::<T, _>(&mut file, None, &ReferenceTables::new())
     }
 }
 
@@ -108,6 +107,7 @@ mod tests {
     use crate::errors::DatabaseError;
     use crate::optimizer::core::histogram::HistogramBuilder;
     use crate::optimizer::core::statistics_meta::StatisticsMeta;
+    use crate::storage::rocksdb::RocksTransaction;
     use crate::types::index::{IndexMeta, IndexType};
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
@@ -154,7 +154,7 @@ mod tests {
         let path = temp_dir.path().join("meta");
 
         StatisticsMeta::new(histogram.clone(), sketch.clone()).to_file(path.clone())?;
-        let statistics_meta = StatisticsMeta::from_file(path)?;
+        let statistics_meta = StatisticsMeta::from_file::<RocksTransaction>(path)?;
 
         debug_assert_eq!(histogram, statistics_meta.histogram);
         debug_assert_eq!(

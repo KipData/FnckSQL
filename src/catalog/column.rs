@@ -41,6 +41,7 @@ pub enum ColumnRelation {
     Table {
         column_id: ColumnId,
         table_name: TableName,
+        is_temp: bool,
     },
 }
 
@@ -145,10 +146,11 @@ impl ColumnCatalog {
         self.summary.name = name;
     }
 
-    pub fn set_ref_table(&mut self, table_name: TableName, column_id: ColumnId) {
+    pub fn set_ref_table(&mut self, table_name: TableName, column_id: ColumnId, is_temp: bool) {
         self.summary.relation = ColumnRelation::Table {
             column_id,
             table_name,
+            is_temp,
         };
     }
 

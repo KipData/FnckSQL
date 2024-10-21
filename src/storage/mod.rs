@@ -1117,7 +1117,8 @@ mod test {
                     name: "c1".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: c1_column_id,
-                        table_name: Arc::new("t1".to_string())
+                        table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 }
             );
@@ -1134,7 +1135,8 @@ mod test {
                     name: "c2".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: c2_column_id,
-                        table_name: Arc::new("t1".to_string())
+                        table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 }
             );
@@ -1151,7 +1153,8 @@ mod test {
                     name: "c3".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: c3_column_id,
-                        table_name: Arc::new("t1".to_string())
+                        table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 }
             );
@@ -1474,6 +1477,7 @@ mod test {
             new_column.summary_mut().relation = ColumnRelation::Table {
                 column_id: *table.get_column_id_by_name("c4").unwrap(),
                 table_name: table_name.clone(),
+                is_temp: false,
             };
             assert_eq!(
                 table.get_column_by_name("c4"),

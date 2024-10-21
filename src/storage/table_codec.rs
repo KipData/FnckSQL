@@ -342,6 +342,7 @@ impl TableCodec {
         if let ColumnRelation::Table {
             column_id,
             table_name,
+            is_temp: false,
         } = &col.summary().relation
         {
             let mut key_prefix = Cursor::new(Self::key_prefix(CodecType::Column, table_name));
@@ -594,6 +595,7 @@ mod tests {
         col.summary_mut().relation = ColumnRelation::Table {
             column_id: Ulid::new(),
             table_name: Arc::new("t1".to_string()),
+            is_temp: false,
         };
         let col = ColumnRef::from(col);
 
@@ -612,6 +614,23 @@ mod tests {
     #[test]
     fn test_table_codec_view() -> Result<(), DatabaseError> {
         let table_state = build_t1_table()?;
+        // Subquery
+        {
+            let plan = table_state
+                .plan("select * from t1 where c1 in (select c1 from t1 where c1 > 1)")?;
+            println!("{:#?}", plan);
+            let view = View {
+                name: "view_subquery".to_string(),
+                plan,
+            };
+            let (_, bytes) = TableCodec::encode_view(&view)?;
+            let transaction = table_state.storage.transaction()?;
+
+            debug_assert_eq!(
+                view,
+                TableCodec::decode_view(&bytes, (&transaction, &table_state.table_cache))?
+            );
+        }
         // No Join
         {
             let plan = table_state.plan("select * from t1 where c1 > 1")?;
@@ -664,6 +683,7 @@ mod tests {
             col.summary_mut().relation = ColumnRelation::Table {
                 column_id: Ulid::from(col_id as u128),
                 table_name: Arc::new(table_name.to_string()),
+                is_temp: false,
             };
 
             let (key, _) =

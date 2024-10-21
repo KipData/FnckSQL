@@ -18,7 +18,12 @@ impl ReferenceSerialization for ColumnRef {
             .then(|| self.nullable())
             .encode(writer, is_direct, reference_tables)?;
 
-        if is_direct || matches!(self.summary().relation, ColumnRelation::None) {
+        if is_direct
+            || !matches!(
+                self.summary().relation,
+                ColumnRelation::Table { is_temp: false, .. }
+            )
+        {
             self.nullable()
                 .encode(writer, is_direct, reference_tables)?;
             self.desc().encode(writer, is_direct, reference_tables)?;
@@ -39,6 +44,7 @@ impl ReferenceSerialization for ColumnRef {
             ColumnRelation::Table {
                 column_id,
                 table_name,
+                is_temp: false,
             },
             Some((transaction, table_cache)),
         ) = (&summary.relation, drive)
@@ -85,10 +91,11 @@ impl ReferenceSerialization for ColumnRelation {
             ColumnRelation::Table {
                 column_id,
                 table_name,
+                is_temp,
             } => {
                 writer.write_all(&[1])?;
-
                 column_id.encode(writer, is_direct, reference_tables)?;
+                is_temp.encode(writer, is_direct, reference_tables)?;
 
                 reference_tables.push_or_replace(table_name).encode(
                     writer,
@@ -113,6 +120,7 @@ impl ReferenceSerialization for ColumnRelation {
             0 => ColumnRelation::None,
             1 => {
                 let column_id = ColumnId::decode(reader, drive, reference_tables)?;
+                let is_temp = bool::decode(reader, drive, reference_tables)?;
                 let table_name = reference_tables
                     .get(<usize as ReferenceSerialization>::decode(
                         reader,
@@ -124,6 +132,7 @@ impl ReferenceSerialization for ColumnRelation {
                 ColumnRelation::Table {
                     column_id,
                     table_name,
+                    is_temp,
                 }
             }
             _ => unreachable!(),
@@ -177,6 +186,7 @@ pub(crate) mod test {
                     relation: ColumnRelation::Table {
                         column_id: c3_column_id,
                         table_name: table_name.clone(),
+                        is_temp: false,
                     },
                 },
                 false,
@@ -253,6 +263,7 @@ pub(crate) mod test {
             relation: ColumnRelation::Table {
                 column_id: Ulid::new(),
                 table_name: Arc::new("t1".to_string()),
+                is_temp: false,
             },
         };
         summary.encode(&mut cursor, false, &mut reference_tables)?;
@@ -288,6 +299,7 @@ pub(crate) mod test {
         let table_relation = ColumnRelation::Table {
             column_id: Ulid::new(),
             table_name: Arc::new("t1".to_string()),
+            is_temp: false,
         };
         table_relation.encode(&mut cursor, false, &mut reference_tables)?;
         cursor.seek(SeekFrom::Start(0))?;

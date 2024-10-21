@@ -1382,6 +1382,7 @@ mod test {
                     relation: ColumnRelation::Table {
                         column_id: c3_column_id,
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
                 false,

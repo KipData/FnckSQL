@@ -137,6 +137,7 @@ mod tests {
                     relation: ColumnRelation::Table {
                         column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
                 false,
@@ -149,6 +150,7 @@ mod tests {
                     relation: ColumnRelation::Table {
                         column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
                 false,
@@ -161,6 +163,7 @@ mod tests {
                     relation: ColumnRelation::Table {
                         column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
                 false,
