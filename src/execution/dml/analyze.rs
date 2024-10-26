@@ -97,7 +97,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                 }
                 drop(coroutine);
                 let mut values = Vec::with_capacity(builders.len());
-                let dir_path = dirs::config_dir()
+                let dir_path = dirs::home_dir()
                     .expect("Your system does not have a Config directory!")
                     .join(DEFAULT_STATISTICS_META_PATH)
                     .join(table_name.as_str());
@@ -184,7 +184,7 @@ mod test {
         }
         let _ = fnck_sql.run("analyze table t1")?;
 
-        let dir_path = dirs::config_dir()
+        let dir_path = dirs::home_dir()
             .expect("Your system does not have a Config directory!")
             .join(DEFAULT_STATISTICS_META_PATH)
             .join("t1");
@@ -227,7 +227,7 @@ mod test {
         }
         let _ = fnck_sql.run("analyze table t1")?;
 
-        let dir_path = dirs::config_dir()
+        let dir_path = dirs::home_dir()
             .expect("Your system does not have a Config directory!")
             .join(DEFAULT_STATISTICS_META_PATH)
             .join("t1");
