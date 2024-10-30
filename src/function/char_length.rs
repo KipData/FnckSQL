@@ -17,12 +17,10 @@ pub(crate) struct CharLength {
     summary: FunctionSummary,
 }
 
-pub type CharacterLength = CharLength;
-
-impl CharacterLength {
+impl CharLength {
     #[allow(unused_mut)]
-    pub(crate) fn new2() -> Arc<Self> {
-        let function_name = "character_length".to_lowercase();
+    pub(crate) fn new() -> Arc<Self> {
+        let function_name = "char_length".to_lowercase();
         let arg_types = vec![LogicalType::Varchar(None, CharLengthUnits::Characters)];
         Arc::new(Self {
             summary: FunctionSummary {
@@ -33,10 +31,12 @@ impl CharacterLength {
     }
 }
 
-impl CharLength {
+pub type CharacterLength = CharLength;
+
+impl CharacterLength {
     #[allow(unused_mut)]
-    pub(crate) fn new() -> Arc<Self> {
-        let function_name = "char_length".to_lowercase();
+    pub(crate) fn new2() -> Arc<Self> {
+        let function_name = "character_length".to_lowercase();
         let arg_types = vec![LogicalType::Varchar(None, CharLengthUnits::Characters)];
         Arc::new(Self {
             summary: FunctionSummary {
