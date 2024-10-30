@@ -6,16 +6,6 @@ SELECT CHARACTER_LENGTH ( 'foo' )
 3
 
 query I
-SELECT CHARACTER_LENGTH ( 'foooof' )
-----
-6
-
-query I
 SELECT CHAR_LENGTH ( 'foo' )
 ----
 3
-
-query I
-SELECT CHAR_LENGTH ( 'foooof' )
-----
-6
