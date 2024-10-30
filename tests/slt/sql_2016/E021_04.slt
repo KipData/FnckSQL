@@ -1,14 +1,12 @@
 # E021-04: CHARACTER_LENGTH function
 
-# TODO: CHARACTER_LENGTH()/CHAR_LENGTH()
-
-# query I
-# SELECT CHARACTER_LENGTH ( 'foo' )
-# ----
-# 3
+query I
+SELECT CHARACTER_LENGTH ( 'foo' )
+----
+3
 
 
-# query I
-# SELECT CHAR_LENGTH ( 'foo' )
-# ----
-# 3
+query I
+SELECT CHAR_LENGTH ( 'foo' )
+----
+3
