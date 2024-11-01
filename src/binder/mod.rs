@@ -4,6 +4,7 @@ mod analyze;
 pub mod copy;
 mod create_index;
 mod create_table;
+mod create_view;
 mod delete;
 mod describe;
 mod distinct;
@@ -329,6 +330,13 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                 unique,
                 ..
             } => self.bind_create_index(table_name, name, columns, *if_not_exists, *unique)?,
+            Statement::CreateView {
+                or_replace,
+                name,
+                columns,
+                query,
+                ..
+            } => self.bind_create_view(or_replace, name, columns, query)?,
             _ => return Err(DatabaseError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)

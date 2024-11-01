@@ -620,8 +620,8 @@ mod tests {
                 .plan("select * from t1 where c1 in (select c1 from t1 where c1 > 1)")?;
             println!("{:#?}", plan);
             let view = View {
-                name: "view_subquery".to_string(),
-                plan,
+                name: Arc::new("view_subquery".to_string()),
+                plan: Box::new(plan),
             };
             let (_, bytes) = TableCodec::encode_view(&view)?;
             let transaction = table_state.storage.transaction()?;
@@ -635,8 +635,8 @@ mod tests {
         {
             let plan = table_state.plan("select * from t1 where c1 > 1")?;
             let view = View {
-                name: "view_filter".to_string(),
-                plan,
+                name: Arc::new("view_filter".to_string()),
+                plan: Box::new(plan),
             };
             let (_, bytes) = TableCodec::encode_view(&view)?;
             let transaction = table_state.storage.transaction()?;
@@ -650,8 +650,8 @@ mod tests {
         {
             let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
             let view = View {
-                name: "view_join".to_string(),
-                plan,
+                name: Arc::new("view_join".to_string()),
+                plan: Box::new(plan),
             };
             let (_, bytes) = TableCodec::encode_view(&view)?;
             let transaction = table_state.storage.transaction()?;

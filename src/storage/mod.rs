@@ -23,8 +23,8 @@ use std::{mem, slice};
 use ulid::Generator;
 
 pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), StatisticsMeta>;
-pub(crate) type TableCache = ShardingLruCache<String, TableCatalog>;
-pub(crate) type ViewCache = ShardingLruCache<String, View>;
+pub(crate) type TableCache = ShardingLruCache<TableName, TableCatalog>;
+pub(crate) type ViewCache = ShardingLruCache<TableName, View>;
 
 pub trait Storage: Clone {
     type TransactionType<'a>: Transaction
@@ -288,6 +288,23 @@ pub trait Transaction: Sized {
         }
     }
 
+    fn create_view(
+        &mut self,
+        view_cache: &ViewCache,
+        view: View,
+        or_replace: bool,
+    ) -> Result<(), DatabaseError> {
+        let (view_key, value) = TableCodec::encode_view(&view)?;
+
+        if !or_replace && self.get(&view_key)?.is_some() {
+            return Err(DatabaseError::ViewExists);
+        }
+        self.set(view_key, value)?;
+        let _ = view_cache.put(view.name.clone(), view);
+
+        Ok(())
+    }
+
     fn create_table(
         &mut self,
         table_cache: &TableCache,
@@ -317,7 +334,7 @@ pub trait Transaction: Sized {
             self.set(key, value)?;
         }
         debug_assert_eq!(reference_tables.len(), 1);
-        table_cache.put(table_name.to_string(), table_catalog);
+        table_cache.put(table_name.clone(), table_catalog);
 
         Ok(table_name)
     }
@@ -362,13 +379,29 @@ pub trait Transaction: Sized {
         Ok(())
     }
 
+    fn view<'a>(
+        &'a self,
+        view_cache: &'a ViewCache,
+        view_name: TableName,
+        drive: (&Self, &TableCache),
+    ) -> Option<&'a View> {
+        view_cache
+            .get_or_insert(view_name.clone(), |_| {
+                let bytes = self
+                    .get(&TableCodec::encode_view_key(&view_name))?
+                    .ok_or(DatabaseError::ViewExists)?;
+                TableCodec::decode_view(&bytes, drive)
+            })
+            .ok()
+    }
+
     fn table<'a>(
         &'a self,
         table_cache: &'a TableCache,
         table_name: TableName,
     ) -> Option<&TableCatalog> {
         table_cache
-            .get_or_insert(table_name.to_string(), |_| {
+            .get_or_insert(table_name.clone(), |_| {
                 // `TableCache` is not theoretically used in `table_collect` because ColumnCatalog should not depend on other Column
                 let (columns, indexes) = self.table_collect(table_name.clone())?;
 
@@ -996,9 +1029,9 @@ pub trait Iter {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{
-        ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary, TableCatalog,
-    };
+    use crate::binder::test::build_t1_table;
+    use crate::catalog::view::View;
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
     use crate::db::test::build_table;
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
@@ -1329,7 +1362,7 @@ mod test {
     fn test_index_insert_delete() -> Result<(), DatabaseError> {
         fn build_index_iter<'a>(
             transaction: &'a RocksTransaction<'a>,
-            table_cache: &'a Arc<ShardingLruCache<String, TableCatalog>>,
+            table_cache: &'a Arc<TableCache>,
             index_column_id: ColumnId,
         ) -> Result<IndexIter<'a, RocksTransaction<'a>>, DatabaseError> {
             transaction.read_by_index(
@@ -1490,6 +1523,50 @@ mod test {
             assert!(!table.contains_column("c4"));
             assert!(table.get_column_by_name("c4").is_none());
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_view_create_drop() -> Result<(), DatabaseError> {
+        let table_state = build_t1_table()?;
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+
+        let view_name = Arc::new("v1".to_string());
+        let view = View {
+            name: view_name.clone(),
+            plan: Box::new(
+                table_state.plan("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1")?,
+            ),
+        };
+        let mut transaction = table_state.storage.transaction()?;
+        transaction.create_view(&view_cache, view.clone(), true)?;
+
+        assert_eq!(
+            &view,
+            transaction
+                .view(
+                    &view_cache,
+                    view_name.clone(),
+                    (&transaction, &table_state.table_cache)
+                )
+                .unwrap()
+        );
+        assert_eq!(
+            &view,
+            transaction
+                .view(
+                    &view_cache,
+                    view_name.clone(),
+                    (
+                        &transaction,
+                        &Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?)
+                    )
+                )
+                .unwrap()
+        );
+
+        // TODO: Drop View
 
         Ok(())
     }

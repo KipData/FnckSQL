@@ -1,5 +1,4 @@
 use crate::binder::{command_type, Binder, BinderContext, CommandType};
-use crate::catalog::TableCatalog;
 use crate::errors::DatabaseError;
 use crate::execution::{build_write, try_collect};
 use crate::expression::function::scala::ScalarFunctionImpl;
@@ -97,7 +96,7 @@ pub struct Database<S: Storage> {
     table_functions: Arc<TableFunctions>,
     mdl: Arc<RwLock<()>>,
     pub(crate) meta_cache: Arc<StatisticsMetaCache>,
-    pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
+    pub(crate) table_cache: Arc<TableCache>,
 }
 
 impl<S: Storage> Database<S> {
@@ -273,7 +272,7 @@ pub struct DBTransaction<'a, S: Storage + 'a> {
     table_functions: Arc<TableFunctions>,
     _guard: ArcRwLockReadGuard<RawRwLock, ()>,
     pub(crate) meta_cache: Arc<StatisticsMetaCache>,
-    pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
+    pub(crate) table_cache: Arc<TableCache>,
 }
 
 impl<S: Storage> DBTransaction<'_, S> {

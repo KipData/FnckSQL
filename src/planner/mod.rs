@@ -136,6 +136,9 @@ impl LogicalPlan {
                 Operator::CreateIndex(_) => Arc::new(vec![ColumnRef::from(
                     ColumnCatalog::new_dummy("CREATE INDEX SUCCESS".to_string()),
                 )]),
+                Operator::CreateView(_) => Arc::new(vec![ColumnRef::from(
+                    ColumnCatalog::new_dummy("CREATE VIEW SUCCESS".to_string()),
+                )]),
                 Operator::DropTable(_) => Arc::new(vec![ColumnRef::from(
                     ColumnCatalog::new_dummy("DROP TABLE SUCCESS".to_string()),
                 )]),

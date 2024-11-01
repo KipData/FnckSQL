@@ -150,4 +150,8 @@ pub enum DatabaseError {
     UnsupportedStmt(String),
     #[error("values length not match, expect {0}, got {1}")]
     ValuesLenMismatch(usize, usize),
+    #[error("the view already exists")]
+    ViewExists,
+    #[error("the view not found")]
+    ViewNotFound,
 }
