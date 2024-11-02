@@ -1347,7 +1347,7 @@ mod test {
         let mut reference_tables = ReferenceTables::new();
         let c3_column_id = {
             let table = transaction
-                .table(&table_cache, Arc::new("t1".to_string()))
+                .table(&table_cache, Arc::new("t1".to_string()))?
                 .unwrap();
             *table.get_column_id_by_name("c3").unwrap()
         };

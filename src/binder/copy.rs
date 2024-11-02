@@ -62,7 +62,7 @@ impl FromStr for ExtSource {
     }
 }
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<T: Transaction> Binder<'_, '_, T> {
     pub(super) fn bind_copy(
         &mut self,
         source: CopySource,
@@ -80,7 +80,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             }
         };
 
-        if let Some(table) = self.context.table(Arc::new(table_name.to_string())) {
+        if let Some(table) = self.context.table(Arc::new(table_name.to_string()))? {
             let schema_ref = table.schema_ref().clone();
             let ext_source = ExtSource {
                 path: match target {

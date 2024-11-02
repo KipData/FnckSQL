@@ -56,7 +56,7 @@ pub trait Transaction: Sized {
         debug_assert!(columns.iter().map(|(i, _)| i).all_unique());
 
         let table = self
-            .table(table_cache, table_name.clone())
+            .table(table_cache, table_name.clone())?
             .ok_or(DatabaseError::TableNotFound)?;
         let table_types = table.types();
         if columns.is_empty() {
@@ -96,7 +96,7 @@ pub trait Transaction: Sized {
         debug_assert!(columns.iter().map(|(i, _)| i).all_unique());
 
         let table = self
-            .table(table_cache, table_name.clone())
+            .table(table_cache, table_name.clone())?
             .ok_or(DatabaseError::TableNotFound)?;
         let table_types = table.types();
         let table_name = table.name.as_str();
@@ -135,7 +135,7 @@ pub trait Transaction: Sized {
         column_ids: Vec<ColumnId>,
         ty: IndexType,
     ) -> Result<IndexId, DatabaseError> {
-        if let Some(mut table) = self.table(table_cache, table_name.clone()).cloned() {
+        if let Some(mut table) = self.table(table_cache, table_name.clone())?.cloned() {
             let index_meta = table.add_index_meta(index_name, column_ids, ty)?;
             let (key, value) = TableCodec::encode_index_meta(table_name, index_meta)?;
             self.set(key, value)?;
@@ -217,7 +217,7 @@ pub trait Transaction: Sized {
         column: &ColumnCatalog,
         if_not_exists: bool,
     ) -> Result<ColumnId, DatabaseError> {
-        if let Some(mut table) = self.table(table_cache, table_name.clone()).cloned() {
+        if let Some(mut table) = self.table(table_cache, table_name.clone())?.cloned() {
             if !column.nullable() && column.default_value()?.is_none() {
                 return Err(DatabaseError::NeedNullAbleOrDefault);
             }
@@ -262,7 +262,7 @@ pub trait Transaction: Sized {
         table_name: &TableName,
         column_name: &str,
     ) -> Result<(), DatabaseError> {
-        if let Some(table_catalog) = self.table(table_cache, table_name.clone()).cloned() {
+        if let Some(table_catalog) = self.table(table_cache, table_name.clone())?.cloned() {
             let column = table_catalog.get_column_by_name(column_name).unwrap();
 
             let (key, _) = TableCodec::encode_column(column, &mut ReferenceTables::new())?;
@@ -345,7 +345,7 @@ pub trait Transaction: Sized {
         table_name: TableName,
         if_exists: bool,
     ) -> Result<(), DatabaseError> {
-        if self.table(table_cache, table_name.clone()).is_none() {
+        if self.table(table_cache, table_name.clone())?.is_none() {
             if if_exists {
                 return Ok(());
             } else {
@@ -384,30 +384,35 @@ pub trait Transaction: Sized {
         view_cache: &'a ViewCache,
         view_name: TableName,
         drive: (&Self, &TableCache),
-    ) -> Option<&'a View> {
-        view_cache
-            .get_or_insert(view_name.clone(), |_| {
-                let bytes = self
-                    .get(&TableCodec::encode_view_key(&view_name))?
-                    .ok_or(DatabaseError::ViewExists)?;
-                TableCodec::decode_view(&bytes, drive)
-            })
-            .ok()
+    ) -> Result<Option<&'a View>, DatabaseError> {
+        if let Some(view) = view_cache.get(&view_name) {
+            return Ok(Some(view));
+        }
+        let Some(bytes) = self.get(&TableCodec::encode_view_key(&view_name))? else {
+            return Ok(None);
+        };
+        Ok(Some(view_cache.get_or_insert(view_name.clone(), |_| {
+            TableCodec::decode_view(&bytes, drive)
+        })?))
     }
 
     fn table<'a>(
         &'a self,
         table_cache: &'a TableCache,
         table_name: TableName,
-    ) -> Option<&TableCatalog> {
-        table_cache
-            .get_or_insert(table_name.clone(), |_| {
-                // `TableCache` is not theoretically used in `table_collect` because ColumnCatalog should not depend on other Column
-                let (columns, indexes) = self.table_collect(table_name.clone())?;
+    ) -> Result<Option<&'a TableCatalog>, DatabaseError> {
+        if let Some(table) = table_cache.get(&table_name) {
+            return Ok(Some(table));
+        }
 
-                TableCatalog::reload(table_name.clone(), columns, indexes)
+        // `TableCache` is not theoretically used in `table_collect` because ColumnCatalog should not depend on other Column
+        self.table_collect(&table_name)?
+            .map(|(columns, indexes)| {
+                table_cache.get_or_insert(table_name.clone(), |_| {
+                    TableCatalog::reload(table_name, columns, indexes)
+                })
             })
-            .ok()
+            .transpose()
     }
 
     fn table_metas(&self) -> Result<Vec<TableMeta>, DatabaseError> {
@@ -465,25 +470,29 @@ pub trait Transaction: Sized {
         Ok(())
     }
 
-    fn meta_loader<'a>(&'a self, meta_cache: &'a StatisticsMetaCache) -> StatisticMetaLoader<Self>
+    fn meta_loader<'a>(
+        &'a self,
+        meta_cache: &'a StatisticsMetaCache,
+    ) -> StatisticMetaLoader<'a, Self>
     where
         Self: Sized,
     {
         StatisticMetaLoader::new(self, meta_cache)
     }
 
+    #[allow(clippy::type_complexity)]
     fn table_collect(
         &self,
-        table_name: TableName,
-    ) -> Result<(Vec<ColumnRef>, Vec<IndexMetaRef>), DatabaseError> {
-        let (table_min, table_max) = TableCodec::table_bound(&table_name);
+        table_name: &TableName,
+    ) -> Result<Option<(Vec<ColumnRef>, Vec<IndexMetaRef>)>, DatabaseError> {
+        let (table_min, table_max) = TableCodec::table_bound(table_name);
         let mut column_iter =
             self.range(Bound::Included(&table_min), Bound::Included(&table_max))?;
 
         let mut columns = Vec::new();
         let mut index_metas = Vec::new();
         let mut reference_tables = ReferenceTables::new();
-        let _ = reference_tables.push_or_replace(&table_name);
+        let _ = reference_tables.push_or_replace(table_name);
 
         // Tips: only `Column`, `IndexMeta`, `TableMeta`
         while let Some((key, value)) = column_iter.try_next().ok().flatten() {
@@ -498,7 +507,7 @@ pub trait Transaction: Sized {
             }
         }
 
-        Ok((columns, index_metas))
+        Ok((!columns.is_empty()).then_some((columns, index_metas)))
     }
 
     fn _drop_data(&mut self, min: &[u8], max: &[u8]) -> Result<(), DatabaseError> {
@@ -1121,7 +1130,7 @@ mod test {
                          table_cache: &TableCache|
          -> Result<(), DatabaseError> {
             let table = transaction
-                .table(&table_cache, Arc::new("t1".to_string()))
+                .table(&table_cache, Arc::new("t1".to_string()))?
                 .unwrap();
             let c1_column_id = *table.get_column_id_by_name("c1").unwrap();
             let c2_column_id = *table.get_column_id_by_name("c2").unwrap();
@@ -1288,7 +1297,7 @@ mod test {
         build_table(&table_cache, &mut transaction)?;
         let (c2_column_id, c3_column_id) = {
             let t1_table = transaction
-                .table(&table_cache, Arc::new("t1".to_string()))
+                .table(&table_cache, Arc::new("t1".to_string()))?
                 .unwrap();
 
             (
@@ -1316,7 +1325,7 @@ mod test {
                          table_cache: &TableCache|
          -> Result<(), DatabaseError> {
             let table = transaction
-                .table(&table_cache, Arc::new("t1".to_string()))
+                .table(&table_cache, Arc::new("t1".to_string()))?
                 .unwrap();
 
             let i1_meta = table.indexes[1].clone();
@@ -1392,7 +1401,7 @@ mod test {
 
         build_table(&table_cache, &mut transaction)?;
         let t1_table = transaction
-            .table(&table_cache, Arc::new("t1".to_string()))
+            .table(&table_cache, Arc::new("t1".to_string()))?
             .unwrap();
         let c3_column_id = *t1_table.get_column_id_by_name("c3").unwrap();
 
@@ -1499,7 +1508,9 @@ mod test {
             );
         }
         {
-            let table = transaction.table(&table_cache, table_name.clone()).unwrap();
+            let table = transaction
+                .table(&table_cache, table_name.clone())?
+                .unwrap();
             assert!(table.contains_column("c4"));
 
             let mut new_column = ColumnCatalog::new(
@@ -1519,7 +1530,9 @@ mod test {
         }
         transaction.drop_column(&table_cache, &meta_cache, &table_name, "c4")?;
         {
-            let table = transaction.table(&table_cache, table_name.clone()).unwrap();
+            let table = transaction
+                .table(&table_cache, table_name.clone())?
+                .unwrap();
             assert!(!table.contains_column("c4"));
             assert!(table.get_column_by_name("c4").is_none());
         }
@@ -1530,7 +1543,6 @@ mod test {
     #[test]
     fn test_view_create_drop() -> Result<(), DatabaseError> {
         let table_state = build_t1_table()?;
-        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
 
         let view_name = Arc::new("v1".to_string());
         let view = View {
@@ -1540,29 +1552,29 @@ mod test {
             ),
         };
         let mut transaction = table_state.storage.transaction()?;
-        transaction.create_view(&view_cache, view.clone(), true)?;
+        transaction.create_view(&table_state.view_cache, view.clone(), true)?;
 
         assert_eq!(
             &view,
             transaction
                 .view(
-                    &view_cache,
+                    &table_state.view_cache,
                     view_name.clone(),
                     (&transaction, &table_state.table_cache)
-                )
+                )?
                 .unwrap()
         );
         assert_eq!(
             &view,
             transaction
                 .view(
-                    &view_cache,
+                    &table_state.view_cache,
                     view_name.clone(),
                     (
                         &transaction,
                         &Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?)
                     )
-                )
+                )?
                 .unwrap()
         );
 

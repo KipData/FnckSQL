@@ -14,7 +14,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::LogicalType;
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<T: Transaction> Binder<'_, '_, T> {
     // TODO: TableConstraint
     pub(crate) fn bind_create_table(
         &mut self,
@@ -158,6 +158,7 @@ mod tests {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let scala_functions = Default::default();
         let table_functions = Default::default();
 
@@ -165,6 +166,7 @@ mod tests {
         let mut binder = Binder::new(
             BinderContext::new(
                 &table_cache,
+                &view_cache,
                 &transaction,
                 &scala_functions,
                 &table_functions,

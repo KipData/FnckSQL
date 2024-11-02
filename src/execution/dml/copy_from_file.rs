@@ -2,7 +2,7 @@ use crate::binder::copy::FileFormat;
 use crate::errors::DatabaseError;
 use crate::execution::{Executor, WriteExecutor};
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{types, Tuple};
 use crate::types::tuple_builder::TupleBuilder;
@@ -26,7 +26,7 @@ impl From<CopyFromFileOperator> for CopyFromFile {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CopyFromFile {
     fn execute_mut(
         self,
-        _: (&'a TableCache, &'a StatisticsMetaCache),
+        _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(
@@ -201,8 +201,10 @@ mod tests {
         let storage = db.storage;
         let mut transaction = storage.transaction()?;
 
-        let mut coroutine =
-            executor.execute_mut((&db.table_cache, &db.meta_cache), &mut transaction);
+        let mut coroutine = executor.execute_mut(
+            (&db.table_cache, &db.view_cache, &db.meta_cache),
+            &mut transaction,
+        );
         let tuple = match Pin::new(&mut coroutine).resume(()) {
             CoroutineState::Yielded(tuple) => tuple,
             CoroutineState::Complete(()) => unreachable!(),

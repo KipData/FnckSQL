@@ -1,6 +1,6 @@
 use crate::execution::{Executor, ReadExecutor};
 use crate::planner::operator::table_scan::TableScanOperator;
-use crate::storage::{Iter, StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{Iter, StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 
 pub(crate) struct SeqScan {
@@ -16,7 +16,7 @@ impl From<TableScanOperator> for SeqScan {
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SeqScan {
     fn execute(
         self,
-        (table_cache, _): (&'a TableCache, &'a StatisticsMetaCache),
+        (table_cache, _, _): (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a> {
         Box::new(

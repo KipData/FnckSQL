@@ -118,7 +118,7 @@ mod tests {
         let transaction = database.storage.transaction()?;
         let c1_column_id = {
             transaction
-                .table(&database.table_cache, Arc::new("t1".to_string()))
+                .table(&database.table_cache, Arc::new("t1".to_string()))?
                 .unwrap()
                 .get_column_id_by_name("c1")
                 .unwrap()
@@ -128,6 +128,7 @@ mod tests {
         let mut binder = Binder::new(
             BinderContext::new(
                 &database.table_cache,
+                &database.view_cache,
                 &transaction,
                 &scala_functions,
                 &table_functions,

@@ -1,4 +1,4 @@
-use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::catalog::{ColumnCatalog, ColumnRef, TableName};
 use crate::errors::DatabaseError;
 use crate::expression;
 use crate::expression::agg::AggKind;
@@ -7,6 +7,7 @@ use sqlparser::ast::{
     BinaryOperator, CharLengthUnits, DataType, Expr, Function, FunctionArg, FunctionArgExpr, Ident,
     Query, UnaryOperator,
 };
+use std::collections::HashMap;
 use std::slice;
 use std::sync::Arc;
 
@@ -15,7 +16,7 @@ use crate::expression::function::scala::{ArcScalarFunctionImpl, ScalarFunction};
 use crate::expression::function::table::{ArcTableFunctionImpl, TableFunction};
 use crate::expression::function::FunctionSummary;
 use crate::expression::{AliasType, ScalarExpression};
-use crate::planner::LogicalPlan;
+use crate::planner::{LogicalPlan, SchemaOutput};
 use crate::storage::Transaction;
 use crate::types::value::{DataValue, Utf8Type};
 use crate::types::{ColumnId, LogicalType};
@@ -39,7 +40,7 @@ macro_rules! try_default {
     };
 }
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<'a, T: Transaction> Binder<'a, '_, T> {
     pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, DatabaseError> {
         match expr {
             Expr::Identifier(ident) => {
@@ -249,6 +250,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     ) -> Result<(LogicalPlan, ColumnRef), DatabaseError> {
         let BinderContext {
             table_cache,
+            view_cache,
             transaction,
             scala_functions,
             table_functions,
@@ -258,6 +260,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
         let mut binder = Binder::new(
             BinderContext::new(
                 table_cache,
+                view_cache,
                 *transaction,
                 scala_functions,
                 table_functions,
@@ -324,46 +327,53 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             try_default!(&full_name.0, full_name.1);
         }
         if let Some(table) = full_name.0.or(bind_table_name) {
-            let table_catalog = self.context.bind_table(&table, self.parent)?;
+            let source = self.context.bind_source(&table, self.parent)?;
+            let schema_buf = self.table_schema_buf.entry(Arc::new(table)).or_default();
 
-            let column_catalog = table_catalog
-                .get_column_by_name(&full_name.1)
-                .ok_or_else(|| DatabaseError::NotFound("column", full_name.1))?;
-            Ok(ScalarExpression::ColumnRef(column_catalog.clone()))
+            Ok(ScalarExpression::ColumnRef(
+                source
+                    .column(&full_name.1, schema_buf)
+                    .ok_or_else(|| DatabaseError::NotFound("column", full_name.1.to_string()))?,
+            ))
         } else {
-            let op = |got_column: &mut Option<ScalarExpression>, context: &BinderContext<'a, T>| {
-                for ((_, alias, _), table_catalog) in context.bind_table.iter() {
-                    if got_column.is_some() {
-                        break;
+            let op =
+                |got_column: &mut Option<ScalarExpression>,
+                 context: &BinderContext<'a, T>,
+                 table_schema_buf: &mut HashMap<TableName, Option<SchemaOutput>>| {
+                    for ((table_name, alias, _), source) in context.bind_table.iter() {
+                        if got_column.is_some() {
+                            break;
+                        }
+                        if let Some(alias) = alias {
+                            *got_column = self.context.expr_aliases.iter().find_map(
+                                |((alias_table, alias_column), expr)| {
+                                    matches!(
+                                        alias_table
+                                            .as_ref()
+                                            .map(|table_name| table_name == alias.as_ref()
+                                                && alias_column == &full_name.1),
+                                        Some(true)
+                                    )
+                                    .then(|| expr.clone())
+                                },
+                            );
+                        } else if let Some(column) = {
+                            let schema_buf =
+                                table_schema_buf.entry(table_name.clone()).or_default();
+                            source.column(&full_name.1, schema_buf)
+                        } {
+                            *got_column = Some(ScalarExpression::ColumnRef(column));
+                        }
                     }
-                    if let Some(alias) = alias {
-                        *got_column = self.context.expr_aliases.iter().find_map(
-                            |((alias_table, alias_column), expr)| {
-                                matches!(
-                                    alias_table
-                                        .as_ref()
-                                        .map(|table_name| table_name == alias.as_ref()
-                                            && alias_column == &full_name.1),
-                                    Some(true)
-                                )
-                                .then(|| expr.clone())
-                            },
-                        );
-                    } else if let Some(column_catalog) =
-                        table_catalog.get_column_by_name(&full_name.1)
-                    {
-                        *got_column = Some(ScalarExpression::ColumnRef(column_catalog.clone()));
-                    }
-                }
-            };
+                };
             // handle col syntax
             let mut got_column = None;
 
-            op(&mut got_column, &self.context);
+            op(&mut got_column, &self.context, &mut self.table_schema_buf);
             if let Some(parent) = self.parent {
-                op(&mut got_column, &parent.context);
+                op(&mut got_column, &parent.context, &mut self.table_schema_buf);
             }
-            Ok(got_column.ok_or_else(|| DatabaseError::NotFound("column", full_name.1))?)
+            Ok(got_column.ok_or(DatabaseError::NotFound("column", full_name.1))?)
         }
     }
 

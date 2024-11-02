@@ -240,11 +240,7 @@ impl Hash for DataValue {
             Date64(v) => v.hash(state),
             Time(v) => v.hash(state),
             Decimal(v) => v.hash(state),
-            Tuple(values) => {
-                for v in values {
-                    v.hash(state)
-                }
-            }
+            Tuple(values) => values.hash(state),
         }
     }
 }

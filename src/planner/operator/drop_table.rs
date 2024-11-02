@@ -12,7 +12,11 @@ pub struct DropTableOperator {
 
 impl fmt::Display for DropTableOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Drop {}, If Exists: {}", self.table_name, self.if_exists)?;
+        write!(
+            f,
+            "Drop Table {}, If Exists: {}",
+            self.table_name, self.if_exists
+        )?;
 
         Ok(())
     }

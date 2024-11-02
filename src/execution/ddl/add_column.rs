@@ -1,6 +1,6 @@
 use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache};
+use crate::storage::{StatisticsMetaCache, TableCache, ViewCache};
 use crate::types::index::{Index, IndexType};
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
@@ -28,7 +28,7 @@ impl From<(AddColumnOperator, LogicalPlan)> for AddColumn {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
     fn execute_mut(
         mut self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(
@@ -76,8 +76,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
                 // Unique Index
                 if let (Some(unique_values), Some(unique_meta)) = (
                     unique_values,
-                    transaction
-                        .table(cache.0, table_name.clone())
+                    throw!(transaction.table(cache.0, table_name.clone()))
                         .and_then(|table| table.get_unique_index(&col_id))
                         .cloned(),
                 ) {

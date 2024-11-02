@@ -5,7 +5,7 @@ use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{Schema, SchemaRef, Tuple};
 use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
@@ -44,7 +44,7 @@ impl From<(JoinOperator, LogicalPlan, LogicalPlan)> for HashJoin {
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
     fn execute(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a> {
         Box::new(
@@ -528,6 +528,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
@@ -538,8 +539,8 @@ mod test {
             },
             join_type: JoinType::Inner,
         };
-        let executor =
-            HashJoin::from((op, left, right)).execute((&table_cache, &meta_cache), &transaction);
+        let executor = HashJoin::from((op, left, right))
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         debug_assert_eq!(tuples.len(), 3);
@@ -566,6 +567,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
@@ -579,7 +581,9 @@ mod test {
         //Outer
         {
             let executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
-            let tuples = try_collect(executor.execute((&table_cache, &meta_cache), &transaction))?;
+            let tuples = try_collect(
+                executor.execute((&table_cache, &view_cache, &meta_cache), &transaction),
+            )?;
 
             debug_assert_eq!(tuples.len(), 4);
 
@@ -604,8 +608,9 @@ mod test {
         {
             let mut executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
             executor.ty = JoinType::LeftSemi;
-            let mut tuples =
-                try_collect(executor.execute((&table_cache, &meta_cache), &transaction))?;
+            let mut tuples = try_collect(
+                executor.execute((&table_cache, &view_cache, &meta_cache), &transaction),
+            )?;
 
             debug_assert_eq!(tuples.len(), 2);
             tuples.sort_by_key(|tuple| {
@@ -627,7 +632,9 @@ mod test {
         {
             let mut executor = HashJoin::from((op, left, right));
             executor.ty = JoinType::LeftAnti;
-            let tuples = try_collect(executor.execute((&table_cache, &meta_cache), &transaction))?;
+            let tuples = try_collect(
+                executor.execute((&table_cache, &view_cache, &meta_cache), &transaction),
+            )?;
 
             debug_assert_eq!(tuples.len(), 1);
             debug_assert_eq!(
@@ -645,6 +652,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
@@ -655,8 +663,8 @@ mod test {
             },
             join_type: JoinType::RightOuter,
         };
-        let executor =
-            HashJoin::from((op, left, right)).execute((&table_cache, &meta_cache), &transaction);
+        let executor = HashJoin::from((op, left, right))
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         debug_assert_eq!(tuples.len(), 4);
@@ -687,6 +695,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
@@ -697,8 +706,8 @@ mod test {
             },
             join_type: JoinType::Full,
         };
-        let executor =
-            HashJoin::from((op, left, right)).execute((&table_cache, &meta_cache), &transaction);
+        let executor = HashJoin::from((op, left, right))
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         debug_assert_eq!(tuples.len(), 5);

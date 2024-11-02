@@ -4,7 +4,7 @@ use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::project::ProjectOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::Tuple;
 use crate::types::value::ValueRef;
@@ -26,7 +26,7 @@ impl From<(ProjectOperator, LogicalPlan)> for Projection {
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Projection {
     fn execute(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a> {
         Box::new(

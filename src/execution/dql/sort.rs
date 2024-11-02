@@ -2,7 +2,7 @@ use crate::errors::DatabaseError;
 use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{Schema, Tuple};
 use itertools::Itertools;
@@ -227,7 +227,7 @@ impl From<(SortOperator, LogicalPlan)> for Sort {
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Sort {
     fn execute(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a> {
         Box::new(

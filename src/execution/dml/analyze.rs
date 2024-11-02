@@ -6,7 +6,7 @@ use crate::optimizer::core::histogram::HistogramBuilder;
 use crate::optimizer::core::statistics_meta::StatisticsMeta;
 use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::index::IndexMetaRef;
 use crate::types::tuple::Tuple;
@@ -53,7 +53,7 @@ impl From<(AnalyzeOperator, LogicalPlan)> for Analyze {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
     fn execute_mut(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(
@@ -67,8 +67,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
 
                 let schema = input.output_schema().clone();
                 let mut builders = Vec::with_capacity(index_metas.len());
-                let table = throw!(transaction
-                    .table(cache.0, table_name.clone())
+                let table = throw!(throw!(transaction.table(cache.0, table_name.clone()))
                     .cloned()
                     .ok_or(DatabaseError::TableNotFound));
 
@@ -122,7 +121,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
                     }));
-                    throw!(transaction.save_table_meta(cache.1, &table_name, path_str, meta));
+                    throw!(transaction.save_table_meta(cache.2, &table_name, path_str, meta));
                     throw!(fs::rename(&temp_path, &path).map_err(DatabaseError::IO));
 
                     active_index_paths.insert(index_file);
@@ -133,7 +132,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                     let entry: DirEntry = throw!(entry.map_err(DatabaseError::IO));
 
                     if !active_index_paths.remove(&entry.file_name()) {
-                        throw!(fs::remove_file(&entry.path()).map_err(DatabaseError::IO));
+                        throw!(fs::remove_file(entry.path()).map_err(DatabaseError::IO));
                     }
                 }
 

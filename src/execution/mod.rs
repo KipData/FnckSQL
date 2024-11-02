@@ -8,6 +8,7 @@ use self::dql::join::nested_loop_join::NestedLoopJoin;
 use crate::errors::DatabaseError;
 use crate::execution::ddl::create_index::CreateIndex;
 use crate::execution::ddl::create_table::CreateTable;
+use crate::execution::ddl::create_view::CreateView;
 use crate::execution::ddl::drop_column::DropColumn;
 use crate::execution::ddl::drop_table::DropTable;
 use crate::execution::ddl::truncate::Truncate;
@@ -35,7 +36,7 @@ use crate::execution::dql::values::Values;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::types::index::IndexInfo;
 use crate::types::tuple::Tuple;
 use std::ops::{Coroutine, CoroutineState};
@@ -47,7 +48,7 @@ pub type Executor<'a> =
 pub trait ReadExecutor<'a, T: Transaction + 'a> {
     fn execute(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a>;
 }
@@ -55,14 +56,14 @@ pub trait ReadExecutor<'a, T: Transaction + 'a> {
 pub trait WriteExecutor<'a, T: Transaction + 'a> {
     fn execute_mut(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a>;
 }
 
 pub fn build_read<'a, T: Transaction + 'a>(
     plan: LogicalPlan,
-    cache: (&'a TableCache, &'a StatisticsMetaCache),
+    cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
     transaction: &'a T,
 ) -> Executor<'a> {
     let LogicalPlan {
@@ -149,7 +150,7 @@ pub fn build_read<'a, T: Transaction + 'a>(
 
 pub fn build_write<'a, T: Transaction + 'a>(
     plan: LogicalPlan,
-    cache: (&'a TableCache, &'a StatisticsMetaCache),
+    cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
     transaction: &'a mut T,
 ) -> Executor<'a> {
     let LogicalPlan {
@@ -190,6 +191,7 @@ pub fn build_write<'a, T: Transaction + 'a>(
 
             CreateIndex::from((op, input)).execute_mut(cache, transaction)
         }
+        Operator::CreateView(op) => CreateView::from(op).execute_mut(cache, transaction),
         Operator::DropTable(op) => DropTable::from(op).execute_mut(cache, transaction),
         Operator::Truncate(op) => Truncate::from(op).execute_mut(cache, transaction),
         Operator::CopyFromFile(op) => CopyFromFile::from(op).execute_mut(cache, transaction),

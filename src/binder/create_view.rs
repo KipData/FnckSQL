@@ -12,7 +12,7 @@ use sqlparser::ast::{Ident, ObjectName, Query};
 use std::sync::Arc;
 use ulid::Ulid;
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<T: Transaction> Binder<'_, '_, T> {
     pub(crate) fn bind_create_view(
         &mut self,
         or_replace: &bool,

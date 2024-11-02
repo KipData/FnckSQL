@@ -1,6 +1,6 @@
 use crate::execution::{Executor, WriteExecutor};
 use crate::planner::operator::create_table::CreateTableOperator;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple_builder::TupleBuilder;
 
@@ -17,7 +17,7 @@ impl From<CreateTableOperator> for CreateTable {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateTable {
     fn execute_mut(
         self,
-        (table_cache, _): (&'a TableCache, &'a StatisticsMetaCache),
+        (table_cache, _, _): (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(

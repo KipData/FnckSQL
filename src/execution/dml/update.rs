@@ -3,7 +3,7 @@ use crate::execution::dql::projection::Projection;
 use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::index::Index;
 use crate::types::tuple::types;
@@ -35,7 +35,7 @@ impl From<(UpdateOperator, LogicalPlan, LogicalPlan)> for Update {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
     fn execute_mut(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(
@@ -51,7 +51,8 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                 let input_schema = input.output_schema().clone();
                 let types = types(&input_schema);
 
-                if let Some(table_catalog) = transaction.table(cache.0, table_name.clone()).cloned()
+                if let Some(table_catalog) =
+                    throw!(transaction.table(cache.0, table_name.clone())).cloned()
                 {
                     let mut value_map = HashMap::new();
                     let mut tuples = Vec::new();

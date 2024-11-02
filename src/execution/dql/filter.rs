@@ -2,7 +2,7 @@ use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
@@ -22,7 +22,7 @@ impl From<(FilterOperator, LogicalPlan)> for Filter {
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Filter {
     fn execute(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a> {
         Box::new(

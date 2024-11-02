@@ -5,7 +5,7 @@ use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{SchemaRef, Tuple};
 use crate::types::value::ValueRef;
@@ -42,7 +42,7 @@ impl From<(AggregateOperator, LogicalPlan)> for HashAggExecutor {
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashAggExecutor {
     fn execute(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a> {
         Box::new(
@@ -184,6 +184,7 @@ mod test {
     #[test]
     fn test_hash_agg() -> Result<(), DatabaseError> {
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
 
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
@@ -241,7 +242,7 @@ mod test {
 
         let tuples = try_collect(
             HashAggExecutor::from((operator, input))
-                .execute((&table_cache, &meta_cache), &transaction),
+                .execute((&table_cache, &view_cache, &meta_cache), &transaction),
         )?;
 
         println!(

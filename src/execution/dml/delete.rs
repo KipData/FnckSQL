@@ -5,7 +5,7 @@ use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::index::{Index, IndexId, IndexType};
 use crate::types::tuple::Tuple;
@@ -30,7 +30,7 @@ impl From<(DeleteOperator, LogicalPlan)> for Delete {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
     fn execute_mut(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(
@@ -42,8 +42,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
                 } = self;
 
                 let schema = input.output_schema().clone();
-                let table = throw!(transaction
-                    .table(cache.0, table_name.clone())
+                let table = throw!(throw!(transaction.table(cache.0, table_name.clone()))
                     .cloned()
                     .ok_or(DatabaseError::TableNotFound));
                 let mut tuple_ids = Vec::new();

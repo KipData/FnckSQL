@@ -4,7 +4,7 @@ use crate::execution::dql::projection::Projection;
 use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
@@ -63,7 +63,7 @@ impl ColumnCatalog {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
     fn execute_mut(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(
@@ -83,9 +83,10 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                     .iter()
                     .find(|col| col.desc().is_primary)
                     .map(|col| col.key(is_mapping_by_name))
-                    .ok_or_else(|| DatabaseError::NotNull));
+                    .ok_or(DatabaseError::NotNull));
 
-                if let Some(table_catalog) = transaction.table(cache.0, table_name.clone()).cloned()
+                if let Some(table_catalog) =
+                    throw!(transaction.table(cache.0, table_name.clone())).cloned()
                 {
                     let types = table_catalog.types();
                     let mut coroutine = build_read(input, cache, transaction);

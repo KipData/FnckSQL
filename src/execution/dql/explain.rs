@@ -1,6 +1,6 @@
 use crate::execution::{Executor, ReadExecutor};
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type};
 use sqlparser::ast::CharLengthUnits;
@@ -17,7 +17,11 @@ impl From<LogicalPlan> for Explain {
 }
 
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Explain {
-    fn execute(self, _: (&'a TableCache, &'a StatisticsMetaCache), _: &T) -> Executor<'a> {
+    fn execute(
+        self,
+        _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
+        _: &'a T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {

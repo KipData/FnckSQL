@@ -50,7 +50,7 @@ impl ReferenceSerialization for ColumnRef {
         ) = (&summary.relation, drive)
         {
             let table = transaction
-                .table(table_cache, table_name.clone())
+                .table(table_cache, table_name.clone())?
                 .ok_or(DatabaseError::TableNotFound)?;
             let column = table
                 .get_column_by_id(column_id)
@@ -174,7 +174,7 @@ pub(crate) mod test {
         let mut reference_tables = ReferenceTables::new();
         let c3_column_id = {
             let table = transaction
-                .table(&table_cache, Arc::new("t1".to_string()))
+                .table(&table_cache, Arc::new("t1".to_string()))?
                 .unwrap();
             *table.get_column_id_by_name("c3").unwrap()
         };

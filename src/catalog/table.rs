@@ -52,6 +52,7 @@ impl TableCatalog {
             .map(|(_, i)| &self.schema_ref[*i])
     }
 
+    #[allow(dead_code)]
     pub(crate) fn contains_column(&self, name: &str) -> bool {
         self.column_idxs.contains_key(name)
     }
