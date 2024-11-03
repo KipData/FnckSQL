@@ -113,7 +113,7 @@ impl ColumnCatalog {
         &self.summary
     }
 
-    pub(crate) fn summary_mut(&mut self) -> &mut ColumnSummary {
+    pub fn summary_mut(&mut self) -> &mut ColumnSummary {
         &mut self.summary
     }
 

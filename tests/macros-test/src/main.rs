@@ -178,18 +178,20 @@ mod test {
             true,
             ColumnDesc::new(LogicalType::Integer, false, false, None)?,
         );
-        c1.summary.relation = ColumnRelation::Table {
+        c1.summary_mut().relation = ColumnRelation::Table {
             column_id: function_schema[0].id().unwrap(),
             table_name: table_name.clone(),
+            is_temp: false,
         };
         let mut c2 = ColumnCatalog::new(
             "c2".to_string(),
             true,
             ColumnDesc::new(LogicalType::Integer, false, false, None)?,
         );
-        c2.summary.relation = ColumnRelation::Table {
+        c2.summary_mut().relation = ColumnRelation::Table {
             column_id: function_schema[1].id().unwrap(),
             table_name: table_name.clone(),
+            is_temp: false,
         };
 
         assert_eq!(
