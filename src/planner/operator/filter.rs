@@ -1,6 +1,6 @@
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::fmt::Formatter;
 use std::{fmt, vec};
 

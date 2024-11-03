@@ -1,5 +1,5 @@
 use crate::catalog::{ColumnCatalog, TableName};
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 

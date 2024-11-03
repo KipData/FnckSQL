@@ -47,8 +47,8 @@ use crate::planner::operator::union::UnionOperator;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::types::index::IndexInfo;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use itertools::Itertools;
-use serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 

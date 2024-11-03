@@ -1,0 +1,16 @@
+[package]
+name = "fnck_sql_serde_macros"
+version     = "0.1.0"
+edition     = "2021"
+description = "SerdeMacros for FnckSQL"
+license     = "Apache-2.0"
+
+[dependencies]
+darling = "0.20"
+proc-macro2 = "1"
+quote = "1"
+syn = "2"
+
+[lib]
+path = "src/lib.rs"
+proc-macro = true

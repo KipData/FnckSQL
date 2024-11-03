@@ -1,6 +1,6 @@
 use crate::catalog::TableName;
 use crate::types::index::IndexMetaRef;
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct AnalyzeOperator {
