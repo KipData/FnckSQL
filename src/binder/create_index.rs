@@ -1,4 +1,4 @@
-use crate::binder::{lower_case_name, Binder};
+use crate::binder::{lower_case_name, Binder, Source};
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::create_index::CreateIndexOperator;
@@ -10,7 +10,7 @@ use crate::types::index::IndexType;
 use sqlparser::ast::{ObjectName, OrderByExpr};
 use std::sync::Arc;
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<T: Transaction> Binder<'_, '_, T> {
     pub(crate) fn bind_create_index(
         &mut self,
         table_name: &ObjectName,
@@ -29,10 +29,14 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             IndexType::Composite
         };
 
-        let table = self
+        let source = self
             .context
-            .table_and_bind(table_name.clone(), None, None)?;
-        let plan = TableScanOperator::build(table_name.clone(), table);
+            .source_and_bind(table_name.clone(), None, None, false)?
+            .ok_or(DatabaseError::SourceNotFound)?;
+        let plan = match source {
+            Source::Table(table) => TableScanOperator::build(table_name.clone(), table),
+            Source::View(view) => LogicalPlan::clone(&view.plan),
+        };
         let mut columns = Vec::with_capacity(exprs.len());
 
         for expr in exprs {

@@ -256,6 +256,7 @@ impl<K: Hash + Eq + PartialEq, V> LruCache<K, V> {
     }
 
     #[inline]
+    #[allow(clippy::manual_inspect)]
     pub fn put(&mut self, key: K, value: V) -> Option<V> {
         let node = NodeReadPtr(Box::leak(Box::new(Node::new(key, value))).into());
         let old_node = self.inner.remove(&KeyRef(node)).map(|node| {
@@ -323,9 +324,8 @@ impl<K: Hash + Eq + PartialEq, V> LruCache<K, V> {
         } else {
             let value = fn_once(&key)?;
             let node = NodeReadPtr(Box::leak(Box::new(Node::new(key, value))).into());
-            let _ignore = self.inner.remove(&KeyRef(node)).map(|node| {
+            self.inner.remove(&KeyRef(node)).inspect(|&node| {
                 self.detach(node);
-                node
             });
             self.expulsion();
             self.attach(node);

@@ -1,7 +1,8 @@
+use crate::catalog::view::View;
 use crate::catalog::{ColumnRef, ColumnRelation, TableMeta};
 use crate::errors::DatabaseError;
 use crate::serdes::{ReferenceSerialization, ReferenceTables};
-use crate::storage::Transaction;
+use crate::storage::{TableCache, Transaction};
 use crate::types::index::{Index, IndexId, IndexMeta, IndexType};
 use crate::types::tuple::{Schema, Tuple, TupleId};
 use crate::types::value::DataValue;
@@ -17,6 +18,8 @@ const BOUND_MAX_TAG: u8 = 1;
 
 lazy_static! {
     static ref ROOT_BYTES: Vec<u8> = b"Root".to_vec();
+    static ref VIEW_BYTES: Vec<u8> = b"View".to_vec();
+    static ref EMPTY_REFERENCE_TABLES: ReferenceTables = ReferenceTables::new();
 }
 
 #[derive(Clone)]
@@ -28,6 +31,7 @@ enum CodecType {
     IndexMeta,
     Index,
     Statistics,
+    View,
     Tuple,
     Root,
 }
@@ -54,9 +58,9 @@ impl TableCodec {
 
     /// TableName + Type
     ///
-    /// Tips: Root full key = key_prefix
-    fn key_prefix(ty: CodecType, table_name: &str) -> Vec<u8> {
-        let mut table_bytes = table_name.to_string().into_bytes();
+    /// Tips: Root & View full key = key_prefix
+    fn key_prefix(ty: CodecType, name: &str) -> Vec<u8> {
+        let mut table_bytes = name.to_string().into_bytes();
 
         match ty {
             CodecType::Column => {
@@ -76,6 +80,13 @@ impl TableCodec {
             }
             CodecType::Root => {
                 let mut bytes = ROOT_BYTES.clone();
+                bytes.push(BOUND_MIN_TAG);
+                bytes.append(&mut table_bytes);
+
+                return bytes;
+            }
+            CodecType::View => {
+                let mut bytes = VIEW_BYTES.clone();
                 bytes.push(BOUND_MIN_TAG);
                 bytes.append(&mut table_bytes);
 
@@ -108,17 +119,21 @@ impl TableCodec {
         (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
     }
 
-    pub fn index_bound(table_name: &str, index_id: &IndexId) -> (Vec<u8>, Vec<u8>) {
-        let op = |bound_id| {
-            let mut key_prefix = Self::key_prefix(CodecType::Index, table_name);
+    pub fn index_bound(
+        table_name: &str,
+        index_id: &IndexId,
+    ) -> Result<(Vec<u8>, Vec<u8>), DatabaseError> {
+        let op = |bound_id| -> Result<Vec<u8>, DatabaseError> {
+            let mut key_prefix = Cursor::new(Self::key_prefix(CodecType::Index, table_name));
+            key_prefix.seek(SeekFrom::End(0))?;
 
-            key_prefix.push(BOUND_MIN_TAG);
-            key_prefix.append(&mut index_id.to_be_bytes().to_vec());
-            key_prefix.push(bound_id);
-            key_prefix
+            key_prefix.write_all(&[BOUND_MIN_TAG])?;
+            key_prefix.write_all(&index_id.to_be_bytes()[..])?;
+            key_prefix.write_all(&[bound_id])?;
+            Ok(key_prefix.into_inner())
         };
 
-        (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
+        Ok((op(BOUND_MIN_TAG)?, op(BOUND_MAX_TAG)?))
     }
 
     pub fn all_index_bound(table_name: &str) -> (Vec<u8>, Vec<u8>) {
@@ -175,6 +190,17 @@ impl TableCodec {
         (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
     }
 
+    pub fn view_bound() -> (Vec<u8>, Vec<u8>) {
+        let op = |bound_id| {
+            let mut key_prefix = VIEW_BYTES.clone();
+
+            key_prefix.push(bound_id);
+            key_prefix
+        };
+
+        (op(BOUND_MIN_TAG), op(BOUND_MAX_TAG))
+    }
+
     /// Key: {TableName}{TUPLE_TAG}{BOUND_MIN_TAG}{RowID}(Sorted)
     /// Value: Tuple
     pub fn encode_tuple(
@@ -217,18 +243,23 @@ impl TableCodec {
         table_name: &str,
         index_meta: &IndexMeta,
     ) -> Result<(Bytes, Bytes), DatabaseError> {
-        let mut key_prefix = Self::key_prefix(CodecType::IndexMeta, table_name);
-        key_prefix.push(BOUND_MIN_TAG);
-        key_prefix.append(&mut index_meta.id.to_be_bytes().to_vec());
+        let mut key_prefix = Cursor::new(Self::key_prefix(CodecType::IndexMeta, table_name));
+        key_prefix.seek(SeekFrom::End(0))?;
+
+        key_prefix.write_all(&[BOUND_MIN_TAG])?;
+        key_prefix.write_all(&index_meta.id.to_be_bytes()[..])?;
+
+        let mut value_bytes = Cursor::new(Vec::new());
+        index_meta.encode(&mut value_bytes, true, &mut ReferenceTables::new())?;
 
         Ok((
-            Bytes::from(key_prefix),
-            Bytes::from(bincode::serialize(&index_meta)?),
+            Bytes::from(key_prefix.into_inner()),
+            Bytes::from(value_bytes.into_inner()),
         ))
     }
 
-    pub fn decode_index_meta(bytes: &[u8]) -> Result<IndexMeta, DatabaseError> {
-        Ok(bincode::deserialize(bytes)?)
+    pub fn decode_index_meta<T: Transaction>(bytes: &[u8]) -> Result<IndexMeta, DatabaseError> {
+        IndexMeta::decode::<T, _>(&mut Cursor::new(bytes), None, &EMPTY_REFERENCE_TABLES)
     }
 
     /// NonUnique Index:
@@ -311,7 +342,8 @@ impl TableCodec {
         if let ColumnRelation::Table {
             column_id,
             table_name,
-        } = &col.summary.relation
+            is_temp: false,
+        } = &col.summary().relation
         {
             let mut key_prefix = Cursor::new(Self::key_prefix(CodecType::Column, table_name));
             key_prefix.seek(SeekFrom::End(0))?;
@@ -365,25 +397,72 @@ impl TableCodec {
         Ok(String::from_utf8(bytes.to_vec())?)
     }
 
+    /// Key: View{BOUND_MIN_TAG}{ViewName}
+    /// Value: View
+    pub fn encode_view(view: &View) -> Result<(Bytes, Bytes), DatabaseError> {
+        let key = Self::encode_view_key(&view.name);
+
+        let mut reference_tables = ReferenceTables::new();
+        let mut bytes = vec![0u8; 4];
+        let reference_tables_pos = {
+            let mut value = Cursor::new(&mut bytes);
+            value.seek(SeekFrom::End(0))?;
+            view.encode(&mut value, false, &mut reference_tables)?;
+            let pos = value.position() as usize;
+            reference_tables.to_raw(&mut bytes)?;
+            pos
+        };
+        bytes[..4].copy_from_slice(&(reference_tables_pos as u32).to_le_bytes());
+
+        Ok((Bytes::from(key), Bytes::from(bytes)))
+    }
+
+    pub fn encode_view_key(view_name: &str) -> Vec<u8> {
+        Self::key_prefix(CodecType::View, view_name)
+    }
+
+    pub fn decode_view<T: Transaction>(
+        bytes: &[u8],
+        drive: (&T, &TableCache),
+    ) -> Result<View, DatabaseError> {
+        let mut cursor = Cursor::new(bytes);
+        let reference_tables_pos = {
+            let mut bytes = [0u8; 4];
+            cursor.read_exact(&mut bytes)?;
+            u32::from_le_bytes(bytes) as u64
+        };
+        cursor.seek(SeekFrom::Start(reference_tables_pos))?;
+        let reference_tables = ReferenceTables::from_raw(&mut cursor)?;
+        cursor.seek(SeekFrom::Start(4))?;
+
+        View::decode(&mut cursor, Some(drive), &reference_tables)
+    }
+
     /// Key: Root{BOUND_MIN_TAG}{TableName}
     /// Value: TableMeta
     pub fn encode_root_table(meta: &TableMeta) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = Self::encode_root_table_key(&meta.table_name);
 
-        Ok((Bytes::from(key), Bytes::from(bincode::serialize(meta)?)))
+        let mut meta_bytes = Cursor::new(Vec::new());
+        meta.encode(&mut meta_bytes, true, &mut ReferenceTables::new())?;
+        Ok((Bytes::from(key), Bytes::from(meta_bytes.into_inner())))
     }
 
     pub fn encode_root_table_key(table_name: &str) -> Vec<u8> {
         Self::key_prefix(CodecType::Root, table_name)
     }
 
-    pub fn decode_root_table(bytes: &[u8]) -> Result<TableMeta, DatabaseError> {
-        Ok(bincode::deserialize(bytes)?)
+    pub fn decode_root_table<T: Transaction>(bytes: &[u8]) -> Result<TableMeta, DatabaseError> {
+        let mut bytes = Cursor::new(bytes);
+
+        TableMeta::decode::<T, _>(&mut bytes, None, &EMPTY_REFERENCE_TABLES)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::binder::test::build_t1_table;
+    use crate::catalog::view::View;
     use crate::catalog::{
         ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, TableCatalog, TableMeta,
     };
@@ -391,6 +470,7 @@ mod tests {
     use crate::serdes::ReferenceTables;
     use crate::storage::rocksdb::RocksTransaction;
     use crate::storage::table_codec::TableCodec;
+    use crate::storage::Storage;
     use crate::types::index::{Index, IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
@@ -455,7 +535,7 @@ mod tests {
         })
         .unwrap();
 
-        let table_meta = TableCodec::decode_root_table(&bytes).unwrap();
+        let table_meta = TableCodec::decode_root_table::<RocksTransaction>(&bytes).unwrap();
 
         debug_assert_eq!(table_meta.table_name.as_str(), table_catalog.name.as_str());
     }
@@ -481,7 +561,10 @@ mod tests {
         };
         let (_, bytes) = TableCodec::encode_index_meta(&"T1".to_string(), &index_meta)?;
 
-        debug_assert_eq!(TableCodec::decode_index_meta(&bytes)?, index_meta);
+        debug_assert_eq!(
+            TableCodec::decode_index_meta::<RocksTransaction>(&bytes)?,
+            index_meta
+        );
 
         Ok(())
     }
@@ -509,9 +592,10 @@ mod tests {
             false,
             ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
         );
-        col.summary.relation = ColumnRelation::Table {
+        col.summary_mut().relation = ColumnRelation::Table {
             column_id: Ulid::new(),
             table_name: Arc::new("t1".to_string()),
+            is_temp: false,
         };
         let col = ColumnRef::from(col);
 
@@ -520,10 +604,63 @@ mod tests {
         let (_, bytes) = TableCodec::encode_column(&col, &mut reference_tables).unwrap();
         let mut cursor = Cursor::new(bytes.as_ref());
         let decode_col =
-            TableCodec::decode_column::<RocksTransaction, _>(&mut cursor, &reference_tables)
-                .unwrap();
+            TableCodec::decode_column::<RocksTransaction, _>(&mut cursor, &reference_tables)?;
 
         debug_assert_eq!(decode_col, col);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_table_codec_view() -> Result<(), DatabaseError> {
+        let table_state = build_t1_table()?;
+        // Subquery
+        {
+            let plan = table_state
+                .plan("select * from t1 where c1 in (select c1 from t1 where c1 > 1)")?;
+            println!("{:#?}", plan);
+            let view = View {
+                name: Arc::new("view_subquery".to_string()),
+                plan: Box::new(plan),
+            };
+            let (_, bytes) = TableCodec::encode_view(&view)?;
+            let transaction = table_state.storage.transaction()?;
+
+            debug_assert_eq!(
+                view,
+                TableCodec::decode_view(&bytes, (&transaction, &table_state.table_cache))?
+            );
+        }
+        // No Join
+        {
+            let plan = table_state.plan("select * from t1 where c1 > 1")?;
+            let view = View {
+                name: Arc::new("view_filter".to_string()),
+                plan: Box::new(plan),
+            };
+            let (_, bytes) = TableCodec::encode_view(&view)?;
+            let transaction = table_state.storage.transaction()?;
+
+            debug_assert_eq!(
+                view,
+                TableCodec::decode_view(&bytes, (&transaction, &table_state.table_cache))?
+            );
+        }
+        // Join
+        {
+            let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
+            let view = View {
+                name: Arc::new("view_join".to_string()),
+                plan: Box::new(plan),
+            };
+            let (_, bytes) = TableCodec::encode_view(&view)?;
+            let transaction = table_state.storage.transaction()?;
+
+            debug_assert_eq!(
+                view,
+                TableCodec::decode_view(&bytes, (&transaction, &table_state.table_cache))?
+            );
+        }
 
         Ok(())
     }
@@ -543,9 +680,10 @@ mod tests {
                 },
             );
 
-            col.summary.relation = ColumnRelation::Table {
+            col.summary_mut().relation = ColumnRelation::Table {
                 column_id: Ulid::from(col_id as u128),
                 table_name: Arc::new(table_name.to_string()),
+                is_temp: false,
             };
 
             let (key, _) =
@@ -663,7 +801,7 @@ mod tests {
 
         println!("{:#?}", set);
 
-        let (min, max) = TableCodec::index_bound(&table_catalog.name, &1);
+        let (min, max) = TableCodec::index_bound(&table_catalog.name, &1).unwrap();
 
         println!("{:?}", min);
         println!("{:?}", max);
@@ -771,7 +909,7 @@ mod tests {
     #[test]
     fn test_root_codec_name_bound() {
         let mut set = BTreeSet::new();
-        let op = |table_name: &str| TableCodec::encode_root_table_key(&table_name.to_string());
+        let op = |table_name: &str| TableCodec::encode_root_table_key(table_name);
 
         set.insert(b"A".to_vec());
 
@@ -793,5 +931,32 @@ mod tests {
         debug_assert_eq!(vec[0], &op("T0"));
         debug_assert_eq!(vec[1], &op("T1"));
         debug_assert_eq!(vec[2], &op("T2"));
+    }
+
+    #[test]
+    fn test_view_codec_name_bound() {
+        let mut set = BTreeSet::new();
+        let op = |view_name: &str| TableCodec::encode_view_key(view_name);
+
+        set.insert(b"A".to_vec());
+
+        set.insert(op("V0"));
+        set.insert(op("V1"));
+        set.insert(op("V2"));
+
+        set.insert(b"Z".to_vec());
+
+        let (min, max) = TableCodec::view_bound();
+
+        let vec = set
+            .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((
+                Bound::Included(&min),
+                Bound::Included(&max),
+            ))
+            .collect_vec();
+
+        debug_assert_eq!(vec[0], &op("V0"));
+        debug_assert_eq!(vec[1], &op("V1"));
+        debug_assert_eq!(vec[2], &op("V2"));
     }
 }

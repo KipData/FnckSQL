@@ -4,6 +4,7 @@ mod analyze;
 pub mod copy;
 mod create_index;
 mod create_table;
+mod create_view;
 mod delete;
 mod describe;
 mod distinct;
@@ -21,13 +22,15 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use crate::catalog::{TableCatalog, TableName};
+use crate::catalog::view::View;
+use crate::catalog::{ColumnRef, TableCatalog, TableName};
 use crate::db::{ScalaFunctions, TableFunctions};
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::JoinType;
-use crate::planner::LogicalPlan;
-use crate::storage::{TableCache, Transaction};
+use crate::planner::{LogicalPlan, SchemaOutput};
+use crate::storage::{TableCache, Transaction, ViewCache};
+use crate::types::tuple::SchemaRef;
 
 pub enum InputRefType {
     AggCall,
@@ -44,6 +47,7 @@ pub fn command_type(stmt: &Statement) -> Result<CommandType, DatabaseError> {
     match stmt {
         Statement::CreateTable { .. }
         | Statement::CreateIndex { .. }
+        | Statement::CreateView { .. }
         | Statement::AlterTable { .. }
         | Statement::Drop { .. } => Ok(CommandType::DDL),
         Statement::Query(_)
@@ -80,15 +84,21 @@ pub enum SubQueryType {
     InSubQuery(bool, LogicalPlan),
 }
 
+#[derive(Debug, Clone)]
+pub enum Source<'a> {
+    Table(&'a TableCatalog),
+    View(&'a View),
+}
+
 #[derive(Clone)]
 pub struct BinderContext<'a, T: Transaction> {
     pub(crate) scala_functions: &'a ScalaFunctions,
     pub(crate) table_functions: &'a TableFunctions,
     pub(crate) table_cache: &'a TableCache,
+    pub(crate) view_cache: &'a ViewCache,
     pub(crate) transaction: &'a T,
     // Tips: When there are multiple tables and Wildcard, use BTreeMap to ensure that the order of the output tables is certain.
-    pub(crate) bind_table:
-        BTreeMap<(TableName, Option<TableName>, Option<JoinType>), &'a TableCatalog>,
+    pub(crate) bind_table: BTreeMap<(TableName, Option<TableName>, Option<JoinType>), Source<'a>>,
     // alias
     expr_aliases: BTreeMap<(Option<String>, String), ScalarExpression>,
     table_aliases: HashMap<TableName, TableName>,
@@ -105,9 +115,53 @@ pub struct BinderContext<'a, T: Transaction> {
     pub(crate) allow_default: bool,
 }
 
+impl Source<'_> {
+    pub(crate) fn column(
+        &self,
+        name: &str,
+        schema_buf: &mut Option<SchemaOutput>,
+    ) -> Option<ColumnRef> {
+        match self {
+            Source::Table(table) => table.get_column_by_name(name),
+            Source::View(view) => schema_buf
+                .get_or_insert_with(|| view.plan.output_schema_direct())
+                .columns()
+                .find(|column| column.name() == name),
+        }
+        .cloned()
+    }
+
+    pub(crate) fn columns<'a>(
+        &'a self,
+        schema_buf: &'a mut Option<SchemaOutput>,
+    ) -> Box<dyn Iterator<Item = &'a ColumnRef> + 'a> {
+        match self {
+            Source::Table(table) => Box::new(table.columns()),
+            Source::View(view) => Box::new(
+                schema_buf
+                    .get_or_insert_with(|| view.plan.output_schema_direct())
+                    .columns(),
+            ),
+        }
+    }
+
+    pub(crate) fn schema_ref(&self, schema_buf: &mut Option<SchemaOutput>) -> SchemaRef {
+        match self {
+            Source::Table(table) => table.schema_ref().clone(),
+            Source::View(view) => {
+                match schema_buf.get_or_insert_with(|| view.plan.output_schema_direct()) {
+                    SchemaOutput::Schema(schema) => Arc::new(schema.clone()),
+                    SchemaOutput::SchemaRef(schema_ref) => schema_ref.clone(),
+                }
+            }
+        }
+    }
+}
+
 impl<'a, T: Transaction> BinderContext<'a, T> {
     pub fn new(
         table_cache: &'a TableCache,
+        view_cache: &'a ViewCache,
         transaction: &'a T,
         scala_functions: &'a ScalaFunctions,
         table_functions: &'a TableFunctions,
@@ -117,6 +171,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             scala_functions,
             table_functions,
             table_cache,
+            view_cache,
             transaction,
             bind_table: Default::default(),
             expr_aliases: Default::default(),
@@ -161,7 +216,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         self.sub_queries.remove(&self.bind_step)
     }
 
-    pub fn table(&self, table_name: TableName) -> Option<&TableCatalog> {
+    pub fn table(&self, table_name: TableName) -> Result<Option<&TableCatalog>, DatabaseError> {
         if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
             self.transaction.table(self.table_cache, real_name.clone())
         } else {
@@ -169,38 +224,76 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }
     }
 
-    pub fn table_and_bind(
+    pub fn view(&self, view_name: TableName) -> Result<Option<&View>, DatabaseError> {
+        if let Some(real_name) = self.table_aliases.get(view_name.as_ref()) {
+            self.transaction.view(
+                self.view_cache,
+                real_name.clone(),
+                (self.transaction, self.table_cache),
+            )
+        } else {
+            self.transaction.view(
+                self.view_cache,
+                view_name.clone(),
+                (self.transaction, self.table_cache),
+            )
+        }
+    }
+
+    #[allow(unused_assignments)]
+    pub fn source_and_bind(
         &mut self,
         table_name: TableName,
-        alias: Option<TableName>,
+        alias: Option<&TableName>,
         join_type: Option<JoinType>,
-    ) -> Result<&TableCatalog, DatabaseError> {
-        let table = if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
+        only_table: bool,
+    ) -> Result<Option<Source>, DatabaseError> {
+        let mut source = None;
+
+        source = if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
             self.transaction.table(self.table_cache, real_name.clone())
         } else {
             self.transaction.table(self.table_cache, table_name.clone())
+        }?
+        .map(Source::Table);
+
+        if source.is_none() && !only_table {
+            source = if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
+                self.transaction.view(
+                    self.view_cache,
+                    real_name.clone(),
+                    (self.transaction, self.table_cache),
+                )
+            } else {
+                self.transaction.view(
+                    self.view_cache,
+                    table_name.clone(),
+                    (self.transaction, self.table_cache),
+                )
+            }?
+            .map(Source::View);
         }
-        .ok_or(DatabaseError::TableNotFound)?;
-
-        self.bind_table
-            .insert((table_name.clone(), alias, join_type), table);
-
-        Ok(table)
+        if let Some(source) = &source {
+            self.bind_table.insert(
+                (table_name.clone(), alias.cloned(), join_type),
+                source.clone(),
+            );
+        }
+        Ok(source)
     }
 
-    /// get table from bindings
-    pub fn bind_table<'b: 'a>(
+    pub fn bind_source<'b: 'a>(
         &self,
         table_name: &str,
         parent: Option<&'b Binder<'a, 'b, T>>,
-    ) -> Result<&TableCatalog, DatabaseError> {
-        if let Some(table_catalog) = self.bind_table.iter().find(|((t, alias, _), _)| {
+    ) -> Result<&Source, DatabaseError> {
+        if let Some(source) = self.bind_table.iter().find(|((t, alias, _), _)| {
             t.as_str() == table_name
                 || matches!(alias.as_ref().map(|a| a.as_str() == table_name), Some(true))
         }) {
-            Ok(table_catalog.1)
+            Ok(source.1)
         } else if let Some(binder) = parent {
-            binder.context.bind_table(table_name, binder.parent)
+            binder.context.bind_source(table_name, binder.parent)
         } else {
             Err(DatabaseError::InvalidTable(table_name.into()))
         }
@@ -238,12 +331,17 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
 
 pub struct Binder<'a, 'b, T: Transaction> {
     context: BinderContext<'a, T>,
+    table_schema_buf: HashMap<TableName, Option<SchemaOutput>>,
     pub(crate) parent: Option<&'b Binder<'a, 'b, T>>,
 }
 
 impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
     pub fn new(context: BinderContext<'a, T>, parent: Option<&'b Binder<'a, 'b, T>>) -> Self {
-        Binder { context, parent }
+        Binder {
+            context,
+            table_schema_buf: Default::default(),
+            parent,
+        }
     }
 
     pub fn bind(&mut self, stmt: &Statement) -> Result<LogicalPlan, DatabaseError> {
@@ -329,6 +427,13 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                 unique,
                 ..
             } => self.bind_create_index(table_name, name, columns, *if_not_exists, *unique)?,
+            Statement::CreateView {
+                or_replace,
+                name,
+                columns,
+                query,
+                ..
+            } => self.bind_create_view(or_replace, name, columns, query)?,
             _ => return Err(DatabaseError::UnsupportedStmt(stmt.to_string())),
         };
         Ok(plan)
@@ -386,7 +491,7 @@ pub mod test {
     use crate::errors::DatabaseError;
     use crate::planner::LogicalPlan;
     use crate::storage::rocksdb::RocksStorage;
-    use crate::storage::{Storage, TableCache, Transaction};
+    use crate::storage::{Storage, TableCache, Transaction, ViewCache};
     use crate::types::ColumnId;
     use crate::types::LogicalType::Integer;
     use crate::utils::lru::ShardingLruCache;
@@ -399,6 +504,7 @@ pub mod test {
     pub(crate) struct TableState<S: Storage> {
         pub(crate) table: TableCatalog,
         pub(crate) table_cache: Arc<TableCache>,
+        pub(crate) view_cache: Arc<ViewCache>,
         pub(crate) storage: S,
     }
 
@@ -410,6 +516,7 @@ pub mod test {
             let mut binder = Binder::new(
                 BinderContext::new(
                     &self.table_cache,
+                    &self.view_cache,
                     &transaction,
                     &scala_functions,
                     &table_functions,
@@ -430,11 +537,12 @@ pub mod test {
     pub(crate) fn build_t1_table() -> Result<TableState<RocksStorage>, DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let storage = build_test_catalog(&table_cache, temp_dir.path())?;
         let table = {
             let transaction = storage.transaction()?;
             transaction
-                .table(&table_cache, Arc::new("t1".to_string()))
+                .table(&table_cache, Arc::new("t1".to_string()))?
                 .unwrap()
                 .clone()
         };
@@ -442,6 +550,7 @@ pub mod test {
         Ok(TableState {
             table,
             table_cache,
+            view_cache,
             storage,
         })
     }

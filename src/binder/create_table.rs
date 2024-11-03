@@ -14,7 +14,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::LogicalType;
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<T: Transaction> Binder<'_, '_, T> {
     // TODO: TableConstraint
     pub(crate) fn bind_create_table(
         &mut self,
@@ -62,9 +62,9 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                             .find(|column| column.name() == column_name)
                         {
                             if *is_primary {
-                                column.desc.is_primary = true;
+                                column.desc_mut().is_primary = true;
                             } else {
-                                column.desc.is_unique = true;
+                                column.desc_mut().is_unique = true;
                             }
                         }
                     }
@@ -73,7 +73,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
             }
         }
 
-        if columns.iter().filter(|col| col.desc.is_primary).count() != 1 {
+        if columns.iter().filter(|col| col.desc().is_primary).count() != 1 {
             return Err(DatabaseError::InvalidTable(
                 "The primary key field must exist and have at least one".to_string(),
             ));
@@ -158,6 +158,7 @@ mod tests {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let scala_functions = Default::default();
         let table_functions = Default::default();
 
@@ -165,6 +166,7 @@ mod tests {
         let mut binder = Binder::new(
             BinderContext::new(
                 &table_cache,
+                &view_cache,
                 &transaction,
                 &scala_functions,
                 &table_functions,
@@ -179,16 +181,16 @@ mod tests {
             Operator::CreateTable(op) => {
                 debug_assert_eq!(op.table_name, Arc::new("t1".to_string()));
                 debug_assert_eq!(op.columns[0].name(), "id");
-                debug_assert_eq!(op.columns[0].nullable, false);
+                debug_assert_eq!(op.columns[0].nullable(), false);
                 debug_assert_eq!(
-                    op.columns[0].desc,
-                    ColumnDesc::new(LogicalType::Integer, true, false, None)?
+                    op.columns[0].desc(),
+                    &ColumnDesc::new(LogicalType::Integer, true, false, None)?
                 );
                 debug_assert_eq!(op.columns[1].name(), "name");
-                debug_assert_eq!(op.columns[1].nullable, true);
+                debug_assert_eq!(op.columns[1].nullable(), true);
                 debug_assert_eq!(
-                    op.columns[1].desc,
-                    ColumnDesc::new(
+                    op.columns[1].desc(),
+                    &ColumnDesc::new(
                         LogicalType::Varchar(Some(10), CharLengthUnits::Characters),
                         false,
                         false,

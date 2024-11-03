@@ -1,6 +1,7 @@
 pub mod rocksdb;
 mod table_codec;
 
+use crate::catalog::view::View;
 use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableMeta, TableName};
 use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
@@ -22,7 +23,8 @@ use std::{mem, slice};
 use ulid::Generator;
 
 pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), StatisticsMeta>;
-pub(crate) type TableCache = ShardingLruCache<String, TableCatalog>;
+pub(crate) type TableCache = ShardingLruCache<TableName, TableCatalog>;
+pub(crate) type ViewCache = ShardingLruCache<TableName, View>;
 
 pub trait Storage: Clone {
     type TransactionType<'a>: Transaction
@@ -54,7 +56,7 @@ pub trait Transaction: Sized {
         debug_assert!(columns.iter().map(|(i, _)| i).all_unique());
 
         let table = self
-            .table(table_cache, table_name.clone())
+            .table(table_cache, table_name.clone())?
             .ok_or(DatabaseError::TableNotFound)?;
         let table_types = table.types();
         if columns.is_empty() {
@@ -94,7 +96,7 @@ pub trait Transaction: Sized {
         debug_assert!(columns.iter().map(|(i, _)| i).all_unique());
 
         let table = self
-            .table(table_cache, table_name.clone())
+            .table(table_cache, table_name.clone())?
             .ok_or(DatabaseError::TableNotFound)?;
         let table_types = table.types();
         let table_name = table.name.as_str();
@@ -133,7 +135,7 @@ pub trait Transaction: Sized {
         column_ids: Vec<ColumnId>,
         ty: IndexType,
     ) -> Result<IndexId, DatabaseError> {
-        if let Some(mut table) = self.table(table_cache, table_name.clone()).cloned() {
+        if let Some(mut table) = self.table(table_cache, table_name.clone())?.cloned() {
             let index_meta = table.add_index_meta(index_name, column_ids, ty)?;
             let (key, value) = TableCodec::encode_index_meta(table_name, index_meta)?;
             self.set(key, value)?;
@@ -215,8 +217,8 @@ pub trait Transaction: Sized {
         column: &ColumnCatalog,
         if_not_exists: bool,
     ) -> Result<ColumnId, DatabaseError> {
-        if let Some(mut table) = self.table(table_cache, table_name.clone()).cloned() {
-            if !column.nullable && column.default_value()?.is_none() {
+        if let Some(mut table) = self.table(table_cache, table_name.clone())?.cloned() {
+            if !column.nullable() && column.default_value()?.is_none() {
                 return Err(DatabaseError::NeedNullAbleOrDefault);
             }
 
@@ -232,7 +234,7 @@ pub trait Transaction: Sized {
             let mut generator = Generator::new();
             let col_id = table.add_column(column.clone(), &mut generator)?;
 
-            if column.desc.is_unique {
+            if column.desc().is_unique {
                 let meta_ref = table.add_index_meta(
                     format!("uk_{}", column.name()),
                     vec![col_id],
@@ -260,7 +262,7 @@ pub trait Transaction: Sized {
         table_name: &TableName,
         column_name: &str,
     ) -> Result<(), DatabaseError> {
-        if let Some(table_catalog) = self.table(table_cache, table_name.clone()).cloned() {
+        if let Some(table_catalog) = self.table(table_cache, table_name.clone())?.cloned() {
             let column = table_catalog.get_column_by_name(column_name).unwrap();
 
             let (key, _) = TableCodec::encode_column(column, &mut ReferenceTables::new())?;
@@ -273,7 +275,7 @@ pub trait Transaction: Sized {
                 let (index_meta_key, _) = TableCodec::encode_index_meta(table_name, index_meta)?;
                 self.remove(&index_meta_key)?;
 
-                let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id);
+                let (index_min, index_max) = TableCodec::index_bound(table_name, &index_meta.id)?;
                 self._drop_data(&index_min, &index_max)?;
 
                 self.remove_table_meta(meta_cache, table_name, index_meta.id)?;
@@ -284,6 +286,23 @@ pub trait Transaction: Sized {
         } else {
             Err(DatabaseError::TableNotFound)
         }
+    }
+
+    fn create_view(
+        &mut self,
+        view_cache: &ViewCache,
+        view: View,
+        or_replace: bool,
+    ) -> Result<(), DatabaseError> {
+        let (view_key, value) = TableCodec::encode_view(&view)?;
+
+        if !or_replace && self.get(&view_key)?.is_some() {
+            return Err(DatabaseError::ViewExists);
+        }
+        self.set(view_key, value)?;
+        let _ = view_cache.put(view.name.clone(), view);
+
+        Ok(())
     }
 
     fn create_table(
@@ -315,7 +334,7 @@ pub trait Transaction: Sized {
             self.set(key, value)?;
         }
         debug_assert_eq!(reference_tables.len(), 1);
-        table_cache.put(table_name.to_string(), table_catalog);
+        table_cache.put(table_name.clone(), table_catalog);
 
         Ok(table_name)
     }
@@ -326,7 +345,7 @@ pub trait Transaction: Sized {
         table_name: TableName,
         if_exists: bool,
     ) -> Result<(), DatabaseError> {
-        if self.table(table_cache, table_name.clone()).is_none() {
+        if self.table(table_cache, table_name.clone())?.is_none() {
             if if_exists {
                 return Ok(());
             } else {
@@ -360,19 +379,40 @@ pub trait Transaction: Sized {
         Ok(())
     }
 
+    fn view<'a>(
+        &'a self,
+        view_cache: &'a ViewCache,
+        view_name: TableName,
+        drive: (&Self, &TableCache),
+    ) -> Result<Option<&'a View>, DatabaseError> {
+        if let Some(view) = view_cache.get(&view_name) {
+            return Ok(Some(view));
+        }
+        let Some(bytes) = self.get(&TableCodec::encode_view_key(&view_name))? else {
+            return Ok(None);
+        };
+        Ok(Some(view_cache.get_or_insert(view_name.clone(), |_| {
+            TableCodec::decode_view(&bytes, drive)
+        })?))
+    }
+
     fn table<'a>(
         &'a self,
         table_cache: &'a TableCache,
         table_name: TableName,
-    ) -> Option<&TableCatalog> {
-        table_cache
-            .get_or_insert(table_name.to_string(), |_| {
-                // `TableCache` is not theoretically used in `table_collect` because ColumnCatalog should not depend on other Column
-                let (columns, indexes) = self.table_collect(table_name.clone())?;
+    ) -> Result<Option<&'a TableCatalog>, DatabaseError> {
+        if let Some(table) = table_cache.get(&table_name) {
+            return Ok(Some(table));
+        }
 
-                TableCatalog::reload(table_name.clone(), columns, indexes)
+        // `TableCache` is not theoretically used in `table_collect` because ColumnCatalog should not depend on other Column
+        self.table_collect(&table_name)?
+            .map(|(columns, indexes)| {
+                table_cache.get_or_insert(table_name.clone(), |_| {
+                    TableCatalog::reload(table_name, columns, indexes)
+                })
             })
-            .ok()
+            .transpose()
     }
 
     fn table_metas(&self) -> Result<Vec<TableMeta>, DatabaseError> {
@@ -381,7 +421,7 @@ pub trait Transaction: Sized {
         let mut iter = self.range(Bound::Included(&min), Bound::Included(&max))?;
 
         while let Some((_, value)) = iter.try_next().ok().flatten() {
-            let meta = TableCodec::decode_root_table(&value)?;
+            let meta = TableCodec::decode_root_table::<Self>(&value)?;
 
             metas.push(meta);
         }
@@ -430,25 +470,29 @@ pub trait Transaction: Sized {
         Ok(())
     }
 
-    fn meta_loader<'a>(&'a self, meta_cache: &'a StatisticsMetaCache) -> StatisticMetaLoader<Self>
+    fn meta_loader<'a>(
+        &'a self,
+        meta_cache: &'a StatisticsMetaCache,
+    ) -> StatisticMetaLoader<'a, Self>
     where
         Self: Sized,
     {
         StatisticMetaLoader::new(self, meta_cache)
     }
 
+    #[allow(clippy::type_complexity)]
     fn table_collect(
         &self,
-        table_name: TableName,
-    ) -> Result<(Vec<ColumnRef>, Vec<IndexMetaRef>), DatabaseError> {
-        let (table_min, table_max) = TableCodec::table_bound(&table_name);
+        table_name: &TableName,
+    ) -> Result<Option<(Vec<ColumnRef>, Vec<IndexMetaRef>)>, DatabaseError> {
+        let (table_min, table_max) = TableCodec::table_bound(table_name);
         let mut column_iter =
             self.range(Bound::Included(&table_min), Bound::Included(&table_max))?;
 
         let mut columns = Vec::new();
         let mut index_metas = Vec::new();
         let mut reference_tables = ReferenceTables::new();
-        let _ = reference_tables.push_or_replace(&table_name);
+        let _ = reference_tables.push_or_replace(table_name);
 
         // Tips: only `Column`, `IndexMeta`, `TableMeta`
         while let Some((key, value)) = column_iter.try_next().ok().flatten() {
@@ -459,11 +503,11 @@ pub trait Transaction: Sized {
                     &reference_tables,
                 )?);
             } else {
-                index_metas.push(Arc::new(TableCodec::decode_index_meta(&value)?));
+                index_metas.push(Arc::new(TableCodec::decode_index_meta::<Self>(&value)?));
             }
         }
 
-        Ok((columns, index_metas))
+        Ok((!columns.is_empty()).then_some((columns, index_metas)))
     }
 
     fn _drop_data(&mut self, min: &[u8], max: &[u8]) -> Result<(), DatabaseError> {
@@ -489,15 +533,15 @@ pub trait Transaction: Sized {
         let table_name = table.name.clone();
         let index_column = table
             .columns()
-            .filter(|column| column.desc.is_primary || column.desc.is_unique)
+            .filter(|column| column.desc().is_primary || column.desc().is_unique)
             .map(|column| (column.id().unwrap(), column.clone()))
             .collect_vec();
 
         for (col_id, col) in index_column {
-            let is_primary = col.desc.is_primary;
+            let is_primary = col.desc().is_primary;
             let index_ty = if is_primary {
                 IndexType::PrimaryKey
-            } else if col.desc.is_unique {
+            } else if col.desc().is_unique {
                 IndexType::Unique
             } else {
                 continue;
@@ -947,7 +991,7 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                     let (bound_min, bound_max) = if matches!(index_meta.ty, IndexType::PrimaryKey) {
                         TableCodec::tuple_bound(table_name)
                     } else {
-                        TableCodec::index_bound(table_name, &index_meta.id)
+                        TableCodec::index_bound(table_name, &index_meta.id)?
                     };
                     let check_bound = |value: &mut Bound<Vec<u8>>, bound: Vec<u8>| {
                         if matches!(value, Bound::Unbounded) {
@@ -994,9 +1038,9 @@ pub trait Iter {
 
 #[cfg(test)]
 mod test {
-    use crate::catalog::{
-        ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary, TableCatalog,
-    };
+    use crate::binder::test::build_t1_table;
+    use crate::catalog::view::View;
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
     use crate::db::test::build_table;
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
@@ -1086,7 +1130,7 @@ mod test {
                          table_cache: &TableCache|
          -> Result<(), DatabaseError> {
             let table = transaction
-                .table(&table_cache, Arc::new("t1".to_string()))
+                .table(&table_cache, Arc::new("t1".to_string()))?
                 .unwrap();
             let c1_column_id = *table.get_column_id_by_name("c1").unwrap();
             let c2_column_id = *table.get_column_id_by_name("c2").unwrap();
@@ -1108,54 +1152,57 @@ mod test {
 
             let mut column_iter = table.columns();
             let c1_column = column_iter.next().unwrap();
-            assert_eq!(c1_column.nullable, false);
+            assert_eq!(c1_column.nullable(), false);
             assert_eq!(
                 c1_column.summary(),
                 &ColumnSummary {
                     name: "c1".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: c1_column_id,
-                        table_name: Arc::new("t1".to_string())
+                        table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 }
             );
             assert_eq!(
-                c1_column.desc,
-                ColumnDesc::new(LogicalType::Integer, true, false, None)?
+                c1_column.desc(),
+                &ColumnDesc::new(LogicalType::Integer, true, false, None)?
             );
 
             let c2_column = column_iter.next().unwrap();
-            assert_eq!(c2_column.nullable, false);
+            assert_eq!(c2_column.nullable(), false);
             assert_eq!(
                 c2_column.summary(),
                 &ColumnSummary {
                     name: "c2".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: c2_column_id,
-                        table_name: Arc::new("t1".to_string())
+                        table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 }
             );
             assert_eq!(
-                c2_column.desc,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None)?
+                c2_column.desc(),
+                &ColumnDesc::new(LogicalType::Boolean, false, false, None)?
             );
 
             let c3_column = column_iter.next().unwrap();
-            assert_eq!(c3_column.nullable, false);
+            assert_eq!(c3_column.nullable(), false);
             assert_eq!(
                 c3_column.summary(),
                 &ColumnSummary {
                     name: "c3".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: c3_column_id,
-                        table_name: Arc::new("t1".to_string())
+                        table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 }
             );
             assert_eq!(
-                c3_column.desc,
-                ColumnDesc::new(LogicalType::Integer, false, false, None)?
+                c3_column.desc(),
+                &ColumnDesc::new(LogicalType::Integer, false, false, None)?
             );
 
             Ok(())
@@ -1250,7 +1297,7 @@ mod test {
         build_table(&table_cache, &mut transaction)?;
         let (c2_column_id, c3_column_id) = {
             let t1_table = transaction
-                .table(&table_cache, Arc::new("t1".to_string()))
+                .table(&table_cache, Arc::new("t1".to_string()))?
                 .unwrap();
 
             (
@@ -1278,7 +1325,7 @@ mod test {
                          table_cache: &TableCache|
          -> Result<(), DatabaseError> {
             let table = transaction
-                .table(&table_cache, Arc::new("t1".to_string()))
+                .table(&table_cache, Arc::new("t1".to_string()))?
                 .unwrap();
 
             let i1_meta = table.indexes[1].clone();
@@ -1324,7 +1371,7 @@ mod test {
     fn test_index_insert_delete() -> Result<(), DatabaseError> {
         fn build_index_iter<'a>(
             transaction: &'a RocksTransaction<'a>,
-            table_cache: &'a Arc<ShardingLruCache<String, TableCatalog>>,
+            table_cache: &'a Arc<TableCache>,
             index_column_id: ColumnId,
         ) -> Result<IndexIter<'a, RocksTransaction<'a>>, DatabaseError> {
             transaction.read_by_index(
@@ -1354,7 +1401,7 @@ mod test {
 
         build_table(&table_cache, &mut transaction)?;
         let t1_table = transaction
-            .table(&table_cache, Arc::new("t1".to_string()))
+            .table(&table_cache, Arc::new("t1".to_string()))?
             .unwrap();
         let c3_column_id = *t1_table.get_column_id_by_name("c3").unwrap();
 
@@ -1403,7 +1450,7 @@ mod test {
             assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[2]);
             assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[1]);
 
-            let (min, max) = TableCodec::index_bound("t1", &1);
+            let (min, max) = TableCodec::index_bound("t1", &1)?;
             let mut iter = transaction.range(Bound::Included(&min), Bound::Included(&max))?;
 
             let (_, value) = iter.try_next()?.unwrap();
@@ -1421,7 +1468,7 @@ mod test {
         assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[2]);
         assert_eq!(index_iter.next_tuple()?.unwrap(), tuples[1]);
 
-        let (min, max) = TableCodec::index_bound("t1", &1);
+        let (min, max) = TableCodec::index_bound("t1", &1)?;
         let mut iter = transaction.range(Bound::Included(&min), Bound::Included(&max))?;
 
         let (_, value) = iter.try_next()?.unwrap();
@@ -1461,7 +1508,9 @@ mod test {
             );
         }
         {
-            let table = transaction.table(&table_cache, table_name.clone()).unwrap();
+            let table = transaction
+                .table(&table_cache, table_name.clone())?
+                .unwrap();
             assert!(table.contains_column("c4"));
 
             let mut new_column = ColumnCatalog::new(
@@ -1469,9 +1518,10 @@ mod test {
                 true,
                 ColumnDesc::new(LogicalType::Integer, false, false, None)?,
             );
-            new_column.summary.relation = ColumnRelation::Table {
+            new_column.summary_mut().relation = ColumnRelation::Table {
                 column_id: *table.get_column_id_by_name("c4").unwrap(),
                 table_name: table_name.clone(),
+                is_temp: false,
             };
             assert_eq!(
                 table.get_column_by_name("c4"),
@@ -1480,10 +1530,55 @@ mod test {
         }
         transaction.drop_column(&table_cache, &meta_cache, &table_name, "c4")?;
         {
-            let table = transaction.table(&table_cache, table_name.clone()).unwrap();
+            let table = transaction
+                .table(&table_cache, table_name.clone())?
+                .unwrap();
             assert!(!table.contains_column("c4"));
             assert!(table.get_column_by_name("c4").is_none());
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_view_create_drop() -> Result<(), DatabaseError> {
+        let table_state = build_t1_table()?;
+
+        let view_name = Arc::new("v1".to_string());
+        let view = View {
+            name: view_name.clone(),
+            plan: Box::new(
+                table_state.plan("select c1, c3 from t1 inner join t2 on c1 = c3 and c1 > 1")?,
+            ),
+        };
+        let mut transaction = table_state.storage.transaction()?;
+        transaction.create_view(&table_state.view_cache, view.clone(), true)?;
+
+        assert_eq!(
+            &view,
+            transaction
+                .view(
+                    &table_state.view_cache,
+                    view_name.clone(),
+                    (&transaction, &table_state.table_cache)
+                )?
+                .unwrap()
+        );
+        assert_eq!(
+            &view,
+            transaction
+                .view(
+                    &table_state.view_cache,
+                    view_name.clone(),
+                    (
+                        &transaction,
+                        &Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?)
+                    )
+                )?
+                .unwrap()
+        );
+
+        // TODO: Drop View
 
         Ok(())
     }

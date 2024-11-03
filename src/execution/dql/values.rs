@@ -1,6 +1,6 @@
 use crate::execution::{Executor, ReadExecutor};
 use crate::planner::operator::values::ValuesOperator;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::types::tuple::Tuple;
 
 pub struct Values {
@@ -14,7 +14,11 @@ impl From<ValuesOperator> for Values {
 }
 
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Values {
-    fn execute(self, _: (&'a TableCache, &'a StatisticsMetaCache), _: &T) -> Executor<'a> {
+    fn execute(
+        self,
+        _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
+        _: &'a T,
+    ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {

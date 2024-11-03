@@ -1,0 +1,64 @@
+statement ok
+create table t1(id int primary key, a int, b int, c int)
+
+statement ok
+insert into t1 values(0, 0, 0, 0)
+
+statement ok
+insert into t1 values(1, 1, 1, 1)
+
+statement ok
+insert into t1 values(2, 2, 2, 2)
+
+statement ok
+create view v1 as select * from t1
+
+statement error
+create view v1 (c0, c1, c2) as select * from t1
+
+statement ok
+create or replace view v1 (c0, c1, c2) as select * from t1
+
+statement ok
+create view v2 as select * from t1 where a != 1
+
+query III
+select * from v1
+----
+0 0 0
+1 1 1
+2 2 2
+
+query IIII
+select * from v2
+----
+0 0 0 0
+2 2 2 2
+
+query IIIIIII
+select * from v1 left join v2
+----
+0 0 0 0 0 0 0
+0 0 0 2 2 2 2
+1 1 1 0 0 0 0
+1 1 1 2 2 2 2
+2 2 2 0 0 0 0
+2 2 2 2 2 2 2
+
+query IIIIIII
+select * from v1 left join v2 where v1.c0 = v2.id
+----
+0 0 0 0 0 0 0
+2 2 2 2 2 2 2
+
+query I rowsort
+select sum(c0) from v1
+----
+3
+
+query III rowsort
+select c1, sum(c0) from v1 group by c1
+----
+0 0
+1 1
+2 2

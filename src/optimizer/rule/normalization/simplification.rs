@@ -250,38 +250,42 @@ mod test {
             )
             .find_best::<RocksTransaction>(None)?;
         if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
-            let c1_col = ColumnCatalog {
-                summary: ColumnSummary {
+            let c1_col = ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "c1".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: *table_state.column_id_by_name("c1"),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc {
+                false,
+                ColumnDesc {
                     column_datatype: LogicalType::Integer,
                     is_primary: true,
                     is_unique: false,
                     default: None,
                 },
-            };
-            let c2_col = ColumnCatalog {
-                summary: ColumnSummary {
+                false,
+            );
+            let c2_col = ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "c2".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: *table_state.column_id_by_name("c2"),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc {
+                false,
+                ColumnDesc {
                     column_datatype: LogicalType::Integer,
                     is_primary: false,
                     is_unique: true,
                     default: None,
                 },
-            };
+                false,
+            );
 
             // -(c1 + 1) > c2 => c1 < -c2 - 1
             debug_assert_eq!(

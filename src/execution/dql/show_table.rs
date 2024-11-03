@@ -1,6 +1,6 @@
 use crate::catalog::TableMeta;
 use crate::execution::{Executor, ReadExecutor};
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type};
@@ -12,7 +12,7 @@ pub struct ShowTables;
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for ShowTables {
     fn execute(
         self,
-        _: (&'a TableCache, &'a StatisticsMetaCache),
+        _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a> {
         Box::new(

@@ -2,7 +2,7 @@ use crate::errors::DatabaseError;
 use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
@@ -24,7 +24,7 @@ impl From<(DropColumnOperator, LogicalPlan)> for DropColumn {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
     fn execute_mut(
         mut self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(
@@ -41,7 +41,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                     .iter()
                     .enumerate()
                     .find(|(_, column)| column.name() == column_name)
-                    .map(|(i, column)| (i, column.desc.is_primary))
+                    .map(|(i, column)| (i, column.desc().is_primary))
                 {
                     if is_primary {
                         throw!(Err(DatabaseError::InvalidColumn(
@@ -69,7 +69,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                     for tuple in tuples {
                         throw!(transaction.append_tuple(&table_name, tuple, &types, true));
                     }
-                    throw!(transaction.drop_column(cache.0, cache.1, &table_name, &column_name));
+                    throw!(transaction.drop_column(cache.0, cache.2, &table_name, &column_name));
 
                     yield Ok(TupleBuilder::build_result("1".to_string()));
                 } else if if_exists {

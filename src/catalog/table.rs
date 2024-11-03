@@ -4,7 +4,7 @@ use crate::types::index::{IndexMeta, IndexMetaRef, IndexType};
 use crate::types::tuple::SchemaRef;
 use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use serde_macros::ReferenceSerialization;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::{slice, vec};
@@ -24,7 +24,7 @@ pub struct TableCatalog {
 }
 
 //TODO: can add some like Table description and other information as attributes
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, ReferenceSerialization)]
 pub struct TableMeta {
     pub(crate) table_name: TableName,
 }
@@ -52,6 +52,7 @@ impl TableCatalog {
             .map(|(_, i)| &self.schema_ref[*i])
     }
 
+    #[allow(dead_code)]
     pub(crate) fn contains_column(&self, name: &str) -> bool {
         self.column_idxs.contains_key(name)
     }
@@ -76,7 +77,7 @@ impl TableCatalog {
         self.schema_ref
             .iter()
             .enumerate()
-            .find(|(_, column)| column.desc.is_primary)
+            .find(|(_, column)| column.desc().is_primary)
             .ok_or(DatabaseError::PrimaryKeyNotFound)
     }
 
@@ -97,9 +98,10 @@ impl TableCatalog {
         }
         let col_id = generator.generate().unwrap();
 
-        col.summary.relation = ColumnRelation::Table {
+        col.summary_mut().relation = ColumnRelation::Table {
             column_id: col_id,
             table_name: self.name.clone(),
+            is_temp: false,
         };
 
         self.column_idxs

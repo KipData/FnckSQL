@@ -6,7 +6,6 @@ use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
 use sqlparser::ast::CharLengthUnits;
 use std::cmp::Ordering;
 use std::fmt::Formatter;
@@ -33,13 +32,13 @@ const ENCODE_MARKER: u8 = 0xFF;
 
 pub type ValueRef = Arc<DataValue>;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub enum Utf8Type {
     Variable(Option<u32>),
     Fixed(u32),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub enum DataValue {
     Null,
     Boolean(Option<bool>),
@@ -241,11 +240,7 @@ impl Hash for DataValue {
             Date64(v) => v.hash(state),
             Time(v) => v.hash(state),
             Decimal(v) => v.hash(state),
-            Tuple(values) => {
-                for v in values {
-                    v.hash(state)
-                }
-            }
+            Tuple(values) => values.hash(state),
         }
     }
 }

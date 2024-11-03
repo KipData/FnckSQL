@@ -14,7 +14,9 @@ use crate::{
     types::value::DataValue,
 };
 
-use super::{lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep, SubQueryType};
+use super::{
+    lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep, Source, SubQueryType,
+};
 
 use crate::catalog::{ColumnCatalog, ColumnRef, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
@@ -25,7 +27,7 @@ use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::operator::union::UnionOperator;
-use crate::planner::LogicalPlan;
+use crate::planner::{LogicalPlan, SchemaOutput};
 use crate::storage::Transaction;
 use crate::types::tuple::{Schema, SchemaRef};
 use crate::types::{ColumnId, LogicalType};
@@ -312,7 +314,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
 
                     self.context
                         .bind_table
-                        .insert((table_name, table_alias, joint_type), table);
+                        .insert((table_name, table_alias, joint_type), Source::Table(table));
                     plan
                 } else {
                     unreachable!()
@@ -353,7 +355,11 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         for (alias, column) in aliases_with_columns {
             let mut alias_column = ColumnCatalog::clone(&column);
             alias_column.set_name(alias.clone());
-            alias_column.set_ref_table(table_alias.clone(), column.id().unwrap_or(ColumnId::new()));
+            alias_column.set_ref_table(
+                table_alias.clone(),
+                column.id().unwrap_or(ColumnId::new()),
+                false,
+            );
 
             let alias_column_expr = ScalarExpression::Alias {
                 expr: Box::new(ScalarExpression::ColumnRef(column)),
@@ -387,16 +393,19 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
             alias_idents = Some(columns);
         }
 
-        let table_catalog =
-            self.context
-                .table_and_bind(table_name.clone(), table_alias.clone(), join_type)?;
-        let mut scan_op = TableScanOperator::build(table_name.clone(), table_catalog);
+        let source = self
+            .context
+            .source_and_bind(table_name.clone(), table_alias.as_ref(), join_type, false)?
+            .ok_or(DatabaseError::SourceNotFound)?;
+        let mut plan = match source {
+            Source::Table(table) => TableScanOperator::build(table_name.clone(), table),
+            Source::View(view) => LogicalPlan::clone(&view.plan),
+        };
 
         if let Some(idents) = alias_idents {
-            scan_op = self.bind_alias(scan_op, idents, table_alias.unwrap(), table_name.clone())?;
+            plan = self.bind_alias(plan, idents, table_alias.unwrap(), table_name.clone())?;
         }
-
-        Ok(scan_op)
+        Ok(plan)
     }
 
     /// Normalize select item.
@@ -417,7 +426,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                 SelectItem::UnnamedExpr(expr) => select_items.push(self.bind_expr(expr)?),
                 SelectItem::ExprWithAlias { expr, alias } => {
                     let expr = self.bind_expr(expr)?;
-                    let alias_name = alias.to_string();
+                    let alias_name = alias.value.to_lowercase();
 
                     self.context
                         .add_alias(None, alias_name.clone(), expr.clone());
@@ -437,7 +446,11 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                     let mut join_used = HashSet::with_capacity(self.context.using.len());
 
                     for (table_name, alias, _) in self.context.bind_table.keys() {
-                        self.bind_table_column_refs(
+                        let schema_buf =
+                            self.table_schema_buf.entry(table_name.clone()).or_default();
+                        Self::bind_table_column_refs(
+                            &self.context,
+                            schema_buf,
                             &mut select_items,
                             alias.as_ref().unwrap_or(table_name).clone(),
                             Some(&mut join_used),
@@ -445,9 +458,14 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                     }
                 }
                 SelectItem::QualifiedWildcard(table_name, _) => {
-                    self.bind_table_column_refs(
+                    let table_name = Arc::new(lower_case_name(table_name)?);
+                    let schema_buf = self.table_schema_buf.entry(table_name.clone()).or_default();
+
+                    Self::bind_table_column_refs(
+                        &self.context,
+                        schema_buf,
                         &mut select_items,
-                        Arc::new(lower_case_name(table_name)?),
+                        table_name,
                         None,
                     )?;
                 }
@@ -457,8 +475,10 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         Ok(select_items)
     }
 
+    #[allow(unused_assignments)]
     fn bind_table_column_refs(
-        &self,
+        context: &BinderContext<'a, T>,
+        schema_buf: &mut Option<SchemaOutput>,
         exprs: &mut Vec<ScalarExpression>,
         table_name: TableName,
         mut join_used: Option<&mut HashSet<String>>,
@@ -470,12 +490,12 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                 context.using.contains(column_name)
                     && matches!(join_used.map(|used| used.contains(column_name)), Some(true))
             };
-        for (_, alias_expr) in self.context.expr_aliases.iter().filter(|(_, expr)| {
+        for (_, alias_expr) in context.expr_aliases.iter().filter(|(_, expr)| {
             if let ScalarExpression::ColumnRef(col) = expr.unpack_alias_ref() {
                 let column_name = col.name();
 
                 if Some(&table_name) == col.table_name()
-                    && !fn_used(column_name, &self.context, join_used.as_deref())
+                    && !fn_used(column_name, context, join_used.as_deref())
                 {
                     if let Some(used) = join_used.as_mut() {
                         used.insert(column_name.to_string());
@@ -492,14 +512,19 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
             return Ok(());
         }
 
-        let table = self
-            .context
-            .table(table_name.clone())
-            .ok_or(DatabaseError::TableNotFound)?;
-        for column in table.columns() {
+        let mut source = None;
+
+        source = context.table(table_name.clone())?.map(Source::Table);
+        if source.is_none() {
+            source = context.view(table_name)?.map(Source::View);
+        }
+        for column in source
+            .ok_or(DatabaseError::SourceNotFound)?
+            .columns(schema_buf)
+        {
             let column_name = column.name();
 
-            if fn_used(column_name, &self.context, join_used.as_deref()) {
+            if fn_used(column_name, context, join_used.as_deref()) {
                 continue;
             }
             let expr = ScalarExpression::ColumnRef(column.clone());
@@ -532,6 +557,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         };
         let BinderContext {
             table_cache,
+            view_cache,
             transaction,
             scala_functions,
             table_functions,
@@ -541,6 +567,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         let mut binder = Binder::new(
             BinderContext::new(
                 table_cache,
+                view_cache,
                 *transaction,
                 scala_functions,
                 table_functions,
@@ -714,30 +741,36 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         let mut left_table_force_nullable = false;
         let mut left_table = None;
 
-        for ((_, _, join_option), table) in bind_tables {
+        for ((table_name, _, join_option), table) in bind_tables {
             if let Some(join_type) = join_option {
                 let (left_force_nullable, right_force_nullable) = joins_nullable(join_type);
-                table_force_nullable.push((table, right_force_nullable));
+                table_force_nullable.push((table_name, table, right_force_nullable));
                 left_table_force_nullable = left_force_nullable;
             } else {
-                left_table = Some(table);
+                left_table = Some((table_name, table));
             }
         }
 
-        if let Some(table) = left_table {
-            table_force_nullable.push((table, left_table_force_nullable));
+        if let Some((table_name, table)) = left_table {
+            table_force_nullable.push((table_name, table, left_table_force_nullable));
         }
 
         for column in select_items {
             if let ScalarExpression::ColumnRef(col) = column {
                 let _ = table_force_nullable
                     .iter()
-                    .find(|(table, _)| table.contains_column(col.name()))
-                    .map(|(_, nullable)| {
-                        let mut new_col = ColumnCatalog::clone(col);
-                        new_col.nullable = *nullable;
+                    .find(|(table_name, source, _)| {
+                        let schema_buf = self
+                            .table_schema_buf
+                            .entry((*table_name).clone())
+                            .or_default();
 
-                        *col = ColumnRef::from(new_col);
+                        source.column(col.name(), schema_buf).is_some()
+                    })
+                    .map(|(_, _, nullable)| {
+                        if let Some(new_column) = col.nullable_for_join(*nullable) {
+                            *col = new_column;
+                        }
                     });
             }
         }
@@ -852,7 +885,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         right_schema: &Schema,
     ) -> Result<(), DatabaseError> {
         let fn_contains = |schema: &Schema, summary: &ColumnSummary| {
-            schema.iter().any(|column| summary == &column.summary)
+            schema.iter().any(|column| summary == column.summary())
         };
         let fn_or_contains =
             |left_schema: &Schema, right_schema: &Schema, summary: &ColumnSummary| {

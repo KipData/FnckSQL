@@ -2,14 +2,14 @@
 //! [`JoinType::LeftSemi`], [`JoinType::LeftAnti`], [`JoinType::RightOuter`], [`JoinType::Cross`], [`JoinType::Full`].
 
 use super::joins_nullable;
-use crate::catalog::{ColumnCatalog, ColumnRef};
+use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
 use crate::execution::dql::projection::Projection;
 use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{Schema, SchemaRef, Tuple};
 use crate::types::value::{DataValue, NULL_VALUE};
@@ -128,7 +128,7 @@ impl From<(JoinOperator, LogicalPlan, LogicalPlan)> for NestedLoopJoin {
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
     fn execute(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a> {
         Box::new(
@@ -168,9 +168,13 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
                             throw!(eq_cond.equals(&left_tuple, &right_tuple)),
                         ) {
                             (None, true) if matches!(ty, JoinType::RightOuter) => {
+                                has_matched = true;
                                 Self::emit_tuple(&right_tuple, &left_tuple, ty, true)
                             }
-                            (None, true) => Self::emit_tuple(&left_tuple, &right_tuple, ty, true),
+                            (None, true) => {
+                                has_matched = true;
+                                Self::emit_tuple(&left_tuple, &right_tuple, ty, true)
+                            }
                             (Some(filter), true) => {
                                 let new_tuple = Self::merge_tuple(&left_tuple, &right_tuple, &ty);
                                 let value = throw!(filter.eval(&new_tuple, &output_schema_ref));
@@ -363,14 +367,18 @@ impl NestedLoopJoin {
 
         let mut join_schema = vec![];
         for column in left_schema.iter() {
-            let mut temp = ColumnCatalog::clone(column);
-            temp.nullable = left_force_nullable;
-            join_schema.push(ColumnRef::from(temp));
+            join_schema.push(
+                column
+                    .nullable_for_join(left_force_nullable)
+                    .unwrap_or_else(|| column.clone()),
+            );
         }
         for column in right_schema.iter() {
-            let mut temp = ColumnCatalog::clone(column);
-            temp.nullable = right_force_nullable;
-            join_schema.push(ColumnRef::from(temp));
+            join_schema.push(
+                column
+                    .nullable_for_join(right_force_nullable)
+                    .unwrap_or_else(|| column.clone()),
+            );
         }
         Arc::new(join_schema)
     }
@@ -533,6 +541,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
@@ -543,7 +552,7 @@ mod test {
             join_type: JoinType::Inner,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(1);
@@ -561,6 +570,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
@@ -571,7 +581,7 @@ mod test {
             join_type: JoinType::LeftOuter,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         debug_assert_eq!(
@@ -601,6 +611,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
@@ -611,7 +622,7 @@ mod test {
             join_type: JoinType::Cross,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(1);
@@ -630,6 +641,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, _) = build_join_values(true);
         let op = JoinOperator {
@@ -640,7 +652,7 @@ mod test {
             join_type: JoinType::Cross,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(3);
@@ -662,6 +674,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, _) = build_join_values(false);
         let op = JoinOperator {
@@ -672,7 +685,7 @@ mod test {
             join_type: JoinType::Cross,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         debug_assert_eq!(tuples.len(), 16);
@@ -686,6 +699,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
@@ -696,7 +710,7 @@ mod test {
             join_type: JoinType::LeftSemi,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(1);
@@ -713,6 +727,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
@@ -723,7 +738,7 @@ mod test {
             join_type: JoinType::LeftAnti,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(3);
@@ -742,6 +757,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
@@ -752,7 +768,7 @@ mod test {
             join_type: JoinType::RightOuter,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(4);
@@ -776,6 +792,7 @@ mod test {
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
         let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right, filter) = build_join_values(true);
         let op = JoinOperator {
@@ -786,7 +803,7 @@ mod test {
             join_type: JoinType::Full,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
         debug_assert_eq!(

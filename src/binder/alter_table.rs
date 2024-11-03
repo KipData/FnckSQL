@@ -12,7 +12,7 @@ use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<T: Transaction> Binder<'_, '_, T> {
     pub(crate) fn bind_alter_table(
         &mut self,
         name: &ObjectName,
@@ -21,7 +21,7 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
         let table_name: Arc<String> = Arc::new(lower_case_name(name)?);
         let table = self
             .context
-            .table(table_name.clone())
+            .table(table_name.clone())?
             .ok_or(DatabaseError::TableNotFound)?;
         let plan = match operation {
             AlterTableOperation::AddColumn {

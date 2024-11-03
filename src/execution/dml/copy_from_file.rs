@@ -2,7 +2,7 @@ use crate::binder::copy::FileFormat;
 use crate::errors::DatabaseError;
 use crate::execution::{Executor, WriteExecutor};
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{types, Tuple};
 use crate::types::tuple_builder::TupleBuilder;
@@ -26,7 +26,7 @@ impl From<CopyFromFileOperator> for CopyFromFile {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CopyFromFile {
     fn execute_mut(
         self,
-        _: (&'a TableCache, &'a StatisticsMetaCache),
+        _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(
@@ -131,45 +131,50 @@ mod tests {
         write!(file, "{}", csv).expect("failed to write file");
 
         let columns = vec![
-            ColumnRef::from(ColumnCatalog {
-                summary: ColumnSummary {
+            ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "a".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
-            }),
-            ColumnRef::from(ColumnCatalog {
-                summary: ColumnSummary {
+                false,
+                ColumnDesc::new(LogicalType::Integer, true, false, None)?,
+                false,
+            )),
+            ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "b".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc::new(LogicalType::Float, false, false, None).unwrap(),
-            }),
-            ColumnRef::from(ColumnCatalog {
-                summary: ColumnSummary {
+                false,
+                ColumnDesc::new(LogicalType::Float, false, false, None)?,
+                false,
+            )),
+            ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
                     name: "c".to_string(),
                     relation: ColumnRelation::Table {
                         column_id: Ulid::new(),
                         table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
                 },
-                nullable: false,
-                desc: ColumnDesc::new(
+                false,
+                ColumnDesc::new(
                     LogicalType::Varchar(Some(10), CharLengthUnits::Characters),
                     false,
                     false,
                     None,
-                )
-                .unwrap(),
-            }),
+                )?,
+                false,
+            )),
         ];
 
         let op = CopyFromFileOperator {
@@ -196,8 +201,10 @@ mod tests {
         let storage = db.storage;
         let mut transaction = storage.transaction()?;
 
-        let mut coroutine =
-            executor.execute_mut((&db.table_cache, &db.meta_cache), &mut transaction);
+        let mut coroutine = executor.execute_mut(
+            (&db.table_cache, &db.view_cache, &db.meta_cache),
+            &mut transaction,
+        );
         let tuple = match Pin::new(&mut coroutine).resume(()) {
             CoroutineState::Yielded(tuple) => tuple,
             CoroutineState::Complete(()) => unreachable!(),

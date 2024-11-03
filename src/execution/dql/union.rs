@@ -1,6 +1,6 @@
 use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
@@ -22,7 +22,7 @@ impl From<(LogicalPlan, LogicalPlan)> for Union {
 impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Union {
     fn execute(
         self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a T,
     ) -> Executor<'a> {
         Box::new(

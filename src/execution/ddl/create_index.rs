@@ -4,7 +4,7 @@ use crate::execution::{build_read, Executor, WriteExecutor};
 use crate::expression::ScalarExpression;
 use crate::planner::operator::create_index::CreateIndexOperator;
 use crate::planner::LogicalPlan;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
@@ -28,7 +28,7 @@ impl From<(CreateIndexOperator, LogicalPlan)> for CreateIndex {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateIndex {
     fn execute_mut(
         mut self,
-        cache: (&'a TableCache, &'a StatisticsMetaCache),
+        cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(

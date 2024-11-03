@@ -7,7 +7,7 @@ use crate::storage::Transaction;
 use sqlparser::ast::ObjectName;
 use std::sync::Arc;
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<T: Transaction> Binder<'_, '_, T> {
     pub(crate) fn bind_truncate(
         &mut self,
         name: &ObjectName,

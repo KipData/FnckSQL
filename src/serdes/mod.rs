@@ -22,7 +22,9 @@ mod vec;
 use crate::catalog::TableName;
 use crate::errors::DatabaseError;
 use crate::storage::{TableCache, Transaction};
+use std::io;
 use std::io::{Read, Write};
+use std::sync::Arc;
 
 #[macro_export]
 macro_rules! implement_serialization_by_bincode {
@@ -82,7 +84,7 @@ pub trait ReferenceSerialization: Sized {
     ) -> Result<Self, DatabaseError>;
 }
 
-#[derive(Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct ReferenceTables {
     tables: Vec<TableName>,
 }
@@ -112,5 +114,56 @@ impl ReferenceTables {
         }
         self.tables.push(table_name.clone());
         self.tables.len() - 1
+    }
+
+    pub fn to_raw<W: Write>(&self, mut writer: W) -> io::Result<()> {
+        writer.write_all(&(self.tables.len() as u32).to_le_bytes())?;
+        for table_name in self.tables.iter() {
+            writer.write_all(&(table_name.len() as u32).to_le_bytes())?;
+            writer.write_all(table_name.as_bytes())?
+        }
+
+        Ok(())
+    }
+
+    pub fn from_raw<R: Read>(reader: &mut R) -> io::Result<Self> {
+        let mut bytes = [0u8; 4];
+        reader.read_exact(&mut bytes)?;
+        let tables_len = u32::from_le_bytes(bytes) as usize;
+        let mut tables = Vec::with_capacity(tables_len);
+
+        for _ in 0..tables_len {
+            let mut bytes = [0u8; 4];
+            reader.read_exact(&mut bytes)?;
+            let len = u32::from_le_bytes(bytes) as usize;
+            let mut bytes = vec![0u8; len];
+            reader.read_exact(&mut bytes)?;
+            tables.push(Arc::new(String::from_utf8(bytes).unwrap()));
+        }
+
+        Ok(ReferenceTables { tables })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::serdes::ReferenceTables;
+    use std::io;
+    use std::io::{Seek, SeekFrom};
+    use std::sync::Arc;
+
+    #[test]
+    fn test_to_raw() -> io::Result<()> {
+        let reference_tables = ReferenceTables {
+            tables: vec![Arc::new("t1".to_string()), Arc::new("t2".to_string())],
+        };
+
+        let mut cursor = io::Cursor::new(Vec::new());
+        reference_tables.to_raw(&mut cursor)?;
+
+        cursor.seek(SeekFrom::Start(0))?;
+        assert_eq!(reference_tables, ReferenceTables::from_raw(&mut cursor)?);
+
+        Ok(())
     }
 }

@@ -64,7 +64,7 @@ impl TableFunctionImpl for Numbers {
         if value.logical_type() != LogicalType::Integer {
             value = Arc::new(DataValue::clone(&value).cast(&LogicalType::Integer)?);
         }
-        let num = value.i32().ok_or_else(|| DatabaseError::NotNull)?;
+        let num = value.i32().ok_or(DatabaseError::NotNull)?;
 
         Ok(Box::new((0..num).map(|i| {
             Ok(Tuple {

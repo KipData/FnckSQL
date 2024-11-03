@@ -64,7 +64,7 @@ impl ScalarExpression {
                             tul_col.table_name().is_none() && tul_col.name() == alias
                         }
                         AliasType::Expr(alias_expr) => {
-                            alias_expr.output_column().summary == tul_col.summary
+                            alias_expr.output_column().summary() == tul_col.summary()
                         }
                     })
                     .map(|(i, _)| &tuple.values[i])
@@ -267,13 +267,11 @@ impl ScalarExpression {
                     unit: CharLengthUnits::Characters,
                 }))
             }
-            ScalarExpression::Reference { pos, .. } => {
-                return Ok(tuple
-                    .values
-                    .get(*pos)
-                    .unwrap_or_else(|| &NULL_VALUE)
-                    .clone());
-            }
+            ScalarExpression::Reference { pos, .. } => Ok(tuple
+                .values
+                .get(*pos)
+                .unwrap_or_else(|| &NULL_VALUE)
+                .clone()),
             ScalarExpression::Tuple(exprs) => {
                 let mut values = Vec::with_capacity(exprs.len());
 

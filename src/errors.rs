@@ -120,6 +120,8 @@ pub enum DatabaseError {
     ),
     #[error("the number of caches cannot be divisible by the number of shards")]
     ShardingNotAlign,
+    #[error("the view not found")]
+    SourceNotFound,
     #[error("the table already exists")]
     TableExists,
     #[error("the table not found")]
@@ -150,4 +152,6 @@ pub enum DatabaseError {
     UnsupportedStmt(String),
     #[error("values length not match, expect {0}, got {1}")]
     ValuesLenMismatch(usize, usize),
+    #[error("the view already exists")]
+    ViewExists,
 }

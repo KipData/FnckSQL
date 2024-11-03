@@ -1,6 +1,6 @@
 use crate::execution::{Executor, WriteExecutor};
 use crate::planner::operator::truncate::TruncateOperator;
-use crate::storage::{StatisticsMetaCache, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple_builder::TupleBuilder;
 
@@ -17,7 +17,7 @@ impl From<TruncateOperator> for Truncate {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Truncate {
     fn execute_mut(
         self,
-        _: (&'a TableCache, &'a StatisticsMetaCache),
+        _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
         transaction: &'a mut T,
     ) -> Executor<'a> {
         Box::new(

@@ -10,7 +10,7 @@ use sqlparser::ast::{Assignment, Expr, TableFactor, TableWithJoins};
 use std::slice;
 use std::sync::Arc;
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<T: Transaction> Binder<'_, '_, T> {
     pub(crate) fn bind_update(
         &mut self,
         to: &TableWithJoins,

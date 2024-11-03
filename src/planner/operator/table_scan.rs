@@ -30,7 +30,7 @@ impl TableScanOperator {
             .columns()
             .enumerate()
             .map(|(i, column)| {
-                if column.desc.is_primary {
+                if column.desc().is_primary {
                     primary_key_option = column.id();
                 }
 

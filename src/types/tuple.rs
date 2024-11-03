@@ -101,7 +101,7 @@ impl Tuple {
         id_option: &mut Option<Arc<DataValue>>,
         projection_i: &mut usize,
     ) {
-        if tuple_columns[*projection_i].desc.is_primary {
+        if tuple_columns[*projection_i].desc().is_primary {
             let _ = id_option.replace(tuple_values[*projection_i].clone());
         }
         *projection_i += 1;

@@ -5,6 +5,7 @@ pub mod copy_from_file;
 pub mod copy_to_file;
 pub mod create_index;
 pub mod create_table;
+pub mod create_view;
 pub mod delete;
 pub mod describe;
 pub mod drop_table;
@@ -34,6 +35,7 @@ use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::create_index::CreateIndexOperator;
 use crate::planner::operator::create_table::CreateTableOperator;
+use crate::planner::operator::create_view::CreateViewOperator;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::describe::DescribeOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
@@ -77,6 +79,7 @@ pub enum Operator {
     DropColumn(DropColumnOperator),
     CreateTable(CreateTableOperator),
     CreateIndex(CreateIndexOperator),
+    CreateView(CreateViewOperator),
     DropTable(DropTableOperator),
     Truncate(TruncateOperator),
     // Copy
@@ -164,6 +167,7 @@ impl Operator {
             | Operator::DropColumn(_)
             | Operator::CreateTable(_)
             | Operator::CreateIndex(_)
+            | Operator::CreateView(_)
             | Operator::DropTable(_)
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)
@@ -240,6 +244,7 @@ impl Operator {
             | Operator::DropColumn(_)
             | Operator::CreateTable(_)
             | Operator::CreateIndex(_)
+            | Operator::CreateView(_)
             | Operator::DropTable(_)
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)
@@ -272,6 +277,7 @@ impl fmt::Display for Operator {
             Operator::DropColumn(op) => write!(f, "{}", op),
             Operator::CreateTable(op) => write!(f, "{}", op),
             Operator::CreateIndex(op) => write!(f, "{}", op),
+            Operator::CreateView(op) => write!(f, "{}", op),
             Operator::DropTable(op) => write!(f, "{}", op),
             Operator::Truncate(op) => write!(f, "{}", op),
             Operator::CopyFromFile(op) => write!(f, "{}", op),

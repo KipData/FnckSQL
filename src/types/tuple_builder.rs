@@ -40,7 +40,7 @@ impl<'a> TupleBuilder<'a> {
                 .cast(self.schema[i].datatype())?,
             );
 
-            if primary_key.is_none() && self.schema[i].desc.is_primary {
+            if primary_key.is_none() && self.schema[i].desc().is_primary {
                 primary_key = Some(data_value.clone());
             }
             values.push(data_value);

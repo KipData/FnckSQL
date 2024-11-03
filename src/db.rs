@@ -1,5 +1,4 @@
 use crate::binder::{command_type, Binder, BinderContext, CommandType};
-use crate::catalog::TableCatalog;
 use crate::errors::DatabaseError;
 use crate::execution::{build_write, try_collect};
 use crate::expression::function::scala::ScalarFunctionImpl;
@@ -17,7 +16,7 @@ use crate::optimizer::rule::normalization::NormalizationRuleImpl;
 use crate::parser::parse_sql;
 use crate::planner::LogicalPlan;
 use crate::storage::rocksdb::RocksStorage;
-use crate::storage::{StatisticsMetaCache, Storage, TableCache, Transaction};
+use crate::storage::{StatisticsMetaCache, Storage, TableCache, Transaction, ViewCache};
 use crate::types::tuple::{SchemaRef, Tuple};
 use crate::utils::lru::ShardingLruCache;
 use ahash::HashMap;
@@ -79,6 +78,7 @@ impl DataBaseBuilder {
         let storage = RocksStorage::new(self.path)?;
         let meta_cache = Arc::new(ShardingLruCache::new(256, 8, RandomState::new())?);
         let table_cache = Arc::new(ShardingLruCache::new(48, 4, RandomState::new())?);
+        let view_cache = Arc::new(ShardingLruCache::new(12, 4, RandomState::new())?);
 
         Ok(Database {
             storage,
@@ -87,6 +87,7 @@ impl DataBaseBuilder {
             mdl: Arc::new(RwLock::new(())),
             meta_cache,
             table_cache,
+            view_cache,
         })
     }
 }
@@ -97,7 +98,8 @@ pub struct Database<S: Storage> {
     table_functions: Arc<TableFunctions>,
     mdl: Arc<RwLock<()>>,
     pub(crate) meta_cache: Arc<StatisticsMetaCache>,
-    pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
+    pub(crate) table_cache: Arc<TableCache>,
+    pub(crate) view_cache: Arc<ViewCache>,
 }
 
 impl<S: Storage> Database<S> {
@@ -118,6 +120,7 @@ impl<S: Storage> Database<S> {
         let mut plan = Self::build_plan(
             stmt,
             &self.table_cache,
+            &self.view_cache,
             &self.meta_cache,
             &transaction,
             &self.scala_functions,
@@ -127,7 +130,7 @@ impl<S: Storage> Database<S> {
         let schema = plan.output_schema().clone();
         let iterator = build_write(
             plan,
-            (&self.table_cache, &self.meta_cache),
+            (&self.table_cache, &self.view_cache, &self.meta_cache),
             &mut transaction,
         );
         let tuples = try_collect(iterator)?;
@@ -148,12 +151,14 @@ impl<S: Storage> Database<S> {
             _guard: guard,
             meta_cache: self.meta_cache.clone(),
             table_cache: self.table_cache.clone(),
+            view_cache: self.view_cache.clone(),
         })
     }
 
     pub(crate) fn build_plan(
         stmt: &Statement,
         table_cache: &TableCache,
+        view_cache: &ViewCache,
         meta_cache: &StatisticsMetaCache,
         transaction: &<S as Storage>::TransactionType<'_>,
         scala_functions: &ScalaFunctions,
@@ -162,6 +167,7 @@ impl<S: Storage> Database<S> {
         let mut binder = Binder::new(
             BinderContext::new(
                 table_cache,
+                view_cache,
                 transaction,
                 scala_functions,
                 table_functions,
@@ -273,7 +279,8 @@ pub struct DBTransaction<'a, S: Storage + 'a> {
     table_functions: Arc<TableFunctions>,
     _guard: ArcRwLockReadGuard<RawRwLock, ()>,
     pub(crate) meta_cache: Arc<StatisticsMetaCache>,
-    pub(crate) table_cache: Arc<ShardingLruCache<String, TableCatalog>>,
+    pub(crate) table_cache: Arc<TableCache>,
+    pub(crate) view_cache: Arc<ViewCache>,
 }
 
 impl<S: Storage> DBTransaction<'_, S> {
@@ -291,6 +298,7 @@ impl<S: Storage> DBTransaction<'_, S> {
         let mut plan = Database::<S>::build_plan(
             stmt,
             &self.table_cache,
+            &self.view_cache,
             &self.meta_cache,
             &self.inner,
             &self.scala_functions,
@@ -298,7 +306,11 @@ impl<S: Storage> DBTransaction<'_, S> {
         )?;
 
         let schema = plan.output_schema().clone();
-        let executor = build_write(plan, (&self.table_cache, &self.meta_cache), &mut self.inner);
+        let executor = build_write(
+            plan,
+            (&self.table_cache, &self.view_cache, &self.meta_cache),
+            &mut self.inner,
+        );
 
         Ok((schema, try_collect(executor)?))
     }
@@ -408,7 +420,7 @@ pub(crate) mod test {
             ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
         );
         let number_column_id = schema[0].id().unwrap();
-        column.set_ref_table(Arc::new("a".to_string()), number_column_id);
+        column.set_ref_table(Arc::new("a".to_string()), number_column_id, false);
 
         debug_assert_eq!(schema, Arc::new(vec![ColumnRef::from(column)]));
         debug_assert_eq!(
