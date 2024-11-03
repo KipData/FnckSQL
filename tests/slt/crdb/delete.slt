@@ -24,31 +24,31 @@ SELECT * FROM kv
 5 6
 7 8
 
-# TODO: View
+# TODO: Drop View
 # statement ok
 # drop view if exists kview
 
-# statement ok
-# CREATE VIEW kview AS SELECT k,v FROM kv
+statement ok
+CREATE VIEW kview AS SELECT k,v FROM kv
 
-# query II
-# SELECT * FROM kview
-# ----
-# 1 2
-# 3 4
-# 5 6
-# 7 8
+query II
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
 
-# statement error 1002
-# DELETE FROM kview
+statement error
+DELETE FROM kview
 
-# query II
-# SELECT * FROM kview
-# ----
-# 1 2
-# 3 4
-# 5 6
-# 7 8
+query II
+SELECT * FROM kview
+----
+1 2
+3 4
+5 6
+7 8
 
 statement ok
 DELETE FROM kv WHERE k=3 OR v=6
@@ -167,7 +167,7 @@ statement ok
 drop table if exists family
 
 statement ok
-CREATE TABLE family (    x INT PRIMARY KEY,    y INT)
+CREATE TABLE family ( x INT PRIMARY KEY, y INT)
 
 statement ok
 INSERT INTO family VALUES (1, 1), (2, 2), (3, 3)

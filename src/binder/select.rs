@@ -426,7 +426,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                 SelectItem::UnnamedExpr(expr) => select_items.push(self.bind_expr(expr)?),
                 SelectItem::ExprWithAlias { expr, alias } => {
                     let expr = self.bind_expr(expr)?;
-                    let alias_name = alias.to_string();
+                    let alias_name = alias.value.to_lowercase();
 
                     self.context
                         .add_alias(None, alias_name.clone(), expr.clone());

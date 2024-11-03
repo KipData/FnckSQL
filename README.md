@@ -185,9 +185,11 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - Create
     - [x] Table
     - [x] Index: Unique\Normal\Composite
+    - [x] View
   - Drop
     - [x] Table
     - [ ] Index
+    - [ ] View
   - Alert
     - [x] Add Column
     - [x] Drop Column
