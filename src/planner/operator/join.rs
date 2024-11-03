@@ -1,8 +1,8 @@
 use super::Operator;
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
-use itertools::Itertools;
 use fnck_sql_serde_macros::ReferenceSerialization;
+use itertools::Itertools;
 use std::fmt;
 use std::fmt::Formatter;
 use strum_macros::Display;

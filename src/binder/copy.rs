@@ -7,8 +7,8 @@ use crate::errors::DatabaseError;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::Operator;
-use serde::{Deserialize, Serialize};
 use fnck_sql_serde_macros::ReferenceSerialization;
+use serde::{Deserialize, Serialize};
 use sqlparser::ast::{CopyOption, CopySource, CopyTarget};
 
 #[derive(Debug, PartialEq, PartialOrd, Ord, Hash, Eq, Clone, ReferenceSerialization)]

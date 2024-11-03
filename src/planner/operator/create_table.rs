@@ -1,6 +1,6 @@
 use crate::catalog::{ColumnCatalog, TableName};
-use itertools::Itertools;
 use fnck_sql_serde_macros::ReferenceSerialization;
+use itertools::Itertools;
 use std::fmt;
 use std::fmt::Formatter;
 

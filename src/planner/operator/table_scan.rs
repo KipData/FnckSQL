@@ -4,8 +4,8 @@ use crate::planner::LogicalPlan;
 use crate::storage::Bounds;
 use crate::types::index::IndexInfo;
 use crate::types::ColumnId;
-use itertools::Itertools;
 use fnck_sql_serde_macros::ReferenceSerialization;
+use itertools::Itertools;
 use std::fmt;
 use std::fmt::Formatter;
 

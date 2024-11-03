@@ -1,7 +1,7 @@
 use crate::planner::LogicalPlan;
 use crate::{expression::ScalarExpression, planner::operator::Operator};
-use itertools::Itertools;
 use fnck_sql_serde_macros::ReferenceSerialization;
+use itertools::Itertools;
 use std::fmt;
 use std::fmt::Formatter;
 

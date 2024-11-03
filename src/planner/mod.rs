@@ -6,8 +6,8 @@ use crate::planner::operator::union::UnionOperator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::types::tuple::{Schema, SchemaRef};
-use itertools::Itertools;
 use fnck_sql_serde_macros::ReferenceSerialization;
+use itertools::Itertools;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
