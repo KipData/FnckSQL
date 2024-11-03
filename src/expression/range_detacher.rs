@@ -3,7 +3,7 @@ use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
 use crate::types::ColumnId;
 use itertools::Itertools;
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::cmp::Ordering;
 use std::collections::Bound;
 use std::fmt::Formatter;

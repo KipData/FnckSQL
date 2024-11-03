@@ -2,7 +2,7 @@ use super::Operator;
 use crate::expression::ScalarExpression;
 use crate::planner::LogicalPlan;
 use itertools::Itertools;
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 use strum_macros::Display;

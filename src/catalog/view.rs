@@ -1,6 +1,6 @@
 use crate::catalog::TableName;
 use crate::planner::LogicalPlan;
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
 

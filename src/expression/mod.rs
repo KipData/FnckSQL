@@ -7,7 +7,7 @@ use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory, UnaryEvaluat
 use crate::types::value::ValueRef;
 use crate::types::LogicalType;
 use itertools::Itertools;
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use sqlparser::ast::TrimWhereField;
 use sqlparser::ast::{
     BinaryOperator as SqlBinaryOperator, CharLengthUnits, UnaryOperator as SqlUnaryOperator,

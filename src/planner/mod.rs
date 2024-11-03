@@ -7,7 +7,7 @@ use crate::planner::operator::values::ValuesOperator;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::types::tuple::{Schema, SchemaRef};
 use itertools::Itertools;
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]

@@ -4,7 +4,7 @@ use crate::expression::ScalarExpression;
 use crate::types::tuple::EMPTY_TUPLE;
 use crate::types::value::ValueRef;
 use crate::types::{ColumnId, LogicalType};
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use sqlparser::ast::CharLengthUnits;
 use std::hash::Hash;
 use std::ops::Deref;

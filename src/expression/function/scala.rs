@@ -6,7 +6,7 @@ use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use serde::{Deserialize, Serialize};
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;

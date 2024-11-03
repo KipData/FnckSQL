@@ -4,7 +4,7 @@ use crate::expression::function::FunctionSummary;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::{SchemaRef, Tuple};
 use serde::{Deserialize, Serialize};
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;

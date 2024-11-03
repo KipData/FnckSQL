@@ -4,7 +4,7 @@ use crate::types::index::{IndexMeta, IndexMetaRef, IndexType};
 use crate::types::tuple::SchemaRef;
 use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::{slice, vec};

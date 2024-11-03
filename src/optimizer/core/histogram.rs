@@ -8,7 +8,7 @@ use crate::types::index::{IndexId, IndexMeta};
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::LogicalType;
 use ordered_float::OrderedFloat;
-use serde_macros::ReferenceSerialization;
+use fnck_sql_serde_macros::ReferenceSerialization;
 use std::collections::Bound;
 use std::sync::Arc;
 use std::{cmp, mem};
