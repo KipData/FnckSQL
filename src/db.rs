@@ -18,7 +18,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::rocksdb::RocksStorage;
 use crate::storage::{StatisticsMetaCache, Storage, TableCache, Transaction, ViewCache};
 use crate::types::tuple::{SchemaRef, Tuple};
-use crate::utils::lru::ShardingLruCache;
+use crate::utils::lru::SharedLruCache;
 use ahash::HashMap;
 use parking_lot::lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard};
 use parking_lot::{RawRwLock, RwLock};
@@ -76,9 +76,9 @@ impl DataBaseBuilder {
 
     pub fn build(self) -> Result<Database<RocksStorage>, DatabaseError> {
         let storage = RocksStorage::new(self.path)?;
-        let meta_cache = Arc::new(ShardingLruCache::new(256, 8, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(48, 4, RandomState::new())?);
-        let view_cache = Arc::new(ShardingLruCache::new(12, 4, RandomState::new())?);
+        let meta_cache = Arc::new(SharedLruCache::new(256, 8, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(48, 4, RandomState::new())?);
+        let view_cache = Arc::new(SharedLruCache::new(12, 4, RandomState::new())?);
 
         Ok(Database {
             storage,

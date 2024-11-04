@@ -433,7 +433,7 @@ mod test {
     use crate::storage::Storage;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
-    use crate::utils::lru::ShardingLruCache;
+    use crate::utils::lru::SharedLruCache;
     use std::hash::RandomState;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -527,9 +527,9 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
@@ -566,9 +566,9 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
@@ -651,9 +651,9 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {
@@ -694,9 +694,9 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let meta_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let (keys, left, right) = build_join_values();
 
         let op = JoinOperator {

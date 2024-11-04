@@ -12,7 +12,7 @@ use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::value::{DataValue, ValueRef};
 use crate::types::{ColumnId, LogicalType};
-use crate::utils::lru::ShardingLruCache;
+use crate::utils::lru::SharedLruCache;
 use bytes::Bytes;
 use itertools::Itertools;
 use std::collections::{Bound, VecDeque};
@@ -22,9 +22,9 @@ use std::sync::Arc;
 use std::{mem, slice};
 use ulid::Generator;
 
-pub(crate) type StatisticsMetaCache = ShardingLruCache<(TableName, IndexId), StatisticsMeta>;
-pub(crate) type TableCache = ShardingLruCache<TableName, TableCatalog>;
-pub(crate) type ViewCache = ShardingLruCache<TableName, View>;
+pub(crate) type StatisticsMetaCache = SharedLruCache<(TableName, IndexId), StatisticsMeta>;
+pub(crate) type TableCache = SharedLruCache<TableName, TableCatalog>;
+pub(crate) type ViewCache = SharedLruCache<TableName, View>;
 
 pub trait Storage: Clone {
     type TransactionType<'a>: Transaction
@@ -1053,7 +1053,7 @@ mod test {
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
     use crate::types::{ColumnId, LogicalType};
-    use crate::utils::lru::ShardingLruCache;
+    use crate::utils::lru::SharedLruCache;
     use std::collections::Bound;
     use std::hash::RandomState;
     use std::slice;
@@ -1122,7 +1122,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let mut transaction = storage.transaction()?;
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
 
         build_table(&table_cache, &mut transaction)?;
 
@@ -1210,7 +1210,7 @@ mod test {
         fn_assert(&mut transaction, &table_cache)?;
         fn_assert(
             &mut transaction,
-            &Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?),
+            &Arc::new(SharedLruCache::new(4, 1, RandomState::new())?),
         )?;
 
         Ok(())
@@ -1221,7 +1221,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let mut transaction = storage.transaction()?;
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
 
         build_table(&table_cache, &mut transaction)?;
 
@@ -1292,7 +1292,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let mut transaction = storage.transaction()?;
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
 
         build_table(&table_cache, &mut transaction)?;
         let (c2_column_id, c3_column_id) = {
@@ -1349,7 +1349,7 @@ mod test {
         fn_assert(&mut transaction, &table_cache)?;
         fn_assert(
             &mut transaction,
-            &Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?),
+            &Arc::new(SharedLruCache::new(4, 1, RandomState::new())?),
         )?;
         {
             let (min, max) = TableCodec::index_meta_bound("t1");
@@ -1397,7 +1397,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let mut transaction = storage.transaction()?;
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
 
         build_table(&table_cache, &mut transaction)?;
         let t1_table = transaction
@@ -1485,7 +1485,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let mut transaction = storage.transaction()?;
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let meta_cache = StatisticsMetaCache::new(4, 1, RandomState::new())?;
 
         build_table(&table_cache, &mut transaction)?;
@@ -1572,7 +1572,7 @@ mod test {
                     view_name.clone(),
                     (
                         &transaction,
-                        &Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?)
+                        &Arc::new(SharedLruCache::new(4, 1, RandomState::new())?)
                     )
                 )?
                 .unwrap()
