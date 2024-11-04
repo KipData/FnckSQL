@@ -494,7 +494,7 @@ pub mod test {
     use crate::storage::{Storage, TableCache, Transaction, ViewCache};
     use crate::types::ColumnId;
     use crate::types::LogicalType::Integer;
-    use crate::utils::lru::ShardingLruCache;
+    use crate::utils::lru::SharedLruCache;
     use std::hash::RandomState;
     use std::path::PathBuf;
     use std::sync::atomic::AtomicUsize;
@@ -536,8 +536,8 @@ pub mod test {
 
     pub(crate) fn build_t1_table() -> Result<TableState<RocksStorage>, DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let storage = build_test_catalog(&table_cache, temp_dir.path())?;
         let table = {
             let transaction = storage.transaction()?;

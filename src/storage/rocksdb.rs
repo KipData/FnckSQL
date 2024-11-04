@@ -143,7 +143,7 @@ mod test {
     use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
-    use crate::utils::lru::ShardingLruCache;
+    use crate::utils::lru::SharedLruCache;
     use itertools::Itertools;
     use std::collections::{Bound, VecDeque};
     use std::hash::RandomState;
@@ -155,7 +155,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let mut transaction = storage.transaction()?;
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let columns = Arc::new(vec![
             ColumnRef::from(ColumnCatalog::new(
                 "c1".to_string(),

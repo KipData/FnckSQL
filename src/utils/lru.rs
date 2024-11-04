@@ -8,7 +8,6 @@ use std::hash::{BuildHasher, Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
-use std::sync::Arc;
 
 // 只读Node操作裸指针
 // https://course.rs/advance/concurrency-with-threads/send-sync.html#:~:text=%E5%AE%89%E5%85%A8%E7%9A%84%E4%BD%BF%E7%94%A8%E3%80%82-,%E4%B8%BA%E8%A3%B8%E6%8C%87%E9%92%88%E5%AE%9E%E7%8E%B0Send,-%E4%B8%8A%E9%9D%A2%E6%88%91%E4%BB%AC%E6%8F%90%E5%88%B0
@@ -40,11 +39,11 @@ impl<K, V> DerefMut for NodeReadPtr<K, V> {
     }
 }
 
-unsafe impl<K: Send, V: Send, S: Send> Send for ShardingLruCache<K, V, S> {}
-unsafe impl<K: Sync, V: Sync, S: Sync> Sync for ShardingLruCache<K, V, S> {}
+unsafe impl<K: Send, V: Send, S: Send> Send for SharedLruCache<K, V, S> {}
+unsafe impl<K: Sync, V: Sync, S: Sync> Sync for SharedLruCache<K, V, S> {}
 
-pub struct ShardingLruCache<K, V, S = RandomState> {
-    sharding_vec: Vec<Arc<Mutex<LruCache<K, V>>>>,
+pub struct SharedLruCache<K, V, S = RandomState> {
+    shared_vec: Vec<Mutex<LruCache<K, V>>>,
     hasher: S,
 }
 
@@ -112,22 +111,19 @@ impl<K, V> Node<K, V> {
     }
 }
 
-impl<K: Hash + Eq + PartialEq, V, S: BuildHasher> ShardingLruCache<K, V, S> {
+impl<K: Hash + Eq + PartialEq, V, S: BuildHasher> SharedLruCache<K, V, S> {
     #[inline]
-    pub fn new(cap: usize, sharding_size: usize, hasher: S) -> Result<Self, DatabaseError> {
-        let mut sharding_vec = Vec::with_capacity(sharding_size);
-        if cap % sharding_size != 0 {
-            return Err(DatabaseError::ShardingNotAlign);
+    pub fn new(cap: usize, shared_size: usize, hasher: S) -> Result<Self, DatabaseError> {
+        let mut shared_vec = Vec::with_capacity(shared_size);
+        if cap % shared_size != 0 {
+            return Err(DatabaseError::SharedNotAlign);
         }
-        let sharding_cap = cap / sharding_size;
-        for _ in 0..sharding_size {
-            sharding_vec.push(Arc::new(Mutex::new(LruCache::new(sharding_cap)?)));
+        let shared_cap = cap / shared_size;
+        for _ in 0..shared_size {
+            shared_vec.push(Mutex::new(LruCache::new(shared_cap)?));
         }
 
-        Ok(ShardingLruCache {
-            sharding_vec,
-            hasher,
-        })
+        Ok(SharedLruCache { shared_vec, hasher })
     }
 
     #[inline]
@@ -150,7 +146,7 @@ impl<K: Hash + Eq + PartialEq, V, S: BuildHasher> ShardingLruCache<K, V, S> {
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        for lru in &self.sharding_vec {
+        for lru in &self.shared_vec {
             if !lru.lock().is_empty() {
                 return false;
             }
@@ -169,16 +165,16 @@ impl<K: Hash + Eq + PartialEq, V, S: BuildHasher> ShardingLruCache<K, V, S> {
             .map(|node| unsafe { &node.as_ref().value })
     }
 
-    fn sharding_size(&self) -> usize {
-        self.sharding_vec.len()
+    fn shared_size(&self) -> usize {
+        self.shared_vec.len()
     }
 
     /// 通过key获取hash值后对其求余获取对应分片
-    fn shard(&self, key: &K) -> Arc<Mutex<LruCache<K, V>>> {
+    fn shard(&self, key: &K) -> &Mutex<LruCache<K, V>> {
         let mut hasher = self.hasher.build_hasher();
         key.hash(&mut hasher);
         #[allow(clippy::manual_hash_one)]
-        Arc::clone(&self.sharding_vec[hasher.finish() as usize % self.sharding_size()])
+        &self.shared_vec[hasher.finish() as usize % self.shared_size()]
     }
 }
 
@@ -393,7 +389,7 @@ impl<K, V> Drop for LruCache<K, V> {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::lru::{LruCache, ShardingLruCache};
+    use crate::utils::lru::{LruCache, SharedLruCache};
     use std::collections::hash_map::RandomState;
     use std::collections::HashSet;
 
@@ -423,8 +419,8 @@ mod tests {
     }
 
     #[test]
-    fn test_sharding_cache() {
-        let lru = ShardingLruCache::new(4, 2, RandomState::default()).unwrap();
+    fn test_shared_cache() {
+        let lru = SharedLruCache::new(4, 2, RandomState::default()).unwrap();
         debug_assert!(lru.is_empty());
         debug_assert_eq!(lru.put(1, 10), None);
         debug_assert_eq!(lru.get(&1), Some(&10));

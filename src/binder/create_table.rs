@@ -146,7 +146,7 @@ mod tests {
     use crate::storage::rocksdb::RocksStorage;
     use crate::storage::Storage;
     use crate::types::LogicalType;
-    use crate::utils::lru::ShardingLruCache;
+    use crate::utils::lru::SharedLruCache;
     use sqlparser::ast::CharLengthUnits;
     use std::hash::RandomState;
     use std::sync::atomic::AtomicUsize;
@@ -157,8 +157,8 @@ mod tests {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
         let transaction = storage.transaction()?;
-        let table_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
-        let view_cache = Arc::new(ShardingLruCache::new(4, 1, RandomState::new())?);
+        let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
+        let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let scala_functions = Default::default();
         let table_functions = Default::default();
 
