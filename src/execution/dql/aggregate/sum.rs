@@ -2,11 +2,10 @@ use crate::errors::DatabaseError;
 use crate::execution::dql::aggregate::Accumulator;
 use crate::expression::BinaryOperator;
 use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory};
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use ahash::RandomState;
 use std::collections::HashSet;
-use std::sync::Arc;
 
 pub struct SumAccumulator {
     result: DataValue,
@@ -25,7 +24,7 @@ impl SumAccumulator {
 }
 
 impl Accumulator for SumAccumulator {
-    fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
+    fn update_value(&mut self, value: &DataValue) -> Result<(), DatabaseError> {
         if !value.is_null() {
             if self.result.is_null() {
                 self.result = DataValue::clone(value);
@@ -37,13 +36,13 @@ impl Accumulator for SumAccumulator {
         Ok(())
     }
 
-    fn evaluate(&self) -> Result<ValueRef, DatabaseError> {
-        Ok(Arc::new(self.result.clone()))
+    fn evaluate(&self) -> Result<DataValue, DatabaseError> {
+        Ok(self.result.clone())
     }
 }
 
 pub struct DistinctSumAccumulator {
-    distinct_values: HashSet<ValueRef, RandomState>,
+    distinct_values: HashSet<DataValue, RandomState>,
     inner: SumAccumulator,
 }
 
@@ -57,7 +56,7 @@ impl DistinctSumAccumulator {
 }
 
 impl Accumulator for DistinctSumAccumulator {
-    fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
+    fn update_value(&mut self, value: &DataValue) -> Result<(), DatabaseError> {
         if !self.distinct_values.contains(value) {
             self.distinct_values.insert(value.clone());
             self.inner.update_value(value)?;
@@ -66,7 +65,7 @@ impl Accumulator for DistinctSumAccumulator {
         Ok(())
     }
 
-    fn evaluate(&self) -> Result<ValueRef, DatabaseError> {
+    fn evaluate(&self) -> Result<DataValue, DatabaseError> {
         self.inner.evaluate()
     }
 }

@@ -5,7 +5,6 @@ use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
-use crate::types::value::DataValue;
 use sqlparser::ast::{Assignment, Expr, TableFactor, TableWithJoins};
 use std::slice;
 use std::sync::Arc;
@@ -47,10 +46,11 @@ impl<T: Transaction> Binder<'_, '_, T> {
                                     // Check if the value length is too long
                                     value.check_len(ty)?;
 
+                                    let mut value = value.clone();
                                     if value.logical_type() != *ty {
-                                        row.push(Arc::new(DataValue::clone(value).cast(ty)?));
+                                        value = value.cast(ty)?;
                                     }
-                                    row.push(value.clone());
+                                    row.push(value);
                                 }
                                 ScalarExpression::Empty => {
                                     let default_value = column

@@ -190,9 +190,9 @@ mod tests {
                     ty: IndexType::PrimaryKey,
                 }),
                 range: Some(Range::SortedRanges(vec![
-                    Range::Eq(Arc::new(DataValue::Int32(Some(2)))),
+                    Range::Eq(DataValue::Int32(Some(2))),
                     Range::Scope {
-                        min: Bound::Excluded(Arc::new(DataValue::Int32(Some(40)))),
+                        min: Bound::Excluded(DataValue::Int32(Some(40))),
                         max: Bound::Unbounded,
                     }
                 ])),

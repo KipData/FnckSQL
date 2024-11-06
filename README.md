@@ -116,7 +116,7 @@ implement_from_tuple!(
 ```
 - User-Defined Function: `features = ["macros"]`
 ```rust
-scala_function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+scala_function!(TestFunction::test(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: DataValue, v2: DataValue| {
     let plus_binary_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
     let value = plus_binary_evaluator.binary_eval(&v1, &v2);
 
@@ -130,7 +130,7 @@ let fnck_sql = DataBaseBuilder::path("./data")
 ```
 - User-Defined Table Function: `features = ["macros"]`
 ```rust
-table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: ValueRef| {
+table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: DataValue| {
     let num = v1.i32().unwrap();
 
     Ok(Box::new((0..num)

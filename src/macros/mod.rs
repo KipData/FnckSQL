@@ -56,7 +56,7 @@ macro_rules! implement_from_tuple {
 /// # Examples
 ///
 /// ```
-/// scala_function!(MyFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+/// scala_function!(MyFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: DataValue, v2: DataValue| {
 ///     DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)
 /// });
 ///
@@ -127,7 +127,7 @@ macro_rules! scala_function {
 /// # Examples
 ///
 /// ```
-/// table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: ValueRef| {
+/// table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: DataValue| {
 ///     let num = v1.i32().unwrap();
 ///
 ///     Ok(Box::new((0..num)

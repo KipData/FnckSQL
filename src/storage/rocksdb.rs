@@ -190,11 +190,8 @@ mod test {
         transaction.append_tuple(
             &"test".to_string(),
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(1)))),
-                values: vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Boolean(Some(true))),
-                ],
+                id: Some(DataValue::Int32(Some(1))),
+                values: vec![DataValue::Int32(Some(1)), DataValue::Boolean(Some(true))],
             },
             &[LogicalType::Integer, LogicalType::Boolean],
             false,
@@ -202,11 +199,8 @@ mod test {
         transaction.append_tuple(
             &"test".to_string(),
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(2)))),
-                values: vec![
-                    Arc::new(DataValue::Int32(Some(2))),
-                    Arc::new(DataValue::Boolean(Some(false))),
-                ],
+                id: Some(DataValue::Int32(Some(2))),
+                values: vec![DataValue::Int32(Some(2)), DataValue::Boolean(Some(false))],
             },
             &[LogicalType::Integer, LogicalType::Boolean],
             false,
@@ -220,10 +214,7 @@ mod test {
         )?;
 
         let option_1 = iter.next_tuple()?;
-        debug_assert_eq!(
-            option_1.unwrap().id,
-            Some(Arc::new(DataValue::Int32(Some(2))))
-        );
+        debug_assert_eq!(option_1.unwrap().id, Some(DataValue::Int32(Some(2))));
 
         let option_2 = iter.next_tuple()?;
         debug_assert_eq!(option_2, None);
@@ -247,10 +238,10 @@ mod test {
             .clone();
         let a_column_id = table.get_column_id_by_name("a").unwrap();
         let tuple_ids = vec![
-            Arc::new(DataValue::Int32(Some(0))),
-            Arc::new(DataValue::Int32(Some(2))),
-            Arc::new(DataValue::Int32(Some(3))),
-            Arc::new(DataValue::Int32(Some(4))),
+            DataValue::Int32(Some(0)),
+            DataValue::Int32(Some(2)),
+            DataValue::Int32(Some(3)),
+            DataValue::Int32(Some(4)),
         ];
         let mut iter = IndexIter {
             offset: 0,
@@ -271,10 +262,10 @@ mod test {
                 tx: &transaction,
             },
             ranges: VecDeque::from(vec![
-                Range::Eq(Arc::new(DataValue::Int32(Some(0)))),
+                Range::Eq(DataValue::Int32(Some(0))),
                 Range::Scope {
-                    min: Bound::Included(Arc::new(DataValue::Int32(Some(2)))),
-                    max: Bound::Included(Arc::new(DataValue::Int32(Some(4)))),
+                    min: Bound::Included(DataValue::Int32(Some(2))),
+                    max: Bound::Included(DataValue::Int32(Some(4))),
                 },
             ]),
             scope_iter: None,
@@ -312,20 +303,17 @@ mod test {
                 columns,
                 table.indexes[0].clone(),
                 vec![Range::Scope {
-                    min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
+                    min: Bound::Excluded(DataValue::Int32(Some(0))),
                     max: Bound::Unbounded,
                 }],
             )
             .unwrap();
 
         while let Some(tuple) = iter.next_tuple()? {
-            debug_assert_eq!(tuple.id, Some(Arc::new(DataValue::Int32(Some(1)))));
+            debug_assert_eq!(tuple.id, Some(DataValue::Int32(Some(1))));
             debug_assert_eq!(
                 tuple.values,
-                vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Int32(Some(1)))
-                ]
+                vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1))]
             )
         }
 

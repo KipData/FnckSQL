@@ -396,9 +396,7 @@ pub(crate) mod test {
             tuples,
             vec![Tuple {
                 id: None,
-                values: vec![Arc::new(DataValue::Date32(Some(
-                    Local::now().num_days_from_ce()
-                )))],
+                values: vec![DataValue::Date32(Some(Local::now().num_days_from_ce()))],
             }]
         );
         Ok(())
@@ -428,11 +426,11 @@ pub(crate) mod test {
             vec![
                 Tuple {
                     id: None,
-                    values: vec![Arc::new(DataValue::Int32(Some(3)))],
+                    values: vec![DataValue::Int32(Some(3))],
                 },
                 Tuple {
                     id: None,
-                    values: vec![Arc::new(DataValue::Int32(Some(4)))],
+                    values: vec![DataValue::Int32(Some(4))],
                 },
             ]
         );
@@ -463,32 +461,20 @@ pub(crate) mod test {
 
         debug_assert_eq!(
             tuples_1[0].values,
-            vec![
-                Arc::new(DataValue::Int32(Some(0))),
-                Arc::new(DataValue::Int32(Some(0)))
-            ]
+            vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
         );
         debug_assert_eq!(
             tuples_1[1].values,
-            vec![
-                Arc::new(DataValue::Int32(Some(1))),
-                Arc::new(DataValue::Int32(Some(1)))
-            ]
+            vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1))]
         );
 
         debug_assert_eq!(
             tuples_2[0].values,
-            vec![
-                Arc::new(DataValue::Int32(Some(0))),
-                Arc::new(DataValue::Int32(Some(0)))
-            ]
+            vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
         );
         debug_assert_eq!(
             tuples_2[1].values,
-            vec![
-                Arc::new(DataValue::Int32(Some(3))),
-                Arc::new(DataValue::Int32(Some(3)))
-            ]
+            vec![DataValue::Int32(Some(3)), DataValue::Int32(Some(3))]
         );
 
         tx_1.commit()?;

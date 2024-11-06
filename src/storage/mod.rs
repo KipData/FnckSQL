@@ -10,7 +10,7 @@ use crate::serdes::ReferenceTables;
 use crate::storage::table_codec::TableCodec;
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use crate::utils::lru::SharedLruCache;
 use bytes::Bytes;
@@ -585,14 +585,14 @@ trait IndexImpl<T: Transaction> {
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError>;
 
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         is_upper: bool,
     ) -> Result<Vec<u8>, DatabaseError>;
 }
@@ -666,7 +666,7 @@ impl<T: Transaction> IndexImpl<T> for IndexImplEnum {
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         match self {
@@ -680,7 +680,7 @@ impl<T: Transaction> IndexImpl<T> for IndexImplEnum {
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         is_upper: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
         match self {
@@ -708,7 +708,7 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let bytes = params
@@ -729,7 +729,7 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        val: &ValueRef,
+        val: &DataValue,
         _: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
         TableCodec::encode_tuple_key(params.table_name, val)
@@ -757,7 +757,7 @@ impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let bytes = params
@@ -776,7 +776,7 @@ impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         _: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
         let index = Index::new(
@@ -800,7 +800,7 @@ impl<T: Transaction> IndexImpl<T> for NormalIndexImpl {
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let min = self.bound_key(params, value, false)?;
@@ -816,7 +816,7 @@ impl<T: Transaction> IndexImpl<T> for NormalIndexImpl {
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         is_upper: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
         let index = Index::new(
@@ -840,7 +840,7 @@ impl<T: Transaction> IndexImpl<T> for CompositeIndexImpl {
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let min = self.bound_key(params, value, false)?;
@@ -856,10 +856,10 @@ impl<T: Transaction> IndexImpl<T> for CompositeIndexImpl {
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         is_upper: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
-        let values = if let DataValue::Tuple(Some(values)) = value.as_ref() {
+        let values = if let DataValue::Tuple(Some(values)) = &value {
             values.as_slice()
         } else {
             slice::from_ref(value)
@@ -974,7 +974,7 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                     let table_name = self.params.table_name;
                     let index_meta = &self.params.index_meta;
                     let bound_encode =
-                        |bound: Bound<ValueRef>, is_upper: bool| -> Result<_, DatabaseError> {
+                        |bound: Bound<DataValue>, is_upper: bool| -> Result<_, DatabaseError> {
                             match bound {
                                 Bound::Included(val) => Ok(Bound::Included(self.inner.bound_key(
                                     &self.params,
@@ -1092,27 +1092,27 @@ mod test {
     fn build_tuples() -> Vec<Tuple> {
         vec![
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(0)))),
+                id: Some(DataValue::Int32(Some(0))),
                 values: vec![
-                    Arc::new(DataValue::Int32(Some(0))),
-                    Arc::new(DataValue::Boolean(Some(true))),
-                    Arc::new(DataValue::Int32(Some(0))),
+                    DataValue::Int32(Some(0)),
+                    DataValue::Boolean(Some(true)),
+                    DataValue::Int32(Some(0)),
                 ],
             },
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(1)))),
+                id: Some(DataValue::Int32(Some(1))),
                 values: vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Boolean(Some(true))),
-                    Arc::new(DataValue::Int32(Some(1))),
+                    DataValue::Int32(Some(1)),
+                    DataValue::Boolean(Some(true)),
+                    DataValue::Int32(Some(1)),
                 ],
             },
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(2)))),
+                id: Some(DataValue::Int32(Some(2))),
                 values: vec![
-                    Arc::new(DataValue::Int32(Some(2))),
-                    Arc::new(DataValue::Boolean(Some(false))),
-                    Arc::new(DataValue::Int32(Some(0))),
+                    DataValue::Int32(Some(2)),
+                    DataValue::Boolean(Some(false)),
+                    DataValue::Int32(Some(0)),
                 ],
             },
         ]

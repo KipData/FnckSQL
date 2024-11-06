@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
-use std::sync::Arc;
 
 pub struct Insert {
     table_name: TableName,
@@ -119,7 +118,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                                 if value.is_none() {
                                     value = throw!(col.default_value());
                                 }
-                                value.unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())))
+                                value.unwrap_or_else(|| DataValue::none(col.datatype()))
                             };
                             if value.is_null() && !col.nullable() {
                                 yield Err(DatabaseError::NotNull);
@@ -131,7 +130,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                             id: Some(if primary_keys.len() == 1 {
                                 tuple_id.pop().unwrap()
                             } else {
-                                Arc::new(DataValue::Tuple(Some(tuple_id)))
+                                DataValue::Tuple(Some(tuple_id))
                             }),
                             values,
                         });

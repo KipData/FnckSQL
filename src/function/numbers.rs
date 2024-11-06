@@ -62,14 +62,14 @@ impl TableFunctionImpl for Numbers {
         let mut value = args[0].eval(&tuple, &[])?;
 
         if value.logical_type() != LogicalType::Integer {
-            value = Arc::new(DataValue::clone(&value).cast(&LogicalType::Integer)?);
+            value = value.cast(&LogicalType::Integer)?;
         }
         let num = value.i32().ok_or(DatabaseError::NotNull)?;
 
         Ok(Box::new((0..num).map(|i| {
             Ok(Tuple {
                 id: None,
-                values: vec![Arc::new(DataValue::Int32(Some(i)))],
+                values: vec![DataValue::Int32(Some(i))],
             })
         }))
             as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)

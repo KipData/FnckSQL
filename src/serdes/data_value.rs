@@ -4,7 +4,6 @@ use crate::storage::{TableCache, Transaction};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use std::io::{Read, Write};
-use std::sync::Arc;
 
 impl DataValue {
     // FIXME: redundant code
@@ -64,7 +63,7 @@ impl DataValue {
                     let mut vec = Vec::with_capacity(len);
 
                     for ty in types.iter() {
-                        vec.push(Arc::new(Self::inner_decode(reader, ty)?));
+                        vec.push(Self::inner_decode(reader, ty)?);
                     }
                     Some(vec)
                 }
@@ -120,7 +119,6 @@ pub(crate) mod test {
     use crate::types::value::{DataValue, Utf8Type};
     use sqlparser::ast::CharLengthUnits;
     use std::io::{Cursor, Seek, SeekFrom};
-    use std::sync::Arc;
 
     #[test]
     fn test_serialization() -> Result<(), DatabaseError> {
@@ -138,8 +136,8 @@ pub(crate) mod test {
         };
         let source_4 = DataValue::Tuple(None);
         let source_5 = DataValue::Tuple(Some(vec![
-            Arc::new(DataValue::Int32(None)),
-            Arc::new(DataValue::Int32(Some(42))),
+            DataValue::Int32(None),
+            DataValue::Int32(Some(42)),
         ]));
 
         let mut reference_tables = ReferenceTables::new();

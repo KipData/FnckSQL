@@ -14,11 +14,10 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::io::Write;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::{cmp, fmt, mem};
 
 lazy_static! {
-    pub static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
+    pub static ref NULL_VALUE: DataValue = DataValue::Null;
     static ref UNIX_DATETIME: NaiveDateTime = DateTime::from_timestamp(0, 0).unwrap().naive_utc();
     static ref UNIX_TIME: NaiveTime = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
 }
@@ -29,8 +28,6 @@ pub const TIME_FMT: &str = "%H:%M:%S";
 
 const ENCODE_GROUP_SIZE: usize = 8;
 const ENCODE_MARKER: u8 = 0xFF;
-
-pub type ValueRef = Arc<DataValue>;
 
 #[derive(Clone)]
 pub enum Utf8Type {
@@ -63,7 +60,7 @@ pub enum DataValue {
     Date64(Option<i64>),
     Time(Option<u32>),
     Decimal(Option<Decimal>),
-    Tuple(Option<Vec<ValueRef>>),
+    Tuple(Option<Vec<DataValue>>),
 }
 
 macro_rules! generate_get_option {
@@ -477,10 +474,7 @@ impl DataValue {
             LogicalType::Time => DataValue::Time(Some(UNIX_TIME.num_seconds_from_midnight())),
             LogicalType::Decimal(_, _) => DataValue::Decimal(Some(Decimal::new(0, 0))),
             LogicalType::Tuple(types) => {
-                let values = types
-                    .iter()
-                    .map(|ty| Arc::new(DataValue::init(ty)))
-                    .collect_vec();
+                let values = types.iter().map(DataValue::init).collect_vec();
 
                 DataValue::Tuple(Some(values))
             }
@@ -1381,7 +1375,7 @@ impl DataValue {
                 LogicalType::Tuple(types) => Ok(if let Some(mut values) = values {
                     for (i, value) in values.iter_mut().enumerate() {
                         if types[i] != value.logical_type() {
-                            *value = Arc::new(DataValue::clone(value).cast(&types[i])?);
+                            *value = DataValue::clone(value).cast(&types[i])?;
                         }
                     }
                     DataValue::Tuple(Some(values))
@@ -1631,7 +1625,6 @@ impl fmt::Debug for DataValue {
 mod test {
     use crate::errors::DatabaseError;
     use crate::types::value::DataValue;
-    use std::sync::Arc;
 
     #[test]
     fn test_mem_comparable_int() -> Result<(), DatabaseError> {
@@ -1728,21 +1721,21 @@ mod test {
         let mut key_tuple_3 = Vec::new();
 
         DataValue::Tuple(Some(vec![
-            Arc::new(DataValue::Int8(None)),
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(1))),
+            DataValue::Int8(None),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(1)),
         ]))
         .memcomparable_encode(&mut key_tuple_1)?;
         DataValue::Tuple(Some(vec![
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(1))),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(1)),
         ]))
         .memcomparable_encode(&mut key_tuple_2)?;
         DataValue::Tuple(Some(vec![
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(2))),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(2)),
         ]))
         .memcomparable_encode(&mut key_tuple_3)?;
 

@@ -10,7 +10,7 @@ use crate::throw;
 use crate::types::index::{Index, IndexId, IndexType};
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use std::collections::HashMap;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
@@ -106,6 +106,6 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
 
 struct Value {
     exprs: Vec<ScalarExpression>,
-    value_rows: Vec<Vec<ValueRef>>,
+    value_rows: Vec<Vec<DataValue>>,
     index_ty: IndexType,
 }

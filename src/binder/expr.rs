@@ -48,7 +48,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             }
             Expr::CompoundIdentifier(idents) => self.bind_column_ref_from_identifiers(idents, None),
             Expr::BinaryOp { left, right, op } => self.bind_binary_op_internal(left, right, op),
-            Expr::Value(v) => Ok(ScalarExpression::Constant(Arc::new(v.into()))),
+            Expr::Value(v) => Ok(ScalarExpression::Constant(v.into())),
             Expr::Function(func) => self.bind_function(func),
             Expr::Nested(expr) => self.bind_expr(expr),
             Expr::UnaryOp { expr, op } => self.bind_unary_op_internal(expr, op),
@@ -77,7 +77,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
                 }
                 .cast(&logical_type)?;
 
-                Ok(ScalarExpression::Constant(Arc::new(value)))
+                Ok(ScalarExpression::Constant(value))
             }
             Expr::Between {
                 expr,
@@ -672,10 +672,10 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
     }
 
     fn wildcard_expr() -> ScalarExpression {
-        ScalarExpression::Constant(Arc::new(DataValue::Utf8 {
+        ScalarExpression::Constant(DataValue::Utf8 {
             value: Some("*".to_string()),
             ty: Utf8Type::Variable(None),
             unit: CharLengthUnits::Characters,
-        }))
+        })
     }
 }

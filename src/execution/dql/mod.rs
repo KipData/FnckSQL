@@ -16,13 +16,10 @@ pub(crate) mod values;
 
 #[cfg(test)]
 pub(crate) mod test {
-    use crate::types::value::{DataValue, ValueRef};
+    use crate::types::value::DataValue;
     use itertools::Itertools;
-    use std::sync::Arc;
 
-    pub(crate) fn build_integers(ints: Vec<Option<i32>>) -> Vec<ValueRef> {
-        ints.into_iter()
-            .map(|i| Arc::new(DataValue::Int32(i)))
-            .collect_vec()
+    pub(crate) fn build_integers(ints: Vec<Option<i32>>) -> Vec<DataValue> {
+        ints.into_iter().map(|i| DataValue::Int32(i)).collect_vec()
     }
 }

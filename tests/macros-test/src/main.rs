@@ -11,7 +11,7 @@ mod test {
     use fnck_sql::expression::ScalarExpression;
     use fnck_sql::types::evaluator::EvaluatorFactory;
     use fnck_sql::types::tuple::{SchemaRef, Tuple};
-    use fnck_sql::types::value::ValueRef;
+    use fnck_sql::types::value::DataValue;
     use fnck_sql::types::value::{DataValue, Utf8Type};
     use fnck_sql::types::LogicalType;
     use fnck_sql::{implement_from_tuple, scala_function, table_function};
@@ -81,13 +81,13 @@ mod test {
         assert_eq!(my_struct.c2, "LOL");
     }
 
-    scala_function!(MyScalaFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: ValueRef, v2: ValueRef| {
+    scala_function!(MyScalaFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: DataValue, v2: DataValue| {
         let plus_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
 
         Ok(plus_evaluator.0.binary_eval(&v1, &v2))
     }));
 
-    table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: ValueRef| {
+    table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: DataValue| {
         let num = v1.i32().unwrap();
 
         Ok(Box::new((0..num)

@@ -1,5 +1,5 @@
 use crate::types::tuple::SchemaRef;
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use fnck_sql_serde_macros::ReferenceSerialization;
 use itertools::Itertools;
 use std::fmt;
@@ -7,7 +7,7 @@ use std::fmt::Formatter;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct ValuesOperator {
-    pub rows: Vec<Vec<ValueRef>>,
+    pub rows: Vec<Vec<DataValue>>,
     pub schema_ref: SchemaRef,
 }
 

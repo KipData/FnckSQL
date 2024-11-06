@@ -2,7 +2,6 @@ use crate::errors::DatabaseError;
 use crate::types::tuple::{Schema, Tuple};
 use crate::types::value::{DataValue, Utf8Type};
 use sqlparser::ast::CharLengthUnits;
-use std::sync::Arc;
 
 pub struct TupleBuilder<'a> {
     schema: &'a Schema,
@@ -14,11 +13,11 @@ impl<'a> TupleBuilder<'a> {
     }
 
     pub fn build_result(message: String) -> Tuple {
-        let values = vec![Arc::new(DataValue::Utf8 {
+        let values = vec![DataValue::Utf8 {
             value: Some(message),
             ty: Utf8Type::Variable(None),
             unit: CharLengthUnits::Characters,
-        })];
+        }];
 
         Tuple { id: None, values }
     }
@@ -31,14 +30,12 @@ impl<'a> TupleBuilder<'a> {
         let mut primary_keys = Vec::new();
 
         for (i, value) in row.into_iter().enumerate() {
-            let data_value = Arc::new(
-                DataValue::Utf8 {
-                    value: Some(value.to_string()),
-                    ty: Utf8Type::Variable(None),
-                    unit: CharLengthUnits::Characters,
-                }
-                .cast(self.schema[i].datatype())?,
-            );
+            let data_value = DataValue::Utf8 {
+                value: Some(value.to_string()),
+                ty: Utf8Type::Variable(None),
+                unit: CharLengthUnits::Characters,
+            }
+            .cast(self.schema[i].datatype())?;
 
             if self.schema[i].desc().is_primary() {
                 primary_keys.push(data_value.clone());
@@ -52,7 +49,7 @@ impl<'a> TupleBuilder<'a> {
             if primary_keys.len() == 1 {
                 primary_keys.pop().unwrap()
             } else {
-                Arc::new(DataValue::Tuple(Some(primary_keys)))
+                DataValue::Tuple(Some(primary_keys))
             }
         });
 

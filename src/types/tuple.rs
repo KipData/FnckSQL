@@ -1,6 +1,6 @@
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
 use integer_encoding::FixedInt;
@@ -19,7 +19,7 @@ lazy_static! {
 
 const BITS_MAX_INDEX: usize = 8;
 
-pub type TupleId = ValueRef;
+pub type TupleId = DataValue;
 pub type Schema = Vec<ColumnRef>;
 pub type SchemaRef = Arc<Schema>;
 
@@ -33,7 +33,7 @@ pub fn types(schema: &Schema) -> Vec<LogicalType> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
     pub id: Option<TupleId>,
-    pub values: Vec<ValueRef>,
+    pub values: Vec<DataValue>,
 }
 
 impl Tuple {
@@ -64,16 +64,13 @@ impl Tuple {
             }
             if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
                 if projections[projection_i] == i {
-                    tuple_values.push(Arc::new(DataValue::none(logic_type)));
+                    tuple_values.push(DataValue::none(logic_type));
                     Self::values_push(schema, &tuple_values, &mut primary_keys, &mut projection_i);
                 }
             } else if let Some(len) = logic_type.raw_len() {
                 /// fixed length (e.g.: int)
                 if projections[projection_i] == i {
-                    tuple_values.push(Arc::new(DataValue::from_raw(
-                        &bytes[pos..pos + len],
-                        logic_type,
-                    )));
+                    tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
                     Self::values_push(schema, &tuple_values, &mut primary_keys, &mut projection_i);
                 }
                 pos += len;
@@ -82,10 +79,7 @@ impl Tuple {
                 let len = u32::decode_fixed(&bytes[pos..pos + 4]) as usize;
                 pos += 4;
                 if projections[projection_i] == i {
-                    tuple_values.push(Arc::new(DataValue::from_raw(
-                        &bytes[pos..pos + len],
-                        logic_type,
-                    )));
+                    tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
                     Self::values_push(schema, &tuple_values, &mut primary_keys, &mut projection_i);
                 }
                 pos += len;
@@ -96,7 +90,7 @@ impl Tuple {
             if primary_keys.len() == 1 {
                 primary_keys.pop().unwrap()
             } else {
-                Arc::new(DataValue::Tuple(Some(primary_keys)))
+                DataValue::Tuple(Some(primary_keys))
             }
         });
         Tuple {
@@ -107,8 +101,8 @@ impl Tuple {
 
     fn values_push(
         tuple_columns: &Schema,
-        tuple_values: &[ValueRef],
-        primary_keys: &mut Vec<ValueRef>,
+        tuple_values: &[DataValue],
+        primary_keys: &mut Vec<DataValue>,
         projection_i: &mut usize,
     ) {
         if tuple_columns[*projection_i].desc().is_primary() {
@@ -299,77 +293,77 @@ mod tests {
 
         let tuples = vec![
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(0)))),
+                id: Some(DataValue::Int32(Some(0))),
                 values: vec![
-                    Arc::new(DataValue::Int32(Some(0))),
-                    Arc::new(DataValue::UInt32(Some(1))),
-                    Arc::new(DataValue::Utf8 {
+                    DataValue::Int32(Some(0)),
+                    DataValue::UInt32(Some(1)),
+                    DataValue::Utf8 {
                         value: Some("LOL".to_string()),
                         ty: Utf8Type::Variable(Some(2)),
                         unit: CharLengthUnits::Characters,
-                    }),
-                    Arc::new(DataValue::Int16(Some(1))),
-                    Arc::new(DataValue::UInt16(Some(1))),
-                    Arc::new(DataValue::Float32(Some(0.1))),
-                    Arc::new(DataValue::Float64(Some(0.1))),
-                    Arc::new(DataValue::Int8(Some(1))),
-                    Arc::new(DataValue::UInt8(Some(1))),
-                    Arc::new(DataValue::Boolean(Some(true))),
-                    Arc::new(DataValue::Date64(Some(0))),
-                    Arc::new(DataValue::Date32(Some(0))),
-                    Arc::new(DataValue::Decimal(Some(Decimal::new(0, 3)))),
-                    Arc::new(DataValue::Utf8 {
+                    },
+                    DataValue::Int16(Some(1)),
+                    DataValue::UInt16(Some(1)),
+                    DataValue::Float32(Some(0.1)),
+                    DataValue::Float64(Some(0.1)),
+                    DataValue::Int8(Some(1)),
+                    DataValue::UInt8(Some(1)),
+                    DataValue::Boolean(Some(true)),
+                    DataValue::Date64(Some(0)),
+                    DataValue::Date32(Some(0)),
+                    DataValue::Decimal(Some(Decimal::new(0, 3))),
+                    DataValue::Utf8 {
                         value: Some("K".to_string()),
                         ty: Utf8Type::Fixed(1),
                         unit: CharLengthUnits::Characters,
-                    }),
-                    Arc::new(DataValue::Utf8 {
+                    },
+                    DataValue::Utf8 {
                         value: Some("LOL".to_string()),
                         ty: Utf8Type::Variable(Some(2)),
                         unit: CharLengthUnits::Octets,
-                    }),
-                    Arc::new(DataValue::Utf8 {
+                    },
+                    DataValue::Utf8 {
                         value: Some("K".to_string()),
                         ty: Utf8Type::Fixed(1),
                         unit: CharLengthUnits::Octets,
-                    }),
+                    },
                 ],
             },
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(1)))),
+                id: Some(DataValue::Int32(Some(1))),
                 values: vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::UInt32(None)),
-                    Arc::new(DataValue::Utf8 {
+                    DataValue::Int32(Some(1)),
+                    DataValue::UInt32(None),
+                    DataValue::Utf8 {
                         value: None,
                         ty: Utf8Type::Variable(Some(2)),
                         unit: CharLengthUnits::Characters,
-                    }),
-                    Arc::new(DataValue::Int16(None)),
-                    Arc::new(DataValue::UInt16(None)),
-                    Arc::new(DataValue::Float32(None)),
-                    Arc::new(DataValue::Float64(None)),
-                    Arc::new(DataValue::Int8(None)),
-                    Arc::new(DataValue::UInt8(None)),
-                    Arc::new(DataValue::Boolean(None)),
-                    Arc::new(DataValue::Date64(None)),
-                    Arc::new(DataValue::Date32(None)),
-                    Arc::new(DataValue::Decimal(None)),
-                    Arc::new(DataValue::Utf8 {
+                    },
+                    DataValue::Int16(None),
+                    DataValue::UInt16(None),
+                    DataValue::Float32(None),
+                    DataValue::Float64(None),
+                    DataValue::Int8(None),
+                    DataValue::UInt8(None),
+                    DataValue::Boolean(None),
+                    DataValue::Date64(None),
+                    DataValue::Date32(None),
+                    DataValue::Decimal(None),
+                    DataValue::Utf8 {
                         value: None,
                         ty: Utf8Type::Fixed(1),
                         unit: CharLengthUnits::Characters,
-                    }),
-                    Arc::new(DataValue::Utf8 {
+                    },
+                    DataValue::Utf8 {
                         value: None,
                         ty: Utf8Type::Variable(Some(2)),
                         unit: CharLengthUnits::Octets,
-                    }),
-                    Arc::new(DataValue::Utf8 {
+                    },
+                    DataValue::Utf8 {
                         value: None,
                         ty: Utf8Type::Fixed(1),
                         unit: CharLengthUnits::Octets,
-                    }),
+                    },
                 ],
             },
         ];

@@ -277,7 +277,6 @@ mod tests {
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use std::collections::Bound;
-    use std::sync::Arc;
 
     #[test]
     fn test_push_predicate_into_scan() -> Result<(), DatabaseError> {
@@ -300,7 +299,7 @@ mod tests {
 
         if let Operator::TableScan(op) = &best_plan.childrens[0].childrens[0].operator {
             let mock_range = Range::Scope {
-                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
+                min: Bound::Excluded(DataValue::Int32(Some(1))),
                 max: Bound::Unbounded,
             };
 

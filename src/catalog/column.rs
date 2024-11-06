@@ -2,7 +2,7 @@ use crate::catalog::TableName;
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::EMPTY_TUPLE;
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use fnck_sql_serde_macros::ReferenceSerialization;
 use sqlparser::ast::CharLengthUnits;
@@ -166,7 +166,7 @@ impl ColumnCatalog {
         &self.desc.column_datatype
     }
 
-    pub(crate) fn default_value(&self) -> Result<Option<ValueRef>, DatabaseError> {
+    pub(crate) fn default_value(&self) -> Result<Option<DataValue>, DatabaseError> {
         self.desc
             .default
             .as_ref()

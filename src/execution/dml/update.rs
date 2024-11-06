@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
-use std::sync::Arc;
 
 pub struct Update {
     table_name: TableName,
@@ -108,7 +107,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                             let id = if primary_keys.len() == 1 {
                                 primary_keys.pop().unwrap()
                             } else {
-                                Arc::new(DataValue::Tuple(Some(primary_keys)))
+                                DataValue::Tuple(Some(primary_keys))
                             };
                             if &id != tuple.id.as_ref().unwrap() {
                                 let old_key = tuple.id.replace(id).unwrap();

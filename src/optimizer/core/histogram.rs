@@ -5,19 +5,18 @@ use crate::expression::BinaryOperator;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
 use crate::types::evaluator::EvaluatorFactory;
 use crate::types::index::{IndexId, IndexMeta};
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use fnck_sql_serde_macros::ReferenceSerialization;
 use ordered_float::OrderedFloat;
 use std::collections::Bound;
-use std::sync::Arc;
 use std::{cmp, mem};
 
 pub struct HistogramBuilder {
     index_id: IndexId,
 
     null_count: usize,
-    values: NullableVec<(usize, ValueRef)>,
+    values: NullableVec<(usize, DataValue)>,
     sort_keys: Vec<(usize, Vec<u8>)>,
 
     value_index: usize,
@@ -41,8 +40,8 @@ pub struct Histogram {
 
 #[derive(Debug, Clone, PartialEq, ReferenceSerialization)]
 struct Bucket {
-    lower: ValueRef,
-    upper: ValueRef,
+    lower: DataValue,
+    upper: DataValue,
     count: u64,
     // repeat: u64,
 }
@@ -58,7 +57,7 @@ impl HistogramBuilder {
         })
     }
 
-    pub fn append(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
+    pub fn append(&mut self, value: &DataValue) -> Result<(), DatabaseError> {
         if value.is_null() {
             self.null_count += 1;
         } else {
@@ -114,11 +113,11 @@ impl HistogramBuilder {
         }
         let mut corr_xy_sum = 0.0;
         let mut number_of_distinct_value = 0;
-        let mut last_value: Option<ValueRef> = None;
+        let mut last_value: Option<DataValue> = None;
 
         for (i, index) in sorted_indices.into_iter().enumerate() {
             let (ordinal, value) = values.take(index);
-            sketch.increment(value.as_ref());
+            sketch.increment(&value);
 
             if let None | Some(true) = last_value.as_ref().map(|last_value| last_value != &value) {
                 last_value = Some(value.clone());
@@ -163,11 +162,11 @@ impl HistogramBuilder {
 }
 
 fn is_under(
-    value: &ValueRef,
-    target: &Bound<ValueRef>,
+    value: &DataValue,
+    target: &Bound<DataValue>,
     is_min: bool,
 ) -> Result<bool, DatabaseError> {
-    let _is_under = |value: &ValueRef, target: &ValueRef, is_min: bool| {
+    let _is_under = |value: &DataValue, target: &DataValue, is_min: bool| {
         let evaluator = EvaluatorFactory::binary_create(
             value.logical_type(),
             if is_min {
@@ -188,11 +187,11 @@ fn is_under(
 }
 
 fn is_above(
-    value: &ValueRef,
-    target: &Bound<ValueRef>,
+    value: &DataValue,
+    target: &Bound<DataValue>,
     is_min: bool,
 ) -> Result<bool, DatabaseError> {
-    let _is_above = |value: &ValueRef, target: &ValueRef, is_min: bool| {
+    let _is_above = |value: &DataValue, target: &DataValue, is_min: bool| {
         let evaluator = EvaluatorFactory::binary_create(
             value.logical_type(),
             if is_min {
@@ -352,7 +351,7 @@ impl Histogram {
                 let bucket = &self.buckets[*bucket_i];
                 let mut temp_count = 0;
 
-                let is_eq = |value: &ValueRef, target: &Bound<ValueRef>| match target {
+                let is_eq = |value: &DataValue, target: &Bound<DataValue>| match target {
                     Bound::Included(target) => target.eq(value),
                     _ => false,
                 };
@@ -447,7 +446,7 @@ impl Histogram {
 
 impl Bucket {
     fn empty() -> Self {
-        let empty_value = Arc::new(DataValue::Null);
+        let empty_value = DataValue::Null;
 
         Bucket {
             lower: empty_value.clone(),
@@ -484,26 +483,26 @@ mod tests {
     fn test_sort_tuples_on_histogram() -> Result<(), DatabaseError> {
         let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(0))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(1))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(2))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(3))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(4))))?;
+        builder.append(&DataValue::Int32(Some(0)))?;
+        builder.append(&DataValue::Int32(Some(1)))?;
+        builder.append(&DataValue::Int32(Some(2)))?;
+        builder.append(&DataValue::Int32(Some(3)))?;
+        builder.append(&DataValue::Int32(Some(4)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(5))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(6))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(7))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(8))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(9))))?;
+        builder.append(&DataValue::Int32(Some(5)))?;
+        builder.append(&DataValue::Int32(Some(6)))?;
+        builder.append(&DataValue::Int32(Some(7)))?;
+        builder.append(&DataValue::Int32(Some(8)))?;
+        builder.append(&DataValue::Int32(Some(9)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(10))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(11))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(12))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
+        builder.append(&DataValue::Int32(Some(10)))?;
+        builder.append(&DataValue::Int32(Some(11)))?;
+        builder.append(&DataValue::Int32(Some(12)))?;
+        builder.append(&DataValue::Int32(Some(13)))?;
+        builder.append(&DataValue::Int32(Some(14)))?;
 
-        builder.append(&Arc::new(DataValue::Null))?;
-        builder.append(&Arc::new(DataValue::Int32(None)))?;
+        builder.append(&DataValue::Null)?;
+        builder.append(&DataValue::Int32(None))?;
 
         // debug_assert!(matches!(builder.build(10), Err(DataBaseError::TooManyBuckets)));
 
@@ -516,28 +515,28 @@ mod tests {
             histogram.buckets,
             vec![
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(0))),
-                    upper: Arc::new(DataValue::Int32(Some(2))),
+                    lower: DataValue::Int32(Some(0)),
+                    upper: DataValue::Int32(Some(2)),
                     count: 3,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(3))),
-                    upper: Arc::new(DataValue::Int32(Some(5))),
+                    lower: DataValue::Int32(Some(3)),
+                    upper: DataValue::Int32(Some(5)),
                     count: 3,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(6))),
-                    upper: Arc::new(DataValue::Int32(Some(8))),
+                    lower: DataValue::Int32(Some(6)),
+                    upper: DataValue::Int32(Some(8)),
                     count: 3,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(9))),
-                    upper: Arc::new(DataValue::Int32(Some(11))),
+                    lower: DataValue::Int32(Some(9)),
+                    upper: DataValue::Int32(Some(11)),
                     count: 3,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(12))),
-                    upper: Arc::new(DataValue::Int32(Some(14))),
+                    lower: DataValue::Int32(Some(12)),
+                    upper: DataValue::Int32(Some(14)),
                     count: 3,
                 },
             ]
@@ -550,26 +549,26 @@ mod tests {
     fn test_rev_sort_tuples_on_histogram() -> Result<(), DatabaseError> {
         let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(12))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(11))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(10))))?;
+        builder.append(&DataValue::Int32(Some(14)))?;
+        builder.append(&DataValue::Int32(Some(13)))?;
+        builder.append(&DataValue::Int32(Some(12)))?;
+        builder.append(&DataValue::Int32(Some(11)))?;
+        builder.append(&DataValue::Int32(Some(10)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(9))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(8))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(7))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(6))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(5))))?;
+        builder.append(&DataValue::Int32(Some(9)))?;
+        builder.append(&DataValue::Int32(Some(8)))?;
+        builder.append(&DataValue::Int32(Some(7)))?;
+        builder.append(&DataValue::Int32(Some(6)))?;
+        builder.append(&DataValue::Int32(Some(5)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(4))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(3))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(2))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(1))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(0))))?;
+        builder.append(&DataValue::Int32(Some(4)))?;
+        builder.append(&DataValue::Int32(Some(3)))?;
+        builder.append(&DataValue::Int32(Some(2)))?;
+        builder.append(&DataValue::Int32(Some(1)))?;
+        builder.append(&DataValue::Int32(Some(0)))?;
 
-        builder.append(&Arc::new(DataValue::Null))?;
-        builder.append(&Arc::new(DataValue::Int32(None)))?;
+        builder.append(&DataValue::Null)?;
+        builder.append(&DataValue::Int32(None))?;
 
         let (histogram, _) = builder.build(5)?;
 
@@ -580,28 +579,28 @@ mod tests {
             histogram.buckets,
             vec![
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(0))),
-                    upper: Arc::new(DataValue::Int32(Some(2))),
+                    lower: DataValue::Int32(Some(0)),
+                    upper: DataValue::Int32(Some(2)),
                     count: 3,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(3))),
-                    upper: Arc::new(DataValue::Int32(Some(5))),
+                    lower: DataValue::Int32(Some(3)),
+                    upper: DataValue::Int32(Some(5)),
                     count: 3,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(6))),
-                    upper: Arc::new(DataValue::Int32(Some(8))),
+                    lower: DataValue::Int32(Some(6)),
+                    upper: DataValue::Int32(Some(8)),
                     count: 3,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(9))),
-                    upper: Arc::new(DataValue::Int32(Some(11))),
+                    lower: DataValue::Int32(Some(9)),
+                    upper: DataValue::Int32(Some(11)),
                     count: 3,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(12))),
-                    upper: Arc::new(DataValue::Int32(Some(14))),
+                    lower: DataValue::Int32(Some(12)),
+                    upper: DataValue::Int32(Some(14)),
                     count: 3,
                 },
             ]
@@ -614,26 +613,26 @@ mod tests {
     fn test_non_average_on_histogram() -> Result<(), DatabaseError> {
         let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(12))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(11))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(10))))?;
+        builder.append(&DataValue::Int32(Some(14)))?;
+        builder.append(&DataValue::Int32(Some(13)))?;
+        builder.append(&DataValue::Int32(Some(12)))?;
+        builder.append(&DataValue::Int32(Some(11)))?;
+        builder.append(&DataValue::Int32(Some(10)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(4))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(3))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(2))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(1))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(0))))?;
+        builder.append(&DataValue::Int32(Some(4)))?;
+        builder.append(&DataValue::Int32(Some(3)))?;
+        builder.append(&DataValue::Int32(Some(2)))?;
+        builder.append(&DataValue::Int32(Some(1)))?;
+        builder.append(&DataValue::Int32(Some(0)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(9))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(8))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(7))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(6))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(5))))?;
+        builder.append(&DataValue::Int32(Some(9)))?;
+        builder.append(&DataValue::Int32(Some(8)))?;
+        builder.append(&DataValue::Int32(Some(7)))?;
+        builder.append(&DataValue::Int32(Some(6)))?;
+        builder.append(&DataValue::Int32(Some(5)))?;
 
-        builder.append(&Arc::new(DataValue::Null))?;
-        builder.append(&Arc::new(DataValue::Int32(None)))?;
+        builder.append(&DataValue::Null)?;
+        builder.append(&DataValue::Int32(None))?;
 
         let (histogram, _) = builder.build(4)?;
 
@@ -644,23 +643,23 @@ mod tests {
             histogram.buckets,
             vec![
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(0))),
-                    upper: Arc::new(DataValue::Int32(Some(3))),
+                    lower: DataValue::Int32(Some(0)),
+                    upper: DataValue::Int32(Some(3)),
                     count: 4,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(4))),
-                    upper: Arc::new(DataValue::Int32(Some(7))),
+                    lower: DataValue::Int32(Some(4)),
+                    upper: DataValue::Int32(Some(7)),
                     count: 4,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(8))),
-                    upper: Arc::new(DataValue::Int32(Some(11))),
+                    lower: DataValue::Int32(Some(8)),
+                    upper: DataValue::Int32(Some(11)),
                     count: 4,
                 },
                 Bucket {
-                    lower: Arc::new(DataValue::Int32(Some(12))),
-                    upper: Arc::new(DataValue::Int32(Some(14))),
+                    lower: DataValue::Int32(Some(12)),
+                    upper: DataValue::Int32(Some(14)),
                     count: 3,
                 },
             ]
@@ -673,35 +672,35 @@ mod tests {
     fn test_collect_count() -> Result<(), DatabaseError> {
         let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(12))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(11))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(10))))?;
+        builder.append(&DataValue::Int32(Some(14)))?;
+        builder.append(&DataValue::Int32(Some(13)))?;
+        builder.append(&DataValue::Int32(Some(12)))?;
+        builder.append(&DataValue::Int32(Some(11)))?;
+        builder.append(&DataValue::Int32(Some(10)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(4))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(3))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(2))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(1))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(0))))?;
+        builder.append(&DataValue::Int32(Some(4)))?;
+        builder.append(&DataValue::Int32(Some(3)))?;
+        builder.append(&DataValue::Int32(Some(2)))?;
+        builder.append(&DataValue::Int32(Some(1)))?;
+        builder.append(&DataValue::Int32(Some(0)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(9))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(8))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(7))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(6))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(5))))?;
+        builder.append(&DataValue::Int32(Some(9)))?;
+        builder.append(&DataValue::Int32(Some(8)))?;
+        builder.append(&DataValue::Int32(Some(7)))?;
+        builder.append(&DataValue::Int32(Some(6)))?;
+        builder.append(&DataValue::Int32(Some(5)))?;
 
-        builder.append(&Arc::new(DataValue::Null))?;
-        builder.append(&Arc::new(DataValue::Int32(None)))?;
+        builder.append(&DataValue::Null)?;
+        builder.append(&DataValue::Int32(None))?;
 
         let (histogram, sketch) = builder.build(4)?;
 
         let count_1 = histogram.collect_count(
             &vec![
-                Range::Eq(Arc::new(DataValue::Int32(Some(2)))),
+                Range::Eq(DataValue::Int32(Some(2))),
                 Range::Scope {
-                    min: Bound::Included(Arc::new(DataValue::Int32(Some(4)))),
-                    max: Bound::Excluded(Arc::new(DataValue::Int32(Some(12)))),
+                    min: Bound::Included(DataValue::Int32(Some(4))),
+                    max: Bound::Excluded(DataValue::Int32(Some(12))),
                 },
             ],
             &sketch,
@@ -711,7 +710,7 @@ mod tests {
 
         let count_2 = histogram.collect_count(
             &vec![Range::Scope {
-                min: Bound::Included(Arc::new(DataValue::Int32(Some(4)))),
+                min: Bound::Included(DataValue::Int32(Some(4))),
                 max: Bound::Unbounded,
             }],
             &sketch,
@@ -721,7 +720,7 @@ mod tests {
 
         let count_3 = histogram.collect_count(
             &vec![Range::Scope {
-                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(7)))),
+                min: Bound::Excluded(DataValue::Int32(Some(7))),
                 max: Bound::Unbounded,
             }],
             &sketch,
@@ -732,7 +731,7 @@ mod tests {
         let count_4 = histogram.collect_count(
             &vec![Range::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Included(Arc::new(DataValue::Int32(Some(11)))),
+                max: Bound::Included(DataValue::Int32(Some(11))),
             }],
             &sketch,
         )?;
@@ -742,7 +741,7 @@ mod tests {
         let count_5 = histogram.collect_count(
             &vec![Range::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(8)))),
+                max: Bound::Excluded(DataValue::Int32(Some(8))),
             }],
             &sketch,
         )?;
@@ -751,7 +750,7 @@ mod tests {
 
         let count_6 = histogram.collect_count(
             &vec![Range::Scope {
-                min: Bound::Included(Arc::new(DataValue::Int32(Some(2)))),
+                min: Bound::Included(DataValue::Int32(Some(2))),
                 max: Bound::Unbounded,
             }],
             &sketch,
@@ -761,7 +760,7 @@ mod tests {
 
         let count_7 = histogram.collect_count(
             &vec![Range::Scope {
-                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(1)))),
+                min: Bound::Excluded(DataValue::Int32(Some(1))),
                 max: Bound::Unbounded,
             }],
             &sketch,
@@ -772,7 +771,7 @@ mod tests {
         let count_8 = histogram.collect_count(
             &vec![Range::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Included(Arc::new(DataValue::Int32(Some(12)))),
+                max: Bound::Included(DataValue::Int32(Some(12))),
             }],
             &sketch,
         )?;
@@ -782,7 +781,7 @@ mod tests {
         let count_9 = histogram.collect_count(
             &vec![Range::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(13)))),
+                max: Bound::Excluded(DataValue::Int32(Some(13))),
             }],
             &sketch,
         )?;
@@ -791,8 +790,8 @@ mod tests {
 
         let count_10 = histogram.collect_count(
             &vec![Range::Scope {
-                min: Bound::Excluded(Arc::new(DataValue::Int32(Some(0)))),
-                max: Bound::Excluded(Arc::new(DataValue::Int32(Some(3)))),
+                min: Bound::Excluded(DataValue::Int32(Some(0))),
+                max: Bound::Excluded(DataValue::Int32(Some(3))),
             }],
             &sketch,
         )?;
@@ -801,8 +800,8 @@ mod tests {
 
         let count_11 = histogram.collect_count(
             &vec![Range::Scope {
-                min: Bound::Included(Arc::new(DataValue::Int32(Some(1)))),
-                max: Bound::Included(Arc::new(DataValue::Int32(Some(2)))),
+                min: Bound::Included(DataValue::Int32(Some(1))),
+                max: Bound::Included(DataValue::Int32(Some(2))),
             }],
             &sketch,
         )?;

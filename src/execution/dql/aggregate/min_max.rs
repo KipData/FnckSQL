@@ -2,12 +2,11 @@ use crate::errors::DatabaseError;
 use crate::execution::dql::aggregate::Accumulator;
 use crate::expression::BinaryOperator;
 use crate::types::evaluator::EvaluatorFactory;
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::DataValue;
 use crate::types::LogicalType;
-use std::sync::Arc;
 
 pub struct MinMaxAccumulator {
-    inner: Option<ValueRef>,
+    inner: Option<DataValue>,
     op: BinaryOperator,
     ty: LogicalType,
 }
@@ -29,7 +28,7 @@ impl MinMaxAccumulator {
 }
 
 impl Accumulator for MinMaxAccumulator {
-    fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError> {
+    fn update_value(&mut self, value: &DataValue) -> Result<(), DatabaseError> {
         if !value.is_null() {
             if let Some(inner_value) = &self.inner {
                 let evaluator = EvaluatorFactory::binary_create(value.logical_type(), self.op)?;
@@ -49,10 +48,10 @@ impl Accumulator for MinMaxAccumulator {
         Ok(())
     }
 
-    fn evaluate(&self) -> Result<ValueRef, DatabaseError> {
+    fn evaluate(&self) -> Result<DataValue, DatabaseError> {
         Ok(self
             .inner
             .clone()
-            .unwrap_or_else(|| Arc::new(DataValue::none(&self.ty))))
+            .unwrap_or_else(|| DataValue::none(&self.ty)))
     }
 }

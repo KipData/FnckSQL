@@ -4,7 +4,7 @@ use crate::errors::DatabaseError;
 use crate::expression::function::scala::ScalarFunction;
 use crate::expression::function::table::TableFunction;
 use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory, UnaryEvaluatorBox};
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use fnck_sql_serde_macros::ReferenceSerialization;
 use itertools::Itertools;
@@ -34,7 +34,7 @@ pub enum AliasType {
 /// b   -> ScalarExpression::ColumnRef()
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub enum ScalarExpression {
-    Constant(ValueRef),
+    Constant(DataValue),
     ColumnRef(ColumnRef),
     Alias {
         expr: Box<ScalarExpression>,
@@ -1360,23 +1360,23 @@ mod test {
 
         fn_assert(
             &mut cursor,
-            ScalarExpression::Constant(Arc::new(DataValue::Int32(None))),
+            ScalarExpression::Constant(DataValue::Int32(None)),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(42)))),
+            ScalarExpression::Constant(DataValue::Int32(Some(42))),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::Constant(Arc::new(DataValue::Utf8 {
+            ScalarExpression::Constant(DataValue::Utf8 {
                 value: Some("hello".to_string()),
                 ty: Utf8Type::Variable(None),
                 unit: CharLengthUnits::Characters,
-            })),
+            }),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;

@@ -12,7 +12,6 @@ use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
 use std::slice;
-use std::sync::Arc;
 
 pub struct AddColumn {
     op: AddColumnOperator,
@@ -61,7 +60,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
                         }
                         tuple.values.push(value);
                     } else {
-                        tuple.values.push(Arc::new(DataValue::Null));
+                        tuple.values.push(DataValue::Null);
                     }
                     tuples.push(tuple);
                 }
