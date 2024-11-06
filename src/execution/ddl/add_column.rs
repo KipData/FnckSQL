@@ -40,15 +40,15 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
                     if_not_exists,
                 } = &self.op;
 
-                let mut unique_values = column.desc().is_unique.then(Vec::new);
+                let mut unique_values = column.desc().is_unique().then(Vec::new);
                 let mut tuples = Vec::new();
                 let schema = self.input.output_schema();
                 let mut types = Vec::with_capacity(schema.len() + 1);
 
                 for column_ref in schema.iter() {
-                    types.push(*column_ref.datatype());
+                    types.push(column_ref.datatype().clone());
                 }
-                types.push(*column.datatype());
+                types.push(column.datatype().clone());
 
                 let mut coroutine = build_read(self.input, cache, transaction);
 

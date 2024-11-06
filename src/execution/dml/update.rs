@@ -9,10 +9,12 @@ use crate::types::index::Index;
 use crate::types::tuple::types;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
+use crate::types::value::DataValue;
 use std::collections::HashMap;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
+use std::sync::Arc;
 
 pub struct Update {
     table_name: TableName,
@@ -93,16 +95,26 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                     }
                     for mut tuple in tuples {
                         let mut is_overwrite = true;
-
+                        let mut primary_keys = Vec::new();
                         for (i, column) in input_schema.iter().enumerate() {
                             if let Some(value) = value_map.get(&column.id()) {
-                                if column.desc().is_primary {
-                                    let old_key = tuple.id.replace(value.clone()).unwrap();
-
-                                    throw!(transaction.remove_tuple(&table_name, &old_key));
-                                    is_overwrite = false;
+                                if column.desc().is_primary() {
+                                    primary_keys.push(value.clone());
                                 }
                                 tuple.values[i] = value.clone();
+                            }
+                        }
+                        if !primary_keys.is_empty() {
+                            let id = if primary_keys.len() == 1 {
+                                primary_keys.pop().unwrap()
+                            } else {
+                                Arc::new(DataValue::Tuple(Some(primary_keys)))
+                            };
+                            if &id != tuple.id.as_ref().unwrap() {
+                                let old_key = tuple.id.replace(id).unwrap();
+
+                                throw!(transaction.remove_tuple(&table_name, &old_key));
+                                is_overwrite = false;
                             }
                         }
                         for (index_meta, exprs) in index_metas.iter() {

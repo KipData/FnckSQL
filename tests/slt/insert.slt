@@ -99,5 +99,3 @@ true
 
 statement ok
 drop table t2;
-
-

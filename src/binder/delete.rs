@@ -30,7 +30,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
             let schema_buf = self.table_schema_buf.entry(table_name.clone()).or_default();
             let primary_key_column = source
                 .columns(schema_buf)
-                .find(|column| column.desc().is_primary)
+                .find(|column| column.desc().is_primary())
                 .cloned()
                 .unwrap();
             let mut plan = match source {

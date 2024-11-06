@@ -1,6 +1,9 @@
 statement ok
 create table t(id int primary key, v1 int, v2 int, v3 int)
 
+statement ok
+create table t_m(ida int primary key, idb int primary key, v1 int, v2 int, v3 int)
+
 statement error
 create table t(id int primary key, v1 int, v2 int, v3 int)
 

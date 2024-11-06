@@ -187,8 +187,8 @@ impl ColumnCatalog {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, ReferenceSerialization)]
 pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
-    pub(crate) is_primary: bool,
-    pub(crate) is_unique: bool,
+    is_primary: bool,
+    is_unique: bool,
     pub(crate) default: Option<ScalarExpression>,
 }
 
@@ -211,5 +211,21 @@ impl ColumnDesc {
             is_unique,
             default,
         })
+    }
+
+    pub(crate) fn is_primary(&self) -> bool {
+        self.is_primary
+    }
+
+    pub(crate) fn set_primary(&mut self, is_primary: bool) {
+        self.is_primary = is_primary
+    }
+
+    pub(crate) fn is_unique(&self) -> bool {
+        self.is_unique
+    }
+
+    pub(crate) fn set_unique(&mut self, is_unique: bool) {
+        self.is_unique = is_unique
     }
 }

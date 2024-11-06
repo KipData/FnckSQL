@@ -260,12 +260,7 @@ mod test {
                     },
                 },
                 false,
-                ColumnDesc {
-                    column_datatype: LogicalType::Integer,
-                    is_primary: true,
-                    is_unique: false,
-                    default: None,
-                },
+                ColumnDesc::new(LogicalType::Integer, true, false, None)?,
                 false,
             );
             let c2_col = ColumnCatalog::direct_new(
@@ -278,12 +273,7 @@ mod test {
                     },
                 },
                 false,
-                ColumnDesc {
-                    column_datatype: LogicalType::Integer,
-                    is_primary: false,
-                    is_unique: true,
-                    default: None,
-                },
+                ColumnDesc::new(LogicalType::Integer, false, true, None)?,
                 false,
             );
 

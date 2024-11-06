@@ -186,7 +186,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
                         if ty == &LogicalType::SqlNull {
                             *ty = result_ty;
                         } else if ty != &result_ty {
-                            return Err(DatabaseError::Incomparable(*ty, result_ty));
+                            return Err(DatabaseError::Incomparable(ty.clone(), result_ty));
                         }
                     }
 

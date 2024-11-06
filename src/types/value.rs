@@ -1,7 +1,9 @@
+use super::LogicalType;
 use crate::errors::DatabaseError;
 use chrono::format::{DelayedFormat, StrftimeItems};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use integer_encoding::{FixedInt, FixedIntWriter};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
@@ -14,8 +16,6 @@ use std::io::Write;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::{cmp, fmt, mem};
-
-use super::LogicalType;
 
 lazy_static! {
     pub static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
@@ -443,7 +443,7 @@ impl DataValue {
             LogicalType::DateTime => DataValue::Date64(None),
             LogicalType::Time => DataValue::Time(None),
             LogicalType::Decimal(_, _) => DataValue::Decimal(None),
-            LogicalType::Tuple => DataValue::Tuple(None),
+            LogicalType::Tuple(_) => DataValue::Tuple(None),
         }
     }
 
@@ -476,7 +476,14 @@ impl DataValue {
             LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.and_utc().timestamp())),
             LogicalType::Time => DataValue::Time(Some(UNIX_TIME.num_seconds_from_midnight())),
             LogicalType::Decimal(_, _) => DataValue::Decimal(Some(Decimal::new(0, 0))),
-            LogicalType::Tuple => DataValue::Tuple(Some(vec![])),
+            LogicalType::Tuple(types) => {
+                let values = types
+                    .iter()
+                    .map(|ty| Arc::new(DataValue::init(ty)))
+                    .collect_vec();
+
+                DataValue::Tuple(Some(values))
+            }
         }
     }
 
@@ -675,7 +682,7 @@ impl DataValue {
                 (!bytes.is_empty())
                     .then(|| Decimal::deserialize(<[u8; 16]>::try_from(bytes).unwrap())),
             ),
-            LogicalType::Tuple => unreachable!(),
+            LogicalType::Tuple(_) => unreachable!(),
         }
     }
 
@@ -707,7 +714,14 @@ impl DataValue {
             DataValue::Date64(_) => LogicalType::DateTime,
             DataValue::Time(_) => LogicalType::Time,
             DataValue::Decimal(_) => LogicalType::Decimal(None, None),
-            DataValue::Tuple(_) => LogicalType::Tuple,
+            DataValue::Tuple(values) => {
+                if let Some(values) = values {
+                    let types = values.iter().map(|v| v.logical_type()).collect_vec();
+                    LogicalType::Tuple(types)
+                } else {
+                    LogicalType::Tuple(vec![])
+                }
+            }
         }
     }
 
@@ -856,7 +870,7 @@ impl DataValue {
                 LogicalType::DateTime => Ok(DataValue::Date64(None)),
                 LogicalType::Time => Ok(DataValue::Time(None)),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(None)),
-                LogicalType::Tuple => Ok(DataValue::Tuple(None)),
+                LogicalType::Tuple(_) => Ok(DataValue::Tuple(None)),
             },
             DataValue::Boolean(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -1364,7 +1378,16 @@ impl DataValue {
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::Tuple(values) => match to {
-                LogicalType::Tuple => Ok(DataValue::Tuple(values)),
+                LogicalType::Tuple(types) => Ok(if let Some(mut values) = values {
+                    for (i, value) in values.iter_mut().enumerate() {
+                        if types[i] != value.logical_type() {
+                            *value = Arc::new(DataValue::clone(value).cast(&types[i])?);
+                        }
+                    }
+                    DataValue::Tuple(Some(values))
+                } else {
+                    DataValue::Tuple(None)
+                }),
                 _ => Err(DatabaseError::CastFail),
             },
         }?;

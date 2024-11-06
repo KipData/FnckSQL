@@ -112,6 +112,8 @@ pub enum DatabaseError {
     ),
     #[error("must contain primary key!")]
     PrimaryKeyNotFound,
+    #[error("primaryKey only allows single or multiple values")]
+    PrimaryKeyTooManyLayers,
     #[error("rocksdb: {0}")]
     RocksDB(
         #[source]

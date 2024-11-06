@@ -37,6 +37,27 @@ enum CodecType {
 }
 
 impl TableCodec {
+    pub fn check_primary_key(value: &DataValue, indentation: usize) -> Result<(), DatabaseError> {
+        if indentation > 1 {
+            return Err(DatabaseError::PrimaryKeyTooManyLayers);
+        }
+        if value.is_null() {
+            return Err(DatabaseError::NotNull);
+        }
+
+        if let DataValue::Tuple(Some(values)) = &value {
+            for value in values {
+                Self::check_primary_key(value, indentation + 1)?
+            }
+
+            return Ok(());
+        } else {
+            Self::check_primary_key_type(&value.logical_type())?;
+        }
+
+        Ok(())
+    }
+
     pub fn check_primary_key_type(ty: &LogicalType) -> Result<(), DatabaseError> {
         if !matches!(
             ty,
@@ -218,7 +239,7 @@ impl TableCodec {
         table_name: &str,
         tuple_id: &TupleId,
     ) -> Result<Vec<u8>, DatabaseError> {
-        Self::check_primary_key_type(&tuple_id.logical_type())?;
+        Self::check_primary_key(tuple_id, 0)?;
 
         let mut key_prefix = Self::key_prefix(CodecType::Tuple, table_name);
         key_prefix.push(BOUND_MIN_TAG);
@@ -279,7 +300,8 @@ impl TableCodec {
     ) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = TableCodec::encode_index_key(name, index, Some(tuple_id))?;
         let mut bytes = Vec::new();
-        tuple_id.to_raw(&mut bytes)?;
+
+        tuple_id.inner_encode(&mut bytes, &tuple_id.logical_type())?;
 
         Ok((Bytes::from(key), Bytes::from(bytes)))
     }
@@ -327,8 +349,14 @@ impl TableCodec {
         Ok(key_prefix)
     }
 
-    pub fn decode_index(bytes: &[u8], primary_key_ty: &LogicalType) -> TupleId {
-        Arc::new(DataValue::from_raw(bytes, primary_key_ty))
+    pub fn decode_index(
+        bytes: &[u8],
+        primary_key_ty: &LogicalType,
+    ) -> Result<TupleId, DatabaseError> {
+        Ok(Arc::new(DataValue::inner_decode(
+            &mut Cursor::new(bytes),
+            primary_key_ty,
+        )?))
     }
 
     /// Key: {TableName}{COLUMN_TAG}{BOUND_MIN_TAG}{ColumnId}
@@ -578,7 +606,7 @@ mod tests {
         let (_, bytes) = TableCodec::encode_index(&table_catalog.name, &index, &tuple_id)?;
 
         debug_assert_eq!(
-            TableCodec::decode_index(&bytes, &tuple_id.logical_type()),
+            TableCodec::decode_index(&bytes, &tuple_id.logical_type())?,
             tuple_id
         );
 
@@ -672,12 +700,7 @@ mod tests {
             let mut col = ColumnCatalog::new(
                 "".to_string(),
                 false,
-                ColumnDesc {
-                    column_datatype: LogicalType::Invalid,
-                    is_primary: false,
-                    is_unique: false,
-                    default: None,
-                },
+                ColumnDesc::new(LogicalType::SqlNull, false, false, None).unwrap(),
             );
 
             col.summary_mut().relation = ColumnRelation::Table {

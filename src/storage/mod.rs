@@ -60,8 +60,8 @@ pub trait Transaction: Sized {
             .ok_or(DatabaseError::TableNotFound)?;
         let table_types = table.types();
         if columns.is_empty() {
-            let (i, column) = table.primary_key()?;
-            columns.push((i, column.clone()));
+            let (i, column) = &table.primary_keys()[0];
+            columns.push((*i, column.clone()));
         }
         let mut tuple_columns = Vec::with_capacity(columns.len());
         let mut projections = Vec::with_capacity(columns.len());
@@ -234,7 +234,7 @@ pub trait Transaction: Sized {
             let mut generator = Generator::new();
             let col_id = table.add_column(column.clone(), &mut generator)?;
 
-            if column.desc().is_unique {
+            if column.desc().is_unique() {
                 let meta_ref = table.add_index_meta(
                     format!("uk_{}", column.name()),
                     vec![col_id],
@@ -313,9 +313,10 @@ pub trait Transaction: Sized {
         if_not_exists: bool,
     ) -> Result<TableName, DatabaseError> {
         let mut table_catalog = TableCatalog::new(table_name.clone(), columns)?;
-        let (_, column) = table_catalog.primary_key()?;
 
-        TableCodec::check_primary_key_type(column.datatype())?;
+        for (_, column) in table_catalog.primary_keys() {
+            TableCodec::check_primary_key_type(column.datatype())?;
+        }
 
         let (table_key, value) =
             TableCodec::encode_root_table(&TableMeta::empty(table_name.clone()))?;
@@ -533,15 +534,15 @@ pub trait Transaction: Sized {
         let table_name = table.name.clone();
         let index_column = table
             .columns()
-            .filter(|column| column.desc().is_primary || column.desc().is_unique)
+            .filter(|column| column.desc().is_primary() || column.desc().is_unique())
             .map(|column| (column.id().unwrap(), column.clone()))
             .collect_vec();
 
         for (col_id, col) in index_column {
-            let is_primary = col.desc().is_primary;
+            let is_primary = col.desc().is_primary();
             let index_ty = if is_primary {
                 IndexType::PrimaryKey
-            } else if col.desc().is_unique {
+            } else if col.desc().is_unique() {
                 IndexType::Unique
             } else {
                 continue;
@@ -739,7 +740,7 @@ fn secondary_index_lookup<T: Transaction>(
     bytes: &Bytes,
     params: &IndexImplParams<T>,
 ) -> Result<Tuple, DatabaseError> {
-    let tuple_id = TableCodec::decode_index(bytes, &params.index_meta.pk_ty);
+    let tuple_id = TableCodec::decode_index(bytes, &params.index_meta.pk_ty)?;
     params
         .get_tuple_by_id(&tuple_id)?
         .ok_or_else(|| DatabaseError::NotFound("index's tuple_id", tuple_id.to_string()))
@@ -765,7 +766,7 @@ impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
             .ok_or_else(|| {
                 DatabaseError::NotFound("secondary index", format!("index_value -> {}", value))
             })?;
-        let tuple_id = TableCodec::decode_index(&bytes, &params.index_meta.pk_ty);
+        let tuple_id = TableCodec::decode_index(&bytes, &params.index_meta.pk_ty)?;
         let tuple = params.get_tuple_by_id(&tuple_id)?.ok_or_else(|| {
             DatabaseError::NotFound("secondary index", format!("tuple_id -> {}", value))
         })?;

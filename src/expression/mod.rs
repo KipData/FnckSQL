@@ -322,8 +322,8 @@ impl ScalarExpression {
                         }
                     }
                 };
-                fn_cast(left_expr, ty);
-                fn_cast(right_expr, ty);
+                fn_cast(left_expr, ty.clone());
+                fn_cast(right_expr, ty.clone());
 
                 *evaluator = Some(EvaluatorFactory::binary_create(ty, *op)?);
             }
@@ -567,7 +567,7 @@ impl ScalarExpression {
     pub fn return_type(&self) -> LogicalType {
         match self {
             ScalarExpression::Constant(v) => v.logical_type(),
-            ScalarExpression::ColumnRef(col) => *col.datatype(),
+            ScalarExpression::ColumnRef(col) => col.datatype().clone(),
             ScalarExpression::Binary {
                 ty: return_type, ..
             }
@@ -594,7 +594,7 @@ impl ScalarExpression {
             }
             | ScalarExpression::CaseWhen {
                 ty: return_type, ..
-            } => *return_type,
+            } => return_type.clone(),
             ScalarExpression::IsNull { .. }
             | ScalarExpression::In { .. }
             | ScalarExpression::Between { .. } => LogicalType::Boolean,
@@ -609,8 +609,14 @@ impl ScalarExpression {
                 expr.return_type()
             }
             ScalarExpression::Empty | ScalarExpression::TableFunction(_) => unreachable!(),
-            ScalarExpression::Tuple(_) => LogicalType::Tuple,
-            ScalarExpression::ScalaFunction(ScalarFunction { inner, .. }) => *inner.return_type(),
+            ScalarExpression::Tuple(exprs) => {
+                let types = exprs.iter().map(|expr| expr.return_type()).collect_vec();
+
+                LogicalType::Tuple(types)
+            }
+            ScalarExpression::ScalaFunction(ScalarFunction { inner, .. }) => {
+                inner.return_type().clone()
+            }
         }
     }
 

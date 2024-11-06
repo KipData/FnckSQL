@@ -173,7 +173,7 @@ impl ScalarExpression {
                 let unary_value = if let Some(evaluator) = evaluator {
                     evaluator.0.unary_eval(&value)
                 } else {
-                    EvaluatorFactory::unary_create(*ty, *op)
+                    EvaluatorFactory::unary_create(ty.clone(), *op)
                         .ok()?
                         .0
                         .unary_eval(&value)
@@ -190,16 +190,16 @@ impl ScalarExpression {
             } => {
                 let mut left = left_expr.unpack_val()?;
                 let mut right = right_expr.unpack_val()?;
-                if left.logical_type() != *ty {
+                if &left.logical_type() != ty {
                     left = Arc::new(DataValue::clone(&left).cast(ty).ok()?);
                 }
-                if right.logical_type() != *ty {
+                if &right.logical_type() != ty {
                     right = Arc::new(DataValue::clone(&right).cast(ty).ok()?);
                 }
                 let binary_value = if let Some(evaluator) = evaluator {
                     evaluator.0.binary_eval(&left, &right)
                 } else {
-                    EvaluatorFactory::binary_create(*ty, *op)
+                    EvaluatorFactory::binary_create(ty.clone(), *op)
                         .ok()?
                         .0
                         .binary_eval(&left, &right)
@@ -251,7 +251,7 @@ impl ScalarExpression {
                     let value = if let Some(evaluator) = evaluator {
                         evaluator.0.unary_eval(unary_val)
                     } else {
-                        EvaluatorFactory::unary_create(*ty, *op)?
+                        EvaluatorFactory::unary_create(ty.clone(), *op)?
                             .0
                             .unary_eval(unary_val)
                     };
@@ -276,7 +276,7 @@ impl ScalarExpression {
                     ScalarExpression::Constant(right_val),
                 ) = (left_expr.as_mut(), right_expr.as_mut())
                 {
-                    let evaluator = EvaluatorFactory::binary_create(ty, *op)?;
+                    let evaluator = EvaluatorFactory::binary_create(ty.clone(), *op)?;
 
                     if left_val.logical_type() != ty {
                         *left_val = Arc::new(DataValue::clone(left_val).cast(&ty)?);
@@ -421,7 +421,7 @@ impl ScalarExpression {
                                 column_expr: ScalarExpression::ColumnRef(col),
                                 val_expr: mem::replace(right_expr, ScalarExpression::Empty),
                                 op: *op,
-                                ty: *ty,
+                                ty: ty.clone(),
                                 is_column_left: true,
                             }));
                         }
@@ -430,7 +430,7 @@ impl ScalarExpression {
                                 column_expr: ScalarExpression::ColumnRef(col),
                                 val_expr: mem::replace(left_expr, ScalarExpression::Empty),
                                 op: *op,
-                                ty: *ty,
+                                ty: ty.clone(),
                                 is_column_left: false,
                             }));
                         }
@@ -445,7 +445,7 @@ impl ScalarExpression {
                                         column_expr: ScalarExpression::ColumnRef(col),
                                         val_expr: mem::replace(right_expr, ScalarExpression::Empty),
                                         op: *op,
-                                        ty: *ty,
+                                        ty: ty.clone(),
                                         is_column_left: true,
                                     }));
                                 }
@@ -454,7 +454,7 @@ impl ScalarExpression {
                                         column_expr: ScalarExpression::ColumnRef(col),
                                         val_expr: mem::replace(left_expr, ScalarExpression::Empty),
                                         op: *op,
-                                        ty: *ty,
+                                        ty: ty.clone(),
                                         is_column_left: false,
                                     }));
                                 }
@@ -492,7 +492,7 @@ impl ScalarExpression {
                     let value = if let Some(evaluator) = evaluator {
                         evaluator.0.unary_eval(&value)
                     } else {
-                        EvaluatorFactory::unary_create(*ty, *op)?
+                        EvaluatorFactory::unary_create(ty.clone(), *op)?
                             .0
                             .unary_eval(&value)
                     };
@@ -502,7 +502,7 @@ impl ScalarExpression {
                     replaces.push(Replace::Unary(ReplaceUnary {
                         child_expr: expr.as_ref().clone(),
                         op: *op,
-                        ty: *ty,
+                        ty: ty.clone(),
                     }));
                 }
             }

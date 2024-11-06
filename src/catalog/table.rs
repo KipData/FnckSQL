@@ -21,6 +21,7 @@ pub struct TableCatalog {
     pub(crate) indexes: Vec<IndexMetaRef>,
 
     schema_ref: SchemaRef,
+    primary_keys: Vec<(usize, ColumnRef)>,
 }
 
 //TODO: can add some like Table description and other information as attributes
@@ -73,17 +74,13 @@ impl TableCatalog {
         self.columns.len()
     }
 
-    pub(crate) fn primary_key(&self) -> Result<(usize, &ColumnRef), DatabaseError> {
-        self.schema_ref
-            .iter()
-            .enumerate()
-            .find(|(_, column)| column.desc().is_primary)
-            .ok_or(DatabaseError::PrimaryKeyNotFound)
+    pub(crate) fn primary_keys(&self) -> &[(usize, ColumnRef)] {
+        &self.primary_keys
     }
 
     pub(crate) fn types(&self) -> Vec<LogicalType> {
         self.columns()
-            .map(|column| *column.datatype())
+            .map(|column| column.datatype().clone())
             .collect_vec()
     }
 
@@ -128,7 +125,17 @@ impl TableCatalog {
         }
 
         let index_id = self.indexes.last().map(|index| index.id + 1).unwrap_or(0);
-        let pk_ty = *self.primary_key()?.1.datatype();
+        let primary_keys = self.primary_keys();
+        let pk_ty = if primary_keys.len() == 1 {
+            primary_keys[0].1.datatype().clone()
+        } else {
+            LogicalType::Tuple(
+                primary_keys
+                    .iter()
+                    .map(|(_, column)| column.datatype().clone())
+                    .collect_vec(),
+            )
+        };
         let index = IndexMeta {
             id: index_id,
             column_ids,
@@ -154,6 +161,7 @@ impl TableCatalog {
             columns: BTreeMap::new(),
             indexes: vec![],
             schema_ref: Arc::new(vec![]),
+            primary_keys: vec![],
         };
         let mut generator = Generator::new();
         for col_catalog in columns.into_iter() {
@@ -161,6 +169,13 @@ impl TableCatalog {
                 .add_column(col_catalog, &mut generator)
                 .unwrap();
         }
+        table_catalog.primary_keys = table_catalog
+            .schema_ref
+            .iter()
+            .enumerate()
+            .filter(|&(_, column)| column.desc().is_primary())
+            .map(|(i, column)| (i, column.clone()))
+            .collect_vec();
 
         Ok(table_catalog)
     }
@@ -182,6 +197,12 @@ impl TableCatalog {
             columns.insert(column_id, i);
         }
         let schema_ref = Arc::new(column_refs.clone());
+        let primary_keys = schema_ref
+            .iter()
+            .enumerate()
+            .filter(|&(_, column)| column.desc().is_primary())
+            .map(|(i, column)| (i, column.clone()))
+            .collect_vec();
 
         Ok(TableCatalog {
             name,
@@ -189,6 +210,7 @@ impl TableCatalog {
             columns,
             indexes,
             schema_ref,
+            primary_keys,
         })
     }
 }

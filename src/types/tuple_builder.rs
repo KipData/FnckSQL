@@ -28,7 +28,7 @@ impl<'a> TupleBuilder<'a> {
         row: impl IntoIterator<Item = &'b str>,
     ) -> Result<Tuple, DatabaseError> {
         let mut values = Vec::with_capacity(self.schema.len());
-        let mut primary_key = None;
+        let mut primary_keys = Vec::new();
 
         for (i, value) in row.into_iter().enumerate() {
             let data_value = Arc::new(
@@ -40,18 +40,22 @@ impl<'a> TupleBuilder<'a> {
                 .cast(self.schema[i].datatype())?,
             );
 
-            if primary_key.is_none() && self.schema[i].desc().is_primary {
-                primary_key = Some(data_value.clone());
+            if self.schema[i].desc().is_primary() {
+                primary_keys.push(data_value.clone());
             }
             values.push(data_value);
         }
         if values.len() != self.schema.len() {
             return Err(DatabaseError::MisMatch("types", "values"));
         }
+        let id = (!primary_keys.is_empty()).then(|| {
+            if primary_keys.len() == 1 {
+                primary_keys.pop().unwrap()
+            } else {
+                Arc::new(DataValue::Tuple(Some(primary_keys)))
+            }
+        });
 
-        Ok(Tuple {
-            id: primary_key,
-            values,
-        })
+        Ok(Tuple { id, values })
     }
 }

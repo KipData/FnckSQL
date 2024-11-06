@@ -52,9 +52,9 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Describe {
                 let table = throw!(throw!(transaction.table(cache.0, self.table_name.clone()))
                     .ok_or(DatabaseError::TableNotFound));
                 let key_fn = |column: &ColumnCatalog| {
-                    if column.desc().is_primary {
+                    if column.desc().is_primary() {
                         PRIMARY_KEY_TYPE.clone()
-                    } else if column.desc().is_unique {
+                    } else if column.desc().is_unique() {
                         UNIQUE_KEY_TYPE.clone()
                     } else {
                         EMPTY_KEY_TYPE.clone()

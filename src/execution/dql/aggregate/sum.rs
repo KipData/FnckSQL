@@ -19,7 +19,7 @@ impl SumAccumulator {
 
         Ok(Self {
             result: DataValue::none(ty),
-            evaluator: EvaluatorFactory::binary_create(*ty, BinaryOperator::Plus)?,
+            evaluator: EvaluatorFactory::binary_create(ty.clone(), BinaryOperator::Plus)?,
         })
     }
 }

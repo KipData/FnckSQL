@@ -317,7 +317,7 @@ impl Histogram {
                 | LogicalType::Float
                 | LogicalType::Double
                 | LogicalType::Decimal(_, _) => value.clone().cast(&LogicalType::Double)?.double(),
-                LogicalType::Tuple => match value {
+                LogicalType::Tuple(_) => match value {
                     DataValue::Tuple(Some(values)) => {
                         let mut float = 0.0;
 

@@ -62,9 +62,9 @@ impl<T: Transaction> Binder<'_, '_, T> {
                             .find(|column| column.name() == column_name)
                         {
                             if *is_primary {
-                                column.desc_mut().is_primary = true;
+                                column.desc_mut().set_primary(true);
                             } else {
-                                column.desc_mut().is_unique = true;
+                                column.desc_mut().set_unique(true);
                             }
                         }
                     }
@@ -73,9 +73,9 @@ impl<T: Transaction> Binder<'_, '_, T> {
             }
         }
 
-        if columns.iter().filter(|col| col.desc().is_primary).count() != 1 {
+        if columns.iter().filter(|col| col.desc().is_primary()).count() == 0 {
             return Err(DatabaseError::InvalidTable(
-                "The primary key field must exist and have at least one".to_string(),
+                "the primary key field must exist and have at least one".to_string(),
             ));
         }
 
@@ -106,12 +106,12 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 ColumnOption::NotNull => nullable = false,
                 ColumnOption::Unique { is_primary, .. } => {
                     if *is_primary {
-                        column_desc.is_primary = true;
+                        column_desc.set_primary(true);
                         nullable = false;
                         // Skip other options when using primary key
                         break;
                     } else {
-                        column_desc.is_unique = true;
+                        column_desc.set_unique(true);
                     }
                 }
                 ColumnOption::Default(expr) => {
@@ -125,7 +125,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                     if expr.return_type() != column_desc.column_datatype {
                         expr = ScalarExpression::TypeCast {
                             expr: Box::new(expr),
-                            ty: column_desc.column_datatype,
+                            ty: column_desc.column_datatype.clone(),
                         }
                     }
                     column_desc.default = Some(expr);

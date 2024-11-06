@@ -24,7 +24,10 @@ pub type Schema = Vec<ColumnRef>;
 pub type SchemaRef = Arc<Schema>;
 
 pub fn types(schema: &Schema) -> Vec<LogicalType> {
-    schema.iter().map(|column| *column.datatype()).collect_vec()
+    schema
+        .iter()
+        .map(|column| column.datatype().clone())
+        .collect_vec()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -50,7 +53,7 @@ impl Tuple {
         let values_len = schema.len();
         let mut tuple_values = Vec::with_capacity(values_len);
         let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
-        let mut id_option = None;
+        let mut primary_keys = Vec::new();
 
         let mut projection_i = 0;
         let mut pos = bits_len;
@@ -62,7 +65,7 @@ impl Tuple {
             if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
                 if projections[projection_i] == i {
                     tuple_values.push(Arc::new(DataValue::none(logic_type)));
-                    Self::values_push(schema, &tuple_values, &mut id_option, &mut projection_i);
+                    Self::values_push(schema, &tuple_values, &mut primary_keys, &mut projection_i);
                 }
             } else if let Some(len) = logic_type.raw_len() {
                 /// fixed length (e.g.: int)
@@ -71,7 +74,7 @@ impl Tuple {
                         &bytes[pos..pos + len],
                         logic_type,
                     )));
-                    Self::values_push(schema, &tuple_values, &mut id_option, &mut projection_i);
+                    Self::values_push(schema, &tuple_values, &mut primary_keys, &mut projection_i);
                 }
                 pos += len;
             } else {
@@ -83,14 +86,21 @@ impl Tuple {
                         &bytes[pos..pos + len],
                         logic_type,
                     )));
-                    Self::values_push(schema, &tuple_values, &mut id_option, &mut projection_i);
+                    Self::values_push(schema, &tuple_values, &mut primary_keys, &mut projection_i);
                 }
                 pos += len;
             }
         }
 
+        let id = (!primary_keys.is_empty()).then(|| {
+            if primary_keys.len() == 1 {
+                primary_keys.pop().unwrap()
+            } else {
+                Arc::new(DataValue::Tuple(Some(primary_keys)))
+            }
+        });
         Tuple {
-            id: id_option,
+            id,
             values: tuple_values,
         }
     }
@@ -98,11 +108,11 @@ impl Tuple {
     fn values_push(
         tuple_columns: &Schema,
         tuple_values: &[ValueRef],
-        id_option: &mut Option<Arc<DataValue>>,
+        primary_keys: &mut Vec<ValueRef>,
         projection_i: &mut usize,
     ) {
-        if tuple_columns[*projection_i].desc().is_primary {
-            let _ = id_option.replace(tuple_values[*projection_i].clone());
+        if tuple_columns[*projection_i].desc().is_primary() {
+            primary_keys.push(tuple_values[*projection_i].clone())
         }
         *projection_i += 1;
     }
@@ -124,7 +134,7 @@ impl Tuple {
             if value.is_null() {
                 bytes[i / BITS_MAX_INDEX] = flip_bit(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX);
             } else {
-                let logical_type = types[i];
+                let logical_type = &types[i];
                 let value_len = value.to_raw(&mut bytes)?;
 
                 if logical_type.raw_len().is_none() {
@@ -365,7 +375,7 @@ mod tests {
         ];
         let types = columns
             .iter()
-            .map(|column| *column.datatype())
+            .map(|column| column.datatype().clone())
             .collect_vec();
         let columns = Arc::new(columns);
 

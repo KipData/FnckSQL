@@ -23,7 +23,7 @@ impl MinMaxAccumulator {
         Self {
             inner: None,
             op,
-            ty: *ty,
+            ty: ty.clone(),
         }
     }
 }

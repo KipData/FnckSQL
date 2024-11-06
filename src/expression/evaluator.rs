@@ -351,7 +351,8 @@ impl ScalarExpression {
                     let mut when_value = when_expr.eval(tuple, schema)?;
                     let is_true = if let Some(operand_value) = &operand_value {
                         let ty = operand_value.logical_type();
-                        let evaluator = EvaluatorFactory::binary_create(ty, BinaryOperator::Eq)?;
+                        let evaluator =
+                            EvaluatorFactory::binary_create(ty.clone(), BinaryOperator::Eq)?;
 
                         if when_value.logical_type() != ty {
                             when_value = Arc::new(DataValue::clone(&when_value).cast(&ty)?);
