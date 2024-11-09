@@ -100,7 +100,7 @@ impl ColumnCatalog {
             // SAFETY: default expr must not be [`ScalarExpression::ColumnRef`]
             desc: ColumnDesc::new(
                 LogicalType::Varchar(None, CharLengthUnits::Characters),
-                false,
+                None,
                 false,
                 None,
             )
@@ -187,7 +187,7 @@ impl ColumnCatalog {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, ReferenceSerialization)]
 pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
-    is_primary: bool,
+    primary: Option<usize>,
     is_unique: bool,
     pub(crate) default: Option<ScalarExpression>,
 }
@@ -195,7 +195,7 @@ pub struct ColumnDesc {
 impl ColumnDesc {
     pub fn new(
         column_datatype: LogicalType,
-        is_primary: bool,
+        primary: Option<usize>,
         is_unique: bool,
         default: Option<ScalarExpression>,
     ) -> Result<ColumnDesc, DatabaseError> {
@@ -207,18 +207,22 @@ impl ColumnDesc {
 
         Ok(ColumnDesc {
             column_datatype,
-            is_primary,
+            primary,
             is_unique,
             default,
         })
     }
 
-    pub(crate) fn is_primary(&self) -> bool {
-        self.is_primary
+    pub(crate) fn primary(&self) -> Option<usize> {
+        self.primary
     }
 
-    pub(crate) fn set_primary(&mut self, is_primary: bool) {
-        self.is_primary = is_primary
+    pub(crate) fn is_primary(&self) -> bool {
+        self.primary.is_some()
+    }
+
+    pub(crate) fn set_primary(&mut self, is_primary: Option<usize>) {
+        self.primary = is_primary
     }
 
     pub(crate) fn is_unique(&self) -> bool {

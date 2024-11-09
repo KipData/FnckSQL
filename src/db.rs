@@ -342,17 +342,17 @@ pub(crate) mod test {
             ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, Some(0), false, None).unwrap(),
             ),
             ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
             ),
             ColumnCatalog::new(
                 "c3".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
             ),
         ];
         let _ =
@@ -389,7 +389,7 @@ pub(crate) mod test {
             Arc::new(vec![ColumnRef::from(ColumnCatalog::new(
                 "current_date()".to_string(),
                 true,
-                ColumnDesc::new(LogicalType::Date, false, false, None).unwrap()
+                ColumnDesc::new(LogicalType::Date, None, false, None).unwrap()
             ))])
         );
         debug_assert_eq!(
@@ -415,7 +415,7 @@ pub(crate) mod test {
         let mut column = ColumnCatalog::new(
             "number".to_string(),
             true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+            ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
         );
         let number_column_id = schema[0].id().unwrap();
         column.set_ref_table(Arc::new("a".to_string()), number_column_id, false);

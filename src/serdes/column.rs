@@ -190,7 +190,7 @@ pub(crate) mod test {
                     },
                 },
                 false,
-                ColumnDesc::new(LogicalType::Integer, false, false, None)?,
+                ColumnDesc::new(LogicalType::Integer, None, false, None)?,
                 false,
             )));
 
@@ -225,7 +225,7 @@ pub(crate) mod test {
                 false,
                 ColumnDesc::new(
                     LogicalType::Integer,
-                    false,
+                    None,
                     false,
                     Some(ScalarExpression::Constant(DataValue::UInt64(Some(42)))),
                 )?,
@@ -313,7 +313,7 @@ pub(crate) mod test {
         let mut reference_tables = ReferenceTables::new();
         let desc = ColumnDesc::new(
             LogicalType::Integer,
-            false,
+            None,
             false,
             Some(ScalarExpression::Constant(DataValue::UInt64(Some(42)))),
         )?;

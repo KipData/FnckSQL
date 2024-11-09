@@ -169,13 +169,7 @@ impl TableCatalog {
                 .add_column(col_catalog, &mut generator)
                 .unwrap();
         }
-        table_catalog.primary_keys = table_catalog
-            .schema_ref
-            .iter()
-            .enumerate()
-            .filter(|&(_, column)| column.desc().is_primary())
-            .map(|(i, column)| (i, column.clone()))
-            .collect_vec();
+        table_catalog.primary_keys = Self::build_primary_keys(&table_catalog.schema_ref);
 
         Ok(table_catalog)
     }
@@ -197,12 +191,7 @@ impl TableCatalog {
             columns.insert(column_id, i);
         }
         let schema_ref = Arc::new(column_refs.clone());
-        let primary_keys = schema_ref
-            .iter()
-            .enumerate()
-            .filter(|&(_, column)| column.desc().is_primary())
-            .map(|(i, column)| (i, column.clone()))
-            .collect_vec();
+        let primary_keys = Self::build_primary_keys(&schema_ref);
 
         Ok(TableCatalog {
             name,
@@ -212,6 +201,21 @@ impl TableCatalog {
             schema_ref,
             primary_keys,
         })
+    }
+
+    fn build_primary_keys(schema_ref: &Arc<Vec<ColumnRef>>) -> Vec<(usize, ColumnRef)> {
+        schema_ref
+            .iter()
+            .enumerate()
+            .filter_map(|(i, column)| {
+                column
+                    .desc()
+                    .primary()
+                    .map(|p_i| (p_i, (i, column.clone())))
+            })
+            .sorted_by_key(|(p_i, _)| *p_i)
+            .map(|(_, entry)| entry)
+            .collect_vec()
     }
 }
 
@@ -236,12 +240,12 @@ mod tests {
         let col0 = ColumnCatalog::new(
             "a".into(),
             false,
-            ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+            ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
         );
         let col1 = ColumnCatalog::new(
             "b".into(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+            ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
         );
         let col_catalogs = vec![col0, col1];
         let table_catalog = TableCatalog::new(Arc::new("test".to_string()), col_catalogs).unwrap();

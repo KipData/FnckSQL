@@ -1,0 +1,13 @@
+statement ok
+create table wide_table(id int primary key, v1 int, v2 int, v3 varchar, v4 decimal(5, 2), v5 date, v6 float, v7 datetime, v8 boolean, v9 text, v10 int, v11 int);
+
+statement ok
+insert into wide_table values(0, 1, 2, 'hello', 0.11, '2024-11-10', 2.1, '2024-11-10', true, 'sql best', 3, 3);
+
+query II
+select id, v1 from wide_table;
+----
+0 1
+
+statement ok
+drop table wide_table

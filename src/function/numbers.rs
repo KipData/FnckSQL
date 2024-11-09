@@ -21,7 +21,7 @@ lazy_static! {
             vec![ColumnCatalog::new(
                 "number".to_lowercase(),
                 true,
-                ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
             )],
         )
         .unwrap()

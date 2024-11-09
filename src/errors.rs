@@ -1,4 +1,5 @@
 use crate::expression::{BinaryOperator, UnaryOperator};
+use crate::types::tuple::TupleId;
 use crate::types::LogicalType;
 use chrono::ParseError;
 use sqlparser::parser::ParserError;
@@ -24,6 +25,10 @@ pub enum DatabaseError {
     ChannelClose,
     #[error("columns empty")]
     ColumnsEmpty,
+    #[error("column id: {0} not found")]
+    ColumnIdNotFound(String),
+    #[error("column: {0} not found")]
+    ColumnNotFound(String),
     #[error("csv error: {0}")]
     Csv(
         #[from]
@@ -42,6 +47,8 @@ pub enum DatabaseError {
     DuplicatePrimaryKey,
     #[error("the column has been declared unique and the value already exists")]
     DuplicateUniqueValue,
+    #[error("function: {0} not found")]
+    FunctionNotFound(String),
     #[error("empty plan")]
     EmptyPlan,
     #[error("sql statement is empty")]
@@ -78,8 +85,6 @@ pub enum DatabaseError {
     NoTransactionBegin,
     #[error("cannot be Null")]
     NotNull,
-    #[error("{0} not found: {1}")]
-    NotFound(&'static str, String),
     #[error("parser bool: {0}")]
     ParseBool(
         #[source]
@@ -122,7 +127,7 @@ pub enum DatabaseError {
     ),
     #[error("the number of caches cannot be divisible by the number of shards")]
     SharedNotAlign,
-    #[error("the view not found")]
+    #[error("the table or view not found")]
     SourceNotFound,
     #[error("the table already exists")]
     TableExists,
@@ -144,6 +149,8 @@ pub enum DatabaseError {
     ),
     #[error("too long")]
     TooLong,
+    #[error("tuple id: {0} not found")]
+    TupleIdNotFound(TupleId),
     #[error("there are more buckets: {0} than elements: {1}")]
     TooManyBuckets(usize, usize),
     #[error("unsupported unary operator: {0} cannot support {1} for calculations")]

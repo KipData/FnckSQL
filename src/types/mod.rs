@@ -152,6 +152,7 @@ impl LogicalType {
                 | LogicalType::UBigint
                 | LogicalType::Float
                 | LogicalType::Double
+                | LogicalType::Decimal(_, _)
         )
     }
 
@@ -280,6 +281,7 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::UTinyint => matches!(
                 to,
@@ -291,6 +293,7 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::Smallint => matches!(
                 to,
@@ -298,6 +301,7 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::USmallint => matches!(
                 to,
@@ -307,10 +311,14 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::Integer => matches!(
                 to,
-                LogicalType::Bigint | LogicalType::Float | LogicalType::Double
+                LogicalType::Bigint
+                    | LogicalType::Float
+                    | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::UInteger => matches!(
                 to,
@@ -318,10 +326,17 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
-            LogicalType::Bigint => matches!(to, LogicalType::Float | LogicalType::Double),
-            LogicalType::UBigint => matches!(to, LogicalType::Float | LogicalType::Double),
-            LogicalType::Float => matches!(to, LogicalType::Double),
+            LogicalType::Bigint => matches!(
+                to,
+                LogicalType::Float | LogicalType::Double | LogicalType::Decimal(_, _)
+            ),
+            LogicalType::UBigint => matches!(
+                to,
+                LogicalType::Float | LogicalType::Double | LogicalType::Decimal(_, _)
+            ),
+            LogicalType::Float => matches!(to, LogicalType::Double | LogicalType::Decimal(_, _)),
             LogicalType::Double => false,
             LogicalType::Char(..) => false,
             LogicalType::Varchar(..) => false,
@@ -377,7 +392,7 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                     char_unit.unwrap_or(CharLengthUnits::Characters),
                 ))
             }
-            sqlparser::ast::DataType::String => {
+            sqlparser::ast::DataType::String | sqlparser::ast::DataType::Text => {
                 Ok(LogicalType::Varchar(None, CharLengthUnits::Characters))
             }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),

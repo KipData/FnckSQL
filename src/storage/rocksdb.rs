@@ -160,12 +160,12 @@ mod test {
             ColumnRef::from(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, Some(0), false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
             )),
         ]);
 
@@ -255,7 +255,7 @@ mod test {
                     table_name,
                     pk_ty: LogicalType::Integer,
                     name: "pk_a".to_string(),
-                    ty: IndexType::PrimaryKey,
+                    ty: IndexType::PrimaryKey { is_multiple: false },
                 }),
                 table_name: &table.name,
                 table_types: table.types(),

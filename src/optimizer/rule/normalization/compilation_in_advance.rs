@@ -89,6 +89,11 @@ impl ExpressionRemapper {
                     expr.try_reference(output_exprs);
                 }
             }
+            Operator::Update(op) => {
+                for (_, expr) in op.value_exprs.iter_mut() {
+                    expr.try_reference(output_exprs);
+                }
+            }
             Operator::Dummy
             | Operator::TableScan(_)
             | Operator::Limit(_)
@@ -97,7 +102,6 @@ impl ExpressionRemapper {
             | Operator::Explain
             | Operator::Describe(_)
             | Operator::Insert(_)
-            | Operator::Update(_)
             | Operator::Delete(_)
             | Operator::Analyze(_)
             | Operator::AddColumn(_)
@@ -191,6 +195,11 @@ impl EvaluatorBind {
                     expr.bind_evaluator()?;
                 }
             }
+            Operator::Update(op) => {
+                for (_, expr) in op.value_exprs.iter_mut() {
+                    expr.bind_evaluator()?;
+                }
+            }
             Operator::Dummy
             | Operator::TableScan(_)
             | Operator::Limit(_)
@@ -199,7 +208,6 @@ impl EvaluatorBind {
             | Operator::Explain
             | Operator::Describe(_)
             | Operator::Insert(_)
-            | Operator::Update(_)
             | Operator::Delete(_)
             | Operator::Analyze(_)
             | Operator::AddColumn(_)

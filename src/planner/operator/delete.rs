@@ -7,7 +7,7 @@ use std::fmt::Formatter;
 pub struct DeleteOperator {
     pub table_name: TableName,
     // for column pruning
-    pub primary_key_column: ColumnRef,
+    pub primary_keys: Vec<ColumnRef>,
 }
 
 impl fmt::Display for DeleteOperator {

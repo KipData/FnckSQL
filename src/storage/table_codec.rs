@@ -342,7 +342,7 @@ impl TableCodec {
 
         if let Some(tuple_id) = tuple_id {
             if matches!(index.ty, IndexType::Normal | IndexType::Composite) {
-                tuple_id.to_raw(&mut key_prefix)?;
+                tuple_id.inner_encode(&mut key_prefix, &tuple_id.logical_type())?;
             }
         }
         Ok(key_prefix)
@@ -352,10 +352,7 @@ impl TableCodec {
         bytes: &[u8],
         primary_key_ty: &LogicalType,
     ) -> Result<TupleId, DatabaseError> {
-        DataValue::inner_decode(
-            &mut Cursor::new(bytes),
-            primary_key_ty,
-        )
+        DataValue::inner_decode(&mut Cursor::new(bytes), primary_key_ty)
     }
 
     /// Key: {TableName}{COLUMN_TAG}{BOUND_MIN_TAG}{ColumnId}
@@ -517,12 +514,12 @@ mod tests {
             ColumnCatalog::new(
                 "c1".into(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, Some(0), false, None).unwrap(),
             ),
             ColumnCatalog::new(
                 "c2".into(),
                 false,
-                ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Decimal(None, None), None, false, None).unwrap(),
             ),
         ];
         TableCatalog::new(Arc::new("t1".to_string()), columns).unwrap()
@@ -584,7 +581,7 @@ mod tests {
             table_name: Arc::new("T1".to_string()),
             pk_ty: LogicalType::Integer,
             name: "index_1".to_string(),
-            ty: IndexType::PrimaryKey,
+            ty: IndexType::PrimaryKey { is_multiple: false },
         };
         let (_, bytes) = TableCodec::encode_index_meta(&"T1".to_string(), &index_meta)?;
 
@@ -600,7 +597,11 @@ mod tests {
     fn test_table_codec_index() -> Result<(), DatabaseError> {
         let table_catalog = build_table_codec();
         let value = Arc::new(DataValue::Int32(Some(0)));
-        let index = Index::new(0, slice::from_ref(&value), IndexType::PrimaryKey);
+        let index = Index::new(
+            0,
+            slice::from_ref(&value),
+            IndexType::PrimaryKey { is_multiple: false },
+        );
         let tuple_id = DataValue::Int32(Some(0));
         let (_, bytes) = TableCodec::encode_index(&table_catalog.name, &index, &tuple_id)?;
 
@@ -617,7 +618,7 @@ mod tests {
         let mut col: ColumnCatalog = ColumnCatalog::new(
             "c2".to_string(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+            ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
         );
         col.summary_mut().relation = ColumnRelation::Table {
             column_id: Ulid::new(),
@@ -699,7 +700,7 @@ mod tests {
             let mut col = ColumnCatalog::new(
                 "".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::SqlNull, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::SqlNull, None, false, None).unwrap(),
             );
 
             col.summary_mut().relation = ColumnRelation::Table {
@@ -751,8 +752,8 @@ mod tests {
                 column_ids: vec![],
                 table_name: Arc::new(table_name.to_string()),
                 pk_ty: LogicalType::Integer,
-                name: "".to_string(),
-                ty: IndexType::PrimaryKey,
+                name: format!("{}_index", index_id),
+                ty: IndexType::PrimaryKey { is_multiple: false },
             };
 
             let (key, _) =
@@ -794,7 +795,7 @@ mod tests {
         let column = ColumnCatalog::new(
             "".to_string(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+            ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
         );
         let table_catalog = TableCatalog::new(Arc::new("T0".to_string()), vec![column]).unwrap();
 
@@ -803,7 +804,7 @@ mod tests {
             let index = Index::new(
                 index_id as u32,
                 slice::from_ref(&value),
-                IndexType::PrimaryKey,
+                IndexType::PrimaryKey { is_multiple: false },
             );
 
             TableCodec::encode_index_key(table_name, &index, None).unwrap()
@@ -859,7 +860,7 @@ mod tests {
             let index = Index::new(
                 index_id as u32,
                 slice::from_ref(&value),
-                IndexType::PrimaryKey,
+                IndexType::PrimaryKey { is_multiple: false },
             );
 
             TableCodec::encode_index_key(&table_name.to_string(), &index, None).unwrap()

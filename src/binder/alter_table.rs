@@ -30,7 +30,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 column_def,
             } => {
                 let plan = TableScanOperator::build(table_name.clone(), table);
-                let column = self.bind_column(column_def)?;
+                let column = self.bind_column(column_def, None)?;
 
                 if !is_valid_identifier(column.name()) {
                     return Err(DatabaseError::InvalidColumn(

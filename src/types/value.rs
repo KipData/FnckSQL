@@ -355,7 +355,8 @@ impl DataValue {
             ) => Self::check_string_len(val, *len as usize, CharLengthUnits::Octets),
             (LogicalType::Decimal(full_len, scale_len), DataValue::Decimal(Some(val))) => {
                 if let Some(len) = full_len {
-                    if val.mantissa().ilog10() + 1 > *len as u32 {
+                    let mantissa = val.mantissa().abs();
+                    if mantissa != 0 && mantissa.ilog10() + 1 > *len as u32 {
                         return Err(DatabaseError::TooLong);
                     }
                 }

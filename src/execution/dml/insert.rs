@@ -81,8 +81,9 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
 
                 let primary_keys = schema
                     .iter()
-                    .filter(|&col| col.desc().is_primary())
-                    .map(|col| col.key(is_mapping_by_name))
+                    .filter_map(|column| column.desc().primary().map(|i| (i, column)))
+                    .sorted_by_key(|(i, _)| *i)
+                    .map(|(_, col)| col.key(is_mapping_by_name))
                     .collect_vec();
                 if primary_keys.is_empty() {
                     throw!(Err(DatabaseError::NotNull))

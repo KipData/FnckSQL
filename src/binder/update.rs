@@ -26,13 +26,13 @@ impl<T: Transaction> Binder<'_, '_, T> {
             if let Some(predicate) = selection {
                 plan = self.bind_where(plan, predicate)?;
             }
+            let mut value_exprs = Vec::with_capacity(assignments.len());
 
-            let mut schema = Vec::with_capacity(assignments.len());
-            let mut row = Vec::with_capacity(assignments.len());
-
+            if assignments.is_empty() {
+                return Err(DatabaseError::ColumnsEmpty);
+            }
             for Assignment { id, value } in assignments {
-                let mut expression = self.bind_expr(value)?;
-                expression.constant_calculation()?;
+                let expression = self.bind_expr(value)?;
 
                 for ident in id {
                     match self.bind_column_ref_from_identifiers(
@@ -40,38 +40,27 @@ impl<T: Transaction> Binder<'_, '_, T> {
                         Some(table_name.to_string()),
                     )? {
                         ScalarExpression::ColumnRef(column) => {
-                            match &expression {
-                                ScalarExpression::Constant(value) => {
-                                    let ty = column.datatype();
-                                    // Check if the value length is too long
-                                    value.check_len(ty)?;
-
-                                    let mut value = value.clone();
-                                    if value.logical_type() != *ty {
-                                        value = value.cast(ty)?;
-                                    }
-                                    row.push(value);
-                                }
-                                ScalarExpression::Empty => {
-                                    let default_value = column
-                                        .default_value()?
-                                        .ok_or(DatabaseError::DefaultNotExist)?;
-                                    row.push(default_value);
-                                }
-                                _ => return Err(DatabaseError::UnsupportedStmt(value.to_string())),
-                            }
-                            schema.push(column);
+                            let expr = if matches!(expression, ScalarExpression::Empty) {
+                                let default_value = column
+                                    .default_value()?
+                                    .ok_or(DatabaseError::DefaultNotExist)?;
+                                ScalarExpression::Constant(default_value)
+                            } else {
+                                expression.clone()
+                            };
+                            value_exprs.push((column, expr));
                         }
                         _ => return Err(DatabaseError::InvalidColumn(ident.to_string())),
                     }
                 }
             }
             self.context.allow_default = false;
-            let values_plan = self.bind_values(vec![row], Arc::new(schema));
-
             Ok(LogicalPlan::new(
-                Operator::Update(UpdateOperator { table_name }),
-                vec![plan, values_plan],
+                Operator::Update(UpdateOperator {
+                    table_name,
+                    value_exprs,
+                }),
+                vec![plan],
             ))
         } else {
             unreachable!("only table")

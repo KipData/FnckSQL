@@ -141,7 +141,7 @@ mod tests {
                     },
                 },
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None)?,
+                ColumnDesc::new(LogicalType::Integer, Some(0), false, None)?,
                 false,
             )),
             ColumnRef::from(ColumnCatalog::direct_new(
@@ -154,7 +154,7 @@ mod tests {
                     },
                 },
                 false,
-                ColumnDesc::new(LogicalType::Float, false, false, None)?,
+                ColumnDesc::new(LogicalType::Float, None, false, None)?,
                 false,
             )),
             ColumnRef::from(ColumnCatalog::direct_new(
@@ -169,7 +169,7 @@ mod tests {
                 false,
                 ColumnDesc::new(
                     LogicalType::Varchar(Some(10), CharLengthUnits::Characters),
-                    false,
+                    None,
                     false,
                     None,
                 )?,

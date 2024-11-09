@@ -14,7 +14,7 @@ pub type IndexMetaRef = Arc<IndexMeta>;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, ReferenceSerialization)]
 pub enum IndexType {
-    PrimaryKey,
+    PrimaryKey { is_multiple: bool },
     Unique,
     Normal,
     Composite,
@@ -47,10 +47,7 @@ impl IndexMeta {
             if let Some(column) = table.get_column_by_id(column_id) {
                 exprs.push(ScalarExpression::ColumnRef(column.clone()));
             } else {
-                return Err(DatabaseError::NotFound(
-                    "Column by id",
-                    column_id.to_string(),
-                ));
+                return Err(DatabaseError::ColumnNotFound(column_id.to_string()));
             }
         }
         Ok(exprs)

@@ -1169,7 +1169,7 @@ impl ScalarExpression {
                 self.output_name(),
                 true,
                 // SAFETY: default expr must not be [`ScalarExpression::ColumnRef`]
-                ColumnDesc::new(self.return_type(), false, false, None).unwrap(),
+                ColumnDesc::new(self.return_type(), None, false, None).unwrap(),
             )),
         }
     }
@@ -1392,7 +1392,7 @@ mod test {
                     },
                 },
                 false,
-                ColumnDesc::new(LogicalType::Integer, false, false, None)?,
+                ColumnDesc::new(LogicalType::Integer, None, false, None)?,
                 false,
             ))),
             Some((&transaction, &table_cache)),
@@ -1406,7 +1406,7 @@ mod test {
                     relation: ColumnRelation::None,
                 },
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None)?,
+                ColumnDesc::new(LogicalType::Boolean, None, false, None)?,
                 false,
             ))),
             Some((&transaction, &table_cache)),

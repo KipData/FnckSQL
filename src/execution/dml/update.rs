@@ -1,6 +1,7 @@
-use crate::catalog::TableName;
+use crate::catalog::{ColumnRef, TableName};
 use crate::execution::dql::projection::Projection;
 use crate::execution::{build_read, Executor, WriteExecutor};
+use crate::expression::ScalarExpression;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::LogicalPlan;
 use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
@@ -8,8 +9,7 @@ use crate::throw;
 use crate::types::index::Index;
 use crate::types::tuple::types;
 use crate::types::tuple::Tuple;
-use crate::types::tuple_builder::TupleBuilder;
-use crate::types::value::DataValue;
+use crate::types::tuple_builder::{TupleBuilder, TupleIdBuilder};
 use std::collections::HashMap;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
@@ -17,18 +17,24 @@ use std::pin::Pin;
 
 pub struct Update {
     table_name: TableName,
+    value_exprs: Vec<(ColumnRef, ScalarExpression)>,
     input: LogicalPlan,
-    values: LogicalPlan,
 }
 
-impl From<(UpdateOperator, LogicalPlan, LogicalPlan)> for Update {
+impl From<(UpdateOperator, LogicalPlan)> for Update {
     fn from(
-        (UpdateOperator { table_name }, input, values): (UpdateOperator, LogicalPlan, LogicalPlan),
+        (
+            UpdateOperator {
+                table_name,
+                value_exprs,
+            },
+            input,
+        ): (UpdateOperator, LogicalPlan),
     ) -> Self {
         Update {
             table_name,
+            value_exprs,
             input,
-            values,
         }
     }
 }
@@ -44,30 +50,23 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
             move || {
                 let Update {
                     table_name,
+                    value_exprs,
                     mut input,
-                    mut values,
                 } = self;
 
-                let values_schema = values.output_schema().clone();
+                let mut exprs_map = HashMap::with_capacity(value_exprs.len());
+                for (column, expr) in value_exprs {
+                    exprs_map.insert(column.id(), expr);
+                }
+
                 let input_schema = input.output_schema().clone();
                 let types = types(&input_schema);
 
                 if let Some(table_catalog) =
                     throw!(transaction.table(cache.0, table_name.clone())).cloned()
                 {
-                    let mut value_map = HashMap::new();
                     let mut tuples = Vec::new();
 
-                    // only once
-                    let mut coroutine = build_read(values, cache, transaction);
-
-                    while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
-                        let Tuple { values, .. } = throw!(tuple);
-                        for i in 0..values.len() {
-                            value_map.insert(values_schema[i].id(), values[i].clone());
-                        }
-                    }
-                    drop(coroutine);
                     let mut coroutine = build_read(input, cache, transaction);
 
                     while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
@@ -92,23 +91,21 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                         }
                         index_metas.push((index_meta, exprs));
                     }
+                    let mut id_builder = TupleIdBuilder::new(&input_schema);
+
                     for mut tuple in tuples {
                         let mut is_overwrite = true;
-                        let mut primary_keys = Vec::new();
+
                         for (i, column) in input_schema.iter().enumerate() {
-                            if let Some(value) = value_map.get(&column.id()) {
+                            if let Some(expr) = exprs_map.get(&column.id()) {
+                                let value = throw!(expr.eval(&tuple, &input_schema));
                                 if column.desc().is_primary() {
-                                    primary_keys.push(value.clone());
+                                    id_builder.append(value.clone());
                                 }
-                                tuple.values[i] = value.clone();
+                                tuple.values[i] = value;
                             }
                         }
-                        if !primary_keys.is_empty() {
-                            let id = if primary_keys.len() == 1 {
-                                primary_keys.pop().unwrap()
-                            } else {
-                                DataValue::Tuple(Some(primary_keys))
-                            };
+                        if let Some(id) = id_builder.build() {
                             if &id != tuple.id.as_ref().unwrap() {
                                 let old_key = tuple.id.replace(id).unwrap();
 

@@ -75,7 +75,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                 } else if if_exists {
                     return;
                 } else {
-                    yield Err(DatabaseError::NotFound("drop column", column_name));
+                    yield Err(DatabaseError::ColumnNotFound(column_name));
                 }
             },
         )

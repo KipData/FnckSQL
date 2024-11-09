@@ -260,7 +260,7 @@ mod test {
                     },
                 },
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None)?,
+                ColumnDesc::new(LogicalType::Integer, Some(0), false, None)?,
                 false,
             );
             let c2_col = ColumnCatalog::direct_new(
@@ -273,7 +273,7 @@ mod test {
                     },
                 },
                 false,
-                ColumnDesc::new(LogicalType::Integer, false, true, None)?,
+                ColumnDesc::new(LogicalType::Integer, None, true, None)?,
                 false,
             );
 

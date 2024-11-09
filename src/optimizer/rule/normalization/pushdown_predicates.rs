@@ -1,6 +1,6 @@
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
-use crate::expression::range_detacher::RangeDetacher;
+use crate::expression::range_detacher::{Range, RangeDetacher};
 use crate::expression::{BinaryOperator, ScalarExpression};
 use crate::optimizer::core::pattern::Pattern;
 use crate::optimizer::core::pattern::PatternChildrenPredicate;
@@ -9,7 +9,7 @@ use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
-use crate::types::index::{IndexInfo, IndexType};
+use crate::types::index::{IndexInfo, IndexMetaRef, IndexType};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -225,41 +225,57 @@ impl NormalizationRule for PushPredicateIntoScan {
                             continue;
                         }
                         *range = match meta.ty {
-                            IndexType::PrimaryKey | IndexType::Unique | IndexType::Normal => {
+                            IndexType::PrimaryKey { is_multiple: false }
+                            | IndexType::Unique
+                            | IndexType::Normal => {
                                 RangeDetacher::new(meta.table_name.as_str(), &meta.column_ids[0])
                                     .detach(&op.predicate)
                             }
-                            IndexType::Composite => {
-                                let mut res = None;
-                                let mut eq_ranges = Vec::with_capacity(meta.column_ids.len());
-
-                                for column_id in meta.column_ids.iter() {
-                                    if let Some(range) =
-                                        RangeDetacher::new(meta.table_name.as_str(), column_id)
-                                            .detach(&op.predicate)
-                                    {
-                                        if range.only_eq() {
-                                            eq_ranges.push(range);
-                                            continue;
-                                        }
-                                        res = range.combining_eqs(&eq_ranges);
-                                    }
-                                    break;
-                                }
-                                if res.is_none() {
-                                    if let Some(range) = eq_ranges.pop() {
-                                        res = range.combining_eqs(&eq_ranges);
-                                    }
-                                }
-                                res
+                            IndexType::PrimaryKey { is_multiple: true } | IndexType::Composite => {
+                                Self::composite_range(&op, meta)
                             }
-                        }
+                        };
                     }
                 }
             }
         }
 
         Ok(())
+    }
+}
+
+impl PushPredicateIntoScan {
+    fn composite_range(op: &FilterOperator, meta: &mut IndexMetaRef) -> Option<Range> {
+        let mut res = None;
+        let mut eq_ranges = Vec::with_capacity(meta.column_ids.len());
+        let mut apply_column_count = 0;
+
+        for column_id in meta.column_ids.iter() {
+            if let Some(range) =
+                RangeDetacher::new(meta.table_name.as_str(), column_id).detach(&op.predicate)
+            {
+                apply_column_count += 1;
+
+                if range.only_eq() {
+                    eq_ranges.push(range);
+                    continue;
+                }
+                res = range.combining_eqs(&eq_ranges);
+            }
+            break;
+        }
+        if res.is_none() {
+            if let Some(range) = eq_ranges.pop() {
+                res = range.combining_eqs(&eq_ranges);
+            }
+        }
+        res.and_then(|range| {
+            if range.only_eq() && apply_column_count != meta.column_ids.len() {
+                None
+            } else {
+                Some(range)
+            }
+        })
     }
 }
 
@@ -303,7 +319,7 @@ mod tests {
                 max: Bound::Unbounded,
             };
 
-            debug_assert_eq!(op.index_infos[1].range, Some(mock_range));
+            debug_assert_eq!(op.index_infos[0].range, Some(mock_range));
         } else {
             unreachable!("Should be a filter operator")
         }

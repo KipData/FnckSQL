@@ -414,7 +414,7 @@ mod test {
         LogicalPlan,
         ScalarExpression,
     ) {
-        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap();
+        let desc = ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap();
 
         let t1_columns = vec![
             ColumnRef::from(ColumnCatalog::new("c1".to_string(), true, desc.clone())),

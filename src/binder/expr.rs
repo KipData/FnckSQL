@@ -333,7 +333,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             Ok(ScalarExpression::ColumnRef(
                 source
                     .column(&full_name.1, schema_buf)
-                    .ok_or_else(|| DatabaseError::NotFound("column", full_name.1.to_string()))?,
+                    .ok_or_else(|| DatabaseError::ColumnNotFound(full_name.1.to_string()))?,
             ))
         } else {
             let op =
@@ -373,7 +373,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             if let Some(parent) = self.parent {
                 op(&mut got_column, &parent.context, &mut self.table_schema_buf);
             }
-            Ok(got_column.ok_or(DatabaseError::NotFound("column", full_name.1))?)
+            Ok(got_column.ok_or(DatabaseError::ColumnNotFound(full_name.1))?)
         }
     }
 
@@ -621,7 +621,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             }));
         }
 
-        Err(DatabaseError::NotFound("function", summary.name))
+        Err(DatabaseError::FunctionNotFound(summary.name))
     }
 
     fn return_type(

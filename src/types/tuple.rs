@@ -3,7 +3,6 @@ use crate::errors::DatabaseError;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
-use integer_encoding::FixedInt;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::sync::Arc;
@@ -50,7 +49,7 @@ impl Tuple {
             bits & (1 << (7 - i)) > 0
         }
 
-        let values_len = schema.len();
+        let values_len = table_types.len();
         let mut tuple_values = Vec::with_capacity(values_len);
         let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
         let mut primary_keys = Vec::new();
@@ -59,7 +58,7 @@ impl Tuple {
         let mut pos = bits_len;
 
         for (i, logic_type) in table_types.iter().enumerate() {
-            if projection_i >= values_len {
+            if projection_i >= values_len || projection_i > projections.len() - 1 {
                 break;
             }
             if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
@@ -76,7 +75,8 @@ impl Tuple {
                 pos += len;
             } else {
                 /// variable length (e.g.: varchar)
-                let len = u32::decode_fixed(&bytes[pos..pos + 4]) as usize;
+                let le_bytes: [u8; 4] = bytes[pos..pos + 4].try_into().unwrap();
+                let len = u32::from_le_bytes(le_bytes) as usize;
                 pos += 4;
                 if projections[projection_i] == i {
                     tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
@@ -134,7 +134,7 @@ impl Tuple {
                 if logical_type.raw_len().is_none() {
                     let index = bytes.len() - value_len;
 
-                    bytes.splice(index..index, (value_len as u32).encode_fixed_vec());
+                    bytes.splice(index..index, (value_len as u32).to_le_bytes());
                 }
             }
         }
@@ -188,19 +188,19 @@ mod tests {
             ColumnRef::from(ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, Some(0), false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UInteger, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::UInteger, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c3".to_string(),
                 false,
                 ColumnDesc::new(
                     LogicalType::Varchar(Some(2), CharLengthUnits::Characters),
-                    false,
+                    None,
                     false,
                     None,
                 )
@@ -209,59 +209,59 @@ mod tests {
             ColumnRef::from(ColumnCatalog::new(
                 "c4".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Smallint, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Smallint, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c5".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::USmallint, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::USmallint, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c6".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Float, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Float, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c7".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Double, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Double, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c8".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Tinyint, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Tinyint, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c9".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::UTinyint, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::UTinyint, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c10".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c11".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::DateTime, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::DateTime, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c12".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Date, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Date, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c13".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Decimal(None, None), None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c14".to_string(),
                 false,
                 ColumnDesc::new(
                     LogicalType::Char(1, CharLengthUnits::Characters),
-                    false,
+                    None,
                     false,
                     None,
                 )
@@ -272,7 +272,7 @@ mod tests {
                 false,
                 ColumnDesc::new(
                     LogicalType::Varchar(Some(2), CharLengthUnits::Octets),
-                    false,
+                    None,
                     false,
                     None,
                 )
@@ -283,7 +283,7 @@ mod tests {
                 false,
                 ColumnDesc::new(
                     LogicalType::Char(1, CharLengthUnits::Octets),
-                    false,
+                    None,
                     false,
                     None,
                 )
