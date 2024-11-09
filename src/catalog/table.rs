@@ -22,6 +22,7 @@ pub struct TableCatalog {
 
     schema_ref: SchemaRef,
     primary_keys: Vec<(usize, ColumnRef)>,
+    primary_key_type: Option<LogicalType>,
 }
 
 //TODO: can add some like Table description and other information as attributes
@@ -125,17 +126,23 @@ impl TableCatalog {
         }
 
         let index_id = self.indexes.last().map(|index| index.id + 1).unwrap_or(0);
-        let primary_keys = self.primary_keys();
-        let pk_ty = if primary_keys.len() == 1 {
-            primary_keys[0].1.datatype().clone()
-        } else {
-            LogicalType::Tuple(
-                primary_keys
-                    .iter()
-                    .map(|(_, column)| column.datatype().clone())
-                    .collect_vec(),
-            )
-        };
+        let pk_ty = self
+            .primary_key_type
+            .get_or_insert_with(|| {
+                let primary_keys = &self.primary_keys;
+
+                if primary_keys.len() == 1 {
+                    primary_keys[0].1.datatype().clone()
+                } else {
+                    LogicalType::Tuple(
+                        primary_keys
+                            .iter()
+                            .map(|(_, column)| column.datatype().clone())
+                            .collect_vec(),
+                    )
+                }
+            })
+            .clone();
         let index = IndexMeta {
             id: index_id,
             column_ids,
@@ -162,6 +169,7 @@ impl TableCatalog {
             indexes: vec![],
             schema_ref: Arc::new(vec![]),
             primary_keys: vec![],
+            primary_key_type: None,
         };
         let mut generator = Generator::new();
         for col_catalog in columns.into_iter() {
@@ -200,6 +208,7 @@ impl TableCatalog {
             indexes,
             schema_ref,
             primary_keys,
+            primary_key_type: None,
         })
     }
 
