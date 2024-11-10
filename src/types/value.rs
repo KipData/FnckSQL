@@ -1651,8 +1651,8 @@ mod test {
 
         println!("{:?} < {:?}", key_i8_1, key_i8_2);
         println!("{:?} < {:?}", key_i8_2, key_i8_3);
-        debug_assert!(key_i8_1 < key_i8_2);
-        debug_assert!(key_i8_2 < key_i8_3);
+        assert!(key_i8_1 < key_i8_2);
+        assert!(key_i8_2 < key_i8_3);
 
         let mut key_i16_1 = Vec::new();
         let mut key_i16_2 = Vec::new();
@@ -1664,8 +1664,8 @@ mod test {
 
         println!("{:?} < {:?}", key_i16_1, key_i16_2);
         println!("{:?} < {:?}", key_i16_2, key_i16_3);
-        debug_assert!(key_i16_1 < key_i16_2);
-        debug_assert!(key_i16_2 < key_i16_3);
+        assert!(key_i16_1 < key_i16_2);
+        assert!(key_i16_2 < key_i16_3);
 
         let mut key_i32_1 = Vec::new();
         let mut key_i32_2 = Vec::new();
@@ -1677,8 +1677,8 @@ mod test {
 
         println!("{:?} < {:?}", key_i32_1, key_i32_2);
         println!("{:?} < {:?}", key_i32_2, key_i32_3);
-        debug_assert!(key_i32_1 < key_i32_2);
-        debug_assert!(key_i32_2 < key_i32_3);
+        assert!(key_i32_1 < key_i32_2);
+        assert!(key_i32_2 < key_i32_3);
 
         let mut key_i64_1 = Vec::new();
         let mut key_i64_2 = Vec::new();
@@ -1690,8 +1690,8 @@ mod test {
 
         println!("{:?} < {:?}", key_i64_1, key_i64_2);
         println!("{:?} < {:?}", key_i64_2, key_i64_3);
-        debug_assert!(key_i64_1 < key_i64_2);
-        debug_assert!(key_i64_2 < key_i64_3);
+        assert!(key_i64_1 < key_i64_2);
+        assert!(key_i64_2 < key_i64_3);
 
         Ok(())
     }
@@ -1708,8 +1708,8 @@ mod test {
 
         println!("{:?} < {:?}", key_f32_1, key_f32_2);
         println!("{:?} < {:?}", key_f32_2, key_f32_3);
-        debug_assert!(key_f32_1 < key_f32_2);
-        debug_assert!(key_f32_2 < key_f32_3);
+        assert!(key_f32_1 < key_f32_2);
+        assert!(key_f32_2 < key_f32_3);
 
         let mut key_f64_1 = Vec::new();
         let mut key_f64_2 = Vec::new();
@@ -1721,8 +1721,8 @@ mod test {
 
         println!("{:?} < {:?}", key_f64_1, key_f64_2);
         println!("{:?} < {:?}", key_f64_2, key_f64_3);
-        debug_assert!(key_f64_1 < key_f64_2);
-        debug_assert!(key_f64_2 < key_f64_3);
+        assert!(key_f64_1 < key_f64_2);
+        assert!(key_f64_2 < key_f64_3);
 
         Ok(())
     }
@@ -1754,8 +1754,8 @@ mod test {
 
         println!("{:?} < {:?}", key_tuple_1, key_tuple_2);
         println!("{:?} < {:?}", key_tuple_2, key_tuple_3);
-        debug_assert!(key_tuple_1 < key_tuple_2);
-        debug_assert!(key_tuple_2 < key_tuple_3);
+        assert!(key_tuple_1 < key_tuple_2);
+        assert!(key_tuple_2 < key_tuple_3);
 
         Ok(())
     }

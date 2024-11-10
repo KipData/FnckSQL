@@ -180,7 +180,7 @@ mod tests {
         }
 
         if let Operator::Limit(op) = &best_plan.childrens[0].childrens[0].childrens[0].operator {
-            debug_assert_eq!(op.limit, Some(1));
+            assert_eq!(op.limit, Some(1));
         } else {
             unreachable!("Should be a limit operator")
         }
@@ -205,7 +205,7 @@ mod tests {
             .find_best::<RocksTransaction>(None)?;
 
         if let Operator::TableScan(op) = &best_plan.childrens[0].operator {
-            debug_assert_eq!(op.limit, (Some(1), Some(1)))
+            assert_eq!(op.limit, (Some(1), Some(1)))
         } else {
             unreachable!("Should be a project operator")
         }

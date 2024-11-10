@@ -227,19 +227,19 @@ mod tests {
         let plan = table_state.plan("select * from t1 left join t2 on c1 = c3")?;
         let graph = HepGraph::new(plan);
 
-        debug_assert!(graph
+        assert!(graph
             .graph
             .contains_edge(NodeIndex::new(1), NodeIndex::new(2)));
-        debug_assert!(graph
+        assert!(graph
             .graph
             .contains_edge(NodeIndex::new(1), NodeIndex::new(3)));
-        debug_assert!(graph
+        assert!(graph
             .graph
             .contains_edge(NodeIndex::new(0), NodeIndex::new(1)));
 
-        debug_assert_eq!(graph.graph.edge_weight(EdgeIndex::new(0)), Some(&0));
-        debug_assert_eq!(graph.graph.edge_weight(EdgeIndex::new(1)), Some(&1));
-        debug_assert_eq!(graph.graph.edge_weight(EdgeIndex::new(2)), Some(&0));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(0)), Some(&0));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(1)), Some(&1));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(2)), Some(&0));
 
         Ok(())
     }
@@ -256,19 +256,19 @@ mod tests {
 
         graph.add_node(HepNodeId::new(5), None, Operator::Dummy);
 
-        debug_assert!(graph
+        assert!(graph
             .graph
             .contains_edge(NodeIndex::new(5), NodeIndex::new(4)));
-        debug_assert!(graph
+        assert!(graph
             .graph
             .contains_edge(NodeIndex::new(1), NodeIndex::new(5)));
-        debug_assert!(graph
+        assert!(graph
             .graph
             .contains_edge(NodeIndex::new(5), NodeIndex::new(6)));
 
-        debug_assert_eq!(graph.graph.edge_weight(EdgeIndex::new(3)), Some(&0));
-        debug_assert_eq!(graph.graph.edge_weight(EdgeIndex::new(4)), Some(&2));
-        debug_assert_eq!(graph.graph.edge_weight(EdgeIndex::new(5)), Some(&1));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(3)), Some(&0));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(4)), Some(&2));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(5)), Some(&1));
 
         Ok(())
     }
@@ -281,7 +281,7 @@ mod tests {
 
         graph.replace_node(HepNodeId::new(1), Operator::Dummy);
 
-        debug_assert!(matches!(graph.operator(HepNodeId::new(1)), Operator::Dummy));
+        assert!(matches!(graph.operator(HepNodeId::new(1)), Operator::Dummy));
 
         Ok(())
     }
@@ -294,12 +294,12 @@ mod tests {
 
         graph.remove_node(HepNodeId::new(1), false);
 
-        debug_assert_eq!(graph.graph.edge_count(), 2);
+        assert_eq!(graph.graph.edge_count(), 2);
 
-        debug_assert!(graph
+        assert!(graph
             .graph
             .contains_edge(NodeIndex::new(0), NodeIndex::new(2)));
-        debug_assert!(graph
+        assert!(graph
             .graph
             .contains_edge(NodeIndex::new(0), NodeIndex::new(3)));
 
@@ -314,7 +314,7 @@ mod tests {
 
         graph.remove_node(HepNodeId::new(1), true);
 
-        debug_assert_eq!(graph.graph.edge_count(), 0);
+        assert_eq!(graph.graph.edge_count(), 0);
 
         Ok(())
     }
@@ -333,8 +333,8 @@ mod tests {
         let op_0 = graph.operator(HepNodeId::new(0));
         let op_1 = graph.operator(HepNodeId::new(1));
 
-        debug_assert_eq!(op_0, &before_op_1);
-        debug_assert_eq!(op_1, &before_op_0);
+        assert_eq!(op_0, &before_op_1);
+        assert_eq!(op_1, &before_op_0);
 
         Ok(())
     }
@@ -347,11 +347,11 @@ mod tests {
 
         graph.add_root(Operator::Dummy);
 
-        debug_assert_eq!(graph.graph.edge_count(), 4);
-        debug_assert!(graph
+        assert_eq!(graph.graph.edge_count(), 4);
+        assert!(graph
             .graph
             .contains_edge(NodeIndex::new(4), NodeIndex::new(0)));
-        debug_assert_eq!(graph.graph.edge_weight(EdgeIndex::new(3)), Some(&0));
+        assert_eq!(graph.graph.edge_weight(EdgeIndex::new(3)), Some(&0));
 
         Ok(())
     }
@@ -374,7 +374,7 @@ mod tests {
 
         let plan_for_graph = graph.into_plan(None).unwrap();
 
-        debug_assert_eq!(plan, plan_for_graph);
+        assert_eq!(plan, plan_for_graph);
 
         Ok(())
     }

@@ -176,13 +176,13 @@ mod tests {
         let best_plan = optimizer.find_best::<RocksTransaction>(None)?;
 
         if let Operator::Project(op) = &best_plan.operator {
-            debug_assert_eq!(op.exprs.len(), 1);
+            assert_eq!(op.exprs.len(), 1);
         } else {
             unreachable!("Should be a project operator")
         }
 
         if let Operator::TableScan(_) = &best_plan.childrens[0].operator {
-            debug_assert_eq!(best_plan.childrens[0].childrens.len(), 0)
+            assert_eq!(best_plan.childrens[0].childrens.len(), 0)
         } else {
             unreachable!("Should be a scan operator")
         }
@@ -223,7 +223,7 @@ mod tests {
 
         if let Operator::Filter(op) = &best_plan.childrens[0].operator {
             if let ScalarExpression::Binary { op, .. } = &op.predicate {
-                debug_assert_eq!(op, &BinaryOperator::And);
+                assert_eq!(op, &BinaryOperator::And);
             } else {
                 unreachable!("Should be a and operator")
             }

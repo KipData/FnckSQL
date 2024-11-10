@@ -543,17 +543,17 @@ mod test {
             .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
-        debug_assert_eq!(tuples.len(), 3);
+        assert_eq!(tuples.len(), 3);
 
-        debug_assert_eq!(
+        assert_eq!(
             tuples[0].values,
             build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples[1].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples[2].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
         );
@@ -585,21 +585,21 @@ mod test {
                 executor.execute((&table_cache, &view_cache, &meta_cache), &transaction),
             )?;
 
-            debug_assert_eq!(tuples.len(), 4);
+            assert_eq!(tuples.len(), 4);
 
-            debug_assert_eq!(
+            assert_eq!(
                 tuples[0].values,
                 build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
             );
-            debug_assert_eq!(
+            assert_eq!(
                 tuples[1].values,
                 build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
             );
-            debug_assert_eq!(
+            assert_eq!(
                 tuples[2].values,
                 build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
             );
-            debug_assert_eq!(
+            assert_eq!(
                 tuples[3].values,
                 build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
             );
@@ -612,18 +612,18 @@ mod test {
                 executor.execute((&table_cache, &view_cache, &meta_cache), &transaction),
             )?;
 
-            debug_assert_eq!(tuples.len(), 2);
+            assert_eq!(tuples.len(), 2);
             tuples.sort_by_key(|tuple| {
                 let mut bytes = Vec::new();
                 tuple.values[0].memcomparable_encode(&mut bytes).unwrap();
                 bytes
             });
 
-            debug_assert_eq!(
+            assert_eq!(
                 tuples[0].values,
                 build_integers(vec![Some(0), Some(2), Some(4)])
             );
-            debug_assert_eq!(
+            assert_eq!(
                 tuples[1].values,
                 build_integers(vec![Some(1), Some(3), Some(5)])
             );
@@ -636,8 +636,8 @@ mod test {
                 executor.execute((&table_cache, &view_cache, &meta_cache), &transaction),
             )?;
 
-            debug_assert_eq!(tuples.len(), 1);
-            debug_assert_eq!(
+            assert_eq!(tuples.len(), 1);
+            assert_eq!(
                 tuples[0].values,
                 build_integers(vec![Some(3), Some(5), Some(7)])
             );
@@ -667,21 +667,21 @@ mod test {
             .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
-        debug_assert_eq!(tuples.len(), 4);
+        assert_eq!(tuples.len(), 4);
 
-        debug_assert_eq!(
+        assert_eq!(
             tuples[0].values,
             build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples[1].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples[2].values,
             build_integers(vec![None, None, None, Some(4), Some(6), Some(8)])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples[3].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
         );
@@ -710,25 +710,25 @@ mod test {
             .execute((&table_cache, &view_cache, &meta_cache), &transaction);
         let tuples = try_collect(executor)?;
 
-        debug_assert_eq!(tuples.len(), 5);
+        assert_eq!(tuples.len(), 5);
 
-        debug_assert_eq!(
+        assert_eq!(
             tuples[0].values,
             build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples[1].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples[2].values,
             build_integers(vec![None, None, None, Some(4), Some(6), Some(8)])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples[3].values,
             build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples[4].values,
             build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
         );
