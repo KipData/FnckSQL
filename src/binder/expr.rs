@@ -48,7 +48,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             }
             Expr::CompoundIdentifier(idents) => self.bind_column_ref_from_identifiers(idents, None),
             Expr::BinaryOp { left, right, op } => self.bind_binary_op_internal(left, right, op),
-            Expr::Value(v) => Ok(ScalarExpression::Constant(Arc::new(v.into()))),
+            Expr::Value(v) => Ok(ScalarExpression::Constant(v.into())),
             Expr::Function(func) => self.bind_function(func),
             Expr::Nested(expr) => self.bind_expr(expr),
             Expr::UnaryOp { expr, op } => self.bind_unary_op_internal(expr, op),
@@ -77,7 +77,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
                 }
                 .cast(&logical_type)?;
 
-                Ok(ScalarExpression::Constant(Arc::new(value)))
+                Ok(ScalarExpression::Constant(value))
             }
             Expr::Between {
                 expr,
@@ -186,7 +186,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
                         if ty == &LogicalType::SqlNull {
                             *ty = result_ty;
                         } else if ty != &result_ty {
-                            return Err(DatabaseError::Incomparable(*ty, result_ty));
+                            return Err(DatabaseError::Incomparable(ty.clone(), result_ty));
                         }
                     }
 
@@ -333,7 +333,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             Ok(ScalarExpression::ColumnRef(
                 source
                     .column(&full_name.1, schema_buf)
-                    .ok_or_else(|| DatabaseError::NotFound("column", full_name.1.to_string()))?,
+                    .ok_or_else(|| DatabaseError::ColumnNotFound(full_name.1.to_string()))?,
             ))
         } else {
             let op =
@@ -373,7 +373,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             if let Some(parent) = self.parent {
                 op(&mut got_column, &parent.context, &mut self.table_schema_buf);
             }
-            Ok(got_column.ok_or(DatabaseError::NotFound("column", full_name.1))?)
+            Ok(got_column.ok_or(DatabaseError::ColumnNotFound(full_name.1))?)
         }
     }
 
@@ -621,7 +621,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             }));
         }
 
-        Err(DatabaseError::NotFound("function", summary.name))
+        Err(DatabaseError::FunctionNotFound(summary.name))
     }
 
     fn return_type(
@@ -672,10 +672,10 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
     }
 
     fn wildcard_expr() -> ScalarExpression {
-        ScalarExpression::Constant(Arc::new(DataValue::Utf8 {
+        ScalarExpression::Constant(DataValue::Utf8 {
             value: Some("*".to_string()),
             ty: Utf8Type::Variable(None),
             unit: CharLengthUnits::Characters,
-        }))
+        })
     }
 }

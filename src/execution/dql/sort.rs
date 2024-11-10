@@ -307,96 +307,96 @@ mod test {
         let schema = Arc::new(vec![ColumnRef::from(ColumnCatalog::new(
             "c1".to_string(),
             true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+            ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
         ))]);
         let tuples = NullableVec(vec![
             Some((
                 0_usize,
                 Tuple {
                     id: None,
-                    values: vec![Arc::new(DataValue::Int32(None))],
+                    values: vec![DataValue::Int32(None)],
                 },
             )),
             Some((
                 1_usize,
                 Tuple {
                     id: None,
-                    values: vec![Arc::new(DataValue::Int32(Some(0)))],
+                    values: vec![DataValue::Int32(Some(0))],
                 },
             )),
             Some((
                 2_usize,
                 Tuple {
                     id: None,
-                    values: vec![Arc::new(DataValue::Int32(Some(1)))],
+                    values: vec![DataValue::Int32(Some(1))],
                 },
             )),
         ]);
 
         let fn_asc_and_nulls_last_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(Some(0)))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(Some(0))])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(Some(1)))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(Some(1))])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(None))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(None)])
             } else {
                 unreachable!()
             }
         };
         let fn_desc_and_nulls_last_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(Some(1)))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(Some(1))])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(Some(0)))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(Some(0))])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(None))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(None)])
             } else {
                 unreachable!()
             }
         };
         let fn_asc_and_nulls_first_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(None))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(None)])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(Some(0)))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(Some(0))])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(Some(1)))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(Some(1))])
             } else {
                 unreachable!()
             }
         };
         let fn_desc_and_nulls_first_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(None))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(None)])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(Some(1)))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(Some(1))])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                debug_assert_eq!(tuple.values, vec![Arc::new(DataValue::Int32(Some(0)))])
+                debug_assert_eq!(tuple.values, vec![DataValue::Int32(Some(0))])
             } else {
                 unreachable!()
             }
@@ -476,12 +476,12 @@ mod test {
             ColumnRef::from(ColumnCatalog::new(
                 "c1".to_string(),
                 true,
-                ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
             )),
             ColumnRef::from(ColumnCatalog::new(
                 "c2".to_string(),
                 true,
-                ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
             )),
         ]);
         let tuples = NullableVec(vec![
@@ -489,60 +489,42 @@ mod test {
                 0_usize,
                 Tuple {
                     id: None,
-                    values: vec![
-                        Arc::new(DataValue::Int32(None)),
-                        Arc::new(DataValue::Int32(None)),
-                    ],
+                    values: vec![DataValue::Int32(None), DataValue::Int32(None)],
                 },
             )),
             Some((
                 1_usize,
                 Tuple {
                     id: None,
-                    values: vec![
-                        Arc::new(DataValue::Int32(Some(0))),
-                        Arc::new(DataValue::Int32(None)),
-                    ],
+                    values: vec![DataValue::Int32(Some(0)), DataValue::Int32(None)],
                 },
             )),
             Some((
                 2_usize,
                 Tuple {
                     id: None,
-                    values: vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(None)),
-                    ],
+                    values: vec![DataValue::Int32(Some(1)), DataValue::Int32(None)],
                 },
             )),
             Some((
                 3_usize,
                 Tuple {
                     id: None,
-                    values: vec![
-                        Arc::new(DataValue::Int32(None)),
-                        Arc::new(DataValue::Int32(Some(0))),
-                    ],
+                    values: vec![DataValue::Int32(None), DataValue::Int32(Some(0))],
                 },
             )),
             Some((
                 4_usize,
                 Tuple {
                     id: None,
-                    values: vec![
-                        Arc::new(DataValue::Int32(Some(0))),
-                        Arc::new(DataValue::Int32(Some(0))),
-                    ],
+                    values: vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))],
                 },
             )),
             Some((
                 5_usize,
                 Tuple {
                     id: None,
-                    values: vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(0))),
-                    ],
+                    values: vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))],
                 },
             )),
         ]);
@@ -551,10 +533,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(None)),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(None), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -562,10 +541,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(None)),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(None), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -573,10 +549,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(0))),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(Some(0)), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -584,10 +557,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(0))),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -595,10 +565,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(1))),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(Some(1)), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -606,10 +573,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(1))),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -620,10 +584,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(0))),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(Some(0)), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -631,10 +592,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(0))),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -642,10 +600,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(1))),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(Some(1)), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -653,10 +608,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(1))),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -664,10 +616,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(None)),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(None), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -675,10 +624,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(None)),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(None), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -689,10 +635,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(None)),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(None), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -700,10 +643,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(None)),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(None), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -711,10 +651,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(1))),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(Some(1)), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -722,10 +659,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(1))),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -733,10 +667,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(0))),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(Some(0)), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -744,10 +675,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(0))),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -758,10 +686,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(1))),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(Some(1)), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -769,10 +694,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(1))),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -780,10 +702,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(0))),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(Some(0)), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -791,10 +710,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(Some(0))),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()
@@ -802,10 +718,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(None)),
-                            Arc::new(DataValue::Int32(None))
-                        ]
+                        vec![DataValue::Int32(None), DataValue::Int32(None)]
                     )
                 } else {
                     unreachable!()
@@ -813,10 +726,7 @@ mod test {
                 if let Some(tuple) = iter.next() {
                     debug_assert_eq!(
                         tuple.values,
-                        vec![
-                            Arc::new(DataValue::Int32(None)),
-                            Arc::new(DataValue::Int32(Some(0)))
-                        ]
+                        vec![DataValue::Int32(None), DataValue::Int32(Some(0))]
                     )
                 } else {
                     unreachable!()

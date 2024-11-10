@@ -8,7 +8,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{SchemaRef, Tuple};
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use ahash::HashMap;
 use itertools::Itertools;
 use std::ops::{Coroutine, CoroutineState};
@@ -78,7 +78,7 @@ pub(crate) struct HashAggStatus {
     groupby_exprs: Vec<ScalarExpression>,
 
     group_columns: Vec<ColumnRef>,
-    group_hash_accs: HashMap<Vec<ValueRef>, Vec<Box<dyn Accumulator>>>,
+    group_hash_accs: HashMap<Vec<DataValue>, Vec<Box<dyn Accumulator>>>,
 }
 
 impl HashAggStatus {
@@ -109,7 +109,7 @@ impl HashAggStatus {
         }
 
         // 2.1 evaluate agg exprs and collect the result values for later accumulators.
-        let values: Vec<ValueRef> = self
+        let values: Vec<DataValue> = self
             .agg_calls
             .iter()
             .map(|expr| {
@@ -121,7 +121,7 @@ impl HashAggStatus {
             })
             .try_collect()?;
 
-        let group_keys: Vec<ValueRef> = self
+        let group_keys: Vec<DataValue> = self
             .groupby_exprs
             .iter()
             .map(|expr| expr.eval(&tuple, &self.schema_ref))
@@ -145,7 +145,7 @@ impl HashAggStatus {
             .drain()
             .map(|(group_keys, accs)| {
                 // Tips: Accumulator First
-                let values: Vec<ValueRef> = accs
+                let values: Vec<DataValue> = accs
                     .iter()
                     .map(|acc| acc.evaluate())
                     .chain(group_keys.into_iter().map(Ok))
@@ -190,7 +190,7 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path()).unwrap();
         let transaction = storage.transaction()?;
-        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None)?;
+        let desc = ColumnDesc::new(LogicalType::Integer, None, false, None)?;
 
         let t1_schema = Arc::new(vec![
             ColumnRef::from(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
@@ -213,24 +213,24 @@ mod test {
             operator: Operator::Values(ValuesOperator {
                 rows: vec![
                     vec![
-                        Arc::new(DataValue::Int32(Some(0))),
-                        Arc::new(DataValue::Int32(Some(2))),
-                        Arc::new(DataValue::Int32(Some(4))),
+                        DataValue::Int32(Some(0)),
+                        DataValue::Int32(Some(2)),
+                        DataValue::Int32(Some(4)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(3))),
-                        Arc::new(DataValue::Int32(Some(5))),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(3)),
+                        DataValue::Int32(Some(5)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(0))),
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(2))),
+                        DataValue::Int32(Some(0)),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(2)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(2))),
-                        Arc::new(DataValue::Int32(Some(3))),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(2)),
+                        DataValue::Int32(Some(3)),
                     ],
                 ],
                 schema_ref: t1_schema.clone(),

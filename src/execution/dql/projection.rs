@@ -7,7 +7,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::Tuple;
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
@@ -52,7 +52,7 @@ impl Projection {
         tuple: &Tuple,
         exprs: &[ScalarExpression],
         schmea: &[ColumnRef],
-    ) -> Result<Vec<ValueRef>, DatabaseError> {
+    ) -> Result<Vec<DataValue>, DatabaseError> {
         let mut values = Vec::with_capacity(exprs.len());
 
         for expr in exprs.iter() {

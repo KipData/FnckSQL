@@ -47,7 +47,8 @@ impl<T: Transaction> Binder<'_, '_, T> {
         }
         let mut columns: Vec<ColumnCatalog> = columns
             .iter()
-            .map(|col| self.bind_column(col))
+            .enumerate()
+            .map(|(i, col)| self.bind_column(col, Some(i)))
             .try_collect()?;
         for constraint in constraints {
             match constraint {
@@ -56,15 +57,19 @@ impl<T: Transaction> Binder<'_, '_, T> {
                     is_primary,
                     ..
                 } => {
-                    for column_name in column_names.iter().map(|ident| ident.value.to_lowercase()) {
+                    for (i, column_name) in column_names
+                        .iter()
+                        .map(|ident| ident.value.to_lowercase())
+                        .enumerate()
+                    {
                         if let Some(column) = columns
                             .iter_mut()
                             .find(|column| column.name() == column_name)
                         {
                             if *is_primary {
-                                column.desc_mut().is_primary = true;
+                                column.desc_mut().set_primary(Some(i));
                             } else {
-                                column.desc_mut().is_unique = true;
+                                column.desc_mut().set_unique(true);
                             }
                         }
                     }
@@ -73,9 +78,9 @@ impl<T: Transaction> Binder<'_, '_, T> {
             }
         }
 
-        if columns.iter().filter(|col| col.desc().is_primary).count() != 1 {
+        if columns.iter().filter(|col| col.desc().is_primary()).count() == 0 {
             return Err(DatabaseError::InvalidTable(
-                "The primary key field must exist and have at least one".to_string(),
+                "the primary key field must exist and have at least one".to_string(),
             ));
         }
 
@@ -89,11 +94,15 @@ impl<T: Transaction> Binder<'_, '_, T> {
         ))
     }
 
-    pub fn bind_column(&mut self, column_def: &ColumnDef) -> Result<ColumnCatalog, DatabaseError> {
+    pub fn bind_column(
+        &mut self,
+        column_def: &ColumnDef,
+        column_index: Option<usize>,
+    ) -> Result<ColumnCatalog, DatabaseError> {
         let column_name = column_def.name.value.to_lowercase();
         let mut column_desc = ColumnDesc::new(
             LogicalType::try_from(column_def.data_type.clone())?,
-            false,
+            None,
             false,
             None,
         )?;
@@ -106,12 +115,12 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 ColumnOption::NotNull => nullable = false,
                 ColumnOption::Unique { is_primary, .. } => {
                     if *is_primary {
-                        column_desc.is_primary = true;
+                        column_desc.set_primary(column_index);
                         nullable = false;
                         // Skip other options when using primary key
                         break;
                     } else {
-                        column_desc.is_unique = true;
+                        column_desc.set_unique(true);
                     }
                 }
                 ColumnOption::Default(expr) => {
@@ -125,7 +134,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                     if expr.return_type() != column_desc.column_datatype {
                         expr = ScalarExpression::TypeCast {
                             expr: Box::new(expr),
-                            ty: column_desc.column_datatype,
+                            ty: column_desc.column_datatype.clone(),
                         }
                     }
                     column_desc.default = Some(expr);
@@ -184,7 +193,7 @@ mod tests {
                 debug_assert_eq!(op.columns[0].nullable(), false);
                 debug_assert_eq!(
                     op.columns[0].desc(),
-                    &ColumnDesc::new(LogicalType::Integer, true, false, None)?
+                    &ColumnDesc::new(LogicalType::Integer, Some(0), false, None)?
                 );
                 debug_assert_eq!(op.columns[1].name(), "name");
                 debug_assert_eq!(op.columns[1].nullable(), true);
@@ -192,7 +201,7 @@ mod tests {
                     op.columns[1].desc(),
                     &ColumnDesc::new(
                         LogicalType::Varchar(Some(10), CharLengthUnits::Characters),
-                        false,
+                        None,
                         false,
                         None
                     )?

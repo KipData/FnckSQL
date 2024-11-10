@@ -44,4 +44,16 @@ select * from t
 4 4 9 233
 
 statement ok
+update t set v3 = v1 + 1
+
+query IIII rowsort
+select * from t
+----
+0 1 9 2
+1 1 9 2
+2 2 9 3
+3 3 9 4
+4 4 9 5
+
+statement ok
 drop table t

@@ -10,7 +10,8 @@ use crate::serdes::ReferenceTables;
 use crate::storage::table_codec::TableCodec;
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::tuple_builder::TupleIdBuilder;
+use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use crate::utils::lru::SharedLruCache;
 use bytes::Bytes;
@@ -58,10 +59,11 @@ pub trait Transaction: Sized {
         let table = self
             .table(table_cache, table_name.clone())?
             .ok_or(DatabaseError::TableNotFound)?;
+        let id_builder = TupleIdBuilder::new(table.schema_ref());
         let table_types = table.types();
         if columns.is_empty() {
-            let (i, column) = table.primary_key()?;
-            columns.push((i, column.clone()));
+            let (i, column) = &table.primary_keys()[0];
+            columns.push((*i, column.clone()));
         }
         let mut tuple_columns = Vec::with_capacity(columns.len());
         let mut projections = Vec::with_capacity(columns.len());
@@ -78,6 +80,7 @@ pub trait Transaction: Sized {
             limit: bounds.1,
             table_types,
             tuple_columns: Arc::new(tuple_columns),
+            id_builder,
             projections,
             iter,
         })
@@ -98,6 +101,7 @@ pub trait Transaction: Sized {
         let table = self
             .table(table_cache, table_name.clone())?
             .ok_or(DatabaseError::TableNotFound)?;
+        let id_builder = TupleIdBuilder::new(table.schema_ref());
         let table_types = table.types();
         let table_name = table.name.as_str();
         let offset = offset_option.unwrap_or(0);
@@ -113,6 +117,7 @@ pub trait Transaction: Sized {
         Ok(IndexIter {
             offset,
             limit: limit_option,
+            id_builder,
             params: IndexImplParams {
                 tuple_schema_ref: Arc::new(tuple_columns),
                 projections,
@@ -153,7 +158,7 @@ pub trait Transaction: Sized {
         index: Index,
         tuple_id: &TupleId,
     ) -> Result<(), DatabaseError> {
-        if matches!(index.ty, IndexType::PrimaryKey) {
+        if matches!(index.ty, IndexType::PrimaryKey { .. }) {
             return Ok(());
         }
         let (key, value) = TableCodec::encode_index(table_name, &index, tuple_id)?;
@@ -178,7 +183,7 @@ pub trait Transaction: Sized {
         index: &Index,
         tuple_id: Option<&TupleId>,
     ) -> Result<(), DatabaseError> {
-        if matches!(index.ty, IndexType::PrimaryKey) {
+        if matches!(index.ty, IndexType::PrimaryKey { .. }) {
             return Ok(());
         }
         self.remove(&TableCodec::encode_index_key(table_name, index, tuple_id)?)?;
@@ -234,7 +239,7 @@ pub trait Transaction: Sized {
             let mut generator = Generator::new();
             let col_id = table.add_column(column.clone(), &mut generator)?;
 
-            if column.desc().is_unique {
+            if column.desc().is_unique() {
                 let meta_ref = table.add_index_meta(
                     format!("uk_{}", column.name()),
                     vec![col_id],
@@ -313,9 +318,10 @@ pub trait Transaction: Sized {
         if_not_exists: bool,
     ) -> Result<TableName, DatabaseError> {
         let mut table_catalog = TableCatalog::new(table_name.clone(), columns)?;
-        let (_, column) = table_catalog.primary_key()?;
 
-        TableCodec::check_primary_key_type(column.datatype())?;
+        for (_, column) in table_catalog.primary_keys() {
+            TableCodec::check_primary_key_type(column.datatype())?;
+        }
 
         let (table_key, value) =
             TableCodec::encode_root_table(&TableMeta::empty(table_name.clone()))?;
@@ -531,32 +537,36 @@ pub trait Transaction: Sized {
         table: &mut TableCatalog,
     ) -> Result<(), DatabaseError> {
         let table_name = table.name.clone();
-        let index_column = table
-            .columns()
-            .filter(|column| column.desc().is_primary || column.desc().is_unique)
-            .map(|column| (column.id().unwrap(), column.clone()))
-            .collect_vec();
+        let mut primary_keys = Vec::new();
 
-        for (col_id, col) in index_column {
-            let is_primary = col.desc().is_primary;
-            let index_ty = if is_primary {
-                IndexType::PrimaryKey
-            } else if col.desc().is_unique {
+        // FIXME: no clone
+        for col in table.columns().cloned().collect_vec() {
+            let col_id = col.id().unwrap();
+            let index_ty = if let Some(i) = col.desc().primary() {
+                primary_keys.push((i, col_id));
+                continue;
+            } else if col.desc().is_unique() {
                 IndexType::Unique
             } else {
                 continue;
             };
-            // FIXME: composite indexes may exist on future
-            let prefix = if is_primary { "pk" } else { "uk" };
-
-            let meta_ref = table.add_index_meta(
-                format!("{}_{}", prefix, col.name()),
-                vec![col_id],
-                index_ty,
-            )?;
+            let meta_ref =
+                table.add_index_meta(format!("uk_{}_index", col.name()), vec![col_id], index_ty)?;
             let (key, value) = TableCodec::encode_index_meta(&table_name, meta_ref)?;
             self.set(key, value)?;
         }
+        let primary_keys = table
+            .primary_keys()
+            .iter()
+            .map(|(_, column)| column.id().unwrap())
+            .collect_vec();
+        let pk_index_ty = IndexType::PrimaryKey {
+            is_multiple: primary_keys.len() != 1,
+        };
+        let meta_ref = table.add_index_meta("pk_index".to_string(), primary_keys, pk_index_ty)?;
+        let (key, value) = TableCodec::encode_index_meta(&table_name, meta_ref)?;
+        self.set(key, value)?;
+
         Ok(())
     }
 
@@ -579,19 +589,21 @@ trait IndexImpl<T: Transaction> {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError>;
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError>;
 
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         is_upper: bool,
     ) -> Result<Vec<u8>, DatabaseError>;
 }
@@ -606,7 +618,7 @@ enum IndexImplEnum {
 impl IndexImplEnum {
     fn instance(index_type: IndexType) -> IndexImplEnum {
         match index_type {
-            IndexType::PrimaryKey => IndexImplEnum::PrimaryKey(PrimaryKeyIndexImpl),
+            IndexType::PrimaryKey { .. } => IndexImplEnum::PrimaryKey(PrimaryKeyIndexImpl),
             IndexType::Unique => IndexImplEnum::Unique(UniqueIndexImpl),
             IndexType::Normal => IndexImplEnum::Normal(NormalIndexImpl),
             IndexType::Composite => IndexImplEnum::Composite(CompositeIndexImpl),
@@ -630,12 +642,32 @@ struct IndexImplParams<'a, T: Transaction> {
 }
 
 impl<T: Transaction> IndexImplParams<'_, T> {
-    fn get_tuple_by_id(&self, tuple_id: &TupleId) -> Result<Option<Tuple>, DatabaseError> {
+    pub(crate) fn pk_ty(&self) -> &LogicalType {
+        &self.index_meta.pk_ty
+    }
+
+    pub(crate) fn try_cast(&self, mut val: DataValue) -> Result<DataValue, DatabaseError> {
+        let pk_ty = self.pk_ty();
+
+        if matches!(self.index_meta.ty, IndexType::PrimaryKey { .. })
+            && &val.logical_type() != pk_ty
+        {
+            val = val.cast(pk_ty)?;
+        }
+        Ok(val)
+    }
+
+    fn get_tuple_by_id(
+        &self,
+        id_builder: &mut TupleIdBuilder,
+        tuple_id: &TupleId,
+    ) -> Result<Option<Tuple>, DatabaseError> {
         let key = TableCodec::encode_tuple_key(self.table_name, tuple_id)?;
 
         Ok(self.tx.get(&key)?.map(|bytes| {
             TableCodec::decode_tuple(
                 &self.table_types,
+                id_builder,
                 &self.projections,
                 &self.tuple_schema_ref,
                 &bytes,
@@ -645,7 +677,7 @@ impl<T: Transaction> IndexImplParams<'_, T> {
 }
 
 enum IndexResult<'a, T: Transaction + 'a> {
-    Tuple(Tuple),
+    Tuple(Option<Tuple>),
     Scope(T::IterType<'a>),
 }
 
@@ -653,33 +685,35 @@ impl<T: Transaction> IndexImpl<T> for IndexImplEnum {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
         match self {
-            IndexImplEnum::PrimaryKey(inner) => inner.index_lookup(bytes, params),
-            IndexImplEnum::Unique(inner) => inner.index_lookup(bytes, params),
-            IndexImplEnum::Normal(inner) => inner.index_lookup(bytes, params),
-            IndexImplEnum::Composite(inner) => inner.index_lookup(bytes, params),
+            IndexImplEnum::PrimaryKey(inner) => inner.index_lookup(bytes, id_builder, params),
+            IndexImplEnum::Unique(inner) => inner.index_lookup(bytes, id_builder, params),
+            IndexImplEnum::Normal(inner) => inner.index_lookup(bytes, id_builder, params),
+            IndexImplEnum::Composite(inner) => inner.index_lookup(bytes, id_builder, params),
         }
     }
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         match self {
-            IndexImplEnum::PrimaryKey(inner) => inner.eq_to_res(value, params),
-            IndexImplEnum::Unique(inner) => inner.eq_to_res(value, params),
-            IndexImplEnum::Normal(inner) => inner.eq_to_res(value, params),
-            IndexImplEnum::Composite(inner) => inner.eq_to_res(value, params),
+            IndexImplEnum::PrimaryKey(inner) => inner.eq_to_res(value, id_builder, params),
+            IndexImplEnum::Unique(inner) => inner.eq_to_res(value, id_builder, params),
+            IndexImplEnum::Normal(inner) => inner.eq_to_res(value, id_builder, params),
+            IndexImplEnum::Composite(inner) => inner.eq_to_res(value, id_builder, params),
         }
     }
 
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         is_upper: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
         match self {
@@ -695,10 +729,12 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
         Ok(TableCodec::decode_tuple(
             &params.table_types,
+            id_builder,
             &params.projections,
             &params.tuple_schema_ref,
             bytes,
@@ -707,28 +743,29 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
-        let bytes = params
+        let tuple = params
             .tx
             .get(&TableCodec::encode_tuple_key(params.table_name, value)?)?
-            .ok_or_else(|| {
-                DatabaseError::NotFound("secondary index", format!("tuple_id -> {}", value))
-            })?;
-        let tuple = TableCodec::decode_tuple(
-            &params.table_types,
-            &params.projections,
-            &params.tuple_schema_ref,
-            &bytes,
-        );
+            .map(|bytes| {
+                TableCodec::decode_tuple(
+                    &params.table_types,
+                    id_builder,
+                    &params.projections,
+                    &params.tuple_schema_ref,
+                    &bytes,
+                )
+            });
         Ok(IndexResult::Tuple(tuple))
     }
 
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        val: &ValueRef,
+        val: &DataValue,
         _: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
         TableCodec::encode_tuple_key(params.table_name, val)
@@ -737,45 +774,45 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
 
 fn secondary_index_lookup<T: Transaction>(
     bytes: &Bytes,
+    id_builder: &mut TupleIdBuilder,
     params: &IndexImplParams<T>,
 ) -> Result<Tuple, DatabaseError> {
-    let tuple_id = TableCodec::decode_index(bytes, &params.index_meta.pk_ty);
+    let tuple_id = TableCodec::decode_index(bytes, &params.index_meta.pk_ty)?;
     params
-        .get_tuple_by_id(&tuple_id)?
-        .ok_or_else(|| DatabaseError::NotFound("index's tuple_id", tuple_id.to_string()))
+        .get_tuple_by_id(id_builder, &tuple_id)?
+        .ok_or(DatabaseError::TupleIdNotFound(tuple_id))
 }
 
 impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
-        secondary_index_lookup(bytes, params)
+        secondary_index_lookup(bytes, id_builder, params)
     }
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
-        let bytes = params
-            .tx
-            .get(&self.bound_key(params, value, false)?)?
-            .ok_or_else(|| {
-                DatabaseError::NotFound("secondary index", format!("index_value -> {}", value))
-            })?;
-        let tuple_id = TableCodec::decode_index(&bytes, &params.index_meta.pk_ty);
-        let tuple = params.get_tuple_by_id(&tuple_id)?.ok_or_else(|| {
-            DatabaseError::NotFound("secondary index", format!("tuple_id -> {}", value))
-        })?;
-        Ok(IndexResult::Tuple(tuple))
+        let Some(bytes) = params.tx.get(&self.bound_key(params, value, false)?)? else {
+            return Ok(IndexResult::Tuple(None));
+        };
+        let tuple_id = TableCodec::decode_index(&bytes, &params.index_meta.pk_ty)?;
+        let tuple = params
+            .get_tuple_by_id(id_builder, &tuple_id)?
+            .ok_or(DatabaseError::TupleIdNotFound(tuple_id))?;
+        Ok(IndexResult::Tuple(Some(tuple)))
     }
 
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         _: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
         let index = Index::new(
@@ -792,14 +829,16 @@ impl<T: Transaction> IndexImpl<T> for NormalIndexImpl {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
-        secondary_index_lookup(bytes, params)
+        secondary_index_lookup(bytes, id_builder, params)
     }
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
+        _: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let min = self.bound_key(params, value, false)?;
@@ -815,7 +854,7 @@ impl<T: Transaction> IndexImpl<T> for NormalIndexImpl {
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         is_upper: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
         let index = Index::new(
@@ -832,14 +871,16 @@ impl<T: Transaction> IndexImpl<T> for CompositeIndexImpl {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
-        secondary_index_lookup(bytes, params)
+        secondary_index_lookup(bytes, id_builder, params)
     }
 
     fn eq_to_res<'a>(
         &self,
-        value: &ValueRef,
+        value: &DataValue,
+        _: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let min = self.bound_key(params, value, false)?;
@@ -855,10 +896,10 @@ impl<T: Transaction> IndexImpl<T> for CompositeIndexImpl {
     fn bound_key(
         &self,
         params: &IndexImplParams<T>,
-        value: &ValueRef,
+        value: &DataValue,
         is_upper: bool,
     ) -> Result<Vec<u8>, DatabaseError> {
-        let values = if let DataValue::Tuple(Some(values)) = value.as_ref() {
+        let values = if let DataValue::Tuple(Some(values)) = &value {
             values.as_slice()
         } else {
             slice::from_ref(value)
@@ -874,6 +915,7 @@ pub struct TupleIter<'a, T: Transaction + 'a> {
     limit: Option<usize>,
     table_types: Vec<LogicalType>,
     tuple_columns: Arc<Vec<ColumnRef>>,
+    id_builder: TupleIdBuilder,
     projections: Vec<usize>,
     iter: T::IterType<'a>,
 }
@@ -895,6 +937,7 @@ impl<'a, T: Transaction + 'a> Iter for TupleIter<'a, T> {
         while let Some((_, value)) = self.iter.try_next()? {
             let tuple = TableCodec::decode_tuple(
                 &self.table_types,
+                &mut self.id_builder,
                 &self.projections,
                 &self.tuple_columns,
                 &value,
@@ -915,6 +958,7 @@ pub struct IndexIter<'a, T: Transaction> {
     offset: usize,
     limit: Option<usize>,
 
+    id_builder: TupleIdBuilder,
     params: IndexImplParams<'a, T>,
     inner: IndexImplEnum,
     // for buffering data
@@ -960,7 +1004,9 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                     continue;
                 }
                 Self::limit_sub(&mut self.limit);
-                let tuple = self.inner.index_lookup(&bytes, &self.params)?;
+                let tuple = self
+                    .inner
+                    .index_lookup(&bytes, &mut self.id_builder, &self.params)?;
 
                 return Ok(Some(tuple));
             }
@@ -973,26 +1019,35 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                     let table_name = self.params.table_name;
                     let index_meta = &self.params.index_meta;
                     let bound_encode =
-                        |bound: Bound<ValueRef>, is_upper: bool| -> Result<_, DatabaseError> {
+                        |bound: Bound<DataValue>, is_upper: bool| -> Result<_, DatabaseError> {
                             match bound {
-                                Bound::Included(val) => Ok(Bound::Included(self.inner.bound_key(
-                                    &self.params,
-                                    &val,
-                                    is_upper,
-                                )?)),
-                                Bound::Excluded(val) => Ok(Bound::Excluded(self.inner.bound_key(
-                                    &self.params,
-                                    &val,
-                                    is_upper,
-                                )?)),
+                                Bound::Included(mut val) => {
+                                    val = self.params.try_cast(val)?;
+
+                                    Ok(Bound::Included(self.inner.bound_key(
+                                        &self.params,
+                                        &val,
+                                        is_upper,
+                                    )?))
+                                }
+                                Bound::Excluded(mut val) => {
+                                    val = self.params.try_cast(val)?;
+
+                                    Ok(Bound::Excluded(self.inner.bound_key(
+                                        &self.params,
+                                        &val,
+                                        is_upper,
+                                    )?))
+                                }
                                 Bound::Unbounded => Ok(Bound::Unbounded),
                             }
                         };
-                    let (bound_min, bound_max) = if matches!(index_meta.ty, IndexType::PrimaryKey) {
-                        TableCodec::tuple_bound(table_name)
-                    } else {
-                        TableCodec::index_bound(table_name, &index_meta.id)?
-                    };
+                    let (bound_min, bound_max) =
+                        if matches!(index_meta.ty, IndexType::PrimaryKey { .. }) {
+                            TableCodec::tuple_bound(table_name)
+                        } else {
+                            TableCodec::index_bound(table_name, &index_meta.id)?
+                        };
                     let check_bound = |value: &mut Bound<Vec<u8>>, bound: Vec<u8>| {
                         if matches!(value, Bound::Unbounded) {
                             let _ = mem::replace(value, Bound::Included(bound));
@@ -1011,16 +1066,23 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                     )?;
                     self.scope_iter = Some(iter);
                 }
-                Range::Eq(val) => match self.inner.eq_to_res(&val, &self.params)? {
-                    IndexResult::Tuple(tuple) => {
-                        if Self::offset_move(&mut self.offset) {
-                            return self.next_tuple();
+                Range::Eq(mut val) => {
+                    val = self.params.try_cast(val)?;
+
+                    match self
+                        .inner
+                        .eq_to_res(&val, &mut self.id_builder, &self.params)?
+                    {
+                        IndexResult::Tuple(tuple) => {
+                            if Self::offset_move(&mut self.offset) {
+                                return self.next_tuple();
+                            }
+                            Self::limit_sub(&mut self.limit);
+                            return Ok(tuple);
                         }
-                        Self::limit_sub(&mut self.limit);
-                        return Ok(Some(tuple));
+                        IndexResult::Scope(iter) => self.scope_iter = Some(iter),
                     }
-                    IndexResult::Scope(iter) => self.scope_iter = Some(iter),
-                },
+                }
                 _ => (),
             }
         }
@@ -1067,7 +1129,7 @@ mod test {
                 ColumnRef::from(ColumnCatalog::new(
                     "c1".to_string(),
                     false,
-                    ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
+                    ColumnDesc::new(LogicalType::Integer, Some(0), false, None).unwrap(),
                 )),
             ),
             (
@@ -1075,7 +1137,7 @@ mod test {
                 ColumnRef::from(ColumnCatalog::new(
                     "c2".to_string(),
                     false,
-                    ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+                    ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
                 )),
             ),
             (
@@ -1083,7 +1145,7 @@ mod test {
                 ColumnRef::from(ColumnCatalog::new(
                     "c3".to_string(),
                     false,
-                    ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+                    ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
                 )),
             ),
         ]
@@ -1091,27 +1153,27 @@ mod test {
     fn build_tuples() -> Vec<Tuple> {
         vec![
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(0)))),
+                id: Some(DataValue::Int32(Some(0))),
                 values: vec![
-                    Arc::new(DataValue::Int32(Some(0))),
-                    Arc::new(DataValue::Boolean(Some(true))),
-                    Arc::new(DataValue::Int32(Some(0))),
+                    DataValue::Int32(Some(0)),
+                    DataValue::Boolean(Some(true)),
+                    DataValue::Int32(Some(0)),
                 ],
             },
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(1)))),
+                id: Some(DataValue::Int32(Some(1))),
                 values: vec![
-                    Arc::new(DataValue::Int32(Some(1))),
-                    Arc::new(DataValue::Boolean(Some(true))),
-                    Arc::new(DataValue::Int32(Some(1))),
+                    DataValue::Int32(Some(1)),
+                    DataValue::Boolean(Some(true)),
+                    DataValue::Int32(Some(1)),
                 ],
             },
             Tuple {
-                id: Some(Arc::new(DataValue::Int32(Some(2)))),
+                id: Some(DataValue::Int32(Some(2))),
                 values: vec![
-                    Arc::new(DataValue::Int32(Some(2))),
-                    Arc::new(DataValue::Boolean(Some(false))),
-                    Arc::new(DataValue::Int32(Some(0))),
+                    DataValue::Int32(Some(2)),
+                    DataValue::Boolean(Some(false)),
+                    DataValue::Int32(Some(0)),
                 ],
             },
         ]
@@ -1147,8 +1209,11 @@ mod test {
                 Arc::new("t1".to_string())
             );
             assert_eq!(primary_key_index_meta.pk_ty, LogicalType::Integer);
-            assert_eq!(primary_key_index_meta.name, "pk_c1".to_string());
-            assert_eq!(primary_key_index_meta.ty, IndexType::PrimaryKey);
+            assert_eq!(primary_key_index_meta.name, "pk_index".to_string());
+            assert_eq!(
+                primary_key_index_meta.ty,
+                IndexType::PrimaryKey { is_multiple: false }
+            );
 
             let mut column_iter = table.columns();
             let c1_column = column_iter.next().unwrap();
@@ -1166,7 +1231,7 @@ mod test {
             );
             assert_eq!(
                 c1_column.desc(),
-                &ColumnDesc::new(LogicalType::Integer, true, false, None)?
+                &ColumnDesc::new(LogicalType::Integer, Some(0), false, None)?
             );
 
             let c2_column = column_iter.next().unwrap();
@@ -1184,7 +1249,7 @@ mod test {
             );
             assert_eq!(
                 c2_column.desc(),
-                &ColumnDesc::new(LogicalType::Boolean, false, false, None)?
+                &ColumnDesc::new(LogicalType::Boolean, None, false, None)?
             );
 
             let c3_column = column_iter.next().unwrap();
@@ -1202,7 +1267,7 @@ mod test {
             );
             assert_eq!(
                 c3_column.desc(),
-                &ColumnDesc::new(LogicalType::Integer, false, false, None)?
+                &ColumnDesc::new(LogicalType::Integer, None, false, None)?
             );
 
             Ok(())
@@ -1494,7 +1559,7 @@ mod test {
         let new_column = ColumnCatalog::new(
             "c4".to_string(),
             true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None)?,
+            ColumnDesc::new(LogicalType::Integer, None, false, None)?,
         );
         let new_column_id =
             transaction.add_column(&table_cache, &table_name, &new_column, false)?;
@@ -1516,7 +1581,7 @@ mod test {
             let mut new_column = ColumnCatalog::new(
                 "c4".to_string(),
                 true,
-                ColumnDesc::new(LogicalType::Integer, false, false, None)?,
+                ColumnDesc::new(LogicalType::Integer, None, false, None)?,
             );
             new_column.summary_mut().relation = ColumnRelation::Table {
                 column_id: *table.get_column_id_by_name("c4").unwrap(),

@@ -12,7 +12,7 @@ use std::fmt::Formatter;
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct TableScanOperator {
     pub(crate) table_name: TableName,
-    pub(crate) primary_key: ColumnId,
+    pub(crate) primary_keys: Vec<ColumnId>,
     pub(crate) columns: Vec<(usize, ColumnRef)>,
     // Support push down limit.
     pub(crate) limit: Bounds,
@@ -24,18 +24,16 @@ pub struct TableScanOperator {
 
 impl TableScanOperator {
     pub fn build(table_name: TableName, table_catalog: &TableCatalog) -> LogicalPlan {
-        let mut primary_key_option = None;
+        let primary_keys = table_catalog
+            .primary_keys()
+            .iter()
+            .filter_map(|(_, column)| column.id())
+            .collect_vec();
         // Fill all Columns in TableCatalog by default
         let columns = table_catalog
             .columns()
             .enumerate()
-            .map(|(i, column)| {
-                if column.desc().is_primary {
-                    primary_key_option = column.id();
-                }
-
-                (i, column.clone())
-            })
+            .map(|(i, column)| (i, column.clone()))
             .collect_vec();
         let index_infos = table_catalog
             .indexes
@@ -50,7 +48,7 @@ impl TableScanOperator {
             Operator::TableScan(TableScanOperator {
                 index_infos,
                 table_name,
-                primary_key: primary_key_option.unwrap(),
+                primary_keys,
                 columns,
                 limit: (None, None),
             }),

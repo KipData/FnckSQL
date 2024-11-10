@@ -5,13 +5,13 @@ use crate::serdes::{ReferenceSerialization, ReferenceTables};
 use crate::storage::{TableCache, Transaction};
 use crate::types::index::{Index, IndexId, IndexMeta, IndexType};
 use crate::types::tuple::{Schema, Tuple, TupleId};
+use crate::types::tuple_builder::TupleIdBuilder;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use bytes::Bytes;
 use integer_encoding::FixedInt;
 use lazy_static::lazy_static;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
-use std::sync::Arc;
 
 const BOUND_MIN_TAG: u8 = 0;
 const BOUND_MAX_TAG: u8 = 1;
@@ -37,6 +37,27 @@ enum CodecType {
 }
 
 impl TableCodec {
+    pub fn check_primary_key(value: &DataValue, indentation: usize) -> Result<(), DatabaseError> {
+        if indentation > 1 {
+            return Err(DatabaseError::PrimaryKeyTooManyLayers);
+        }
+        if value.is_null() {
+            return Err(DatabaseError::NotNull);
+        }
+
+        if let DataValue::Tuple(Some(values)) = &value {
+            for value in values {
+                Self::check_primary_key(value, indentation + 1)?
+            }
+
+            return Ok(());
+        } else {
+            Self::check_primary_key_type(&value.logical_type())?;
+        }
+
+        Ok(())
+    }
+
     pub fn check_primary_key_type(ty: &LogicalType) -> Result<(), DatabaseError> {
         if !matches!(
             ty,
@@ -218,7 +239,7 @@ impl TableCodec {
         table_name: &str,
         tuple_id: &TupleId,
     ) -> Result<Vec<u8>, DatabaseError> {
-        Self::check_primary_key_type(&tuple_id.logical_type())?;
+        Self::check_primary_key(tuple_id, 0)?;
 
         let mut key_prefix = Self::key_prefix(CodecType::Tuple, table_name);
         key_prefix.push(BOUND_MIN_TAG);
@@ -230,11 +251,12 @@ impl TableCodec {
 
     pub fn decode_tuple(
         table_types: &[LogicalType],
+        id_builder: &mut TupleIdBuilder,
         projections: &[usize],
         schema: &Schema,
         bytes: &[u8],
     ) -> Tuple {
-        Tuple::deserialize_from(table_types, projections, schema, bytes)
+        Tuple::deserialize_from(table_types, id_builder, projections, schema, bytes)
     }
 
     /// Key: {TableName}{INDEX_META_TAG}{BOUND_MIN_TAG}{IndexID}
@@ -279,7 +301,8 @@ impl TableCodec {
     ) -> Result<(Bytes, Bytes), DatabaseError> {
         let key = TableCodec::encode_index_key(name, index, Some(tuple_id))?;
         let mut bytes = Vec::new();
-        tuple_id.to_raw(&mut bytes)?;
+
+        tuple_id.inner_encode(&mut bytes, &tuple_id.logical_type())?;
 
         Ok((Bytes::from(key), Bytes::from(bytes)))
     }
@@ -321,14 +344,17 @@ impl TableCodec {
 
         if let Some(tuple_id) = tuple_id {
             if matches!(index.ty, IndexType::Normal | IndexType::Composite) {
-                tuple_id.to_raw(&mut key_prefix)?;
+                tuple_id.inner_encode(&mut key_prefix, &tuple_id.logical_type())?;
             }
         }
         Ok(key_prefix)
     }
 
-    pub fn decode_index(bytes: &[u8], primary_key_ty: &LogicalType) -> TupleId {
-        Arc::new(DataValue::from_raw(bytes, primary_key_ty))
+    pub fn decode_index(
+        bytes: &[u8],
+        primary_key_ty: &LogicalType,
+    ) -> Result<TupleId, DatabaseError> {
+        DataValue::inner_decode(&mut Cursor::new(bytes), primary_key_ty)
     }
 
     /// Key: {TableName}{COLUMN_TAG}{BOUND_MIN_TAG}{ColumnId}
@@ -473,6 +499,7 @@ mod tests {
     use crate::storage::Storage;
     use crate::types::index::{Index, IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
+    use crate::types::tuple_builder::TupleIdBuilder;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use bytes::Bytes;
@@ -490,12 +517,12 @@ mod tests {
             ColumnCatalog::new(
                 "c1".into(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, Some(0), false, None).unwrap(),
             ),
             ColumnCatalog::new(
                 "c2".into(),
                 false,
-                ColumnDesc::new(LogicalType::Decimal(None, None), false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Decimal(None, None), None, false, None).unwrap(),
             ),
         ];
         TableCatalog::new(Arc::new("t1".to_string()), columns).unwrap()
@@ -506,10 +533,10 @@ mod tests {
         let table_catalog = build_table_codec();
 
         let tuple = Tuple {
-            id: Some(Arc::new(DataValue::Int32(Some(0)))),
+            id: Some(DataValue::Int32(Some(0))),
             values: vec![
-                Arc::new(DataValue::Int32(Some(0))),
-                Arc::new(DataValue::Decimal(Some(Decimal::new(1, 0)))),
+                DataValue::Int32(Some(0)),
+                DataValue::Decimal(Some(Decimal::new(1, 0))),
             ],
         };
         let (_, bytes) = TableCodec::encode_tuple(
@@ -518,9 +545,16 @@ mod tests {
             &[LogicalType::Integer, LogicalType::Decimal(None, None)],
         )?;
         let schema = table_catalog.schema_ref();
+        let mut id_builder = TupleIdBuilder::new(schema);
 
         debug_assert_eq!(
-            TableCodec::decode_tuple(&table_catalog.types(), &[0, 1], schema, &bytes),
+            TableCodec::decode_tuple(
+                &table_catalog.types(),
+                &mut id_builder,
+                &[0, 1],
+                schema,
+                &bytes
+            ),
             tuple
         );
 
@@ -557,7 +591,7 @@ mod tests {
             table_name: Arc::new("T1".to_string()),
             pk_ty: LogicalType::Integer,
             name: "index_1".to_string(),
-            ty: IndexType::PrimaryKey,
+            ty: IndexType::PrimaryKey { is_multiple: false },
         };
         let (_, bytes) = TableCodec::encode_index_meta(&"T1".to_string(), &index_meta)?;
 
@@ -573,12 +607,16 @@ mod tests {
     fn test_table_codec_index() -> Result<(), DatabaseError> {
         let table_catalog = build_table_codec();
         let value = Arc::new(DataValue::Int32(Some(0)));
-        let index = Index::new(0, slice::from_ref(&value), IndexType::PrimaryKey);
-        let tuple_id = Arc::new(DataValue::Int32(Some(0)));
+        let index = Index::new(
+            0,
+            slice::from_ref(&value),
+            IndexType::PrimaryKey { is_multiple: false },
+        );
+        let tuple_id = DataValue::Int32(Some(0));
         let (_, bytes) = TableCodec::encode_index(&table_catalog.name, &index, &tuple_id)?;
 
         debug_assert_eq!(
-            TableCodec::decode_index(&bytes, &tuple_id.logical_type()),
+            TableCodec::decode_index(&bytes, &tuple_id.logical_type())?,
             tuple_id
         );
 
@@ -590,7 +628,7 @@ mod tests {
         let mut col: ColumnCatalog = ColumnCatalog::new(
             "c2".to_string(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+            ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
         );
         col.summary_mut().relation = ColumnRelation::Table {
             column_id: Ulid::new(),
@@ -672,12 +710,7 @@ mod tests {
             let mut col = ColumnCatalog::new(
                 "".to_string(),
                 false,
-                ColumnDesc {
-                    column_datatype: LogicalType::Invalid,
-                    is_primary: false,
-                    is_unique: false,
-                    default: None,
-                },
+                ColumnDesc::new(LogicalType::SqlNull, None, false, None).unwrap(),
             );
 
             col.summary_mut().relation = ColumnRelation::Table {
@@ -729,8 +762,8 @@ mod tests {
                 column_ids: vec![],
                 table_name: Arc::new(table_name.to_string()),
                 pk_ty: LogicalType::Integer,
-                name: "".to_string(),
-                ty: IndexType::PrimaryKey,
+                name: format!("{}_index", index_id),
+                ty: IndexType::PrimaryKey { is_multiple: false },
             };
 
             let (key, _) =
@@ -772,7 +805,7 @@ mod tests {
         let column = ColumnCatalog::new(
             "".to_string(),
             false,
-            ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+            ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
         );
         let table_catalog = TableCatalog::new(Arc::new("T0".to_string()), vec![column]).unwrap();
 
@@ -781,7 +814,7 @@ mod tests {
             let index = Index::new(
                 index_id as u32,
                 slice::from_ref(&value),
-                IndexType::PrimaryKey,
+                IndexType::PrimaryKey { is_multiple: false },
             );
 
             TableCodec::encode_index_key(table_name, &index, None).unwrap()
@@ -837,7 +870,7 @@ mod tests {
             let index = Index::new(
                 index_id as u32,
                 slice::from_ref(&value),
-                IndexType::PrimaryKey,
+                IndexType::PrimaryKey { is_multiple: false },
             );
 
             TableCodec::encode_index_key(&table_name.to_string(), &index, None).unwrap()

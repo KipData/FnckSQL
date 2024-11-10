@@ -100,4 +100,17 @@ true
 statement ok
 drop table t2;
 
+statement ok
+create table t3_decimal(id int primary key, v1 decimal(5, 2));
 
+statement ok
+insert into t3_decimal (id, v1) values (0, 1);
+
+statement ok
+insert into t3_decimal (id, v1) values (1, 2.2);
+
+statement ok
+insert into t3_decimal (id, v1) values (2, -10);
+
+statement ok
+drop table t3_decimal;

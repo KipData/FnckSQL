@@ -206,7 +206,6 @@ mod tests {
     use crate::optimizer::core::cm_sketch::CountMinSketch;
     use crate::types::value::DataValue;
     use std::collections::Bound;
-    use std::sync::Arc;
 
     #[test]
     fn test_increment() {
@@ -236,7 +235,7 @@ mod tests {
         }
         debug_assert_eq!(
             cms.collect_count(&vec![
-                Range::Eq(Arc::new(DataValue::Int32(Some(300)))),
+                Range::Eq(DataValue::Int32(Some(300))),
                 Range::Scope {
                     min: Bound::Unbounded,
                     max: Bound::Unbounded,

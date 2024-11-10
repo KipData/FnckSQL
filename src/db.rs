@@ -342,17 +342,17 @@ pub(crate) mod test {
             ColumnCatalog::new(
                 "c1".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, true, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, Some(0), false, None).unwrap(),
             ),
             ColumnCatalog::new(
                 "c2".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Boolean, None, false, None).unwrap(),
             ),
             ColumnCatalog::new(
                 "c3".to_string(),
                 false,
-                ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+                ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
             ),
         ];
         let _ =
@@ -389,16 +389,14 @@ pub(crate) mod test {
             Arc::new(vec![ColumnRef::from(ColumnCatalog::new(
                 "current_date()".to_string(),
                 true,
-                ColumnDesc::new(LogicalType::Date, false, false, None).unwrap()
+                ColumnDesc::new(LogicalType::Date, None, false, None).unwrap()
             ))])
         );
         debug_assert_eq!(
             tuples,
             vec![Tuple {
                 id: None,
-                values: vec![Arc::new(DataValue::Date32(Some(
-                    Local::now().num_days_from_ce()
-                )))],
+                values: vec![DataValue::Date32(Some(Local::now().num_days_from_ce()))],
             }]
         );
         Ok(())
@@ -417,7 +415,7 @@ pub(crate) mod test {
         let mut column = ColumnCatalog::new(
             "number".to_string(),
             true,
-            ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap(),
+            ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
         );
         let number_column_id = schema[0].id().unwrap();
         column.set_ref_table(Arc::new("a".to_string()), number_column_id, false);
@@ -428,11 +426,11 @@ pub(crate) mod test {
             vec![
                 Tuple {
                     id: None,
-                    values: vec![Arc::new(DataValue::Int32(Some(3)))],
+                    values: vec![DataValue::Int32(Some(3))],
                 },
                 Tuple {
                     id: None,
-                    values: vec![Arc::new(DataValue::Int32(Some(4)))],
+                    values: vec![DataValue::Int32(Some(4))],
                 },
             ]
         );
@@ -463,32 +461,20 @@ pub(crate) mod test {
 
         debug_assert_eq!(
             tuples_1[0].values,
-            vec![
-                Arc::new(DataValue::Int32(Some(0))),
-                Arc::new(DataValue::Int32(Some(0)))
-            ]
+            vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
         );
         debug_assert_eq!(
             tuples_1[1].values,
-            vec![
-                Arc::new(DataValue::Int32(Some(1))),
-                Arc::new(DataValue::Int32(Some(1)))
-            ]
+            vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1))]
         );
 
         debug_assert_eq!(
             tuples_2[0].values,
-            vec![
-                Arc::new(DataValue::Int32(Some(0))),
-                Arc::new(DataValue::Int32(Some(0)))
-            ]
+            vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
         );
         debug_assert_eq!(
             tuples_2[1].values,
-            vec![
-                Arc::new(DataValue::Int32(Some(3))),
-                Arc::new(DataValue::Int32(Some(3)))
-            ]
+            vec![DataValue::Int32(Some(3)), DataValue::Int32(Some(3))]
         );
 
         tx_1.commit()?;

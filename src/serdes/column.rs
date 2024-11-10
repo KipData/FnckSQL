@@ -190,12 +190,7 @@ pub(crate) mod test {
                     },
                 },
                 false,
-                ColumnDesc {
-                    column_datatype: LogicalType::Integer,
-                    is_primary: false,
-                    is_unique: false,
-                    default: None,
-                },
+                ColumnDesc::new(LogicalType::Integer, None, false, None)?,
                 false,
             )));
 
@@ -228,14 +223,12 @@ pub(crate) mod test {
                     relation: ColumnRelation::None,
                 },
                 false,
-                ColumnDesc {
-                    column_datatype: LogicalType::Integer,
-                    is_primary: false,
-                    is_unique: false,
-                    default: Some(ScalarExpression::Constant(Arc::new(DataValue::UInt64(
-                        Some(42),
-                    )))),
-                },
+                ColumnDesc::new(
+                    LogicalType::Integer,
+                    None,
+                    false,
+                    Some(ScalarExpression::Constant(DataValue::UInt64(Some(42)))),
+                )?,
                 false,
             )));
             not_ref_column.encode(&mut cursor, false, &mut reference_tables)?;
@@ -318,14 +311,12 @@ pub(crate) mod test {
     fn test_column_desc_serialization() -> Result<(), DatabaseError> {
         let mut cursor = Cursor::new(Vec::new());
         let mut reference_tables = ReferenceTables::new();
-        let desc = ColumnDesc {
-            column_datatype: LogicalType::Integer,
-            is_primary: false,
-            is_unique: false,
-            default: Some(ScalarExpression::Constant(Arc::new(DataValue::UInt64(
-                Some(42),
-            )))),
-        };
+        let desc = ColumnDesc::new(
+            LogicalType::Integer,
+            None,
+            false,
+            Some(ScalarExpression::Constant(DataValue::UInt64(Some(42)))),
+        )?;
         desc.encode(&mut cursor, false, &mut reference_tables)?;
         cursor.seek(SeekFrom::Start(0))?;
 

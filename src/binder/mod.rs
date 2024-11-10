@@ -569,12 +569,12 @@ pub mod test {
                 ColumnCatalog::new(
                     "c1".to_string(),
                     false,
-                    ColumnDesc::new(Integer, true, false, None)?,
+                    ColumnDesc::new(Integer, Some(0), false, None)?,
                 ),
                 ColumnCatalog::new(
                     "c2".to_string(),
                     false,
-                    ColumnDesc::new(Integer, false, true, None)?,
+                    ColumnDesc::new(Integer, None, true, None)?,
                 ),
             ],
             false,
@@ -587,12 +587,12 @@ pub mod test {
                 ColumnCatalog::new(
                     "c3".to_string(),
                     false,
-                    ColumnDesc::new(Integer, true, false, None)?,
+                    ColumnDesc::new(Integer, Some(0), false, None)?,
                 ),
                 ColumnCatalog::new(
                     "c4".to_string(),
                     false,
-                    ColumnDesc::new(Integer, false, false, None)?,
+                    ColumnDesc::new(Integer, None, false, None)?,
                 ),
             ],
             false,

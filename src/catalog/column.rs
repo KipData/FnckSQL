@@ -2,7 +2,7 @@ use crate::catalog::TableName;
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::types::tuple::EMPTY_TUPLE;
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use fnck_sql_serde_macros::ReferenceSerialization;
 use sqlparser::ast::CharLengthUnits;
@@ -100,7 +100,7 @@ impl ColumnCatalog {
             // SAFETY: default expr must not be [`ScalarExpression::ColumnRef`]
             desc: ColumnDesc::new(
                 LogicalType::Varchar(None, CharLengthUnits::Characters),
-                false,
+                None,
                 false,
                 None,
             )
@@ -166,7 +166,7 @@ impl ColumnCatalog {
         &self.desc.column_datatype
     }
 
-    pub(crate) fn default_value(&self) -> Result<Option<ValueRef>, DatabaseError> {
+    pub(crate) fn default_value(&self) -> Result<Option<DataValue>, DatabaseError> {
         self.desc
             .default
             .as_ref()
@@ -187,15 +187,15 @@ impl ColumnCatalog {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, ReferenceSerialization)]
 pub struct ColumnDesc {
     pub(crate) column_datatype: LogicalType,
-    pub(crate) is_primary: bool,
-    pub(crate) is_unique: bool,
+    primary: Option<usize>,
+    is_unique: bool,
     pub(crate) default: Option<ScalarExpression>,
 }
 
 impl ColumnDesc {
     pub fn new(
         column_datatype: LogicalType,
-        is_primary: bool,
+        primary: Option<usize>,
         is_unique: bool,
         default: Option<ScalarExpression>,
     ) -> Result<ColumnDesc, DatabaseError> {
@@ -207,9 +207,29 @@ impl ColumnDesc {
 
         Ok(ColumnDesc {
             column_datatype,
-            is_primary,
+            primary,
             is_unique,
             default,
         })
+    }
+
+    pub(crate) fn primary(&self) -> Option<usize> {
+        self.primary
+    }
+
+    pub(crate) fn is_primary(&self) -> bool {
+        self.primary.is_some()
+    }
+
+    pub(crate) fn set_primary(&mut self, is_primary: Option<usize>) {
+        self.primary = is_primary
+    }
+
+    pub(crate) fn is_unique(&self) -> bool {
+        self.is_unique
+    }
+
+    pub(crate) fn set_unique(&mut self, is_unique: bool) {
+        self.is_unique = is_unique
     }
 }

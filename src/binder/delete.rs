@@ -5,6 +5,7 @@ use crate::planner::operator::table_scan::TableScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
+use itertools::Itertools;
 use sqlparser::ast::{Expr, TableAlias, TableFactor, TableWithJoins};
 use std::sync::Arc;
 
@@ -23,20 +24,19 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 table_alias = Some(Arc::new(name.value.to_lowercase()));
                 alias_idents = Some(columns);
             }
-            let source = self
+            let Source::Table(table) = self
                 .context
-                .source_and_bind(table_name.clone(), table_alias.as_ref(), None, false)?
-                .ok_or(DatabaseError::SourceNotFound)?;
-            let schema_buf = self.table_schema_buf.entry(table_name.clone()).or_default();
-            let primary_key_column = source
-                .columns(schema_buf)
-                .find(|column| column.desc().is_primary)
-                .cloned()
-                .unwrap();
-            let mut plan = match source {
-                Source::Table(table) => TableScanOperator::build(table_name.clone(), table),
-                Source::View(view) => LogicalPlan::clone(&view.plan),
+                .source_and_bind(table_name.clone(), table_alias.as_ref(), None, true)?
+                .ok_or(DatabaseError::TableNotFound)?
+            else {
+                unreachable!()
             };
+            let primary_keys = table
+                .primary_keys()
+                .iter()
+                .map(|(_, column)| column.clone())
+                .collect_vec();
+            let mut plan = TableScanOperator::build(table_name.clone(), table);
 
             if let Some(alias_idents) = alias_idents {
                 plan =
@@ -50,7 +50,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
             Ok(LogicalPlan::new(
                 Operator::Delete(DeleteOperator {
                     table_name,
-                    primary_key_column,
+                    primary_keys,
                 }),
                 vec![plan],
             ))

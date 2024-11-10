@@ -7,7 +7,7 @@ use crate::planner::operator::Operator;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
 use crate::types::tuple::SchemaRef;
-use crate::types::value::{DataValue, ValueRef};
+use crate::types::value::DataValue;
 use sqlparser::ast::{Expr, Ident, ObjectName};
 use std::slice;
 use std::sync::Arc;
@@ -78,7 +78,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                         value.check_len(ty)?;
 
                         if value.logical_type() != *ty {
-                            value = Arc::new(DataValue::clone(&value).cast(ty)?);
+                            value = value.cast(ty)?;
                         }
                         row.push(value);
                     }
@@ -108,7 +108,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
 
     pub(crate) fn bind_values(
         &mut self,
-        rows: Vec<Vec<ValueRef>>,
+        rows: Vec<Vec<DataValue>>,
         schema_ref: SchemaRef,
     ) -> LogicalPlan {
         LogicalPlan::new(

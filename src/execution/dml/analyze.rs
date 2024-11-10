@@ -116,11 +116,11 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                     let meta = StatisticsMeta::new(histogram, sketch);
 
                     throw!(meta.to_file(&temp_path));
-                    values.push(Arc::new(DataValue::Utf8 {
+                    values.push(DataValue::Utf8 {
                         value: Some(path_str.clone()),
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
-                    }));
+                    });
                     throw!(transaction.save_table_meta(cache.2, &table_name, path_str, meta));
                     throw!(fs::rename(&temp_path, &path).map_err(DatabaseError::IO));
 

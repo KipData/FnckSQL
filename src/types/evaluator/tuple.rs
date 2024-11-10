@@ -1,6 +1,5 @@
 use crate::types::evaluator::BinaryEvaluator;
 use crate::types::evaluator::DataValue;
-use crate::types::value::ValueRef;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::hint;
@@ -18,7 +17,7 @@ pub struct TupleLtBinaryEvaluator;
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub struct TupleLtEqBinaryEvaluator;
 
-fn tuple_cmp(v1: &[ValueRef], v2: &[ValueRef]) -> Option<Ordering> {
+fn tuple_cmp(v1: &[DataValue], v2: &[DataValue]) -> Option<Ordering> {
     let mut order = Ordering::Equal;
     let mut v1_iter = v1.iter();
     let mut v2_iter = v2.iter();

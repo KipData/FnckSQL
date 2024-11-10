@@ -186,13 +186,13 @@ mod tests {
                     column_ids: vec![*c1_column_id],
                     table_name: Arc::new("t1".to_string()),
                     pk_ty: LogicalType::Integer,
-                    name: "pk_c1".to_string(),
-                    ty: IndexType::PrimaryKey,
+                    name: "pk_index".to_string(),
+                    ty: IndexType::PrimaryKey { is_multiple: false },
                 }),
                 range: Some(Range::SortedRanges(vec![
-                    Range::Eq(Arc::new(DataValue::Int32(Some(2)))),
+                    Range::Eq(DataValue::Int32(Some(2))),
                     Range::Scope {
-                        min: Bound::Excluded(Arc::new(DataValue::Int32(Some(40)))),
+                        min: Bound::Excluded(DataValue::Int32(Some(40))),
                         max: Bound::Unbounded,
                     }
                 ])),

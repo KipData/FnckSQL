@@ -167,10 +167,9 @@ pub fn build_write<'a, T: Transaction + 'a>(
             Insert::from((op, input)).execute_mut(cache, transaction)
         }
         Operator::Update(op) => {
-            let values = childrens.pop().unwrap();
             let input = childrens.pop().unwrap();
 
-            Update::from((op, input, values)).execute_mut(cache, transaction)
+            Update::from((op, input)).execute_mut(cache, transaction)
         }
         Operator::Delete(op) => {
             let input = childrens.pop().unwrap();

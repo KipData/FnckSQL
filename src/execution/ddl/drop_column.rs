@@ -41,7 +41,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                     .iter()
                     .enumerate()
                     .find(|(_, column)| column.name() == column_name)
-                    .map(|(i, column)| (i, column.desc().is_primary))
+                    .map(|(i, column)| (i, column.desc().is_primary()))
                 {
                     if is_primary {
                         throw!(Err(DatabaseError::InvalidColumn(
@@ -55,7 +55,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                         if i == column_index {
                             continue;
                         }
-                        types.push(*column_ref.datatype());
+                        types.push(column_ref.datatype().clone());
                     }
                     let mut coroutine = build_read(self.input, cache, transaction);
 
@@ -75,7 +75,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                 } else if if_exists {
                     return;
                 } else {
-                    yield Err(DatabaseError::NotFound("drop column", column_name));
+                    yield Err(DatabaseError::ColumnNotFound(column_name));
                 }
             },
         )

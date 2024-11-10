@@ -11,11 +11,11 @@ use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
 use crate::types::value::DataValue;
 use crate::types::ColumnId;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
-use std::sync::Arc;
 
 pub struct Insert {
     table_name: TableName,
@@ -79,11 +79,15 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                 let mut tuples = Vec::new();
                 let schema = input.output_schema().clone();
 
-                let pk_key = throw!(schema
+                let primary_keys = schema
                     .iter()
-                    .find(|col| col.desc().is_primary)
-                    .map(|col| col.key(is_mapping_by_name))
-                    .ok_or(DatabaseError::NotNull));
+                    .filter_map(|column| column.desc().primary().map(|i| (i, column)))
+                    .sorted_by_key(|(i, _)| *i)
+                    .map(|(_, col)| col.key(is_mapping_by_name))
+                    .collect_vec();
+                if primary_keys.is_empty() {
+                    throw!(Err(DatabaseError::NotNull))
+                }
 
                 if let Some(table_catalog) =
                     throw!(transaction.table(cache.0, table_name.clone())).cloned()
@@ -94,14 +98,18 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                     while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                         let Tuple { values, .. } = throw!(tuple);
 
+                        let mut tuple_id = Vec::with_capacity(primary_keys.len());
                         let mut tuple_map = HashMap::new();
                         for (i, value) in values.into_iter().enumerate() {
                             tuple_map.insert(schema[i].key(is_mapping_by_name), value);
                         }
-                        let tuple_id = throw!(tuple_map
-                            .get(&pk_key)
-                            .cloned()
-                            .ok_or(DatabaseError::NotNull));
+
+                        for primary_key in primary_keys.iter() {
+                            tuple_id.push(throw!(tuple_map
+                                .get(primary_key)
+                                .cloned()
+                                .ok_or(DatabaseError::NotNull)));
+                        }
                         let mut values = Vec::with_capacity(table_catalog.columns_len());
 
                         for col in table_catalog.columns() {
@@ -111,7 +119,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                                 if value.is_none() {
                                     value = throw!(col.default_value());
                                 }
-                                value.unwrap_or_else(|| Arc::new(DataValue::none(col.datatype())))
+                                value.unwrap_or_else(|| DataValue::none(col.datatype()))
                             };
                             if value.is_null() && !col.nullable() {
                                 yield Err(DatabaseError::NotNull);
@@ -120,7 +128,11 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                             values.push(value)
                         }
                         tuples.push(Tuple {
-                            id: Some(tuple_id),
+                            id: Some(if primary_keys.len() == 1 {
+                                tuple_id.pop().unwrap()
+                            } else {
+                                DataValue::Tuple(Some(tuple_id))
+                            }),
                             values,
                         });
                     }

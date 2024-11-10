@@ -6,7 +6,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::Tuple;
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use itertools::Itertools;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
@@ -47,7 +47,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SimpleAggExecutor {
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let tuple = throw!(tuple);
 
-                    let values: Vec<ValueRef> = throw!(agg_calls
+                    let values: Vec<DataValue> = throw!(agg_calls
                         .iter()
                         .map(|expr| match expr {
                             ScalarExpression::AggCall { args, .. } => args[0].eval(&tuple, &schema),
@@ -59,7 +59,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SimpleAggExecutor {
                         throw!(acc.update_value(value));
                     }
                 }
-                let values: Vec<ValueRef> =
+                let values: Vec<DataValue> =
                     throw!(accs.into_iter().map(|acc| acc.evaluate()).try_collect());
 
                 yield Ok(Tuple { id: None, values });

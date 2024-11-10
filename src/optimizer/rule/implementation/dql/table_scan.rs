@@ -37,11 +37,7 @@ impl<T: Transaction> ImplementationRule<T> for SeqScanImplementation {
             let cost = scan_op
                 .index_infos
                 .iter()
-                .find(|index_info| {
-                    let column_ids = &index_info.meta.column_ids;
-
-                    column_ids.len() == 1 && column_ids[0] == scan_op.primary_key
-                })
+                .find(|index_info| index_info.meta.column_ids == scan_op.primary_keys)
                 .map(|index_info| loader.load(&scan_op.table_name, index_info.meta.id))
                 .transpose()?
                 .flatten()
@@ -87,7 +83,7 @@ impl<T: Transaction> ImplementationRule<T> for IndexScanImplementation {
                     {
                         let mut row_count = statistics_meta.collect_count(range)?;
 
-                        if !matches!(index_info.meta.ty, IndexType::PrimaryKey) {
+                        if !matches!(index_info.meta.ty, IndexType::PrimaryKey { .. }) {
                             // need to return table query(non-covering index)
                             row_count *= 2;
                         }

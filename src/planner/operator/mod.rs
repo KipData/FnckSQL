@@ -232,7 +232,7 @@ impl Operator {
                 .cloned()
                 .collect_vec(),
             Operator::Analyze(_) => vec![],
-            Operator::Delete(op) => vec![op.primary_key_column.clone()],
+            Operator::Delete(op) => op.primary_keys.clone(),
             Operator::Dummy
             | Operator::Limit(_)
             | Operator::Show

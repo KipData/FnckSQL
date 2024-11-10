@@ -12,7 +12,7 @@ use crate::execution::dql::aggregate::min_max::MinMaxAccumulator;
 use crate::execution::dql::aggregate::sum::{DistinctSumAccumulator, SumAccumulator};
 use crate::expression::agg::AggKind;
 use crate::expression::ScalarExpression;
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use itertools::Itertools;
 
 /// Tips: Idea for sqlrs
@@ -20,10 +20,10 @@ use itertools::Itertools;
 /// rows and generically accumulates values.
 pub trait Accumulator: Send + Sync {
     /// updates the accumulator's state from a vector of arrays.
-    fn update_value(&mut self, value: &ValueRef) -> Result<(), DatabaseError>;
+    fn update_value(&mut self, value: &DataValue) -> Result<(), DatabaseError>;
 
     /// returns its value based on its current state.
-    fn evaluate(&self) -> Result<ValueRef, DatabaseError>;
+    fn evaluate(&self) -> Result<DataValue, DatabaseError>;
 }
 
 fn create_accumulator(expr: &ScalarExpression) -> Result<Box<dyn Accumulator>, DatabaseError> {

@@ -2,7 +2,7 @@ use crate::catalog::{TableCatalog, TableName};
 use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
 use crate::expression::ScalarExpression;
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use fnck_sql_serde_macros::ReferenceSerialization;
 use std::fmt;
@@ -14,7 +14,7 @@ pub type IndexMetaRef = Arc<IndexMeta>;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, ReferenceSerialization)]
 pub enum IndexType {
-    PrimaryKey,
+    PrimaryKey { is_multiple: bool },
     Unique,
     Normal,
     Composite,
@@ -47,10 +47,7 @@ impl IndexMeta {
             if let Some(column) = table.get_column_by_id(column_id) {
                 exprs.push(ScalarExpression::ColumnRef(column.clone()));
             } else {
-                return Err(DatabaseError::NotFound(
-                    "Column by id",
-                    column_id.to_string(),
-                ));
+                return Err(DatabaseError::ColumnNotFound(column_id.to_string()));
             }
         }
         Ok(exprs)
@@ -60,12 +57,12 @@ impl IndexMeta {
 #[derive(Debug, Clone)]
 pub struct Index<'a> {
     pub id: IndexId,
-    pub column_values: &'a [ValueRef],
+    pub column_values: &'a [DataValue],
     pub ty: IndexType,
 }
 
 impl<'a> Index<'a> {
-    pub fn new(id: IndexId, column_values: &'a [ValueRef], ty: IndexType) -> Self {
+    pub fn new(id: IndexId, column_values: &'a [DataValue], ty: IndexType) -> Self {
         Index {
             id,
             column_values,

@@ -1,7 +1,9 @@
+use super::LogicalType;
 use crate::errors::DatabaseError;
 use chrono::format::{DelayedFormat, StrftimeItems};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use integer_encoding::{FixedInt, FixedIntWriter};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
@@ -12,13 +14,10 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::io::Write;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::{cmp, fmt, mem};
 
-use super::LogicalType;
-
 lazy_static! {
-    pub static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
+    pub static ref NULL_VALUE: DataValue = DataValue::Null;
     static ref UNIX_DATETIME: NaiveDateTime = DateTime::from_timestamp(0, 0).unwrap().naive_utc();
     static ref UNIX_TIME: NaiveTime = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
 }
@@ -29,8 +28,6 @@ pub const TIME_FMT: &str = "%H:%M:%S";
 
 const ENCODE_GROUP_SIZE: usize = 8;
 const ENCODE_MARKER: u8 = 0xFF;
-
-pub type ValueRef = Arc<DataValue>;
 
 #[derive(Clone)]
 pub enum Utf8Type {
@@ -63,7 +60,7 @@ pub enum DataValue {
     Date64(Option<i64>),
     Time(Option<u32>),
     Decimal(Option<Decimal>),
-    Tuple(Option<Vec<ValueRef>>),
+    Tuple(Option<Vec<DataValue>>),
 }
 
 macro_rules! generate_get_option {
@@ -358,7 +355,8 @@ impl DataValue {
             ) => Self::check_string_len(val, *len as usize, CharLengthUnits::Octets),
             (LogicalType::Decimal(full_len, scale_len), DataValue::Decimal(Some(val))) => {
                 if let Some(len) = full_len {
-                    if val.mantissa().ilog10() + 1 > *len as u32 {
+                    let mantissa = val.mantissa().abs();
+                    if mantissa != 0 && mantissa.ilog10() + 1 > *len as u32 {
                         return Err(DatabaseError::TooLong);
                     }
                 }
@@ -443,7 +441,7 @@ impl DataValue {
             LogicalType::DateTime => DataValue::Date64(None),
             LogicalType::Time => DataValue::Time(None),
             LogicalType::Decimal(_, _) => DataValue::Decimal(None),
-            LogicalType::Tuple => DataValue::Tuple(None),
+            LogicalType::Tuple(_) => DataValue::Tuple(None),
         }
     }
 
@@ -476,7 +474,11 @@ impl DataValue {
             LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.and_utc().timestamp())),
             LogicalType::Time => DataValue::Time(Some(UNIX_TIME.num_seconds_from_midnight())),
             LogicalType::Decimal(_, _) => DataValue::Decimal(Some(Decimal::new(0, 0))),
-            LogicalType::Tuple => DataValue::Tuple(Some(vec![])),
+            LogicalType::Tuple(types) => {
+                let values = types.iter().map(DataValue::init).collect_vec();
+
+                DataValue::Tuple(Some(values))
+            }
         }
     }
 
@@ -675,7 +677,7 @@ impl DataValue {
                 (!bytes.is_empty())
                     .then(|| Decimal::deserialize(<[u8; 16]>::try_from(bytes).unwrap())),
             ),
-            LogicalType::Tuple => unreachable!(),
+            LogicalType::Tuple(_) => unreachable!(),
         }
     }
 
@@ -707,7 +709,14 @@ impl DataValue {
             DataValue::Date64(_) => LogicalType::DateTime,
             DataValue::Time(_) => LogicalType::Time,
             DataValue::Decimal(_) => LogicalType::Decimal(None, None),
-            DataValue::Tuple(_) => LogicalType::Tuple,
+            DataValue::Tuple(values) => {
+                if let Some(values) = values {
+                    let types = values.iter().map(|v| v.logical_type()).collect_vec();
+                    LogicalType::Tuple(types)
+                } else {
+                    LogicalType::Tuple(vec![])
+                }
+            }
         }
     }
 
@@ -856,7 +865,7 @@ impl DataValue {
                 LogicalType::DateTime => Ok(DataValue::Date64(None)),
                 LogicalType::Time => Ok(DataValue::Time(None)),
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(None)),
-                LogicalType::Tuple => Ok(DataValue::Tuple(None)),
+                LogicalType::Tuple(_) => Ok(DataValue::Tuple(None)),
             },
             DataValue::Boolean(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
@@ -1364,7 +1373,16 @@ impl DataValue {
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::Tuple(values) => match to {
-                LogicalType::Tuple => Ok(DataValue::Tuple(values)),
+                LogicalType::Tuple(types) => Ok(if let Some(mut values) = values {
+                    for (i, value) in values.iter_mut().enumerate() {
+                        if types[i] != value.logical_type() {
+                            *value = DataValue::clone(value).cast(&types[i])?;
+                        }
+                    }
+                    DataValue::Tuple(Some(values))
+                } else {
+                    DataValue::Tuple(None)
+                }),
                 _ => Err(DatabaseError::CastFail),
             },
         }?;
@@ -1608,7 +1626,6 @@ impl fmt::Debug for DataValue {
 mod test {
     use crate::errors::DatabaseError;
     use crate::types::value::DataValue;
-    use std::sync::Arc;
 
     #[test]
     fn test_mem_comparable_int() -> Result<(), DatabaseError> {
@@ -1705,21 +1722,21 @@ mod test {
         let mut key_tuple_3 = Vec::new();
 
         DataValue::Tuple(Some(vec![
-            Arc::new(DataValue::Int8(None)),
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(1))),
+            DataValue::Int8(None),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(1)),
         ]))
         .memcomparable_encode(&mut key_tuple_1)?;
         DataValue::Tuple(Some(vec![
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(1))),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(1)),
         ]))
         .memcomparable_encode(&mut key_tuple_2)?;
         DataValue::Tuple(Some(vec![
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(0))),
-            Arc::new(DataValue::Int8(Some(2))),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(0)),
+            DataValue::Int8(Some(2)),
         ]))
         .memcomparable_encode(&mut key_tuple_3)?;
 

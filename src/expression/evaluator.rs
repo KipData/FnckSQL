@@ -4,7 +4,7 @@ use crate::expression::function::scala::ScalarFunction;
 use crate::expression::{AliasType, BinaryOperator, ScalarExpression};
 use crate::types::evaluator::EvaluatorFactory;
 use crate::types::tuple::Tuple;
-use crate::types::value::{DataValue, Utf8Type, ValueRef};
+use crate::types::value::{DataValue, Utf8Type};
 use crate::types::LogicalType;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -12,34 +12,34 @@ use regex::Regex;
 use sqlparser::ast::{CharLengthUnits, TrimWhereField};
 use std::cmp;
 use std::cmp::Ordering;
-use std::sync::Arc;
 
 lazy_static! {
-    static ref NULL_VALUE: ValueRef = Arc::new(DataValue::Null);
+    static ref NULL_VALUE: DataValue = DataValue::Null;
 }
 
 macro_rules! eval_to_num {
     ($num_expr:expr, $tuple:expr, $schema:expr) => {
-        if let Some(num_i32) = DataValue::clone($num_expr.eval($tuple, $schema)?.as_ref())
+        if let Some(num_i32) = $num_expr
+            .eval($tuple, $schema)?
             .cast(&LogicalType::Integer)?
             .i32()
         {
             num_i32
         } else {
-            return Ok(Arc::new(DataValue::Utf8 {
+            return Ok(DataValue::Utf8 {
                 value: None,
                 ty: Utf8Type::Variable(None),
                 unit: CharLengthUnits::Characters,
-            }));
+            });
         }
     };
 }
 
 impl ScalarExpression {
-    pub fn eval(&self, tuple: &Tuple, schema: &[ColumnRef]) -> Result<ValueRef, DatabaseError> {
-        let check_cast = |value: ValueRef, return_type: &LogicalType| {
+    pub fn eval(&self, tuple: &Tuple, schema: &[ColumnRef]) -> Result<DataValue, DatabaseError> {
+        let check_cast = |value: DataValue, return_type: &LogicalType| {
             if value.logical_type() != *return_type {
-                return Ok(Arc::new(DataValue::clone(&value).cast(return_type)?));
+                return DataValue::clone(&value).cast(return_type);
             }
             Ok(value)
         };
@@ -77,7 +77,7 @@ impl ScalarExpression {
             ScalarExpression::TypeCast { expr, ty, .. } => {
                 let value = expr.eval(tuple, schema)?;
 
-                Ok(Arc::new(DataValue::clone(&value).cast(ty)?))
+                Ok(DataValue::clone(&value).cast(ty)?)
             }
             ScalarExpression::Binary {
                 left_expr,
@@ -88,20 +88,18 @@ impl ScalarExpression {
                 let left = left_expr.eval(tuple, schema)?;
                 let right = right_expr.eval(tuple, schema)?;
 
-                Ok(Arc::new(
-                    evaluator
-                        .as_ref()
-                        .ok_or(DatabaseError::EvaluatorNotFound)?
-                        .0
-                        .binary_eval(&left, &right),
-                ))
+                Ok(evaluator
+                    .as_ref()
+                    .ok_or(DatabaseError::EvaluatorNotFound)?
+                    .0
+                    .binary_eval(&left, &right))
             }
             ScalarExpression::IsNull { expr, negated } => {
                 let mut is_null = expr.eval(tuple, schema)?.is_null();
                 if *negated {
                     is_null = !is_null;
                 }
-                Ok(Arc::new(DataValue::Boolean(Some(is_null))))
+                Ok(DataValue::Boolean(Some(is_null)))
             }
             ScalarExpression::In {
                 expr,
@@ -110,14 +108,14 @@ impl ScalarExpression {
             } => {
                 let value = expr.eval(tuple, schema)?;
                 if value.is_null() {
-                    return Ok(Arc::new(DataValue::Boolean(None)));
+                    return Ok(DataValue::Boolean(None));
                 }
                 let mut is_in = false;
                 for arg in args {
                     let arg_value = arg.eval(tuple, schema)?;
 
                     if arg_value.is_null() {
-                        return Ok(Arc::new(DataValue::Boolean(None)));
+                        return Ok(DataValue::Boolean(None));
                     }
                     if arg_value == value {
                         is_in = true;
@@ -127,20 +125,18 @@ impl ScalarExpression {
                 if *negated {
                     is_in = !is_in;
                 }
-                Ok(Arc::new(DataValue::Boolean(Some(is_in))))
+                Ok(DataValue::Boolean(Some(is_in)))
             }
             ScalarExpression::Unary {
                 expr, evaluator, ..
             } => {
                 let value = expr.eval(tuple, schema)?;
 
-                Ok(Arc::new(
-                    evaluator
-                        .as_ref()
-                        .ok_or(DatabaseError::EvaluatorNotFound)?
-                        .0
-                        .unary_eval(&value),
-                ))
+                Ok(evaluator
+                    .as_ref()
+                    .ok_or(DatabaseError::EvaluatorNotFound)?
+                    .0
+                    .unary_eval(&value))
             }
             ScalarExpression::AggCall { .. } => {
                 unreachable!("must use `NormalizationRuleImpl::ExpressionRemapper`")
@@ -160,20 +156,21 @@ impl ScalarExpression {
                     value.partial_cmp(&right).map(Ordering::is_le),
                 ) {
                     (Some(true), Some(true)) => true,
-                    (None, _) | (_, None) => return Ok(Arc::new(DataValue::Boolean(None))),
+                    (None, _) | (_, None) => return Ok(DataValue::Boolean(None)),
                     _ => false,
                 };
                 if *negated {
                     is_between = !is_between;
                 }
-                Ok(Arc::new(DataValue::Boolean(Some(is_between))))
+                Ok(DataValue::Boolean(Some(is_between)))
             }
             ScalarExpression::SubString {
                 expr,
                 for_expr,
                 from_expr,
             } => {
-                if let Some(mut string) = DataValue::clone(expr.eval(tuple, schema)?.as_ref())
+                if let Some(mut string) = expr
+                    .eval(tuple, schema)?
                     .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                     .utf8()
                 {
@@ -185,11 +182,11 @@ impl ScalarExpression {
                             from += len_i + 1;
                         }
                         if from > len_i {
-                            return Ok(Arc::new(DataValue::Utf8 {
+                            return Ok(DataValue::Utf8 {
                                 value: None,
                                 ty: Utf8Type::Variable(None),
                                 unit: CharLengthUnits::Characters,
-                            }));
+                            });
                         }
                         string = string.split_off(from as usize);
                     }
@@ -199,31 +196,32 @@ impl ScalarExpression {
                         let _ = string.split_off(for_i);
                     }
 
-                    Ok(Arc::new(DataValue::Utf8 {
+                    Ok(DataValue::Utf8 {
                         value: Some(string),
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
-                    }))
+                    })
                 } else {
-                    Ok(Arc::new(DataValue::Utf8 {
+                    Ok(DataValue::Utf8 {
                         value: None,
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
-                    }))
+                    })
                 }
             }
             ScalarExpression::Position { expr, in_expr } => {
                 let unpack = |expr: &ScalarExpression| -> Result<String, DatabaseError> {
-                    Ok(DataValue::clone(expr.eval(tuple, schema)?.as_ref())
+                    Ok(expr
+                        .eval(tuple, schema)?
                         .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                         .utf8()
                         .unwrap_or("".to_owned()))
                 };
                 let pattern = unpack(expr)?;
                 let str = unpack(in_expr)?;
-                Ok(Arc::new(DataValue::Int32(Some(
+                Ok(DataValue::Int32(Some(
                     str.find(&pattern).map(|pos| pos as i32 + 1).unwrap_or(0),
-                ))))
+                )))
             }
             ScalarExpression::Trim {
                 expr,
@@ -231,13 +229,15 @@ impl ScalarExpression {
                 trim_where,
             } => {
                 let mut value = None;
-                if let Some(string) = DataValue::clone(expr.eval(tuple, schema)?.as_ref())
+                if let Some(string) = expr
+                    .eval(tuple, schema)?
                     .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                     .utf8()
                 {
                     let mut trim_what = String::from(" ");
                     if let Some(trim_what_expr) = trim_what_expr {
-                        trim_what = DataValue::clone(trim_what_expr.eval(tuple, schema)?.as_ref())
+                        trim_what = trim_what_expr
+                            .eval(tuple, schema)?
                             .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                             .utf8()
                             .unwrap_or_default();
@@ -261,11 +261,11 @@ impl ScalarExpression {
 
                     value = Some(string_trimmed)
                 }
-                Ok(Arc::new(DataValue::Utf8 {
+                Ok(DataValue::Utf8 {
                     value,
                     ty: Utf8Type::Variable(None),
                     unit: CharLengthUnits::Characters,
-                }))
+                })
             }
             ScalarExpression::Reference { pos, .. } => Ok(tuple
                 .values
@@ -278,13 +278,11 @@ impl ScalarExpression {
                 for expr in exprs {
                     values.push(expr.eval(tuple, schema)?);
                 }
-                Ok(Arc::new(DataValue::Tuple(
-                    (!values.is_empty()).then_some(values),
-                )))
+                Ok(DataValue::Tuple((!values.is_empty()).then_some(values)))
             }
-            ScalarExpression::ScalaFunction(ScalarFunction { inner, args, .. }) => Ok(Arc::new(
-                inner.eval(args, tuple, schema)?.cast(inner.return_type())?,
-            )),
+            ScalarExpression::ScalaFunction(ScalarFunction { inner, args, .. }) => {
+                inner.eval(args, tuple, schema)?.cast(inner.return_type())
+            }
             ScalarExpression::Empty => unreachable!(),
             ScalarExpression::If {
                 condition,
@@ -351,10 +349,11 @@ impl ScalarExpression {
                     let mut when_value = when_expr.eval(tuple, schema)?;
                     let is_true = if let Some(operand_value) = &operand_value {
                         let ty = operand_value.logical_type();
-                        let evaluator = EvaluatorFactory::binary_create(ty, BinaryOperator::Eq)?;
+                        let evaluator =
+                            EvaluatorFactory::binary_create(ty.clone(), BinaryOperator::Eq)?;
 
                         if when_value.logical_type() != ty {
-                            when_value = Arc::new(DataValue::clone(&when_value).cast(&ty)?);
+                            when_value = when_value.cast(&ty)?;
                         }
                         evaluator
                             .0

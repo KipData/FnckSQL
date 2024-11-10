@@ -178,7 +178,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
                             (Some(filter), true) => {
                                 let new_tuple = Self::merge_tuple(&left_tuple, &right_tuple, &ty);
                                 let value = throw!(filter.eval(&new_tuple, &output_schema_ref));
-                                match value.as_ref() {
+                                match &value {
                                     DataValue::Boolean(Some(true)) => {
                                         let tuple = match ty {
                                             JoinType::LeftAnti => None,
@@ -414,7 +414,7 @@ mod test {
         LogicalPlan,
         ScalarExpression,
     ) {
-        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap();
+        let desc = ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap();
 
         let t1_columns = vec![
             ColumnRef::from(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
@@ -441,24 +441,24 @@ mod test {
             operator: Operator::Values(ValuesOperator {
                 rows: vec![
                     vec![
-                        Arc::new(DataValue::Int32(Some(0))),
-                        Arc::new(DataValue::Int32(Some(2))),
-                        Arc::new(DataValue::Int32(Some(4))),
+                        DataValue::Int32(Some(0)),
+                        DataValue::Int32(Some(2)),
+                        DataValue::Int32(Some(4)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(2))),
-                        Arc::new(DataValue::Int32(Some(5))),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(2)),
+                        DataValue::Int32(Some(5)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(3))),
-                        Arc::new(DataValue::Int32(Some(5))),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(3)),
+                        DataValue::Int32(Some(5)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(3))),
-                        Arc::new(DataValue::Int32(Some(5))),
-                        Arc::new(DataValue::Int32(Some(7))),
+                        DataValue::Int32(Some(3)),
+                        DataValue::Int32(Some(5)),
+                        DataValue::Int32(Some(7)),
                     ],
                 ],
                 schema_ref: Arc::new(t1_columns),
@@ -472,24 +472,24 @@ mod test {
             operator: Operator::Values(ValuesOperator {
                 rows: vec![
                     vec![
-                        Arc::new(DataValue::Int32(Some(0))),
-                        Arc::new(DataValue::Int32(Some(2))),
-                        Arc::new(DataValue::Int32(Some(4))),
+                        DataValue::Int32(Some(0)),
+                        DataValue::Int32(Some(2)),
+                        DataValue::Int32(Some(4)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(3))),
-                        Arc::new(DataValue::Int32(Some(5))),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(3)),
+                        DataValue::Int32(Some(5)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(4))),
-                        Arc::new(DataValue::Int32(Some(6))),
-                        Arc::new(DataValue::Int32(Some(8))),
+                        DataValue::Int32(Some(4)),
+                        DataValue::Int32(Some(6)),
+                        DataValue::Int32(Some(8)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(1))),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(1)),
                     ],
                 ],
                 schema_ref: Arc::new(t2_columns),
@@ -514,7 +514,7 @@ mod test {
         (on_keys, values_t1, values_t2, filter)
     }
 
-    fn valid_result(expected: &mut HashSet<Vec<Arc<DataValue>>>, actual: &[Tuple]) {
+    fn valid_result(expected: &mut HashSet<Vec<DataValue>>, actual: &[Tuple]) {
         debug_assert_eq!(actual.len(), expected.len());
 
         for tuple in actual {
@@ -522,8 +522,8 @@ mod test {
                 .values
                 .iter()
                 .map(|v| {
-                    if matches!(v.as_ref(), DataValue::Null) {
-                        Arc::new(DataValue::Int32(None))
+                    if matches!(v, DataValue::Null) {
+                        DataValue::Int32(None)
                     } else {
                         v.clone()
                     }

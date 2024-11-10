@@ -4,7 +4,7 @@ use crate::errors::DatabaseError;
 use crate::expression::function::scala::ScalarFunction;
 use crate::expression::function::table::TableFunction;
 use crate::types::evaluator::{BinaryEvaluatorBox, EvaluatorFactory, UnaryEvaluatorBox};
-use crate::types::value::ValueRef;
+use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use fnck_sql_serde_macros::ReferenceSerialization;
 use itertools::Itertools;
@@ -34,7 +34,7 @@ pub enum AliasType {
 /// b   -> ScalarExpression::ColumnRef()
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub enum ScalarExpression {
-    Constant(ValueRef),
+    Constant(DataValue),
     ColumnRef(ColumnRef),
     Alias {
         expr: Box<ScalarExpression>,
@@ -322,8 +322,8 @@ impl ScalarExpression {
                         }
                     }
                 };
-                fn_cast(left_expr, ty);
-                fn_cast(right_expr, ty);
+                fn_cast(left_expr, ty.clone());
+                fn_cast(right_expr, ty.clone());
 
                 *evaluator = Some(EvaluatorFactory::binary_create(ty, *op)?);
             }
@@ -567,7 +567,7 @@ impl ScalarExpression {
     pub fn return_type(&self) -> LogicalType {
         match self {
             ScalarExpression::Constant(v) => v.logical_type(),
-            ScalarExpression::ColumnRef(col) => *col.datatype(),
+            ScalarExpression::ColumnRef(col) => col.datatype().clone(),
             ScalarExpression::Binary {
                 ty: return_type, ..
             }
@@ -594,7 +594,7 @@ impl ScalarExpression {
             }
             | ScalarExpression::CaseWhen {
                 ty: return_type, ..
-            } => *return_type,
+            } => return_type.clone(),
             ScalarExpression::IsNull { .. }
             | ScalarExpression::In { .. }
             | ScalarExpression::Between { .. } => LogicalType::Boolean,
@@ -609,8 +609,14 @@ impl ScalarExpression {
                 expr.return_type()
             }
             ScalarExpression::Empty | ScalarExpression::TableFunction(_) => unreachable!(),
-            ScalarExpression::Tuple(_) => LogicalType::Tuple,
-            ScalarExpression::ScalaFunction(ScalarFunction { inner, .. }) => *inner.return_type(),
+            ScalarExpression::Tuple(exprs) => {
+                let types = exprs.iter().map(|expr| expr.return_type()).collect_vec();
+
+                LogicalType::Tuple(types)
+            }
+            ScalarExpression::ScalaFunction(ScalarFunction { inner, .. }) => {
+                inner.return_type().clone()
+            }
         }
     }
 
@@ -1163,7 +1169,7 @@ impl ScalarExpression {
                 self.output_name(),
                 true,
                 // SAFETY: default expr must not be [`ScalarExpression::ColumnRef`]
-                ColumnDesc::new(self.return_type(), false, false, None).unwrap(),
+                ColumnDesc::new(self.return_type(), None, false, None).unwrap(),
             )),
         }
     }
@@ -1354,23 +1360,23 @@ mod test {
 
         fn_assert(
             &mut cursor,
-            ScalarExpression::Constant(Arc::new(DataValue::Int32(None))),
+            ScalarExpression::Constant(DataValue::Int32(None)),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::Constant(Arc::new(DataValue::Int32(Some(42)))),
+            ScalarExpression::Constant(DataValue::Int32(Some(42))),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::Constant(Arc::new(DataValue::Utf8 {
+            ScalarExpression::Constant(DataValue::Utf8 {
                 value: Some("hello".to_string()),
                 ty: Utf8Type::Variable(None),
                 unit: CharLengthUnits::Characters,
-            })),
+            }),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
@@ -1386,7 +1392,7 @@ mod test {
                     },
                 },
                 false,
-                ColumnDesc::new(LogicalType::Integer, false, false, None)?,
+                ColumnDesc::new(LogicalType::Integer, None, false, None)?,
                 false,
             ))),
             Some((&transaction, &table_cache)),
@@ -1400,7 +1406,7 @@ mod test {
                     relation: ColumnRelation::None,
                 },
                 false,
-                ColumnDesc::new(LogicalType::Boolean, false, false, None)?,
+                ColumnDesc::new(LogicalType::Boolean, None, false, None)?,
                 false,
             ))),
             Some((&transaction, &table_cache)),

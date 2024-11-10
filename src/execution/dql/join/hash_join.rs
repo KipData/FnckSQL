@@ -8,7 +8,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{Schema, SchemaRef, Tuple};
-use crate::types::value::{DataValue, ValueRef, NULL_VALUE};
+use crate::types::value::{DataValue, NULL_VALUE};
 use crate::utils::bit_vector::BitVector;
 use ahash::HashMap;
 use itertools::Itertools;
@@ -109,7 +109,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
 pub(crate) struct HashJoinStatus {
     ty: JoinType,
     filter: Option<ScalarExpression>,
-    build_map: HashMap<Vec<ValueRef>, (Vec<Tuple>, bool, bool)>,
+    build_map: HashMap<Vec<DataValue>, (Vec<Tuple>, bool, bool)>,
 
     full_schema_ref: SchemaRef,
     left_schema_len: usize,
@@ -289,7 +289,7 @@ impl HashJoinStatus {
         left_schema_len: usize,
     ) -> Result<Option<Tuple>, DatabaseError> {
         if let (Some(expr), false) = (filter, matches!(join_ty, JoinType::Full | JoinType::Cross)) {
-            match expr.eval(&tuple, schema)?.as_ref() {
+            match &expr.eval(&tuple, schema)? {
                 DataValue::Boolean(Some(false) | None) => {
                     let full_schema_len = schema.len();
 
@@ -341,7 +341,7 @@ impl HashJoinStatus {
     }
 
     fn right_null_tuple<'a>(
-        build_map: &'a mut HashMap<Vec<ValueRef>, (Vec<Tuple>, bool, bool)>,
+        build_map: &'a mut HashMap<Vec<DataValue>, (Vec<Tuple>, bool, bool)>,
         schema: &'a Schema,
     ) -> Executor<'a> {
         Box::new(
@@ -363,7 +363,7 @@ impl HashJoinStatus {
     }
 
     fn one_side_tuple<'a>(
-        build_map: &'a mut HashMap<Vec<ValueRef>, (Vec<Tuple>, bool, bool)>,
+        build_map: &'a mut HashMap<Vec<DataValue>, (Vec<Tuple>, bool, bool)>,
         schema: &'a Schema,
         filter: &'a Option<ScalarExpression>,
         join_ty: &'a JoinType,
@@ -407,7 +407,7 @@ impl HashJoinStatus {
         on_keys: &[ScalarExpression],
         tuple: &Tuple,
         schema: &[ColumnRef],
-    ) -> Result<Vec<ValueRef>, DatabaseError> {
+    ) -> Result<Vec<DataValue>, DatabaseError> {
         let mut values = Vec::with_capacity(on_keys.len());
 
         for expr in on_keys {
@@ -443,7 +443,7 @@ mod test {
         LogicalPlan,
         LogicalPlan,
     ) {
-        let desc = ColumnDesc::new(LogicalType::Integer, false, false, None).unwrap();
+        let desc = ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap();
 
         let t1_columns = vec![
             ColumnRef::from(ColumnCatalog::new("c1".to_string(), true, desc.clone())),
@@ -466,19 +466,19 @@ mod test {
             operator: Operator::Values(ValuesOperator {
                 rows: vec![
                     vec![
-                        Arc::new(DataValue::Int32(Some(0))),
-                        Arc::new(DataValue::Int32(Some(2))),
-                        Arc::new(DataValue::Int32(Some(4))),
+                        DataValue::Int32(Some(0)),
+                        DataValue::Int32(Some(2)),
+                        DataValue::Int32(Some(4)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(3))),
-                        Arc::new(DataValue::Int32(Some(5))),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(3)),
+                        DataValue::Int32(Some(5)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(3))),
-                        Arc::new(DataValue::Int32(Some(5))),
-                        Arc::new(DataValue::Int32(Some(7))),
+                        DataValue::Int32(Some(3)),
+                        DataValue::Int32(Some(5)),
+                        DataValue::Int32(Some(7)),
                     ],
                 ],
                 schema_ref: Arc::new(t1_columns),
@@ -492,24 +492,24 @@ mod test {
             operator: Operator::Values(ValuesOperator {
                 rows: vec![
                     vec![
-                        Arc::new(DataValue::Int32(Some(0))),
-                        Arc::new(DataValue::Int32(Some(2))),
-                        Arc::new(DataValue::Int32(Some(4))),
+                        DataValue::Int32(Some(0)),
+                        DataValue::Int32(Some(2)),
+                        DataValue::Int32(Some(4)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(3))),
-                        Arc::new(DataValue::Int32(Some(5))),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(3)),
+                        DataValue::Int32(Some(5)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(4))),
-                        Arc::new(DataValue::Int32(Some(6))),
-                        Arc::new(DataValue::Int32(Some(8))),
+                        DataValue::Int32(Some(4)),
+                        DataValue::Int32(Some(6)),
+                        DataValue::Int32(Some(8)),
                     ],
                     vec![
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(1))),
-                        Arc::new(DataValue::Int32(Some(1))),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(1)),
+                        DataValue::Int32(Some(1)),
                     ],
                 ],
                 schema_ref: Arc::new(t2_columns),

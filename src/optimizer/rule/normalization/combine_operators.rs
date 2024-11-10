@@ -157,7 +157,6 @@ mod tests {
     use crate::storage::rocksdb::RocksTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
-    use std::sync::Arc;
 
     #[test]
     fn test_collapse_project() -> Result<(), DatabaseError> {
@@ -213,8 +212,8 @@ mod tests {
         if let Operator::Filter(op) = &mut new_filter_op {
             op.predicate = ScalarExpression::Binary {
                 op: BinaryOperator::Eq,
-                left_expr: Box::new(Constant(Arc::new(DataValue::Int8(Some(1))))),
-                right_expr: Box::new(Constant(Arc::new(DataValue::Int8(Some(1))))),
+                left_expr: Box::new(Constant(DataValue::Int8(Some(1)))),
+                right_expr: Box::new(Constant(DataValue::Int8(Some(1)))),
                 evaluator: None,
                 ty: LogicalType::Boolean,
             }

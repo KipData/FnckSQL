@@ -23,7 +23,6 @@ pub type ColumnId = Ulid;
 #[derive(
     Debug,
     Clone,
-    Copy,
     PartialEq,
     Eq,
     Hash,
@@ -55,7 +54,7 @@ pub enum LogicalType {
     Time,
     // decimal (precision, scale)
     Decimal(Option<u8>, Option<u8>),
-    Tuple,
+    Tuple(Vec<LogicalType>),
 }
 
 impl LogicalType {
@@ -121,7 +120,7 @@ impl LogicalType {
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
             LogicalType::Time => Some(4),
-            LogicalType::Invalid | LogicalType::Tuple => unreachable!(),
+            LogicalType::Invalid | LogicalType::Tuple(_) => unreachable!(),
         }
     }
 
@@ -153,6 +152,7 @@ impl LogicalType {
                 | LogicalType::UBigint
                 | LogicalType::Float
                 | LogicalType::Double
+                | LogicalType::Decimal(_, _)
         )
     }
 
@@ -185,12 +185,19 @@ impl LogicalType {
         right: &LogicalType,
     ) -> Result<LogicalType, DatabaseError> {
         if left == right {
-            return Ok(*left);
+            return Ok(left.clone());
         }
         match (left, right) {
             // SqlNull type can be cast to anything
-            (LogicalType::SqlNull, _) => return Ok(*right),
-            (_, LogicalType::SqlNull) => return Ok(*left),
+            (LogicalType::SqlNull, _) => return Ok(right.clone()),
+            (_, LogicalType::SqlNull) => return Ok(left.clone()),
+            (LogicalType::Tuple(types_0), LogicalType::Tuple(types_1)) => {
+                if types_0.len() > types_1.len() {
+                    return Ok(left.clone());
+                } else {
+                    return Ok(right.clone());
+                }
+            }
             _ => {}
         }
         if left.is_numeric() && right.is_numeric() {
@@ -223,7 +230,7 @@ impl LogicalType {
         {
             return Ok(LogicalType::Varchar(None, CharLengthUnits::Characters));
         }
-        Err(DatabaseError::Incomparable(*left, *right))
+        Err(DatabaseError::Incomparable(left.clone(), right.clone()))
     }
 
     fn combine_numeric_types(
@@ -231,7 +238,7 @@ impl LogicalType {
         right: &LogicalType,
     ) -> Result<LogicalType, DatabaseError> {
         if left == right {
-            return Ok(*left);
+            return Ok(left.clone());
         }
         if left.is_signed_numeric() && right.is_unsigned_numeric() {
             // this method is symmetric
@@ -241,10 +248,10 @@ impl LogicalType {
         }
 
         if LogicalType::can_implicit_cast(left, right) {
-            return Ok(*right);
+            return Ok(right.clone());
         }
         if LogicalType::can_implicit_cast(right, left) {
-            return Ok(*left);
+            return Ok(left.clone());
         }
         // we can't cast implicitly either way and types are not equal
         // this happens when left is signed and right is unsigned
@@ -255,7 +262,7 @@ impl LogicalType {
             (LogicalType::Integer, _) | (_, LogicalType::UInteger) => Ok(LogicalType::Bigint),
             (LogicalType::Smallint, _) | (_, LogicalType::USmallint) => Ok(LogicalType::Integer),
             (LogicalType::Tinyint, _) | (_, LogicalType::UTinyint) => Ok(LogicalType::Smallint),
-            _ => Err(DatabaseError::Incomparable(*left, *right)),
+            _ => Err(DatabaseError::Incomparable(left.clone(), right.clone())),
         }
     }
 
@@ -274,6 +281,7 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::UTinyint => matches!(
                 to,
@@ -285,6 +293,7 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::Smallint => matches!(
                 to,
@@ -292,6 +301,7 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::USmallint => matches!(
                 to,
@@ -301,10 +311,14 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::Integer => matches!(
                 to,
-                LogicalType::Bigint | LogicalType::Float | LogicalType::Double
+                LogicalType::Bigint
+                    | LogicalType::Float
+                    | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
             LogicalType::UInteger => matches!(
                 to,
@@ -312,10 +326,17 @@ impl LogicalType {
                     | LogicalType::Bigint
                     | LogicalType::Float
                     | LogicalType::Double
+                    | LogicalType::Decimal(_, _)
             ),
-            LogicalType::Bigint => matches!(to, LogicalType::Float | LogicalType::Double),
-            LogicalType::UBigint => matches!(to, LogicalType::Float | LogicalType::Double),
-            LogicalType::Float => matches!(to, LogicalType::Double),
+            LogicalType::Bigint => matches!(
+                to,
+                LogicalType::Float | LogicalType::Double | LogicalType::Decimal(_, _)
+            ),
+            LogicalType::UBigint => matches!(
+                to,
+                LogicalType::Float | LogicalType::Double | LogicalType::Decimal(_, _)
+            ),
+            LogicalType::Float => matches!(to, LogicalType::Double | LogicalType::Decimal(_, _)),
             LogicalType::Double => false,
             LogicalType::Char(..) => false,
             LogicalType::Varchar(..) => false,
@@ -333,7 +354,7 @@ impl LogicalType {
             LogicalType::Time => {
                 matches!(to, LogicalType::Varchar(..) | LogicalType::Char(..))
             }
-            LogicalType::Decimal(_, _) | LogicalType::Tuple => false,
+            LogicalType::Decimal(_, _) | LogicalType::Tuple(_) => false,
         }
     }
 }
@@ -371,7 +392,7 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                     char_unit.unwrap_or(CharLengthUnits::Characters),
                 ))
             }
-            sqlparser::ast::DataType::String => {
+            sqlparser::ast::DataType::String | sqlparser::ast::DataType::Text => {
                 Ok(LogicalType::Varchar(None, CharLengthUnits::Characters))
             }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
@@ -529,7 +550,11 @@ pub(crate) mod test {
             &mut reference_tables,
             LogicalType::Decimal(None, None),
         )?;
-        fn_assert(&mut cursor, &mut reference_tables, LogicalType::Tuple)?;
+        fn_assert(
+            &mut cursor,
+            &mut reference_tables,
+            LogicalType::Tuple(vec![LogicalType::Integer]),
+        )?;
 
         Ok(())
     }

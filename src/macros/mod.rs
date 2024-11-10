@@ -56,7 +56,7 @@ macro_rules! implement_from_tuple {
 /// # Examples
 ///
 /// ```
-/// scala_function!(MyFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: ValueRef, v2: ValueRef| {
+/// scala_function!(MyFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => |v1: DataValue, v2: DataValue| {
 ///     DataValue::binary_op(&v1, &v2, &BinaryOperator::Plus)
 /// });
 ///
@@ -103,7 +103,7 @@ macro_rules! scala_function {
                     _index += 1;
 
                     if value.logical_type() != $arg_ty {
-                        value = Arc::new(::fnck_sql::types::value::DataValue::clone(&value).cast(&$arg_ty)?);
+                        value = ::fnck_sql::types::value::DataValue::clone(&value).cast(&$arg_ty)?;
                     }
                     value
                 }, )*)
@@ -127,7 +127,7 @@ macro_rules! scala_function {
 /// # Examples
 ///
 /// ```
-/// table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: ValueRef| {
+/// table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: DataValue| {
 ///     let num = v1.i32().unwrap();
 ///
 ///     Ok(Box::new((0..num)
@@ -135,8 +135,8 @@ macro_rules! scala_function {
 ///         .map(|i| Ok(Tuple {
 ///             id: None,
 ///             values: vec![
-///                 Arc::new(DataValue::Int32(Some(i))),
-///                 Arc::new(DataValue::Int32(Some(i))),
+///                 DataValue::Int32(Some(i)),
+///                 DataValue::Int32(Some(i)),
 ///             ]
 ///         }))) as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
 ///     }));
@@ -154,7 +154,7 @@ macro_rules! table_function {
                 let mut columns = Vec::new();
 
                 $({
-                    columns.push(::fnck_sql::catalog::column::ColumnCatalog::new(stringify!($output_name).to_lowercase(), true, ::fnck_sql::catalog::column::ColumnDesc::new($output_ty, false, false, None).unwrap()));
+                    columns.push(::fnck_sql::catalog::column::ColumnCatalog::new(stringify!($output_name).to_lowercase(), true, ::fnck_sql::catalog::column::ColumnDesc::new($output_ty, None, false, None).unwrap()));
                 })*
                 ::fnck_sql::catalog::table::TableCatalog::new(Arc::new(stringify!($function_name).to_lowercase()), columns).unwrap()
             };
@@ -199,7 +199,7 @@ macro_rules! table_function {
                     _index += 1;
 
                     if value.logical_type() != $arg_ty {
-                        value = Arc::new(::fnck_sql::types::value::DataValue::clone(&value).cast(&$arg_ty)?);
+                        value = ::fnck_sql::types::value::DataValue::clone(&value).cast(&$arg_ty)?;
                     }
                     value
                 }, )*)
