@@ -10,6 +10,7 @@ use crate::serdes::ReferenceTables;
 use crate::storage::table_codec::TableCodec;
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
+use crate::types::tuple_builder::TupleIdBuilder;
 use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use crate::utils::lru::SharedLruCache;
@@ -21,7 +22,6 @@ use std::ops::SubAssign;
 use std::sync::Arc;
 use std::{mem, slice};
 use ulid::Generator;
-use crate::types::tuple_builder::TupleIdBuilder;
 
 pub(crate) type StatisticsMetaCache = SharedLruCache<(TableName, IndexId), StatisticsMeta>;
 pub(crate) type TableCache = SharedLruCache<TableName, TableCatalog>;
@@ -657,7 +657,11 @@ impl<T: Transaction> IndexImplParams<'_, T> {
         Ok(val)
     }
 
-    fn get_tuple_by_id(&self, id_builder: &mut TupleIdBuilder, tuple_id: &TupleId) -> Result<Option<Tuple>, DatabaseError> {
+    fn get_tuple_by_id(
+        &self,
+        id_builder: &mut TupleIdBuilder,
+        tuple_id: &TupleId,
+    ) -> Result<Option<Tuple>, DatabaseError> {
         let key = TableCodec::encode_tuple_key(self.table_name, tuple_id)?;
 
         Ok(self.tx.get(&key)?.map(|bytes| {
@@ -1000,7 +1004,9 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                     continue;
                 }
                 Self::limit_sub(&mut self.limit);
-                let tuple = self.inner.index_lookup(&bytes, &mut self.id_builder, &self.params)?;
+                let tuple = self
+                    .inner
+                    .index_lookup(&bytes, &mut self.id_builder, &self.params)?;
 
                 return Ok(Some(tuple));
             }
@@ -1063,7 +1069,10 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                 Range::Eq(mut val) => {
                     val = self.params.try_cast(val)?;
 
-                    match self.inner.eq_to_res(&val, &mut self.id_builder, &self.params)? {
+                    match self
+                        .inner
+                        .eq_to_res(&val, &mut self.id_builder, &self.params)?
+                    {
                         IndexResult::Tuple(tuple) => {
                             if Self::offset_move(&mut self.offset) {
                                 return self.next_tuple();

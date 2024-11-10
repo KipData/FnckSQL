@@ -5,13 +5,13 @@ use crate::serdes::{ReferenceSerialization, ReferenceTables};
 use crate::storage::{TableCache, Transaction};
 use crate::types::index::{Index, IndexId, IndexMeta, IndexType};
 use crate::types::tuple::{Schema, Tuple, TupleId};
+use crate::types::tuple_builder::TupleIdBuilder;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use bytes::Bytes;
 use integer_encoding::FixedInt;
 use lazy_static::lazy_static;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
-use crate::types::tuple_builder::TupleIdBuilder;
 
 const BOUND_MIN_TAG: u8 = 0;
 const BOUND_MAX_TAG: u8 = 1;
@@ -499,6 +499,7 @@ mod tests {
     use crate::storage::Storage;
     use crate::types::index::{Index, IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
+    use crate::types::tuple_builder::TupleIdBuilder;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use bytes::Bytes;
@@ -510,7 +511,6 @@ mod tests {
     use std::slice;
     use std::sync::Arc;
     use ulid::Ulid;
-    use crate::types::tuple_builder::TupleIdBuilder;
 
     fn build_table_codec() -> TableCatalog {
         let columns = vec![
@@ -548,7 +548,13 @@ mod tests {
         let mut id_builder = TupleIdBuilder::new(schema);
 
         debug_assert_eq!(
-            TableCodec::decode_tuple(&table_catalog.types(), &mut id_builder, &[0, 1], schema, &bytes),
+            TableCodec::decode_tuple(
+                &table_catalog.types(),
+                &mut id_builder,
+                &[0, 1],
+                schema,
+                &bytes
+            ),
             tuple
         );
 

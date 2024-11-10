@@ -141,6 +141,7 @@ mod test {
     };
     use crate::types::index::{IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
+    use crate::types::tuple_builder::TupleIdBuilder;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use crate::utils::lru::SharedLruCache;
@@ -149,7 +150,6 @@ mod test {
     use std::hash::RandomState;
     use std::sync::Arc;
     use tempfile::TempDir;
-    use crate::types::tuple_builder::TupleIdBuilder;
 
     #[test]
     fn test_in_rocksdb_storage_works_with_data() -> Result<(), DatabaseError> {

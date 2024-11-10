@@ -1,12 +1,12 @@
 use crate::catalog::ColumnRef;
 use crate::errors::DatabaseError;
+use crate::types::tuple_builder::TupleIdBuilder;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::sync::Arc;
-use crate::types::tuple_builder::TupleIdBuilder;
 
 lazy_static! {
     pub static ref EMPTY_TUPLE: Tuple = {
@@ -168,13 +168,13 @@ pub fn create_table(schema: &Schema, tuples: &[Tuple]) -> Table {
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::types::tuple::Tuple;
+    use crate::types::tuple_builder::TupleIdBuilder;
     use crate::types::value::{DataValue, Utf8Type};
     use crate::types::LogicalType;
     use itertools::Itertools;
     use rust_decimal::Decimal;
     use sqlparser::ast::CharLengthUnits;
     use std::sync::Arc;
-    use crate::types::tuple_builder::TupleIdBuilder;
 
     #[test]
     fn test_tuple_serialize_to_and_deserialize_from() {
