@@ -9,18 +9,14 @@ use crate::planner::operator::Operator;
 use crate::types::value::{DataValue, Utf8Type};
 use crate::types::LogicalType;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use sqlparser::ast::CharLengthUnits;
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref COLUMN_PRUNING_RULE: Pattern = {
-        Pattern {
-            predicate: |_| true,
-            children: PatternChildrenPredicate::None,
-        }
-    };
-}
+static COLUMN_PRUNING_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |_| true,
+    children: PatternChildrenPredicate::None,
+});
 
 #[derive(Clone)]
 pub struct ColumnPruning;

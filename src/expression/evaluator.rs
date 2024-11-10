@@ -7,15 +7,13 @@ use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type};
 use crate::types::LogicalType;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use regex::Regex;
 use sqlparser::ast::{CharLengthUnits, TrimWhereField};
 use std::cmp;
 use std::cmp::Ordering;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref NULL_VALUE: DataValue = DataValue::Null;
-}
+static NULL_VALUE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Null);
 
 macro_rules! eval_to_num {
     ($num_expr:expr, $tuple:expr, $schema:expr) => {

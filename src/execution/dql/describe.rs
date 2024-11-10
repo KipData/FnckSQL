@@ -6,26 +6,26 @@ use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::Tuple;
 use crate::types::value::{DataValue, Utf8Type};
-use lazy_static::lazy_static;
 use sqlparser::ast::CharLengthUnits;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref PRIMARY_KEY_TYPE: DataValue = DataValue::Utf8 {
-        value: Some(String::from("PRIMARY")),
-        ty: Utf8Type::Variable(None),
-        unit: CharLengthUnits::Characters
-    };
-    static ref UNIQUE_KEY_TYPE: DataValue = DataValue::Utf8 {
-        value: Some(String::from("UNIQUE")),
-        ty: Utf8Type::Variable(None),
-        unit: CharLengthUnits::Characters
-    };
-    static ref EMPTY_KEY_TYPE: DataValue = DataValue::Utf8 {
-        value: Some(String::from("EMPTY")),
-        ty: Utf8Type::Variable(None),
-        unit: CharLengthUnits::Characters
-    };
-}
+static PRIMARY_KEY_TYPE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Utf8 {
+    value: Some(String::from("PRIMARY")),
+    ty: Utf8Type::Variable(None),
+    unit: CharLengthUnits::Characters,
+});
+
+static UNIQUE_KEY_TYPE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Utf8 {
+    value: Some(String::from("UNIQUE")),
+    ty: Utf8Type::Variable(None),
+    unit: CharLengthUnits::Characters,
+});
+
+static EMPTY_KEY_TYPE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Utf8 {
+    value: Some(String::from("EMPTY")),
+    ty: Utf8Type::Variable(None),
+    unit: CharLengthUnits::Characters,
+});
 
 pub struct Describe {
     table_name: TableName,

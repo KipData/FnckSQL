@@ -6,32 +6,27 @@ use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::single_mapping;
 use crate::storage::Transaction;
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref GROUP_BY_AGGREGATE_PATTERN: Pattern = {
-        Pattern {
-            predicate: |op| {
-                if let Operator::Aggregate(op) = op {
-                    return !op.groupby_exprs.is_empty();
-                }
-                false
-            },
-            children: PatternChildrenPredicate::None,
+static GROUP_BY_AGGREGATE_PATTERN: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| {
+        if let Operator::Aggregate(op) = op {
+            return !op.groupby_exprs.is_empty();
         }
-    };
-    static ref SIMPLE_AGGREGATE_PATTERN: Pattern = {
-        Pattern {
-            predicate: |op| {
-                if let Operator::Aggregate(op) = op {
-                    return op.groupby_exprs.is_empty();
-                }
-                false
-            },
-            children: PatternChildrenPredicate::None,
+        false
+    },
+    children: PatternChildrenPredicate::None,
+});
+
+static SIMPLE_AGGREGATE_PATTERN: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| {
+        if let Operator::Aggregate(op) = op {
+            return op.groupby_exprs.is_empty();
         }
-    };
-}
+        false
+    },
+    children: PatternChildrenPredicate::None,
+});
 
 #[derive(Clone)]
 pub struct GroupByAggregateImplementation;

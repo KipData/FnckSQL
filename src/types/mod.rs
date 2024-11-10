@@ -13,7 +13,6 @@ use std::cmp;
 use crate::errors::DatabaseError;
 use fnck_sql_serde_macros::ReferenceSerialization;
 use sqlparser::ast::{CharLengthUnits, ExactNumberInfo, TimezoneInfo};
-use strum_macros::AsRefStr;
 use ulid::Ulid;
 
 pub type ColumnId = Ulid;
@@ -28,7 +27,6 @@ pub type ColumnId = Ulid;
     Hash,
     PartialOrd,
     Ord,
-    AsRefStr,
     Serialize,
     Deserialize,
     ReferenceSerialization,
@@ -449,7 +447,43 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
 
 impl std::fmt::Display for LogicalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_ref().to_uppercase())
+        match self {
+            LogicalType::Invalid => write!(f, "Invalid")?,
+            LogicalType::SqlNull => write!(f, "SqlNull")?,
+            LogicalType::Boolean => write!(f, "Boolean")?,
+            LogicalType::Tinyint => write!(f, "Tinyint")?,
+            LogicalType::UTinyint => write!(f, "UTinyint")?,
+            LogicalType::Smallint => write!(f, "Smallint")?,
+            LogicalType::USmallint => write!(f, "USmallint")?,
+            LogicalType::Integer => write!(f, "Integer")?,
+            LogicalType::UInteger => write!(f, "UInteger")?,
+            LogicalType::Bigint => write!(f, "Bigint")?,
+            LogicalType::UBigint => write!(f, "UBigint")?,
+            LogicalType::Float => write!(f, "Float")?,
+            LogicalType::Double => write!(f, "Double")?,
+            LogicalType::Char(len, units) => write!(f, "Char({}, {})", len, units)?,
+            LogicalType::Varchar(len, units) => write!(f, "Varchar({:?}, {})", len, units)?,
+            LogicalType::Date => write!(f, "Date")?,
+            LogicalType::DateTime => write!(f, "DateTime")?,
+            LogicalType::Time => write!(f, "Time")?,
+            LogicalType::Decimal(precision, scale) => {
+                write!(f, "Decimal({:?}, {:?})", precision, scale)?
+            }
+            LogicalType::Tuple(types) => {
+                write!(f, "(")?;
+                let mut first = true;
+                for ty in types {
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    first = false;
+                    write!(f, "{}", ty)?;
+                }
+                write!(f, ")")?
+            }
+        }
+
+        Ok(())
     }
 }
 

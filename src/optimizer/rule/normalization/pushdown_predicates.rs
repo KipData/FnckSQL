@@ -12,40 +12,33 @@ use crate::planner::operator::Operator;
 use crate::types::index::{IndexInfo, IndexMetaRef, IndexType};
 use crate::types::LogicalType;
 use itertools::Itertools;
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref PUSH_PREDICATE_THROUGH_JOIN: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Filter(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Join(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
+static PUSH_PREDICATE_THROUGH_JOIN: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Filter(_)),
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| matches!(op, Operator::Join(_)),
+        children: PatternChildrenPredicate::None,
+    }]),
+});
 
-    static ref PUSH_PREDICATE_INTO_SCAN: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Filter(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::TableScan(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
+static PUSH_PREDICATE_INTO_SCAN: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Filter(_)),
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| matches!(op, Operator::TableScan(_)),
+        children: PatternChildrenPredicate::None,
+    }]),
+});
 
-    // TODO: 感觉是只是处理projection中的alias反向替换为filter中表达式
-    static ref PUSH_PREDICATE_THROUGH_NON_JOIN: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Filter(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Project(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
-}
+// TODO: 感觉是只是处理projection中的alias反向替换为filter中表达式
+#[allow(dead_code)]
+static PUSH_PREDICATE_THROUGH_NON_JOIN: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Filter(_)),
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| matches!(op, Operator::Project(_)),
+        children: PatternChildrenPredicate::None,
+    }]),
+});
 
 fn split_conjunctive_predicates(expr: &ScalarExpression) -> Vec<ScalarExpression> {
     match expr {

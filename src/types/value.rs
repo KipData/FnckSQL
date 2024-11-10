@@ -2,9 +2,7 @@ use super::LogicalType;
 use crate::errors::DatabaseError;
 use chrono::format::{DelayedFormat, StrftimeItems};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
-use integer_encoding::{FixedInt, FixedIntWriter};
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
@@ -14,13 +12,15 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::io::Write;
 use std::str::FromStr;
+use std::sync::LazyLock;
 use std::{cmp, fmt, mem};
 
-lazy_static! {
-    pub static ref NULL_VALUE: DataValue = DataValue::Null;
-    static ref UNIX_DATETIME: NaiveDateTime = DateTime::from_timestamp(0, 0).unwrap().naive_utc();
-    static ref UNIX_TIME: NaiveTime = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
-}
+pub static NULL_VALUE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Null);
+
+static UNIX_DATETIME: LazyLock<NaiveDateTime> =
+    LazyLock::new(|| DateTime::from_timestamp(0, 0).unwrap().naive_utc());
+
+static UNIX_TIME: LazyLock<NaiveTime> = LazyLock::new(|| NaiveTime::from_hms_opt(0, 0, 0).unwrap());
 
 pub const DATE_FMT: &str = "%Y-%m-%d";
 pub const DATE_TIME_FMT: &str = "%Y-%m-%d %H:%M:%S";
@@ -487,7 +487,8 @@ impl DataValue {
             DataValue::Null => (),
             DataValue::Boolean(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v as u8)?);
+                    writer.write_all(&[*v as u8])?;
+                    return Ok(1);
                 }
             }
             DataValue::Float32(v) => {
@@ -504,42 +505,50 @@ impl DataValue {
             }
             DataValue::Int8(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(1);
                 }
             }
             DataValue::Int16(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(2);
                 }
             }
             DataValue::Int32(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(4);
                 }
             }
             DataValue::Int64(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(8);
                 }
             }
             DataValue::UInt8(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(1);
                 }
             }
             DataValue::UInt16(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(2);
                 }
             }
             DataValue::UInt32(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(4);
                 }
             }
             DataValue::UInt64(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(8);
                 }
             }
             DataValue::Utf8 { value: v, ty, unit } => {
@@ -577,17 +586,20 @@ impl DataValue {
             }
             DataValue::Date32(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(4);
                 }
             }
             DataValue::Date64(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(8);
                 }
             }
             DataValue::Time(v) => {
                 if let Some(v) = v {
-                    return Ok(writer.write_fixedint(*v)?);
+                    writer.write_all(&v.to_le_bytes())?;
+                    return Ok(4);
                 }
             }
             DataValue::Decimal(v) => {
@@ -606,30 +618,30 @@ impl DataValue {
             LogicalType::Invalid => panic!("invalid logical type"),
             LogicalType::SqlNull => DataValue::Null,
             LogicalType::Boolean => DataValue::Boolean(bytes.first().map(|v| *v != 0)),
-            LogicalType::Tinyint => {
-                DataValue::Int8((!bytes.is_empty()).then(|| i8::decode_fixed(bytes)))
-            }
-            LogicalType::UTinyint => {
-                DataValue::UInt8((!bytes.is_empty()).then(|| u8::decode_fixed(bytes)))
-            }
-            LogicalType::Smallint => {
-                DataValue::Int16((!bytes.is_empty()).then(|| i16::decode_fixed(bytes)))
-            }
-            LogicalType::USmallint => {
-                DataValue::UInt16((!bytes.is_empty()).then(|| u16::decode_fixed(bytes)))
-            }
-            LogicalType::Integer => {
-                DataValue::Int32((!bytes.is_empty()).then(|| i32::decode_fixed(bytes)))
-            }
-            LogicalType::UInteger => {
-                DataValue::UInt32((!bytes.is_empty()).then(|| u32::decode_fixed(bytes)))
-            }
-            LogicalType::Bigint => {
-                DataValue::Int64((!bytes.is_empty()).then(|| i64::decode_fixed(bytes)))
-            }
-            LogicalType::UBigint => {
-                DataValue::UInt64((!bytes.is_empty()).then(|| u64::decode_fixed(bytes)))
-            }
+            LogicalType::Tinyint => DataValue::Int8(
+                (!bytes.is_empty()).then(|| i8::from_le_bytes(bytes.try_into().unwrap())),
+            ),
+            LogicalType::UTinyint => DataValue::UInt8(
+                (!bytes.is_empty()).then(|| u8::from_le_bytes(bytes.try_into().unwrap())),
+            ),
+            LogicalType::Smallint => DataValue::Int16(
+                (!bytes.is_empty()).then(|| i16::from_le_bytes(bytes.try_into().unwrap())),
+            ),
+            LogicalType::USmallint => DataValue::UInt16(
+                (!bytes.is_empty()).then(|| u16::from_le_bytes(bytes.try_into().unwrap())),
+            ),
+            LogicalType::Integer => DataValue::Int32(
+                (!bytes.is_empty()).then(|| i32::from_le_bytes(bytes.try_into().unwrap())),
+            ),
+            LogicalType::UInteger => DataValue::UInt32(
+                (!bytes.is_empty()).then(|| u32::from_le_bytes(bytes.try_into().unwrap())),
+            ),
+            LogicalType::Bigint => DataValue::Int64(
+                (!bytes.is_empty()).then(|| i64::from_le_bytes(bytes.try_into().unwrap())),
+            ),
+            LogicalType::UBigint => DataValue::UInt64(
+                (!bytes.is_empty()).then(|| u64::from_le_bytes(bytes.try_into().unwrap())),
+            ),
             LogicalType::Float => DataValue::Float32((!bytes.is_empty()).then(|| {
                 let mut buf = [0; 4];
                 buf.copy_from_slice(bytes);
@@ -664,15 +676,15 @@ impl DataValue {
                     unit: *unit,
                 }
             }
-            LogicalType::Date => {
-                DataValue::Date32((!bytes.is_empty()).then(|| i32::decode_fixed(bytes)))
-            }
-            LogicalType::DateTime => {
-                DataValue::Date64((!bytes.is_empty()).then(|| i64::decode_fixed(bytes)))
-            }
-            LogicalType::Time => {
-                DataValue::Time((!bytes.is_empty()).then(|| u32::decode_fixed(bytes)))
-            }
+            LogicalType::Date => DataValue::Date32(
+                (!bytes.is_empty()).then(|| i32::from_le_bytes(bytes.try_into().unwrap())),
+            ),
+            LogicalType::DateTime => DataValue::Date64(
+                (!bytes.is_empty()).then(|| i64::from_le_bytes(bytes.try_into().unwrap())),
+            ),
+            LogicalType::Time => DataValue::Time(
+                (!bytes.is_empty()).then(|| u32::from_le_bytes(bytes.try_into().unwrap())),
+            ),
             LogicalType::Decimal(_, _) => DataValue::Decimal(
                 (!bytes.is_empty())
                     .then(|| Decimal::deserialize(<[u8; 16]>::try_from(bytes).unwrap())),

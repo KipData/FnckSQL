@@ -149,16 +149,14 @@ macro_rules! scala_function {
 #[macro_export]
 macro_rules! table_function {
     ($struct_name:ident::$function_name:ident($($arg_ty:expr),*) -> [$($output_name:ident: $output_ty:expr),*] => $closure:expr) => {
-        ::lazy_static::lazy_static! {
-            static ref $function_name: ::fnck_sql::catalog::table::TableCatalog = {
-                let mut columns = Vec::new();
+        static $function_name: ::std::sync::LazyLock<::fnck_sql::catalog::table::TableCatalog> = ::std::sync::LazyLock::new(|| {
+            let mut columns = Vec::new();
 
-                $({
-                    columns.push(::fnck_sql::catalog::column::ColumnCatalog::new(stringify!($output_name).to_lowercase(), true, ::fnck_sql::catalog::column::ColumnDesc::new($output_ty, None, false, None).unwrap()));
-                })*
-                ::fnck_sql::catalog::table::TableCatalog::new(Arc::new(stringify!($function_name).to_lowercase()), columns).unwrap()
-            };
-        }
+            $({
+                columns.push(::fnck_sql::catalog::column::ColumnCatalog::new(stringify!($output_name).to_lowercase(), true, ::fnck_sql::catalog::column::ColumnDesc::new($output_ty, None, false, None).unwrap()));
+            })*
+            ::fnck_sql::catalog::table::TableCatalog::new(Arc::new(stringify!($function_name).to_lowercase()), columns).unwrap()
+        });
 
         #[derive(Debug, ::serde::Serialize, ::serde::Deserialize)]
         pub(crate) struct $struct_name {

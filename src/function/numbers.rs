@@ -9,24 +9,22 @@ use crate::types::tuple::SchemaRef;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
-use lazy_static::lazy_static;
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref NUMBERS: TableCatalog = {
-        TableCatalog::new(
-            Arc::new("numbers".to_lowercase()),
-            vec![ColumnCatalog::new(
-                "number".to_lowercase(),
-                true,
-                ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
-            )],
-        )
-        .unwrap()
-    };
-}
+static NUMBERS: LazyLock<TableCatalog> = LazyLock::new(|| {
+    TableCatalog::new(
+        Arc::new("numbers".to_lowercase()),
+        vec![ColumnCatalog::new(
+            "number".to_lowercase(),
+            true,
+            ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
+        )],
+    )
+    .unwrap()
+});
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Numbers {

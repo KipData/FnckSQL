@@ -4,9 +4,9 @@ create table t9 (c1 int primary key, c2 int default 0, c3 varchar unique);
 query TTTTI
 describe t9;
 ----
-c1 INTEGER 4 false PRIMARY null
-c2 INTEGER 4 true EMPTY 0
-c3 VARCHAR null true UNIQUE null
+c1 Integer 4 false PRIMARY null
+c2 Integer 4 true EMPTY 0
+c3 Varchar(None, CHARACTERS) null true UNIQUE null
 
 statement ok
 drop table t9;
@@ -17,9 +17,9 @@ create table t9_m (c1 int primary key, c2 int primary key, c3 varchar unique);
 query TTTTI
 describe t9_m;
 ----
-c1 INTEGER 4 false PRIMARY null
-c2 INTEGER 4 false PRIMARY null
-c3 VARCHAR null true UNIQUE null
+c1 Integer 4 false PRIMARY null
+c2 Integer 4 false PRIMARY null
+c3 Varchar(None, CHARACTERS) null true UNIQUE null
 
 statement ok
 drop table t9_m;

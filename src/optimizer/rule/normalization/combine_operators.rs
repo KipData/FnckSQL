@@ -6,44 +6,38 @@ use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::rule::normalization::is_subset_exprs;
 use crate::planner::operator::Operator;
 use crate::types::LogicalType;
-use lazy_static::lazy_static;
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref COLLAPSE_PROJECT_RULE: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Project(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Project(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
-    static ref COMBINE_FILTERS_RULE: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Filter(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Filter(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
-    static ref COLLAPSE_GROUP_BY_AGG: Pattern = {
-        Pattern {
-            predicate: |op| match op {
-                Operator::Aggregate(agg_op) => !agg_op.groupby_exprs.is_empty(),
-                _ => false,
-            },
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| match op {
-                    Operator::Aggregate(agg_op) => !agg_op.groupby_exprs.is_empty(),
-                    _ => false,
-                },
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
-}
+static COLLAPSE_PROJECT_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Project(_)),
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| matches!(op, Operator::Project(_)),
+        children: PatternChildrenPredicate::None,
+    }]),
+});
+
+static COMBINE_FILTERS_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Filter(_)),
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| matches!(op, Operator::Filter(_)),
+        children: PatternChildrenPredicate::None,
+    }]),
+});
+
+static COLLAPSE_GROUP_BY_AGG: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| match op {
+        Operator::Aggregate(agg_op) => !agg_op.groupby_exprs.is_empty(),
+        _ => false,
+    },
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| match op {
+            Operator::Aggregate(agg_op) => !agg_op.groupby_exprs.is_empty(),
+            _ => false,
+        },
+        children: PatternChildrenPredicate::None,
+    }]),
+});
 
 /// Combine two adjacent project operators into one.
 pub struct CollapseProject;
