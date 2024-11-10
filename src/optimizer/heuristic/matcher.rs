@@ -129,8 +129,6 @@ mod tests {
             children: PatternChildrenPredicate::Recursive,
         };
 
-        assert!(
-            HepMatcher::new(&only_dummy_pattern, HepNodeId::new(0), &graph).match_opt_expr()
-        );
+        assert!(HepMatcher::new(&only_dummy_pattern, HepNodeId::new(0), &graph).match_opt_expr());
     }
 }
