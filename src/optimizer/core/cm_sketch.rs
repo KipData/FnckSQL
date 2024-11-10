@@ -212,7 +212,7 @@ mod tests {
         for _ in 0..300 {
             cms.increment("key");
         }
-        debug_assert_eq!(cms.estimate("key"), 300);
+        assert_eq!(cms.estimate("key"), 300);
     }
 
     #[test]
@@ -222,7 +222,7 @@ mod tests {
             cms.increment(&(i % 100));
         }
         for key in 0..100 {
-            debug_assert!(cms.estimate(&key) >= 9_000);
+            assert!(cms.estimate(&key) >= 9_000);
         }
     }
 
@@ -232,7 +232,7 @@ mod tests {
         for _ in 0..300 {
             cms.increment(&DataValue::Int32(Some(300)));
         }
-        debug_assert_eq!(
+        assert_eq!(
             cms.collect_count(&vec![
                 Range::Eq(DataValue::Int32(Some(300))),
                 Range::Scope {

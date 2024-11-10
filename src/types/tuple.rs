@@ -378,7 +378,7 @@ mod tests {
             &tuples[1].serialize_to(&types).unwrap(),
         );
 
-        debug_assert_eq!(tuples[0], tuple_0);
-        debug_assert_eq!(tuples[1], tuple_1);
+        assert_eq!(tuples[0], tuple_0);
+        assert_eq!(tuples[1], tuple_1);
     }
 }

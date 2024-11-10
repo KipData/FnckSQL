@@ -384,7 +384,7 @@ pub(crate) mod test {
         let (schema, tuples) = fnck_sql.run("select current_date()")?;
         println!("{}", create_table(&schema, &tuples));
 
-        debug_assert_eq!(
+        assert_eq!(
             schema,
             Arc::new(vec![ColumnRef::from(ColumnCatalog::new(
                 "current_date()".to_string(),
@@ -392,7 +392,7 @@ pub(crate) mod test {
                 ColumnDesc::new(LogicalType::Date, None, false, None).unwrap()
             ))])
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples,
             vec![Tuple {
                 id: None,
@@ -420,8 +420,8 @@ pub(crate) mod test {
         let number_column_id = schema[0].id().unwrap();
         column.set_ref_table(Arc::new("a".to_string()), number_column_id, false);
 
-        debug_assert_eq!(schema, Arc::new(vec![ColumnRef::from(column)]));
-        debug_assert_eq!(
+        assert_eq!(schema, Arc::new(vec![ColumnRef::from(column)]));
+        assert_eq!(
             tuples,
             vec![
                 Tuple {
@@ -456,34 +456,34 @@ pub(crate) mod test {
         let (_, tuples_1) = tx_1.run("select * from t1")?;
         let (_, tuples_2) = tx_2.run("select * from t1")?;
 
-        debug_assert_eq!(tuples_1.len(), 2);
-        debug_assert_eq!(tuples_2.len(), 2);
+        assert_eq!(tuples_1.len(), 2);
+        assert_eq!(tuples_2.len(), 2);
 
-        debug_assert_eq!(
+        assert_eq!(
             tuples_1[0].values,
             vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples_1[1].values,
             vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1))]
         );
 
-        debug_assert_eq!(
+        assert_eq!(
             tuples_2[0].values,
             vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
         );
-        debug_assert_eq!(
+        assert_eq!(
             tuples_2[1].values,
             vec![DataValue::Int32(Some(3)), DataValue::Int32(Some(3))]
         );
 
         tx_1.commit()?;
 
-        debug_assert!(tx_2.commit().is_err());
+        assert!(tx_2.commit().is_err());
 
         let mut tx_3 = fnck_sql.new_transaction()?;
         let res = tx_3.run("create table t2 (a int primary key, b int)");
-        debug_assert!(res.is_err());
+        assert!(res.is_err());
 
         Ok(())
     }

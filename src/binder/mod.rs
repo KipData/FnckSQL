@@ -605,13 +605,13 @@ pub mod test {
 
     #[test]
     pub fn test_valid_identifier() {
-        debug_assert!(is_valid_identifier("valid_table"));
-        debug_assert!(is_valid_identifier("valid_column"));
-        debug_assert!(is_valid_identifier("_valid_column"));
-        debug_assert!(is_valid_identifier("valid_column_1"));
+        assert!(is_valid_identifier("valid_table"));
+        assert!(is_valid_identifier("valid_column"));
+        assert!(is_valid_identifier("_valid_column"));
+        assert!(is_valid_identifier("valid_column_1"));
 
-        debug_assert!(!is_valid_identifier("invalid_name&"));
-        debug_assert!(!is_valid_identifier("1_invalid_name"));
-        debug_assert!(!is_valid_identifier("____"));
+        assert!(!is_valid_identifier("invalid_name&"));
+        assert!(!is_valid_identifier("1_invalid_name"));
+        assert!(!is_valid_identifier("____"));
     }
 }

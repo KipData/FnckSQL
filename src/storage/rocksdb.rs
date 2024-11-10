@@ -182,8 +182,8 @@ mod test {
         )?;
 
         let table_catalog = transaction.table(&table_cache, Arc::new("test".to_string()))?;
-        debug_assert!(table_catalog.is_some());
-        debug_assert!(table_catalog
+        assert!(table_catalog.is_some());
+        assert!(table_catalog
             .unwrap()
             .get_column_id_by_name(&"c1".to_string())
             .is_some());
@@ -215,10 +215,10 @@ mod test {
         )?;
 
         let option_1 = iter.next_tuple()?;
-        debug_assert_eq!(option_1.unwrap().id, Some(DataValue::Int32(Some(2))));
+        assert_eq!(option_1.unwrap().id, Some(DataValue::Int32(Some(2))));
 
         let option_2 = iter.next_tuple()?;
-        debug_assert_eq!(option_2, None);
+        assert_eq!(option_2, None);
 
         Ok(())
     }
@@ -280,7 +280,7 @@ mod test {
             result.push(tuple.id.unwrap());
         }
 
-        debug_assert_eq!(result, tuple_ids);
+        assert_eq!(result, tuple_ids);
 
         Ok(())
     }
@@ -313,8 +313,8 @@ mod test {
             .unwrap();
 
         while let Some(tuple) = iter.next_tuple()? {
-            debug_assert_eq!(tuple.id, Some(DataValue::Int32(Some(1))));
-            debug_assert_eq!(
+            assert_eq!(tuple.id, Some(DataValue::Int32(Some(1))));
+            assert_eq!(
                 tuple.values,
                 vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1))]
             )
