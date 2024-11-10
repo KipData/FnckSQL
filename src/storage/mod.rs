@@ -21,6 +21,7 @@ use std::ops::SubAssign;
 use std::sync::Arc;
 use std::{mem, slice};
 use ulid::Generator;
+use crate::types::tuple_builder::TupleIdBuilder;
 
 pub(crate) type StatisticsMetaCache = SharedLruCache<(TableName, IndexId), StatisticsMeta>;
 pub(crate) type TableCache = SharedLruCache<TableName, TableCatalog>;
@@ -58,6 +59,7 @@ pub trait Transaction: Sized {
         let table = self
             .table(table_cache, table_name.clone())?
             .ok_or(DatabaseError::TableNotFound)?;
+        let id_builder = TupleIdBuilder::new(table.schema_ref());
         let table_types = table.types();
         if columns.is_empty() {
             let (i, column) = &table.primary_keys()[0];
@@ -78,6 +80,7 @@ pub trait Transaction: Sized {
             limit: bounds.1,
             table_types,
             tuple_columns: Arc::new(tuple_columns),
+            id_builder,
             projections,
             iter,
         })
@@ -98,6 +101,7 @@ pub trait Transaction: Sized {
         let table = self
             .table(table_cache, table_name.clone())?
             .ok_or(DatabaseError::TableNotFound)?;
+        let id_builder = TupleIdBuilder::new(table.schema_ref());
         let table_types = table.types();
         let table_name = table.name.as_str();
         let offset = offset_option.unwrap_or(0);
@@ -113,6 +117,7 @@ pub trait Transaction: Sized {
         Ok(IndexIter {
             offset,
             limit: limit_option,
+            id_builder,
             params: IndexImplParams {
                 tuple_schema_ref: Arc::new(tuple_columns),
                 projections,
@@ -584,12 +589,14 @@ trait IndexImpl<T: Transaction> {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError>;
 
     fn eq_to_res<'a>(
         &self,
         value: &DataValue,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError>;
 
@@ -650,12 +657,13 @@ impl<T: Transaction> IndexImplParams<'_, T> {
         Ok(val)
     }
 
-    fn get_tuple_by_id(&self, tuple_id: &TupleId) -> Result<Option<Tuple>, DatabaseError> {
+    fn get_tuple_by_id(&self, id_builder: &mut TupleIdBuilder, tuple_id: &TupleId) -> Result<Option<Tuple>, DatabaseError> {
         let key = TableCodec::encode_tuple_key(self.table_name, tuple_id)?;
 
         Ok(self.tx.get(&key)?.map(|bytes| {
             TableCodec::decode_tuple(
                 &self.table_types,
+                id_builder,
                 &self.projections,
                 &self.tuple_schema_ref,
                 &bytes,
@@ -673,26 +681,28 @@ impl<T: Transaction> IndexImpl<T> for IndexImplEnum {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
         match self {
-            IndexImplEnum::PrimaryKey(inner) => inner.index_lookup(bytes, params),
-            IndexImplEnum::Unique(inner) => inner.index_lookup(bytes, params),
-            IndexImplEnum::Normal(inner) => inner.index_lookup(bytes, params),
-            IndexImplEnum::Composite(inner) => inner.index_lookup(bytes, params),
+            IndexImplEnum::PrimaryKey(inner) => inner.index_lookup(bytes, id_builder, params),
+            IndexImplEnum::Unique(inner) => inner.index_lookup(bytes, id_builder, params),
+            IndexImplEnum::Normal(inner) => inner.index_lookup(bytes, id_builder, params),
+            IndexImplEnum::Composite(inner) => inner.index_lookup(bytes, id_builder, params),
         }
     }
 
     fn eq_to_res<'a>(
         &self,
         value: &DataValue,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         match self {
-            IndexImplEnum::PrimaryKey(inner) => inner.eq_to_res(value, params),
-            IndexImplEnum::Unique(inner) => inner.eq_to_res(value, params),
-            IndexImplEnum::Normal(inner) => inner.eq_to_res(value, params),
-            IndexImplEnum::Composite(inner) => inner.eq_to_res(value, params),
+            IndexImplEnum::PrimaryKey(inner) => inner.eq_to_res(value, id_builder, params),
+            IndexImplEnum::Unique(inner) => inner.eq_to_res(value, id_builder, params),
+            IndexImplEnum::Normal(inner) => inner.eq_to_res(value, id_builder, params),
+            IndexImplEnum::Composite(inner) => inner.eq_to_res(value, id_builder, params),
         }
     }
 
@@ -715,10 +725,12 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
         Ok(TableCodec::decode_tuple(
             &params.table_types,
+            id_builder,
             &params.projections,
             &params.tuple_schema_ref,
             bytes,
@@ -728,6 +740,7 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
     fn eq_to_res<'a>(
         &self,
         value: &DataValue,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let tuple = params
@@ -736,6 +749,7 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
             .map(|bytes| {
                 TableCodec::decode_tuple(
                     &params.table_types,
+                    id_builder,
                     &params.projections,
                     &params.tuple_schema_ref,
                     &bytes,
@@ -756,11 +770,12 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
 
 fn secondary_index_lookup<T: Transaction>(
     bytes: &Bytes,
+    id_builder: &mut TupleIdBuilder,
     params: &IndexImplParams<T>,
 ) -> Result<Tuple, DatabaseError> {
     let tuple_id = TableCodec::decode_index(bytes, &params.index_meta.pk_ty)?;
     params
-        .get_tuple_by_id(&tuple_id)?
+        .get_tuple_by_id(id_builder, &tuple_id)?
         .ok_or(DatabaseError::TupleIdNotFound(tuple_id))
 }
 
@@ -768,14 +783,16 @@ impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
-        secondary_index_lookup(bytes, params)
+        secondary_index_lookup(bytes, id_builder, params)
     }
 
     fn eq_to_res<'a>(
         &self,
         value: &DataValue,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let Some(bytes) = params.tx.get(&self.bound_key(params, value, false)?)? else {
@@ -783,7 +800,7 @@ impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
         };
         let tuple_id = TableCodec::decode_index(&bytes, &params.index_meta.pk_ty)?;
         let tuple = params
-            .get_tuple_by_id(&tuple_id)?
+            .get_tuple_by_id(id_builder, &tuple_id)?
             .ok_or(DatabaseError::TupleIdNotFound(tuple_id))?;
         Ok(IndexResult::Tuple(Some(tuple)))
     }
@@ -808,14 +825,16 @@ impl<T: Transaction> IndexImpl<T> for NormalIndexImpl {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
-        secondary_index_lookup(bytes, params)
+        secondary_index_lookup(bytes, id_builder, params)
     }
 
     fn eq_to_res<'a>(
         &self,
         value: &DataValue,
+        _: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let min = self.bound_key(params, value, false)?;
@@ -848,14 +867,16 @@ impl<T: Transaction> IndexImpl<T> for CompositeIndexImpl {
     fn index_lookup(
         &self,
         bytes: &Bytes,
+        id_builder: &mut TupleIdBuilder,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
-        secondary_index_lookup(bytes, params)
+        secondary_index_lookup(bytes, id_builder, params)
     }
 
     fn eq_to_res<'a>(
         &self,
         value: &DataValue,
+        _: &mut TupleIdBuilder,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
         let min = self.bound_key(params, value, false)?;
@@ -890,6 +911,7 @@ pub struct TupleIter<'a, T: Transaction + 'a> {
     limit: Option<usize>,
     table_types: Vec<LogicalType>,
     tuple_columns: Arc<Vec<ColumnRef>>,
+    id_builder: TupleIdBuilder,
     projections: Vec<usize>,
     iter: T::IterType<'a>,
 }
@@ -911,6 +933,7 @@ impl<'a, T: Transaction + 'a> Iter for TupleIter<'a, T> {
         while let Some((_, value)) = self.iter.try_next()? {
             let tuple = TableCodec::decode_tuple(
                 &self.table_types,
+                &mut self.id_builder,
                 &self.projections,
                 &self.tuple_columns,
                 &value,
@@ -931,6 +954,7 @@ pub struct IndexIter<'a, T: Transaction> {
     offset: usize,
     limit: Option<usize>,
 
+    id_builder: TupleIdBuilder,
     params: IndexImplParams<'a, T>,
     inner: IndexImplEnum,
     // for buffering data
@@ -976,7 +1000,7 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                     continue;
                 }
                 Self::limit_sub(&mut self.limit);
-                let tuple = self.inner.index_lookup(&bytes, &self.params)?;
+                let tuple = self.inner.index_lookup(&bytes, &mut self.id_builder, &self.params)?;
 
                 return Ok(Some(tuple));
             }
@@ -1039,7 +1063,7 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                 Range::Eq(mut val) => {
                     val = self.params.try_cast(val)?;
 
-                    match self.inner.eq_to_res(&val, &self.params)? {
+                    match self.inner.eq_to_res(&val, &mut self.id_builder, &self.params)? {
                         IndexResult::Tuple(tuple) => {
                             if Self::offset_move(&mut self.offset) {
                                 return self.next_tuple();

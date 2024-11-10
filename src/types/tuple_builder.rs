@@ -4,7 +4,7 @@ use crate::types::value::{DataValue, Utf8Type};
 use itertools::Itertools;
 use sqlparser::ast::CharLengthUnits;
 
-pub(crate) struct TupleIdBuilder {
+pub struct TupleIdBuilder {
     primary_indexes: Vec<usize>,
     tmp_keys: Vec<Option<DataValue>>,
 }
@@ -14,7 +14,7 @@ pub struct TupleBuilder<'a> {
 }
 
 impl TupleIdBuilder {
-    pub(crate) fn new(schema: &Schema) -> Self {
+    pub fn new(schema: &Schema) -> Self {
         let primary_indexes = schema
             .iter()
             .filter_map(|column| column.desc().primary())
@@ -29,16 +29,16 @@ impl TupleIdBuilder {
         }
     }
 
-    pub(crate) fn append(&mut self, value: DataValue) {
+    pub fn append(&mut self, value: DataValue) {
         self.tmp_keys.push(Some(value));
     }
 
-    pub(crate) fn build(&mut self) -> Option<TupleId> {
+    pub fn build(&mut self) -> Option<TupleId> {
         (!self.tmp_keys.is_empty()).then(|| {
             if self.tmp_keys.len() == 1 {
                 self.tmp_keys.pop().unwrap().unwrap()
             } else {
-                let mut primary_keys = Vec::new();
+                let mut primary_keys = Vec::with_capacity(self.primary_indexes.len());
 
                 for i in self.primary_indexes.iter() {
                     primary_keys.push(self.tmp_keys[*i].take().unwrap());

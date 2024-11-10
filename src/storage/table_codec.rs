@@ -11,6 +11,7 @@ use bytes::Bytes;
 use integer_encoding::FixedInt;
 use lazy_static::lazy_static;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use crate::types::tuple_builder::TupleIdBuilder;
 
 const BOUND_MIN_TAG: u8 = 0;
 const BOUND_MAX_TAG: u8 = 1;
@@ -250,11 +251,12 @@ impl TableCodec {
 
     pub fn decode_tuple(
         table_types: &[LogicalType],
+        id_builder: &mut TupleIdBuilder,
         projections: &[usize],
         schema: &Schema,
         bytes: &[u8],
     ) -> Tuple {
-        Tuple::deserialize_from(table_types, projections, schema, bytes)
+        Tuple::deserialize_from(table_types, id_builder, projections, schema, bytes)
     }
 
     /// Key: {TableName}{INDEX_META_TAG}{BOUND_MIN_TAG}{IndexID}
@@ -508,6 +510,7 @@ mod tests {
     use std::slice;
     use std::sync::Arc;
     use ulid::Ulid;
+    use crate::types::tuple_builder::TupleIdBuilder;
 
     fn build_table_codec() -> TableCatalog {
         let columns = vec![
@@ -542,9 +545,10 @@ mod tests {
             &[LogicalType::Integer, LogicalType::Decimal(None, None)],
         )?;
         let schema = table_catalog.schema_ref();
+        let mut id_builder = TupleIdBuilder::new(schema);
 
         debug_assert_eq!(
-            TableCodec::decode_tuple(&table_catalog.types(), &[0, 1], schema, &bytes),
+            TableCodec::decode_tuple(&table_catalog.types(), &mut id_builder, &[0, 1], schema, &bytes),
             tuple
         );
 

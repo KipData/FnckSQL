@@ -6,6 +6,7 @@ use comfy_table::{Cell, Table};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::sync::Arc;
+use crate::types::tuple_builder::TupleIdBuilder;
 
 lazy_static! {
     pub static ref EMPTY_TUPLE: Tuple = {
@@ -38,6 +39,7 @@ pub struct Tuple {
 impl Tuple {
     pub fn deserialize_from(
         table_types: &[LogicalType],
+        id_builder: &mut TupleIdBuilder,
         projections: &[usize],
         schema: &Schema,
         bytes: &[u8],
@@ -52,7 +54,6 @@ impl Tuple {
         let values_len = table_types.len();
         let mut tuple_values = Vec::with_capacity(values_len);
         let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
-        let mut primary_keys = Vec::new();
 
         let mut projection_i = 0;
         let mut pos = bits_len;
@@ -64,13 +65,13 @@ impl Tuple {
             if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
                 if projections[projection_i] == i {
                     tuple_values.push(DataValue::none(logic_type));
-                    Self::values_push(schema, &tuple_values, &mut primary_keys, &mut projection_i);
+                    Self::values_push(schema, &tuple_values, id_builder, &mut projection_i);
                 }
             } else if let Some(len) = logic_type.raw_len() {
                 /// fixed length (e.g.: int)
                 if projections[projection_i] == i {
                     tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
-                    Self::values_push(schema, &tuple_values, &mut primary_keys, &mut projection_i);
+                    Self::values_push(schema, &tuple_values, id_builder, &mut projection_i);
                 }
                 pos += len;
             } else {
@@ -80,21 +81,13 @@ impl Tuple {
                 pos += 4;
                 if projections[projection_i] == i {
                     tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
-                    Self::values_push(schema, &tuple_values, &mut primary_keys, &mut projection_i);
+                    Self::values_push(schema, &tuple_values, id_builder, &mut projection_i);
                 }
                 pos += len;
             }
         }
-
-        let id = (!primary_keys.is_empty()).then(|| {
-            if primary_keys.len() == 1 {
-                primary_keys.pop().unwrap()
-            } else {
-                DataValue::Tuple(Some(primary_keys))
-            }
-        });
         Tuple {
-            id,
+            id: id_builder.build(),
             values: tuple_values,
         }
     }
@@ -102,11 +95,11 @@ impl Tuple {
     fn values_push(
         tuple_columns: &Schema,
         tuple_values: &[DataValue],
-        primary_keys: &mut Vec<DataValue>,
+        id_builder: &mut TupleIdBuilder,
         projection_i: &mut usize,
     ) {
         if tuple_columns[*projection_i].desc().is_primary() {
-            primary_keys.push(tuple_values[*projection_i].clone())
+            id_builder.append(tuple_values[*projection_i].clone());
         }
         *projection_i += 1;
     }
@@ -181,6 +174,7 @@ mod tests {
     use rust_decimal::Decimal;
     use sqlparser::ast::CharLengthUnits;
     use std::sync::Arc;
+    use crate::types::tuple_builder::TupleIdBuilder;
 
     #[test]
     fn test_tuple_serialize_to_and_deserialize_from() {
@@ -372,15 +366,18 @@ mod tests {
             .map(|column| column.datatype().clone())
             .collect_vec();
         let columns = Arc::new(columns);
+        let mut id_builder = TupleIdBuilder::new(&columns);
 
         let tuple_0 = Tuple::deserialize_from(
             &types,
+            &mut id_builder,
             &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
             &columns,
             &tuples[0].serialize_to(&types).unwrap(),
         );
         let tuple_1 = Tuple::deserialize_from(
             &types,
+            &mut id_builder,
             &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
             &columns,
             &tuples[1].serialize_to(&types).unwrap(),

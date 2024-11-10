@@ -149,6 +149,7 @@ mod test {
     use std::hash::RandomState;
     use std::sync::Arc;
     use tempfile::TempDir;
+    use crate::types::tuple_builder::TupleIdBuilder;
 
     #[test]
     fn test_in_rocksdb_storage_works_with_data() -> Result<(), DatabaseError> {
@@ -243,9 +244,11 @@ mod test {
             DataValue::Int32(Some(3)),
             DataValue::Int32(Some(4)),
         ];
+        let id_builder = TupleIdBuilder::new(table.schema_ref());
         let mut iter = IndexIter {
             offset: 0,
             limit: None,
+            id_builder,
             params: IndexImplParams {
                 tuple_schema_ref: table.schema_ref().clone(),
                 projections: vec![0],
