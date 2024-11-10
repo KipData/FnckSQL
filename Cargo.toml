@@ -34,26 +34,18 @@ harness = false
 
 [dependencies]
 ahash                 = { version = "0.8" }
-async-trait           = { version = "0.1", optional = true }
 bincode               = { version = "1" }
 bytes                 = { version = "1" }
 chrono                = { version = "0.4" }
-clap                  = { version = "4.5", features = ["derive"], optional = true }
 comfy-table           = { version = "7" }
 csv                   = { version = "1" }
 encode_unicode        = { version = "1" }
 dirs                  = { version = "5" }
-env_logger            = { version = "0.11", optional = true }
-futures               = { version = "0.3", optional = true }
-integer-encoding      = { version = "3" }
 itertools             = { version = "0.12" }
-lazy_static           = { version = "1" }
-log                   = { version = "0.4", optional = true }
 ordered-float         = { version = "4" }
 paste                 = { version = "1" }
 parking_lot           = { version = "0.12", features = ["arc_lock"] }
 petgraph              = { version = "0.6" }
-pgwire                = { version = "0.19", optional = true }
 rand                  = { version = "0.9.0-alpha" }
 regex                 = { version = "1" }
 rocksdb               = { version = "0.22.0" }
@@ -64,10 +56,19 @@ siphasher             = { version = "1", features = ["serde"] }
 sqlparser             = { version = "0.34", features = ["serde"] }
 strum_macros          = { version = "0.26.2" }
 thiserror             = { version = "1" }
-tokio                 = { version = "1.36", features = ["full"], optional = true }
 tracing               = { version = "0.1" }
 typetag               = { version = "0.2" }
 ulid                  = { version = "1", features = ["serde"] }
+
+# Feature: net
+async-trait           = { version = "0.1", optional = true }
+clap                  = { version = "4.5", features = ["derive"], optional = true }
+env_logger            = { version = "0.11", optional = true }
+futures               = { version = "0.3", optional = true }
+log                   = { version = "0.4", optional = true }
+pgwire                = { version = "0.19", optional = true }
+tokio                 = { version = "1.36", features = ["full"], optional = true }
+
 
 [dev-dependencies]
 cargo-tarpaulin       = { version = "0.27" }

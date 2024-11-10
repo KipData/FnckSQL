@@ -5,17 +5,13 @@ use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
-lazy_static! {
-    pub static ref EMPTY_TUPLE: Tuple = {
-        Tuple {
-            id: None,
-            values: vec![],
-        }
-    };
-}
+pub static EMPTY_TUPLE: LazyLock<Tuple> = LazyLock::new(|| Tuple {
+    id: None,
+    values: vec![],
+});
 
 const BITS_MAX_INDEX: usize = 8;
 
@@ -76,8 +72,7 @@ impl Tuple {
                 pos += len;
             } else {
                 /// variable length (e.g.: varchar)
-                let le_bytes: [u8; 4] = bytes[pos..pos + 4].try_into().unwrap();
-                let len = u32::from_le_bytes(le_bytes) as usize;
+                let len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
                 pos += 4;
                 if projections[projection_i] == i {
                     tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));

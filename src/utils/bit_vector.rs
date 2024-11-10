@@ -1,6 +1,4 @@
-use integer_encoding::FixedInt;
 use itertools::Itertools;
-use std::slice;
 
 #[derive(Debug, Default)]
 pub struct BitVector {
@@ -44,19 +42,19 @@ impl BitVector {
 
     #[allow(dead_code)]
     pub fn to_raw(&self, bytes: &mut Vec<u8>) {
-        bytes.append(&mut u64::encode_fixed_vec(self.len));
+        bytes.extend(self.len.to_le_bytes());
 
         for bits in &self.bit_groups {
-            bytes.append(&mut bits.encode_fixed_vec());
+            bytes.extend(bits.to_le_bytes());
         }
     }
 
     #[allow(dead_code)]
     pub fn from_raw(bytes: &[u8]) -> Self {
-        let len = u64::decode_fixed(&bytes[0..8]);
+        let len = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
         let bit_groups = bytes[8..]
             .iter()
-            .map(|bit| i8::decode_fixed(slice::from_ref(bit)))
+            .map(|bit| i8::from_le_bytes([*bit]))
             .collect_vec();
 
         BitVector { len, bit_groups }

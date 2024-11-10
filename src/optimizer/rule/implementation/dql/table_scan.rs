@@ -6,16 +6,12 @@ use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::storage::Transaction;
 use crate::types::index::IndexType;
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref TABLE_SCAN_PATTERN: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::TableScan(_)),
-            children: PatternChildrenPredicate::None,
-        }
-    };
-}
+static TABLE_SCAN_PATTERN: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::TableScan(_)),
+    children: PatternChildrenPredicate::None,
+});
 
 #[derive(Clone)]
 pub struct SeqScanImplementation;

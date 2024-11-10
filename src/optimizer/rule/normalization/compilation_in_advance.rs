@@ -5,25 +5,17 @@ use crate::optimizer::core::rule::{MatchPattern, NormalizationRule};
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref EXPRESSION_REMAPPER_RULE: Pattern = {
-        Pattern {
-            predicate: |_| true,
-            children: PatternChildrenPredicate::None,
-        }
-    };
-}
+static EXPRESSION_REMAPPER_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |_| true,
+    children: PatternChildrenPredicate::None,
+});
 
-lazy_static! {
-    static ref EVALUATOR_BIND_RULE: Pattern = {
-        Pattern {
-            predicate: |_| true,
-            children: PatternChildrenPredicate::None,
-        }
-    };
-}
+static EVALUATOR_BIND_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |_| true,
+    children: PatternChildrenPredicate::None,
+});
 
 #[derive(Clone)]
 pub struct ExpressionRemapper;

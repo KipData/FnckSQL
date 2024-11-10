@@ -6,16 +6,12 @@ use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::planner::operator::join::{JoinCondition, JoinOperator};
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::storage::Transaction;
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref JOIN_PATTERN: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Join(_)),
-            children: PatternChildrenPredicate::None,
-        }
-    };
-}
+static JOIN_PATTERN: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Join(_)),
+    children: PatternChildrenPredicate::None,
+});
 
 #[derive(Clone)]
 pub struct JoinImplementation;

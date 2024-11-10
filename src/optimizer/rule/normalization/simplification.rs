@@ -5,24 +5,20 @@ use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::Operator;
 use itertools::Itertools;
-use lazy_static::lazy_static;
-lazy_static! {
-    static ref CONSTANT_CALCULATION_RULE: Pattern = {
-        Pattern {
-            predicate: |_| true,
-            children: PatternChildrenPredicate::None,
-        }
-    };
-    static ref SIMPLIFY_FILTER_RULE: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Filter(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| !matches!(op, Operator::Aggregate(_)),
-                children: PatternChildrenPredicate::Recursive,
-            }]),
-        }
-    };
-}
+use std::sync::LazyLock;
+
+static CONSTANT_CALCULATION_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |_| true,
+    children: PatternChildrenPredicate::None,
+});
+
+static SIMPLIFY_FILTER_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Filter(_)),
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| !matches!(op, Operator::Aggregate(_)),
+        children: PatternChildrenPredicate::Recursive,
+    }]),
+});
 
 #[derive(Copy, Clone)]
 pub struct ConstantCalculation;

@@ -6,46 +6,31 @@ use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
 use itertools::Itertools;
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref LIMIT_PROJECT_TRANSPOSE_RULE: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Limit(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Project(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
-    static ref ELIMINATE_LIMITS_RULE: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Limit(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Limit(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
-    static ref PUSH_LIMIT_THROUGH_JOIN_RULE: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Limit(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::Join(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
-    static ref PUSH_LIMIT_INTO_TABLE_SCAN_RULE: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Limit(_)),
-            children: PatternChildrenPredicate::Predicate(vec![Pattern {
-                predicate: |op| matches!(op, Operator::TableScan(_)),
-                children: PatternChildrenPredicate::None,
-            }]),
-        }
-    };
-}
+static LIMIT_PROJECT_TRANSPOSE_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Limit(_)),
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| matches!(op, Operator::Project(_)),
+        children: PatternChildrenPredicate::None,
+    }]),
+});
+
+static PUSH_LIMIT_THROUGH_JOIN_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Limit(_)),
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| matches!(op, Operator::Join(_)),
+        children: PatternChildrenPredicate::None,
+    }]),
+});
+
+static PUSH_LIMIT_INTO_TABLE_SCAN_RULE: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Limit(_)),
+    children: PatternChildrenPredicate::Predicate(vec![Pattern {
+        predicate: |op| matches!(op, Operator::TableScan(_)),
+        children: PatternChildrenPredicate::None,
+    }]),
+});
 
 pub struct LimitProjectTranspose;
 

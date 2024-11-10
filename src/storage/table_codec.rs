@@ -9,18 +9,15 @@ use crate::types::tuple_builder::TupleIdBuilder;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use bytes::Bytes;
-use integer_encoding::FixedInt;
-use lazy_static::lazy_static;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::sync::LazyLock;
 
 const BOUND_MIN_TAG: u8 = 0;
 const BOUND_MAX_TAG: u8 = 1;
 
-lazy_static! {
-    static ref ROOT_BYTES: Vec<u8> = b"Root".to_vec();
-    static ref VIEW_BYTES: Vec<u8> = b"View".to_vec();
-    static ref EMPTY_REFERENCE_TABLES: ReferenceTables = ReferenceTables::new();
-}
+static ROOT_BYTES: LazyLock<Vec<u8>> = LazyLock::new(|| b"Root".to_vec());
+static VIEW_BYTES: LazyLock<Vec<u8>> = LazyLock::new(|| b"View".to_vec());
+static EMPTY_REFERENCE_TABLES: LazyLock<ReferenceTables> = LazyLock::new(ReferenceTables::new);
 
 #[derive(Clone)]
 pub struct TableCodec {}
@@ -415,7 +412,7 @@ impl TableCodec {
         let mut key_prefix = Self::key_prefix(CodecType::Statistics, table_name);
 
         key_prefix.push(BOUND_MIN_TAG);
-        key_prefix.extend_from_slice(index_id.encode_fixed_light());
+        key_prefix.extend(index_id.to_le_bytes());
         key_prefix
     }
 

@@ -6,16 +6,12 @@ use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
 use crate::planner::operator::{Operator, PhysicalOption};
 use crate::single_mapping;
 use crate::storage::Transaction;
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 
-lazy_static! {
-    static ref DELETE_PATTERN: Pattern = {
-        Pattern {
-            predicate: |op| matches!(op, Operator::Delete(_)),
-            children: PatternChildrenPredicate::None,
-        }
-    };
-}
+static DELETE_PATTERN: LazyLock<Pattern> = LazyLock::new(|| Pattern {
+    predicate: |op| matches!(op, Operator::Delete(_)),
+    children: PatternChildrenPredicate::None,
+});
 
 #[derive(Clone)]
 pub struct DeleteImplementation;
