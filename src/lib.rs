@@ -93,6 +93,7 @@
 #![feature(iterator_try_collect)]
 #![feature(slice_pattern)]
 #![feature(stmt_expr_attributes)]
+#![feature(random)]
 extern crate core;
 
 pub mod binder;

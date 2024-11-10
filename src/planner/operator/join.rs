@@ -5,11 +5,8 @@ use fnck_sql_serde_macros::ReferenceSerialization;
 use itertools::Itertools;
 use std::fmt;
 use std::fmt::Formatter;
-use strum_macros::Display;
 
-#[derive(
-    Debug, Display, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd, ReferenceSerialization,
-)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd, ReferenceSerialization)]
 pub enum JoinType {
     Inner,
     LeftOuter,
@@ -47,6 +44,22 @@ impl JoinOperator {
             Operator::Join(JoinOperator { on, join_type }),
             vec![left, right],
         )
+    }
+}
+
+impl fmt::Display for JoinType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            JoinType::Inner => write!(f, "Inner")?,
+            JoinType::LeftOuter => write!(f, "LeftOuter")?,
+            JoinType::LeftSemi => write!(f, "LeftSemi")?,
+            JoinType::LeftAnti => write!(f, "LeftAnti")?,
+            JoinType::RightOuter => write!(f, "RightOuter")?,
+            JoinType::Full => write!(f, "Full")?,
+            JoinType::Cross => write!(f, "Cross")?,
+        }
+
+        Ok(())
     }
 }
 

@@ -46,17 +46,14 @@ ordered-float         = { version = "4" }
 paste                 = { version = "1" }
 parking_lot           = { version = "0.12", features = ["arc_lock"] }
 petgraph              = { version = "0.6" }
-rand                  = { version = "0.9.0-alpha" }
 regex                 = { version = "1" }
-rocksdb               = { version = "0.22.0" }
+rocksdb               = { version = "0.22" }
 rust_decimal          = { version = "1" }
 serde                 = { version = "1", features = ["derive", "rc"] }
 fnck_sql_serde_macros = { version = "0.1.0", path = "fnck_sql_serde_macros" }
 siphasher             = { version = "1", features = ["serde"] }
 sqlparser             = { version = "0.34", features = ["serde"] }
-strum_macros          = { version = "0.26.2" }
 thiserror             = { version = "1" }
-tracing               = { version = "0.1" }
 typetag               = { version = "0.2" }
 ulid                  = { version = "1", features = ["serde"] }
 
