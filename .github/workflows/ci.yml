@@ -25,6 +25,9 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
 
+      - name: cache dependencies
+        uses: Swatinem/rust-cache@v2
+
       # `cargo check` command here will use installed `nightly`
       # as it is set as an "override" for current directory
 
@@ -58,6 +61,9 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      - name: cache dependencies
+        uses: Swatinem/rust-cache@v2
+
       # `cargo check` command here will use installed `nightly`
       # as it is set as an "override" for current directory
 
@@ -78,6 +84,9 @@ jobs:
           toolchain: nightly-2024-10-10
           override: true
           components: rustfmt, clippy
+
+      - name: cache dependencies
+        uses: Swatinem/rust-cache@v2
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v2

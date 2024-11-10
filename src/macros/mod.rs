@@ -149,7 +149,7 @@ macro_rules! scala_function {
 #[macro_export]
 macro_rules! table_function {
     ($struct_name:ident::$function_name:ident($($arg_ty:expr),*) -> [$($output_name:ident: $output_ty:expr),*] => $closure:expr) => {
-        static $function_name: ::std::sync::LazyLock<::fnck_sql::catalog::table::TableCatalog> = LazyLock::new(|| {
+        static $function_name: ::std::sync::LazyLock<::fnck_sql::catalog::table::TableCatalog> = ::std::sync::LazyLock::new(|| {
             let mut columns = Vec::new();
 
             $({
