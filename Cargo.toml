@@ -2,7 +2,7 @@
 
 [package]
 name          = "fnck_sql"
-version       = "0.0.4"
+version       = "0.0.6"
 edition       = "2021"
 authors       = ["Kould <kould2333@gmail.com>", "Xwg <loloxwg@gmail.com>"]
 description   = "SQL as a Function for Rust"
@@ -82,8 +82,9 @@ pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
 [workspace]
 members = [
   "tests/sqllogictest",
-  "tests/macros-test"
-, "fnck_sql_serde_macros"]
+  "tests/macros-test",
+  "fnck_sql_serde_macros",
+  "tpcc"]
 
 [profile.release]
 lto = true

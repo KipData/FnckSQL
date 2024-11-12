@@ -586,7 +586,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
                 if !args.is_empty() {
                     ty = args[0].return_type();
 
-                    for arg in args.iter() {
+                    for arg in args.iter_mut() {
                         let temp_ty = arg.return_type();
 
                         if temp_ty == LogicalType::SqlNull {
@@ -595,7 +595,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
                         if ty == LogicalType::SqlNull && temp_ty != LogicalType::SqlNull {
                             ty = temp_ty;
                         } else if ty != temp_ty {
-                            return Err(DatabaseError::Incomparable(ty, temp_ty));
+                            ty = LogicalType::max_logical_type(&ty, &temp_ty)?;
                         }
                     }
                 }

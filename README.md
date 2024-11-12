@@ -54,6 +54,21 @@ let fnck_sql = DataBaseBuilder::path("./data").build()?;
 let tuples = fnck_sql.run("select * from t1")?;
 ```
 
+### TPCC
+run `cargo run -p tpcc --release` to run tpcc
+
+- i9-13900HX
+- 32.0 GB
+- YMTC PC411-1024GB-B
+```shell
+<90th Percentile RT (MaxRT)>
+   New-Order : 0.882  (0.947)
+     Payment : 0.080  (0.095)
+Order-Status : 0.235  (0.255)
+    Delivery : 5.386  (5.658)
+ Stock-Level : 0.001  (0.002)
+```
+
 #### PG Wire Service
 run `cargo run --features="net"` to start server
 ![start](./static/images/start.gif)
@@ -138,8 +153,8 @@ table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: Logi
         .map(|i| Ok(Tuple {
             id: None,
             values: vec![
-                Arc::new(DataValue::Int32(Some(i))),
-                Arc::new(DataValue::Int32(Some(i))),
+                DataValue::Int32(Some(i)),
+                DataValue::Int32(Some(i)),
             ]
         }))) as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
 }));

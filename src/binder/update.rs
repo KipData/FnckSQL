@@ -40,7 +40,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                         Some(table_name.to_string()),
                     )? {
                         ScalarExpression::ColumnRef(column) => {
-                            let expr = if matches!(expression, ScalarExpression::Empty) {
+                            let mut expr = if matches!(expression, ScalarExpression::Empty) {
                                 let default_value = column
                                     .default_value()?
                                     .ok_or(DatabaseError::DefaultNotExist)?;
@@ -48,6 +48,12 @@ impl<T: Transaction> Binder<'_, '_, T> {
                             } else {
                                 expression.clone()
                             };
+                            if &expr.return_type() != column.datatype() {
+                                expr = ScalarExpression::TypeCast {
+                                    expr: Box::new(expr),
+                                    ty: column.datatype().clone(),
+                                }
+                            }
                             value_exprs.push((column, expr));
                         }
                         _ => return Err(DatabaseError::InvalidColumn(ident.to_string())),

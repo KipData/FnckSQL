@@ -1388,7 +1388,7 @@ impl DataValue {
                 LogicalType::Tuple(types) => Ok(if let Some(mut values) = values {
                     for (i, value) in values.iter_mut().enumerate() {
                         if types[i] != value.logical_type() {
-                            *value = DataValue::clone(value).cast(&types[i])?;
+                            *value = mem::replace(value, DataValue::Null).cast(&types[i])?;
                         }
                     }
                     DataValue::Tuple(Some(values))
