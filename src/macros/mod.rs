@@ -25,20 +25,20 @@
 macro_rules! implement_from_tuple {
     ($struct_name:ident, ($($field_name:ident : $field_type:ty => $closure:expr),+)) => {
         impl From<(&::fnck_sql::types::tuple::SchemaRef, ::fnck_sql::types::tuple::Tuple)> for $struct_name {
-            fn from((schema, tuple): (&::fnck_sql::types::tuple::SchemaRef, ::fnck_sql::types::tuple::Tuple)) -> Self {
-                fn try_get<T: 'static>(tuple: &::fnck_sql::types::tuple::Tuple, schema: &::fnck_sql::types::tuple::SchemaRef, field_name: &str) -> Option<::fnck_sql::types::value::DataValue> {
+            fn from((schema, mut tuple): (&::fnck_sql::types::tuple::SchemaRef, ::fnck_sql::types::tuple::Tuple)) -> Self {
+                fn try_get<T: 'static>(tuple: &mut ::fnck_sql::types::tuple::Tuple, schema: &::fnck_sql::types::tuple::SchemaRef, field_name: &str) -> Option<::fnck_sql::types::value::DataValue> {
                     let ty = ::fnck_sql::types::LogicalType::type_trans::<T>()?;
                     let (idx, _) = schema
                         .iter()
                         .enumerate()
                         .find(|(_, col)| col.name() == field_name)?;
 
-                    tuple.values[idx].cast(&ty).ok()
+                    std::mem::replace(&mut tuple.values[idx], ::fnck_sql::types::value::DataValue::Null).cast(&ty).ok()
                 }
 
                 let mut struct_instance = $struct_name::default();
                 $(
-                    if let Some(value) = try_get::<$field_type>(&tuple, schema, stringify!($field_name)) {
+                    if let Some(value) = try_get::<$field_type>(&mut tuple, schema, stringify!($field_name)) {
                         $closure(
                             &mut struct_instance,
                             value

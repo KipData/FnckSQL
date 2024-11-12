@@ -430,8 +430,8 @@ impl<S: Storage> Load<S> {
     }
 
     #[allow(unused_assignments)]
-    fn gen_orig(rng: &mut ThreadRng) -> [i32; 100001] {
-        let mut orig = [0; MAX_ITEMS + 1];
+    fn gen_orig(rng: &mut ThreadRng) -> Vec<i32> {
+        let mut orig = vec![0; MAX_ITEMS + 1];
 
         for _ in 0..MAX_ITEMS / 10 {
             let mut pos = 0;

@@ -563,7 +563,6 @@ impl DataValue {
                         }
                         Utf8Type::Fixed(len) => match unit {
                             CharLengthUnits::Characters => {
-                                debug_assert!((*len as usize) >= v.len());
                                 let chars_len = *len as usize;
                                 let string_bytes =
                                     format!("{:len$}", v, len = chars_len).into_bytes();

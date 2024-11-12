@@ -67,9 +67,9 @@ fn main() -> Result<(), TpccError> {
     let database = DataBaseBuilder::path(&args.path).build()?;
 
     Load::load_items(&mut rng, &database)?;
-    Load::load_warehouses(&mut rng, &database, 1)?;
-    Load::load_custs(&mut rng, &database, 1)?;
-    Load::load_ord(&mut rng, &database, 1)?;
+    Load::load_warehouses(&mut rng, &database, args.num_ware)?;
+    Load::load_custs(&mut rng, &database, args.num_ware)?;
+    Load::load_ord(&mut rng, &database, args.num_ware)?;
 
     let mut rt_hist = RtHist::new();
     let tests = vec![
