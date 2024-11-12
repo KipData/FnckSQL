@@ -45,7 +45,7 @@ impl Accumulator for AvgAccumulator {
         let quantity_ty = quantity.logical_type();
 
         if value_ty != quantity_ty {
-            value = DataValue::clone(&value).cast(&quantity_ty)?
+            value = value.cast(&quantity_ty)?
         }
         let evaluator = EvaluatorFactory::binary_create(quantity_ty, BinaryOperator::Divide)?;
         Ok(evaluator.0.binary_eval(&value, &quantity))

@@ -43,8 +43,7 @@ impl ScalarFunctionImpl for Lower {
         let value = exprs[0].eval(tuples, columns)?;
         let mut value = DataValue::clone(&value);
         if !matches!(value.logical_type(), LogicalType::Varchar(_, _)) {
-            value = DataValue::clone(&value)
-                .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?;
+            value = value.cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?;
         }
         if let DataValue::Utf8 {
             value: Some(value),

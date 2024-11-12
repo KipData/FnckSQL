@@ -563,6 +563,7 @@ impl DataValue {
                         }
                         Utf8Type::Fixed(len) => match unit {
                             CharLengthUnits::Characters => {
+                                debug_assert!((*len as usize) >= v.len());
                                 let chars_len = *len as usize;
                                 let string_bytes =
                                     format!("{:len$}", v, len = chars_len).into_bytes();
@@ -1388,7 +1389,7 @@ impl DataValue {
                 LogicalType::Tuple(types) => Ok(if let Some(mut values) = values {
                     for (i, value) in values.iter_mut().enumerate() {
                         if types[i] != value.logical_type() {
-                            *value = DataValue::clone(value).cast(&types[i])?;
+                            *value = mem::replace(value, DataValue::Null).cast(&types[i])?;
                         }
                     }
                     DataValue::Tuple(Some(values))

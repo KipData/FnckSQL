@@ -1,0 +1,15 @@
+[package]
+name = "tpcc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap            = { version = "4", features = ["derive"] }
+chrono          = { version = "0.4" }
+fnck_sql        = { version = "0.0.4", path = "..", package = "fnck_sql" }
+indicatif       = { version = "0.17" }
+ordered-float   = { version = "4" }
+rand            = { version = "0.8" }
+rust_decimal    = { version = "1" }
+tempfile        = { version = "3" }
+thiserror       = { version = "1" }

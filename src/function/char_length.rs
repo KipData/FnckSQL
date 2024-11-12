@@ -41,8 +41,7 @@ impl ScalarFunctionImpl for CharLength {
         let value = exprs[0].eval(tuples, columns)?;
         let mut value = DataValue::clone(&value);
         if !matches!(value.logical_type(), LogicalType::Varchar(_, _)) {
-            value = DataValue::clone(&value)
-                .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?;
+            value = value.cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?;
         }
         let mut length: u64 = 0;
         if let DataValue::Utf8 {

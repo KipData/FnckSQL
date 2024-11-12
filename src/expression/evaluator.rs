@@ -37,7 +37,7 @@ impl ScalarExpression {
     pub fn eval(&self, tuple: &Tuple, schema: &[ColumnRef]) -> Result<DataValue, DatabaseError> {
         let check_cast = |value: DataValue, return_type: &LogicalType| {
             if value.logical_type() != *return_type {
-                return DataValue::clone(&value).cast(return_type);
+                return value.cast(return_type);
             }
             Ok(value)
         };
@@ -73,9 +73,7 @@ impl ScalarExpression {
                 expr.eval(tuple, schema)
             }
             ScalarExpression::TypeCast { expr, ty, .. } => {
-                let value = expr.eval(tuple, schema)?;
-
-                Ok(DataValue::clone(&value).cast(ty)?)
+                Ok(expr.eval(tuple, schema)?.cast(ty)?)
             }
             ScalarExpression::Binary {
                 left_expr,

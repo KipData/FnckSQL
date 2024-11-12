@@ -33,9 +33,7 @@ macro_rules! implement_from_tuple {
                         .enumerate()
                         .find(|(_, col)| col.name() == field_name)?;
 
-                    ::fnck_sql::types::value::DataValue::clone(&tuple.values[idx])
-                        .cast(&ty)
-                        .ok()
+                    tuple.values[idx].cast(&ty).ok()
                 }
 
                 let mut struct_instance = $struct_name::default();
@@ -103,7 +101,7 @@ macro_rules! scala_function {
                     _index += 1;
 
                     if value.logical_type() != $arg_ty {
-                        value = ::fnck_sql::types::value::DataValue::clone(&value).cast(&$arg_ty)?;
+                        value = value.cast(&$arg_ty)?;
                     }
                     value
                 }, )*)
@@ -197,7 +195,7 @@ macro_rules! table_function {
                     _index += 1;
 
                     if value.logical_type() != $arg_ty {
-                        value = ::fnck_sql::types::value::DataValue::clone(&value).cast(&$arg_ty)?;
+                        value = value.cast(&$arg_ty)?;
                     }
                     value
                 }, )*)

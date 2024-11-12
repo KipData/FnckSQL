@@ -335,7 +335,7 @@ impl LogicalType {
                 LogicalType::Float | LogicalType::Double | LogicalType::Decimal(_, _)
             ),
             LogicalType::Float => matches!(to, LogicalType::Double | LogicalType::Decimal(_, _)),
-            LogicalType::Double => false,
+            LogicalType::Double => matches!(to, LogicalType::Decimal(_, _)),
             LogicalType::Char(..) => false,
             LogicalType::Varchar(..) => false,
             LogicalType::Date => matches!(

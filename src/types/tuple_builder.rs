@@ -34,6 +34,10 @@ impl TupleIdBuilder {
     }
 
     pub fn build(&mut self) -> Option<TupleId> {
+        if self.tmp_keys.len() != self.primary_indexes.len() {
+            self.tmp_keys.clear();
+            return None;
+        }
         (!self.tmp_keys.is_empty()).then(|| {
             if self.tmp_keys.len() == 1 {
                 self.tmp_keys.pop().unwrap().unwrap()
