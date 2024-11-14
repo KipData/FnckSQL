@@ -9,6 +9,7 @@ pub mod create_view;
 pub mod delete;
 pub mod describe;
 pub mod drop_table;
+pub mod drop_view;
 pub mod filter;
 pub mod function_scan;
 pub mod insert;
@@ -39,6 +40,7 @@ use crate::planner::operator::create_view::CreateViewOperator;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::describe::DescribeOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
+use crate::planner::operator::drop_view::DropViewOperator;
 use crate::planner::operator::function_scan::FunctionScanOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
@@ -81,6 +83,7 @@ pub enum Operator {
     CreateIndex(CreateIndexOperator),
     CreateView(CreateViewOperator),
     DropTable(DropTableOperator),
+    DropView(DropViewOperator),
     Truncate(TruncateOperator),
     // Copy
     CopyFromFile(CopyFromFileOperator),
@@ -169,6 +172,7 @@ impl Operator {
             | Operator::CreateIndex(_)
             | Operator::CreateView(_)
             | Operator::DropTable(_)
+            | Operator::DropView(_)
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)
             | Operator::CopyToFile(_) => None,
@@ -246,6 +250,7 @@ impl Operator {
             | Operator::CreateIndex(_)
             | Operator::CreateView(_)
             | Operator::DropTable(_)
+            | Operator::DropView(_)
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)
             | Operator::CopyToFile(_) => vec![],
@@ -279,6 +284,7 @@ impl fmt::Display for Operator {
             Operator::CreateIndex(op) => write!(f, "{}", op),
             Operator::CreateView(op) => write!(f, "{}", op),
             Operator::DropTable(op) => write!(f, "{}", op),
+            Operator::DropView(op) => write!(f, "{}", op),
             Operator::Truncate(op) => write!(f, "{}", op),
             Operator::CopyFromFile(op) => write!(f, "{}", op),
             Operator::CopyToFile(_) => todo!(),

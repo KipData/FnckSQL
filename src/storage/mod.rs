@@ -345,6 +345,30 @@ pub trait Transaction: Sized {
         Ok(table_name)
     }
 
+    fn drop_view(
+        &mut self,
+        view_cache: &ViewCache,
+        table_cache: &TableCache,
+        view_name: TableName,
+        if_exists: bool,
+    ) -> Result<(), DatabaseError> {
+        if self
+            .view(table_cache, view_cache, view_name.clone())?
+            .is_none()
+        {
+            if if_exists {
+                return Ok(());
+            } else {
+                return Err(DatabaseError::ViewNotFound);
+            }
+        }
+
+        self.remove(&TableCodec::encode_view_key(view_name.as_str()))?;
+        view_cache.remove(&view_name);
+
+        Ok(())
+    }
+
     fn drop_table(
         &mut self,
         table_cache: &TableCache,
@@ -387,9 +411,9 @@ pub trait Transaction: Sized {
 
     fn view<'a>(
         &'a self,
+        table_cache: &'a TableCache,
         view_cache: &'a ViewCache,
         view_name: TableName,
-        drive: (&Self, &TableCache),
     ) -> Result<Option<&'a View>, DatabaseError> {
         if let Some(view) = view_cache.get(&view_name) {
             return Ok(Some(view));
@@ -398,7 +422,7 @@ pub trait Transaction: Sized {
             return Ok(None);
         };
         Ok(Some(view_cache.get_or_insert(view_name.clone(), |_| {
-            TableCodec::decode_view(&bytes, drive)
+            TableCodec::decode_view(&bytes, (self, table_cache))
         })?))
     }
 
@@ -1623,9 +1647,9 @@ mod test {
             &view,
             transaction
                 .view(
+                    &table_state.table_cache,
                     &table_state.view_cache,
                     view_name.clone(),
-                    (&transaction, &table_state.table_cache)
                 )?
                 .unwrap()
         );
@@ -1633,17 +1657,28 @@ mod test {
             &view,
             transaction
                 .view(
+                    &Arc::new(SharedLruCache::new(4, 1, RandomState::new())?),
                     &table_state.view_cache,
                     view_name.clone(),
-                    (
-                        &transaction,
-                        &Arc::new(SharedLruCache::new(4, 1, RandomState::new())?)
-                    )
                 )?
                 .unwrap()
         );
 
-        // TODO: Drop View
+        transaction.drop_view(
+            &table_state.view_cache,
+            &table_state.table_cache,
+            view_name.clone(),
+            false,
+        )?;
+        transaction.drop_view(
+            &table_state.view_cache,
+            &table_state.table_cache,
+            view_name.clone(),
+            true,
+        )?;
+        assert!(transaction
+            .view(&table_state.table_cache, &table_state.view_cache, view_name)?
+            .is_none());
 
         Ok(())
     }

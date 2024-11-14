@@ -147,6 +147,7 @@ impl ColumnPruning {
             | Operator::CreateIndex(_)
             | Operator::CreateView(_)
             | Operator::DropTable(_)
+            | Operator::DropView(_)
             | Operator::Truncate(_)
             | Operator::Show
             | Operator::CopyFromFile(_)
