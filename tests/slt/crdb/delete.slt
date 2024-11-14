@@ -24,9 +24,8 @@ SELECT * FROM kv
 5 6
 7 8
 
-# TODO: Drop View
-# statement ok
-# drop view if exists kview
+statement ok
+drop view if exists kview
 
 statement ok
 CREATE VIEW kview AS SELECT k,v FROM kv

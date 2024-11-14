@@ -11,6 +11,7 @@ use crate::execution::ddl::create_table::CreateTable;
 use crate::execution::ddl::create_view::CreateView;
 use crate::execution::ddl::drop_column::DropColumn;
 use crate::execution::ddl::drop_table::DropTable;
+use crate::execution::ddl::drop_view::DropView;
 use crate::execution::ddl::truncate::Truncate;
 use crate::execution::dml::analyze::Analyze;
 use crate::execution::dml::copy_from_file::CopyFromFile;
@@ -192,6 +193,7 @@ pub fn build_write<'a, T: Transaction + 'a>(
         }
         Operator::CreateView(op) => CreateView::from(op).execute_mut(cache, transaction),
         Operator::DropTable(op) => DropTable::from(op).execute_mut(cache, transaction),
+        Operator::DropView(op) => DropView::from(op).execute_mut(cache, transaction),
         Operator::Truncate(op) => Truncate::from(op).execute_mut(cache, transaction),
         Operator::CopyFromFile(op) => CopyFromFile::from(op).execute_mut(cache, transaction),
         #[warn(unused_assignments)]

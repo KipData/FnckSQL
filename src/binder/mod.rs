@@ -9,6 +9,7 @@ mod delete;
 mod describe;
 mod distinct;
 mod drop_table;
+mod drop_view;
 mod explain;
 pub mod expr;
 mod insert;
@@ -226,17 +227,11 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
 
     pub fn view(&self, view_name: TableName) -> Result<Option<&View>, DatabaseError> {
         if let Some(real_name) = self.table_aliases.get(view_name.as_ref()) {
-            self.transaction.view(
-                self.view_cache,
-                real_name.clone(),
-                (self.transaction, self.table_cache),
-            )
+            self.transaction
+                .view(self.table_cache, self.view_cache, real_name.clone())
         } else {
-            self.transaction.view(
-                self.view_cache,
-                view_name.clone(),
-                (self.transaction, self.table_cache),
-            )
+            self.transaction
+                .view(self.table_cache, self.view_cache, view_name.clone())
         }
     }
 
@@ -259,17 +254,11 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
 
         if source.is_none() && !only_table {
             source = if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
-                self.transaction.view(
-                    self.view_cache,
-                    real_name.clone(),
-                    (self.transaction, self.table_cache),
-                )
+                self.transaction
+                    .view(self.table_cache, self.view_cache, real_name.clone())
             } else {
-                self.transaction.view(
-                    self.view_cache,
-                    table_name.clone(),
-                    (self.transaction, self.table_cache),
-                )
+                self.transaction
+                    .view(self.table_cache, self.view_cache, table_name.clone())
             }?
             .map(Source::View);
         }
@@ -361,7 +350,10 @@ impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
                 if_exists,
                 ..
             } => match object_type {
+                // todo handle all names
                 ObjectType::Table => self.bind_drop_table(&names[0], if_exists)?,
+                // todo handle all names
+                ObjectType::View => self.bind_drop_view(&names[0], if_exists)?,
                 _ => todo!(),
             },
             Statement::Insert {

@@ -163,4 +163,6 @@ pub enum DatabaseError {
     ValuesLenMismatch(usize, usize),
     #[error("the view already exists")]
     ViewExists,
+    #[error("the view not found")]
+    ViewNotFound,
 }
