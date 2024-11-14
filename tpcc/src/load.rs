@@ -130,6 +130,8 @@ impl<S: Storage> Load<S> {
             pb.set_position(i_id as u64);
         }
         pb.finish_with_message("load completed!");
+        println!("[Analyze Table: item]");
+        let _ = db.run("analyze table item")?;
         Ok(())
     }
 
@@ -235,7 +237,7 @@ impl<S: Storage> Load<S> {
             pb.set_position(w_id as u64);
         }
         pb.finish_with_message("load completed!");
-        println!("analyze stock");
+        println!("[Analyze Table: stock]");
         let _ = db.run("analyze table stock")?;
         Ok(())
     }
@@ -290,7 +292,7 @@ impl<S: Storage> Load<S> {
                 Self::load_customers(rng, db, d_id, w_id)?;
             }
         }
-        println!("analyze customer");
+        println!("[Analyze Table: customer]");
         let _ = db.run("analyze table customer")?;
 
         Ok(())
@@ -344,7 +346,7 @@ impl<S: Storage> Load<S> {
                 Self::load_orders(rng, db, d_id, w_id)?;
             }
         }
-        println!("analyze orders & order_line");
+        println!("[Analyze Table: orders & order_line]");
         let _ = db.run("analyze table orders")?;
         let _ = db.run("analyze table order_line")?;
 

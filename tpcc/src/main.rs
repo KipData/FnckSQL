@@ -69,6 +69,7 @@ struct Args {
     num_ware: usize,
 }
 
+// TODO: Support multi-threaded TPCC
 fn main() -> Result<(), TpccError> {
     let args = Args::parse();
 
@@ -125,6 +126,7 @@ fn main() -> Result<(), TpccError> {
                 } else {
                     late[i] += 1;
                 }
+                tx.commit()?;
                 break;
             }
             if j < args.max_retry {
@@ -159,32 +161,32 @@ fn main() -> Result<(), TpccError> {
         j += (success[i] + late[i]) as f64;
     }
     // Payment
-    let f = ((success[1] + late[1]) as f64 / j) * 100.0;
-    print!("    Payment: {:.1}% (>=43.0%)", f);
+    let f = (((success[1] + late[1]) as f64 / j) * 100.0).round();
+    print!("   Payment: {:.1}% (>=43.0%)", f);
     if f >= 43.0 {
         println!("  [Ok]");
     } else {
         println!("  [NG]");
     }
     // Order-Status
-    let f = ((success[2] + late[2]) as f64 / j) * 100.0;
-    print!("    Order-Status: {:.1}% (>=4.0%)", f);
+    let f = (((success[2] + late[2]) as f64 / j) * 100.0).round();
+    print!("   Order-Status: {:.1}% (>=4.0%)", f);
     if f >= 4.0 {
         println!("  [Ok]");
     } else {
         println!("  [NG]");
     }
     // Delivery
-    let f = ((success[3] + late[3]) as f64 / j) * 100.0;
-    print!("    Order-Status: {:.1}% (>=4.0%)", f);
+    let f = (((success[3] + late[3]) as f64 / j) * 100.0).round();
+    print!("   Delivery: {:.1}% (>=4.0%)", f);
     if f >= 4.0 {
         println!("  [Ok]");
     } else {
         println!("  [NG]");
     }
     // Stock-Level
-    let f = ((success[4] + late[4]) as f64 / j) * 100.0;
-    print!("    Order-Status: {:.1}% (>=4.0%)", f);
+    let f = (((success[4] + late[4]) as f64 / j) * 100.0).round();
+    print!("   Stock-Level: {:.1}% (>=4.0%)", f);
     if f >= 4.0 {
         println!("  [Ok]");
     } else {
@@ -206,7 +208,7 @@ fn main() -> Result<(), TpccError> {
     println!();
     rt_hist.hist_report();
     println!("<TpmC>");
-    let tpmc = (success[0] + late[0]) as f64 / (actual_tpcc_time.as_secs_f64() / 60.0);
+    let tpmc = ((success[0] + late[0]) as f64 / (actual_tpcc_time.as_secs_f64() / 60.0)).round();
     println!("{} Tpmc", tpmc);
 
     Ok(())

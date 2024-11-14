@@ -57,6 +57,20 @@ let tuples = fnck_sql.run("select * from t1")?;
 ### TPCC
 run `cargo run -p tpcc --release` to run tpcc
 
+- i9-13900HX
+- 32.0 GB
+- YMTC PC411-1024GB-B
+- Tips: TPCC currently only supports single thread
+```shell
+<90th Percentile RT (MaxRT)>
+   New-Order : 0.005  (0.007)
+     Payment : 0.084  (0.141)
+Order-Status : 0.492  (0.575)
+    Delivery : 6.109  (6.473)
+ Stock-Level : 0.001  (0.001)
+<TpmC>
+89.9205557572134 Tpmc
+```
 #### PG Wire Service
 run `cargo run --features="net"` to start server
 ![start](./static/images/start.gif)
