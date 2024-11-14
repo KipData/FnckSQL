@@ -192,7 +192,7 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - Drop
     - [x] Table
     - [ ] Index
-    - [ ] View
+    - [x] View
   - Alert
     - [x] Add Column
     - [x] Drop Column
@@ -221,6 +221,8 @@ let fnck_sql = DataBaseBuilder::path("./data")
   - [x] Update
   - [x] Delete
   - [x] Analyze
+  - [x] Copy To 
+  - [x] Copy From
 - DataTypes
   - Invalid
   - SqlNull

@@ -165,7 +165,9 @@ impl LogicalPlan {
             Operator::CopyFromFile(_) => SchemaOutput::Schema(vec![ColumnRef::from(
                 ColumnCatalog::new_dummy("COPY FROM SOURCE".to_string()),
             )]),
-            Operator::CopyToFile(_) => todo!(),
+            Operator::CopyToFile(_) => SchemaOutput::Schema(vec![ColumnRef::from(
+                ColumnCatalog::new_dummy("COPY TO TARGET".to_string()),
+            )]),
         }
     }
 
