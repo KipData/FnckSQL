@@ -227,17 +227,11 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
 
     pub fn view(&self, view_name: TableName) -> Result<Option<&View>, DatabaseError> {
         if let Some(real_name) = self.table_aliases.get(view_name.as_ref()) {
-            self.transaction.view(
-                self.table_cache,
-                self.view_cache,
-                real_name.clone(),
-            )
+            self.transaction
+                .view(self.table_cache, self.view_cache, real_name.clone())
         } else {
-            self.transaction.view(
-                self.table_cache,
-                self.view_cache,
-                view_name.clone(),
-            )
+            self.transaction
+                .view(self.table_cache, self.view_cache, view_name.clone())
         }
     }
 
@@ -260,17 +254,11 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
 
         if source.is_none() && !only_table {
             source = if let Some(real_name) = self.table_aliases.get(table_name.as_ref()) {
-                self.transaction.view(
-                    self.table_cache,
-                    self.view_cache,
-                    real_name.clone(),
-                )
+                self.transaction
+                    .view(self.table_cache, self.view_cache, real_name.clone())
             } else {
-                self.transaction.view(
-                    self.table_cache,
-                    self.view_cache,
-                    table_name.clone(),
-                )
+                self.transaction
+                    .view(self.table_cache, self.view_cache, table_name.clone())
             }?
             .map(Source::View);
         }
