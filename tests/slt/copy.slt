@@ -12,3 +12,8 @@ SELECT * FROM test_copy
 ----
 0 1.5 one
 1 2.5 two
+
+query I
+COPY test_copy TO '/tmp/copy.csv' ( DELIMITER ',' );
+----
+Copy test_copy -> /tmp/copy.csv [a, b, c]

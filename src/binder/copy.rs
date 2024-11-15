@@ -93,7 +93,11 @@ impl<T: Transaction> Binder<'_, '_, T> {
             if to {
                 // COPY <source_table> TO <dest_file>
                 Ok(LogicalPlan::new(
-                    Operator::CopyToFile(CopyToFileOperator { source: ext_source }),
+                    Operator::CopyToFile(CopyToFileOperator {
+                        table: table.name.to_string(),
+                        target: ext_source,
+                        schema_ref,
+                    }),
                     vec![],
                 ))
             } else {

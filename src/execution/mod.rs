@@ -15,6 +15,7 @@ use crate::execution::ddl::drop_view::DropView;
 use crate::execution::ddl::truncate::Truncate;
 use crate::execution::dml::analyze::Analyze;
 use crate::execution::dml::copy_from_file::CopyFromFile;
+use crate::execution::dml::copy_to_file::CopyToFile;
 use crate::execution::dml::delete::Delete;
 use crate::execution::dml::insert::Insert;
 use crate::execution::dml::update::Update;
@@ -196,10 +197,8 @@ pub fn build_write<'a, T: Transaction + 'a>(
         Operator::DropView(op) => DropView::from(op).execute_mut(cache, transaction),
         Operator::Truncate(op) => Truncate::from(op).execute_mut(cache, transaction),
         Operator::CopyFromFile(op) => CopyFromFile::from(op).execute_mut(cache, transaction),
-        #[warn(unused_assignments)]
-        Operator::CopyToFile(_op) => {
-            todo!()
-        }
+        Operator::CopyToFile(op) => CopyToFile::from(op).execute(cache, transaction),
+
         Operator::Analyze(op) => {
             let input = childrens.pop().unwrap();
 
