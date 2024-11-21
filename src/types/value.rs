@@ -1534,8 +1534,8 @@ impl From<&sqlparser::ast::Value> for DataValue {
                     panic!("unsupported number {:?}", n)
                 }
             }
-            sqlparser::ast::Value::SingleQuotedString(s) => s.clone().into(),
-            sqlparser::ast::Value::DoubleQuotedString(s) => s.clone().into(),
+            sqlparser::ast::Value::SingleQuotedString(s)
+            | sqlparser::ast::Value::DoubleQuotedString(s) => s.clone().into(),
             sqlparser::ast::Value::Boolean(b) => (*b).into(),
             sqlparser::ast::Value::Null => Self::Null,
             _ => todo!("unsupported parsed scalar value {:?}", v),

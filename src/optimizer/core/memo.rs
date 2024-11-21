@@ -98,6 +98,7 @@ mod tests {
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use petgraph::stable_graph::NodeIndex;
+    use std::cell::RefCell;
     use std::ops::Bound;
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
@@ -118,22 +119,24 @@ mod tests {
         let transaction = database.storage.transaction()?;
         let c1_column_id = {
             transaction
-                .table(&database.table_cache, Arc::new("t1".to_string()))?
+                .table(database.state.table_cache(), Arc::new("t1".to_string()))?
                 .unwrap()
                 .get_column_id_by_name("c1")
                 .unwrap()
         };
         let scala_functions = Default::default();
         let table_functions = Default::default();
+        let args = RefCell::new(Vec::new());
         let mut binder = Binder::new(
             BinderContext::new(
-                &database.table_cache,
-                &database.view_cache,
+                database.state.table_cache(),
+                database.state.view_cache(),
                 &transaction,
                 &scala_functions,
                 &table_functions,
                 Arc::new(AtomicUsize::new(0)),
             ),
+            &args,
             None,
         );
         // where: c1 => 2, (40, +inf)
@@ -167,7 +170,7 @@ mod tests {
 
         let memo = Memo::new(
             &graph,
-            &transaction.meta_loader(&database.meta_cache),
+            &transaction.meta_loader(database.state.meta_cache()),
             &rules,
         )?;
         let best_plan = graph.into_plan(Some(&memo));

@@ -41,11 +41,15 @@ impl<T: Transaction> Binder<'_, '_, T> {
         select_list: &mut [ScalarExpression],
         groupby: &[Expr],
     ) -> Result<(), DatabaseError> {
-        self.validate_groupby_illegal_column(select_list, groupby)?;
+        let mut group_by_exprs = Vec::with_capacity(groupby.len());
+        for expr in groupby.iter() {
+            group_by_exprs.push(self.bind_expr(expr)?);
+        }
 
-        for gb in groupby {
-            let mut expr = self.bind_expr(gb)?;
-            self.visit_group_by_expr(select_list, &mut expr);
+        self.validate_groupby_illegal_column(select_list, &group_by_exprs)?;
+
+        for expr in group_by_exprs.iter_mut() {
+            self.visit_group_by_expr(select_list, expr);
         }
         Ok(())
     }
@@ -213,33 +217,31 @@ impl<T: Transaction> Binder<'_, '_, T> {
     fn validate_groupby_illegal_column(
         &mut self,
         select_items: &[ScalarExpression],
-        groupby: &[Expr],
+        groupby: &[ScalarExpression],
     ) -> Result<(), DatabaseError> {
         let mut group_raw_exprs = vec![];
         for expr in groupby {
-            let expr = self.bind_expr(expr)?;
-
             if let ScalarExpression::Alias { alias, .. } = expr {
                 let alias_expr = select_items.iter().find(|column| {
                     if let ScalarExpression::Alias {
                         alias: inner_alias, ..
                     } = &column
                     {
-                        alias == *inner_alias
+                        alias == inner_alias
                     } else {
                         false
                     }
                 });
 
                 if let Some(inner_expr) = alias_expr {
-                    group_raw_exprs.push(inner_expr.clone());
+                    group_raw_exprs.push(inner_expr);
                 }
             } else {
                 group_raw_exprs.push(expr);
             }
         }
         let mut group_raw_set: HashSet<&ScalarExpression, RandomState> =
-            HashSet::from_iter(group_raw_exprs.iter());
+            HashSet::from_iter(group_raw_exprs.iter().copied());
 
         for expr in select_items {
             if expr.has_agg_call() {
@@ -247,7 +249,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
             }
             group_raw_set.remove(expr);
 
-            if !group_raw_exprs.iter().contains(expr) {
+            if !group_raw_exprs.iter().contains(&expr) {
                 return Err(DatabaseError::AggMiss(format!(
                     "`{}` must appear in the GROUP BY clause or be used in an aggregate function",
                     expr
@@ -257,7 +259,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
 
         if !group_raw_set.is_empty() {
             return Err(DatabaseError::AggMiss(
-                "In the GROUP BY clause the field must be in the select clause".to_string(),
+                "in the GROUP BY clause the field must be in the select clause".to_string(),
             ));
         }
 

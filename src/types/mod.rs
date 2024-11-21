@@ -440,7 +440,9 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                     }
                 }
             }
-            other => Err(DatabaseError::UnsupportedStmt(other.to_string())),
+            other => Err(DatabaseError::UnsupportedStmt(format!(
+                "unsupported data type: {other}"
+            ))),
         }
     }
 }

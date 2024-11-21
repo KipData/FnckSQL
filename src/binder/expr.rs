@@ -5,7 +5,7 @@ use crate::expression::agg::AggKind;
 use itertools::Itertools;
 use sqlparser::ast::{
     BinaryOperator, CharLengthUnits, DataType, Expr, Function, FunctionArg, FunctionArgExpr, Ident,
-    Query, UnaryOperator,
+    Query, UnaryOperator, Value,
 };
 use std::collections::HashMap;
 use std::slice;
@@ -48,7 +48,21 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             }
             Expr::CompoundIdentifier(idents) => self.bind_column_ref_from_identifiers(idents, None),
             Expr::BinaryOp { left, right, op } => self.bind_binary_op_internal(left, right, op),
-            Expr::Value(v) => Ok(ScalarExpression::Constant(v.into())),
+            Expr::Value(v) => {
+                let value = if let Value::Placeholder(name) = v {
+                    let (i, _) = self
+                        .args
+                        .borrow()
+                        .iter()
+                        .enumerate()
+                        .find(|(_, (key, _))| key == name)
+                        .ok_or_else(|| DatabaseError::ParametersNotFound(name.to_string()))?;
+                    self.args.borrow_mut().remove(i).1
+                } else {
+                    v.into()
+                };
+                Ok(ScalarExpression::Constant(value))
+            }
             Expr::Function(func) => self.bind_function(func),
             Expr::Nested(expr) => self.bind_expr(expr),
             Expr::UnaryOp { expr, op } => self.bind_unary_op_internal(expr, op),
@@ -266,6 +280,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
                 table_functions,
                 temp_table_id.clone(),
             ),
+            self.args,
             Some(self),
         );
         let mut sub_query = binder.bind_query(subquery)?;

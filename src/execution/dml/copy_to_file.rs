@@ -49,10 +49,10 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for CopyToFile {
                                 .map(|v| v.to_string())
                                 .collect::<Vec<_>>()
                         )
-                        .map_err(|e| DatabaseError::from(e)));
+                        .map_err(DatabaseError::from));
                 }
 
-                throw!(writer.flush().map_err(|e| DatabaseError::from(e)));
+                throw!(writer.flush().map_err(DatabaseError::from));
 
                 yield Ok(TupleBuilder::build_result(format!("{}", self.op)));
             },
@@ -183,7 +183,11 @@ mod tests {
 
         let executor = CopyToFile { op: op.clone() };
         let mut coroutine = executor.execute(
-            (&db.table_cache, &db.view_cache, &db.meta_cache),
+            (
+                db.state.table_cache(),
+                db.state.view_cache(),
+                db.state.meta_cache(),
+            ),
             &mut transaction,
         );
 
