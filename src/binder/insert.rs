@@ -72,14 +72,11 @@ impl<T: Transaction> Binder<'_, '_, T> {
 
                 expression.constant_calculation()?;
                 match expression {
-                    ScalarExpression::Constant(mut value) => {
+                    ScalarExpression::Constant(value) => {
                         let ty = schema_ref[i].datatype();
                         // Check if the value length is too long
                         value.check_len(ty)?;
 
-                        if value.logical_type() != *ty {
-                            value = value.cast(ty)?;
-                        }
                         row.push(value);
                     }
                     ScalarExpression::Empty => {

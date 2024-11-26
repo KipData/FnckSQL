@@ -157,6 +157,7 @@ mod tests {
     use crate::types::LogicalType;
     use crate::utils::lru::SharedLruCache;
     use sqlparser::ast::CharLengthUnits;
+    use std::cell::RefCell;
     use std::hash::RandomState;
     use std::sync::atomic::AtomicUsize;
     use tempfile::TempDir;
@@ -172,6 +173,7 @@ mod tests {
         let table_functions = Default::default();
 
         let sql = "create table t1 (id int primary key, name varchar(10) null)";
+        let args = RefCell::new(Vec::new());
         let mut binder = Binder::new(
             BinderContext::new(
                 &table_cache,
@@ -181,6 +183,7 @@ mod tests {
                 &table_functions,
                 Arc::new(AtomicUsize::new(0)),
             ),
+            &args,
             None,
         );
         let stmt = crate::parser::parse_sql(sql).unwrap();

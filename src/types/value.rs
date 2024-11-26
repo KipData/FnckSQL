@@ -1496,6 +1496,7 @@ impl_scalar!(u8, UInt8);
 impl_scalar!(u16, UInt16);
 impl_scalar!(u32, UInt32);
 impl_scalar!(u64, UInt64);
+impl_scalar!(Decimal, Decimal);
 
 impl From<String> for DataValue {
     fn from(value: String) -> Self {
@@ -1517,6 +1518,42 @@ impl From<Option<String>> for DataValue {
     }
 }
 
+impl From<&NaiveDate> for DataValue {
+    fn from(value: &NaiveDate) -> Self {
+        DataValue::Date32(Some(value.num_days_from_ce()))
+    }
+}
+
+impl From<Option<&NaiveDate>> for DataValue {
+    fn from(value: Option<&NaiveDate>) -> Self {
+        DataValue::Date32(value.map(|d| d.num_days_from_ce()))
+    }
+}
+
+impl From<&NaiveDateTime> for DataValue {
+    fn from(value: &NaiveDateTime) -> Self {
+        DataValue::Date64(Some(value.and_utc().timestamp()))
+    }
+}
+
+impl From<Option<&NaiveDateTime>> for DataValue {
+    fn from(value: Option<&NaiveDateTime>) -> Self {
+        DataValue::Date64(value.map(|d| d.and_utc().timestamp()))
+    }
+}
+
+impl From<&NaiveTime> for DataValue {
+    fn from(value: &NaiveTime) -> Self {
+        DataValue::Time(Some(value.num_seconds_from_midnight()))
+    }
+}
+
+impl From<Option<&NaiveTime>> for DataValue {
+    fn from(value: Option<&NaiveTime>) -> Self {
+        DataValue::Time(value.map(|d| d.num_seconds_from_midnight()))
+    }
+}
+
 impl From<&sqlparser::ast::Value> for DataValue {
     fn from(v: &sqlparser::ast::Value) -> Self {
         match v {
@@ -1534,8 +1571,8 @@ impl From<&sqlparser::ast::Value> for DataValue {
                     panic!("unsupported number {:?}", n)
                 }
             }
-            sqlparser::ast::Value::SingleQuotedString(s) => s.clone().into(),
-            sqlparser::ast::Value::DoubleQuotedString(s) => s.clone().into(),
+            sqlparser::ast::Value::SingleQuotedString(s)
+            | sqlparser::ast::Value::DoubleQuotedString(s) => s.clone().into(),
             sqlparser::ast::Value::Boolean(b) => (*b).into(),
             sqlparser::ast::Value::Null => Self::Null,
             _ => todo!("unsupported parsed scalar value {:?}", v),

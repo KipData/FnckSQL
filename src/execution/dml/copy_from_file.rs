@@ -202,7 +202,11 @@ mod tests {
         let mut transaction = storage.transaction()?;
 
         let mut coroutine = executor.execute_mut(
-            (&db.table_cache, &db.view_cache, &db.meta_cache),
+            (
+                db.state.table_cache(),
+                db.state.view_cache(),
+                db.state.meta_cache(),
+            ),
             &mut transaction,
         );
         let tuple = match Pin::new(&mut coroutine).resume(()) {

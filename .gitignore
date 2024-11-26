@@ -27,5 +27,6 @@ fncksql_data
 fncksql_bench
 sqlite_bench
 fnck_sql_tpcc
+copy.csv
 
 tests/data/row_20000.csv

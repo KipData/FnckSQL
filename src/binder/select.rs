@@ -573,6 +573,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                 table_functions,
                 temp_table_id.clone(),
             ),
+            self.args,
             Some(self),
         );
         let mut right = binder.bind_single_table_ref(relation, Some(join_type))?;

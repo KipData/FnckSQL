@@ -81,6 +81,8 @@ pub enum DatabaseError {
     MisMatch(&'static str, &'static str),
     #[error("add column must be nullable or specify a default value")]
     NeedNullAbleOrDefault,
+    #[error("parameter: {0} not found")]
+    ParametersNotFound(String),
     #[error("no transaction begin")]
     NoTransactionBegin,
     #[error("cannot be Null")]

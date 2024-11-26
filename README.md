@@ -69,7 +69,7 @@ Order-Status : 0.492  (0.575)
     Delivery : 6.109  (6.473)
  Stock-Level : 0.001  (0.001)
 <TpmC>
-89.9205557572134 Tpmc
+98 Tpmc
 ```
 #### PG Wire Service
 run `cargo run --features="net"` to start server

@@ -260,6 +260,20 @@ impl LogicalType {
             (LogicalType::Integer, _) | (_, LogicalType::UInteger) => Ok(LogicalType::Bigint),
             (LogicalType::Smallint, _) | (_, LogicalType::USmallint) => Ok(LogicalType::Integer),
             (LogicalType::Tinyint, _) | (_, LogicalType::UTinyint) => Ok(LogicalType::Smallint),
+            (
+                LogicalType::Decimal(precision_0, scale_0),
+                LogicalType::Decimal(precision_1, scale_1),
+            ) => {
+                let fn_option = |num_0: &Option<u8>, num_1: &Option<u8>| match (num_0, num_1) {
+                    (Some(num_0), Some(num_1)) => Some(*cmp::max(num_0, num_1)),
+                    (Some(num), None) | (None, Some(num)) => Some(*num),
+                    (None, None) => None,
+                };
+                Ok(LogicalType::Decimal(
+                    fn_option(precision_0, precision_1),
+                    fn_option(scale_0, scale_1),
+                ))
+            }
             _ => Err(DatabaseError::Incomparable(left.clone(), right.clone())),
         }
     }
@@ -440,7 +454,9 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                     }
                 }
             }
-            other => Err(DatabaseError::UnsupportedStmt(other.to_string())),
+            other => Err(DatabaseError::UnsupportedStmt(format!(
+                "unsupported data type: {other}"
+            ))),
         }
     }
 }

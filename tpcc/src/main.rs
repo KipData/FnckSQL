@@ -7,7 +7,7 @@ use crate::rt_hist::RtHist;
 use crate::slev::SlevTest;
 use crate::utils::SeqGen;
 use clap::Parser;
-use fnck_sql::db::{DBTransaction, DataBaseBuilder};
+use fnck_sql::db::{DBTransaction, DataBaseBuilder, Statement};
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::storage::Storage;
 use rand::prelude::ThreadRng;
@@ -35,7 +35,11 @@ pub(crate) const RT_LIMITS: [Duration; 5] = [
 pub(crate) trait TpccTransaction<S: Storage> {
     type Args;
 
-    fn run(tx: &mut DBTransaction<S>, args: &Self::Args) -> Result<(), TpccError>;
+    fn run(
+        tx: &mut DBTransaction<S>,
+        args: &Self::Args,
+        statements: &[Statement],
+    ) -> Result<(), TpccError>;
 }
 
 pub(crate) trait TpccTest<S: Storage> {
@@ -47,6 +51,7 @@ pub(crate) trait TpccTest<S: Storage> {
         tx: &mut DBTransaction<S>,
         num_ware: usize,
         args: &TpccArgs,
+        statements: &[Statement],
     ) -> Result<(), TpccError>;
 }
 
@@ -81,6 +86,56 @@ fn main() -> Result<(), TpccError> {
     Load::load_custs(&mut rng, &database, args.num_ware)?;
     Load::load_ord(&mut rng, &database, args.num_ware)?;
 
+    let test_statements = vec![
+        vec![
+            database.prepare("SELECT c.c_discount, c.c_last, c.c_credit, w.w_tax FROM customer AS c JOIN warehouse AS w ON c.c_w_id = w_id AND w.w_id = ?1 AND c.c_w_id = ?2 AND c.c_d_id = ?3 AND c.c_id = ?4")?,
+            database.prepare("SELECT c_discount, c_last, c_credit FROM customer WHERE c_w_id = ?1 AND c_d_id = ?2 AND c_id = ?3")?,
+            database.prepare("SELECT w_tax FROM warehouse WHERE w_id = ?1")?,
+            database.prepare("SELECT d_next_o_id, d_tax FROM district WHERE d_id = ?1 AND d_w_id = ?2")?,
+            database.prepare("UPDATE district SET d_next_o_id = ?1 + 1 WHERE d_id = ?2 AND d_w_id = ?3")?,
+            database.prepare("INSERT INTO orders (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)")?,
+            database.prepare("INSERT INTO new_orders (no_o_id, no_d_id, no_w_id) VALUES (?1,?2,?3)")?,
+            database.prepare("SELECT i_price, i_name, i_data FROM item WHERE i_id = ?1")?,
+            database.prepare("SELECT s_quantity, s_data, s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05, s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10 FROM stock WHERE s_i_id = ?1 AND s_w_id = ?2")?,
+            database.prepare("UPDATE stock SET s_quantity = ?1 WHERE s_i_id = ?2 AND s_w_id = ?3")?,
+            database.prepare("INSERT INTO order_line (ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")?,
+        ],
+        vec![
+            database.prepare("UPDATE warehouse SET w_ytd = w_ytd + ?1 WHERE w_id = ?2")?,
+            database.prepare("SELECT w_street_1, w_street_2, w_city, w_state, w_zip, w_name FROM warehouse WHERE w_id = ?1")?,
+            database.prepare("UPDATE district SET d_ytd = d_ytd + ?1 WHERE d_w_id = ?2 AND d_id = ?3")?,
+            database.prepare("SELECT d_street_1, d_street_2, d_city, d_state, d_zip, d_name FROM district WHERE d_w_id = ?1 AND d_id = ?2")?,
+            database.prepare("SELECT count(c_id) FROM customer WHERE c_w_id = ?1 AND c_d_id = ?2 AND c_last = ?3")?,
+            database.prepare("SELECT c_id FROM customer WHERE c_w_id = ?1 AND c_d_id = ?2 AND c_last = ?3 ORDER BY c_first")?,
+            database.prepare("SELECT c_first, c_middle, c_last, c_street_1, c_street_2, c_city, c_state, c_zip, c_phone, c_credit, c_credit_lim, c_discount, c_balance, c_since FROM customer WHERE c_w_id = ?1 AND c_d_id = ?2 AND c_id = ?3")?,
+            database.prepare("SELECT c_data FROM customer WHERE c_w_id = ?1 AND c_d_id = ?2 AND c_id = ?3")?,
+            database.prepare("UPDATE customer SET c_balance = ?1, c_data = ?2 WHERE c_w_id = ?3 AND c_d_id = ?4 AND c_id = ?5")?,
+            database.prepare("UPDATE customer SET c_balance = ?1 WHERE c_w_id = ?2 AND c_d_id = ?3 AND c_id = ?4")?,
+            database.prepare("INSERT OVERWRITE history(h_c_d_id, h_c_w_id, h_c_id, h_d_id, h_w_id, h_date, h_amount, h_data) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)")?,
+        ],
+        vec![
+            database.prepare("SELECT count(c_id) FROM customer WHERE c_w_id = ?1 AND c_d_id = ?2 AND c_last = ?3")?,
+            database.prepare("SELECT c_balance, c_first, c_middle, c_last FROM customer WHERE c_w_id = ?1 AND c_d_id = ?2 AND c_last = ?3 ORDER BY c_first")?,
+            database.prepare("SELECT c_balance, c_first, c_middle, c_last FROM customer WHERE c_w_id = ?1 AND c_d_id = ?2 AND c_id = ?3")?,
+            database.prepare("SELECT o_id, o_entry_d, COALESCE(o_carrier_id,0) FROM orders WHERE o_w_id = ?1 AND o_d_id = ?2 AND o_c_id = ?3 AND o_id = (SELECT MAX(o_id) FROM orders WHERE o_w_id = ?4 AND o_d_id = ?5 AND o_c_id = ?6)")?,
+            database.prepare("SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d FROM order_line WHERE ol_w_id = ?1 AND ol_d_id = ?2 AND ol_o_id = ?3")?
+        ],
+        vec![
+            database.prepare("SELECT COALESCE(MIN(no_o_id),0) FROM new_orders WHERE no_d_id = ?1 AND no_w_id = ?2")?,
+            database.prepare("DELETE FROM new_orders WHERE no_o_id = ?1 AND no_d_id = ?2 AND no_w_id = ?3")?,
+            database.prepare("SELECT o_c_id FROM orders WHERE o_id = ?1 AND o_d_id = ?2 AND o_w_id = ?3")?,
+            database.prepare("UPDATE orders SET o_carrier_id = ?1 WHERE o_id = ?2 AND o_d_id = ?3 AND o_w_id = ?4")?,
+            database.prepare("UPDATE order_line SET ol_delivery_d = ?1 WHERE ol_o_id = ?2 AND ol_d_id = ?3 AND ol_w_id = ?4")?,
+            database.prepare("SELECT SUM(ol_amount) FROM order_line WHERE ol_o_id = ?1 AND ol_d_id = ?2 AND ol_w_id = ?3")?,
+            database.prepare("UPDATE customer SET c_balance = c_balance + ?1 , c_delivery_cnt = c_delivery_cnt + 1 WHERE c_id = ?2 AND c_d_id = ?3 AND c_w_id = ?4")?,
+        ],
+        vec![
+            database.prepare("SELECT d_next_o_id FROM district WHERE d_id = ?1 AND d_w_id = ?2")?,
+            database.prepare("SELECT DISTINCT ol_i_id FROM order_line WHERE ol_w_id = ?1 AND ol_d_id = ?2 AND ol_o_id < ?3 AND ol_o_id >= (?4 - 20)")?,
+            database.prepare("SELECT count(*) FROM stock WHERE s_w_id = ?1 AND s_i_id = ?2 AND s_quantity < ?3")?,
+        ],
+    ];
+
     let mut rt_hist = RtHist::new();
     let mut success = [0usize; 5];
     let mut late = [0usize; 5];
@@ -102,13 +157,15 @@ fn main() -> Result<(), TpccError> {
     while tpcc_start.elapsed() < duration {
         let i = seq_gen.get();
         let tpcc_test = &tests[i];
+        let statement = &test_statements[i];
 
         let mut is_succeed = false;
         for j in 0..args.max_retry + 1 {
             let transaction_start = Instant::now();
             let mut tx = database.new_transaction()?;
 
-            if let Err(err) = tpcc_test.do_transaction(&mut rng, &mut tx, args.num_ware, &tpcc_args)
+            if let Err(err) =
+                tpcc_test.do_transaction(&mut rng, &mut tx, args.num_ware, &tpcc_args, &statement)
             {
                 failure[i] += 1;
                 eprintln!(

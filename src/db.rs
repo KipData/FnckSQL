@@ -18,18 +18,23 @@ use crate::planner::LogicalPlan;
 use crate::storage::rocksdb::RocksStorage;
 use crate::storage::{StatisticsMetaCache, Storage, TableCache, Transaction, ViewCache};
 use crate::types::tuple::{SchemaRef, Tuple};
+use crate::types::value::DataValue;
 use crate::utils::lru::SharedLruCache;
 use ahash::HashMap;
 use parking_lot::lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard};
 use parking_lot::{RawRwLock, RwLock};
-use sqlparser::ast::Statement;
+use std::cell::RefCell;
 use std::hash::RandomState;
+use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
 pub(crate) type ScalaFunctions = HashMap<FunctionSummary, Arc<dyn ScalarFunctionImpl>>;
 pub(crate) type TableFunctions = HashMap<FunctionSummary, Arc<dyn TableFunctionImpl>>;
+
+pub type Args = Vec<(&'static str, DataValue)>;
+pub type Statement = sqlparser::ast::Statement;
 
 #[allow(dead_code)]
 pub(crate) enum MetaDataLock {
@@ -76,87 +81,55 @@ impl DataBaseBuilder {
 
     pub fn build(self) -> Result<Database<RocksStorage>, DatabaseError> {
         let storage = RocksStorage::new(self.path)?;
-        let meta_cache = Arc::new(SharedLruCache::new(256, 8, RandomState::new())?);
-        let table_cache = Arc::new(SharedLruCache::new(48, 4, RandomState::new())?);
-        let view_cache = Arc::new(SharedLruCache::new(12, 4, RandomState::new())?);
+        let meta_cache = SharedLruCache::new(256, 8, RandomState::new())?;
+        let table_cache = SharedLruCache::new(48, 4, RandomState::new())?;
+        let view_cache = SharedLruCache::new(12, 4, RandomState::new())?;
 
         Ok(Database {
             storage,
-            scala_functions: Arc::new(self.scala_functions),
-            table_functions: Arc::new(self.table_functions),
-            mdl: Arc::new(RwLock::new(())),
-            meta_cache,
-            table_cache,
-            view_cache,
+            mdl: Default::default(),
+            state: Arc::new(State {
+                scala_functions: self.scala_functions,
+                table_functions: self.table_functions,
+                meta_cache,
+                table_cache,
+                view_cache,
+                _p: Default::default(),
+            }),
         })
     }
 }
 
-pub struct Database<S: Storage> {
-    pub(crate) storage: S,
-    scala_functions: Arc<ScalaFunctions>,
-    table_functions: Arc<TableFunctions>,
-    mdl: Arc<RwLock<()>>,
-    pub(crate) meta_cache: Arc<StatisticsMetaCache>,
-    pub(crate) table_cache: Arc<TableCache>,
-    pub(crate) view_cache: Arc<ViewCache>,
+pub(crate) struct State<S> {
+    scala_functions: ScalaFunctions,
+    table_functions: TableFunctions,
+    meta_cache: StatisticsMetaCache,
+    table_cache: TableCache,
+    view_cache: ViewCache,
+    _p: PhantomData<S>,
 }
 
-impl<S: Storage> Database<S> {
-    /// Run SQL queries.
-    pub fn run<T: AsRef<str>>(&self, sql: T) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
-        // parse
-        let stmts = parse_sql(sql)?;
-        if stmts.is_empty() {
-            return Err(DatabaseError::EmptyStatement);
-        }
-        let stmt = &stmts[0];
-        let _guard = if matches!(command_type(stmt)?, CommandType::DDL) {
-            MetaDataLock::Write(self.mdl.write_arc())
-        } else {
-            MetaDataLock::Read(self.mdl.read_arc())
-        };
-        let mut transaction = self.storage.transaction()?;
-        let mut plan = Self::build_plan(
-            stmt,
-            &self.table_cache,
-            &self.view_cache,
-            &self.meta_cache,
-            &transaction,
-            &self.scala_functions,
-            &self.table_functions,
-        )?;
-
-        let schema = plan.output_schema().clone();
-        let iterator = build_write(
-            plan,
-            (&self.table_cache, &self.view_cache, &self.meta_cache),
-            &mut transaction,
-        );
-        let tuples = try_collect(iterator)?;
-
-        transaction.commit()?;
-
-        Ok((schema, tuples))
+impl<S: Storage> State<S> {
+    fn scala_functions(&self) -> &ScalaFunctions {
+        &self.scala_functions
+    }
+    fn table_functions(&self) -> &TableFunctions {
+        &self.table_functions
+    }
+    pub(crate) fn meta_cache(&self) -> &StatisticsMetaCache {
+        &self.meta_cache
+    }
+    pub(crate) fn table_cache(&self) -> &TableCache {
+        &self.table_cache
+    }
+    pub(crate) fn view_cache(&self) -> &ViewCache {
+        &self.view_cache
     }
 
-    pub fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
-        let guard = self.mdl.read_arc();
-        let transaction = self.storage.transaction()?;
-
-        Ok(DBTransaction {
-            inner: transaction,
-            scala_functions: self.scala_functions.clone(),
-            table_functions: self.table_functions.clone(),
-            _guard: guard,
-            meta_cache: self.meta_cache.clone(),
-            table_cache: self.table_cache.clone(),
-            view_cache: self.view_cache.clone(),
-        })
-    }
-
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn build_plan(
         stmt: &Statement,
+        args: &RefCell<Args>,
         table_cache: &TableCache,
         view_cache: &ViewCache,
         meta_cache: &StatisticsMetaCache,
@@ -173,6 +146,7 @@ impl<S: Storage> Database<S> {
                 table_functions,
                 Arc::new(AtomicUsize::new(0)),
             ),
+            args,
             None,
         );
         /// Build a logical plan.
@@ -271,48 +245,118 @@ impl<S: Storage> Database<S> {
                 ImplementationRuleImpl::Truncate,
             ])
     }
+
+    fn prepare<T: AsRef<str>>(&self, sql: T) -> Result<Statement, DatabaseError> {
+        let mut stmts = parse_sql(sql)?;
+        stmts.pop().ok_or(DatabaseError::EmptyStatement)
+    }
+
+    fn execute(
+        &self,
+        transaction: &mut S::TransactionType<'_>,
+        stmt: &Statement,
+        args: Args,
+    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+        let args = RefCell::new(args);
+
+        let mut plan = Self::build_plan(
+            stmt,
+            &args,
+            self.table_cache(),
+            self.view_cache(),
+            self.meta_cache(),
+            transaction,
+            self.scala_functions(),
+            self.table_functions(),
+        )?;
+        let schema = plan.output_schema().clone();
+        let iterator = build_write(
+            plan,
+            (&self.table_cache, &self.view_cache, &self.meta_cache),
+            transaction,
+        );
+        let tuples = try_collect(iterator)?;
+
+        Ok((schema, tuples))
+    }
+}
+
+pub struct Database<S: Storage> {
+    pub(crate) storage: S,
+    mdl: Arc<RwLock<()>>,
+    pub(crate) state: Arc<State<S>>,
+}
+
+impl<S: Storage> Database<S> {
+    /// Run SQL queries.
+    pub fn run<T: AsRef<str>>(&self, sql: T) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+        let statement = self.prepare(sql)?;
+
+        self.execute(&statement, vec![])
+    }
+
+    pub fn prepare<T: AsRef<str>>(&self, sql: T) -> Result<Statement, DatabaseError> {
+        self.state.prepare(sql)
+    }
+
+    fn execute(
+        &self,
+        statement: &Statement,
+        args: Args,
+    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+        let _guard = if matches!(command_type(statement)?, CommandType::DDL) {
+            MetaDataLock::Write(self.mdl.write_arc())
+        } else {
+            MetaDataLock::Read(self.mdl.read_arc())
+        };
+        let mut transaction = self.storage.transaction()?;
+        let (schema, tuples) = self.state.execute(&mut transaction, statement, args)?;
+        transaction.commit()?;
+
+        Ok((schema, tuples))
+    }
+
+    pub fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
+        let guard = self.mdl.read_arc();
+        let transaction = self.storage.transaction()?;
+        let state = self.state.clone();
+
+        Ok(DBTransaction {
+            inner: transaction,
+            _guard: guard,
+            state,
+        })
+    }
 }
 
 pub struct DBTransaction<'a, S: Storage + 'a> {
     inner: S::TransactionType<'a>,
-    scala_functions: Arc<ScalaFunctions>,
-    table_functions: Arc<TableFunctions>,
     _guard: ArcRwLockReadGuard<RawRwLock, ()>,
-    pub(crate) meta_cache: Arc<StatisticsMetaCache>,
-    pub(crate) table_cache: Arc<TableCache>,
-    pub(crate) view_cache: Arc<ViewCache>,
+    state: Arc<State<S>>,
 }
 
 impl<S: Storage> DBTransaction<'_, S> {
     pub fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
-        let stmts = parse_sql(sql)?;
-        if stmts.is_empty() {
-            return Err(DatabaseError::EmptyStatement);
-        }
-        let stmt = &stmts[0];
-        if matches!(command_type(stmt)?, CommandType::DDL) {
+        let statement = self.state.prepare(sql)?;
+
+        self.execute(&statement, vec![])
+    }
+
+    pub fn prepare<T: AsRef<str>>(&self, sql: T) -> Result<Statement, DatabaseError> {
+        self.state.prepare(sql)
+    }
+
+    pub fn execute(
+        &mut self,
+        statement: &Statement,
+        args: Args,
+    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+        if matches!(command_type(statement)?, CommandType::DDL) {
             return Err(DatabaseError::UnsupportedStmt(
                 "`DDL` is not allowed to execute within a transaction".to_string(),
             ));
         }
-        let mut plan = Database::<S>::build_plan(
-            stmt,
-            &self.table_cache,
-            &self.view_cache,
-            &self.meta_cache,
-            &self.inner,
-            &self.scala_functions,
-            &self.table_functions,
-        )?;
-
-        let schema = plan.output_schema().clone();
-        let executor = build_write(
-            plan,
-            (&self.table_cache, &self.view_cache, &self.meta_cache),
-            &mut self.inner,
-        );
-
-        Ok((schema, try_collect(executor)?))
+        self.state.execute(&mut self.inner, statement, args)
     }
 
     pub fn commit(self) -> Result<(), DatabaseError> {
@@ -367,7 +411,7 @@ pub(crate) mod test {
         let database = DataBaseBuilder::path(temp_dir.path()).build()?;
         let mut transaction = database.storage.transaction()?;
 
-        build_table(&database.table_cache, &mut transaction)?;
+        build_table(&database.state.table_cache(), &mut transaction)?;
         transaction.commit()?;
 
         let batch = database.run("select * from t1")?;
@@ -434,6 +478,81 @@ pub(crate) mod test {
                 },
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_prepare_statment() -> Result<(), DatabaseError> {
+        let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+        let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
+
+        let _ = fnck_sql.run("create table t1 (a int primary key, b int)")?;
+        let _ = fnck_sql.run("insert into t1 values(0, 0)")?;
+        let _ = fnck_sql.run("insert into t1 values(1, 1)")?;
+        let _ = fnck_sql.run("insert into t1 values(2, 2)")?;
+
+        // Filter
+        {
+            let statement = fnck_sql.prepare("explain select * from t1 where b > ?1")?;
+
+            let (_, tuples) =
+                fnck_sql.execute(&statement, vec![("?1", DataValue::Int32(Some(0)))])?;
+
+            assert_eq!(
+                tuples[0].values[0].utf8().unwrap(),
+                "Projection [t1.a, t1.b] [Project]
+  Filter (t1.b > 0), Is Having: false [Filter]
+    TableScan t1 -> [a, b] [SeqScan]"
+            )
+        }
+        // Aggregate
+        {
+            let statement = fnck_sql.prepare(
+                "explain select a + ?1, max(b + ?2) from t1 where b > ?3 group by a + ?4",
+            )?;
+
+            let (_, tuples) = fnck_sql.execute(
+                &statement,
+                vec![
+                    ("?1", DataValue::Int32(Some(0))),
+                    ("?2", DataValue::Int32(Some(0))),
+                    ("?3", DataValue::Int32(Some(1))),
+                    ("?4", DataValue::Int32(Some(0))),
+                ],
+            )?;
+            assert_eq!(
+                tuples[0].values[0].utf8().unwrap(),
+                "Projection [(t1.a + 0), Max((t1.b + 0))] [Project]
+  Aggregate [Max((t1.b + 0))] -> Group By [(t1.a + 0)] [HashAggregate]
+    Filter (t1.b > 1), Is Having: false [Filter]
+      TableScan t1 -> [a, b] [SeqScan]"
+            )
+        }
+        {
+            let statement = fnck_sql.prepare("explain select *, ?1 from (select * from t1 where b > ?2) left join (select * from t1 where a > ?3) on a > ?4")?;
+
+            let (_, tuples) = fnck_sql.execute(
+                &statement,
+                vec![
+                    ("?1", DataValue::Int32(Some(9))),
+                    ("?2", DataValue::Int32(Some(0))),
+                    ("?3", DataValue::Int32(Some(1))),
+                    ("?4", DataValue::Int32(Some(0))),
+                ],
+            )?;
+            assert_eq!(
+                tuples[0].values[0].utf8().unwrap(),
+                "Projection [t1.a, t1.b, 9] [Project]
+  LeftOuter Join Where (t1.a > 0) [NestLoopJoin]
+    Projection [t1.a, t1.b] [Project]
+      Filter (t1.b > 0), Is Having: false [Filter]
+        TableScan t1 -> [a, b] [SeqScan]
+    Projection [t1.a, t1.b] [Project]
+      Filter (t1.a > 1), Is Having: false [Filter]
+        TableScan t1 -> [a, b] [SeqScan]"
+            )
+        }
+
         Ok(())
     }
 

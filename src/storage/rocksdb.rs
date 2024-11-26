@@ -234,7 +234,7 @@ mod test {
 
         let table_name = Arc::new("t1".to_string());
         let table = transaction
-            .table(&fnck_sql.table_cache, table_name.clone())?
+            .table(fnck_sql.state.table_cache(), table_name.clone())?
             .unwrap()
             .clone();
         let a_column_id = table.get_column_id_by_name("a").unwrap();
@@ -294,13 +294,13 @@ mod test {
         let transaction = fnck_sql.storage.transaction().unwrap();
 
         let table = transaction
-            .table(&fnck_sql.table_cache, Arc::new("t1".to_string()))?
+            .table(fnck_sql.state.table_cache(), Arc::new("t1".to_string()))?
             .unwrap()
             .clone();
         let columns = table.columns().cloned().enumerate().collect_vec();
         let mut iter = transaction
             .read_by_index(
-                &fnck_sql.table_cache,
+                fnck_sql.state.table_cache(),
                 Arc::new("t1".to_string()),
                 (Some(0), Some(1)),
                 columns,

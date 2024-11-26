@@ -1,7 +1,10 @@
 use crate::execution::{Executor, ReadExecutor};
 use crate::planner::operator::values::ValuesOperator;
 use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
+use crate::throw;
 use crate::types::tuple::Tuple;
+use crate::types::value::DataValue;
+use std::mem;
 
 pub struct Values {
     op: ValuesOperator,
@@ -22,9 +25,17 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Values {
         Box::new(
             #[coroutine]
             move || {
-                let ValuesOperator { rows, .. } = self.op;
+                let ValuesOperator { rows, schema_ref } = self.op;
 
-                for values in rows {
+                for mut values in rows {
+                    for (i, value) in values.iter_mut().enumerate() {
+                        let ty = schema_ref[i].datatype().clone();
+
+                        if value.logical_type() != ty {
+                            *value = throw!(mem::replace(value, DataValue::Null).cast(&ty));
+                        }
+                    }
+
                     yield Ok(Tuple { id: None, values });
                 }
             },
