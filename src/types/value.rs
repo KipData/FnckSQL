@@ -1496,6 +1496,7 @@ impl_scalar!(u8, UInt8);
 impl_scalar!(u16, UInt16);
 impl_scalar!(u32, UInt32);
 impl_scalar!(u64, UInt64);
+impl_scalar!(Decimal, Decimal);
 
 impl From<String> for DataValue {
     fn from(value: String) -> Self {
@@ -1514,6 +1515,42 @@ impl From<Option<String>> for DataValue {
             ty: Utf8Type::Variable(None),
             unit: CharLengthUnits::Characters,
         }
+    }
+}
+
+impl From<&NaiveDate> for DataValue {
+    fn from(value: &NaiveDate) -> Self {
+        DataValue::Date32(Some(value.num_days_from_ce()))
+    }
+}
+
+impl From<Option<&NaiveDate>> for DataValue {
+    fn from(value: Option<&NaiveDate>) -> Self {
+        DataValue::Date32(value.map(|d| d.num_days_from_ce()))
+    }
+}
+
+impl From<&NaiveDateTime> for DataValue {
+    fn from(value: &NaiveDateTime) -> Self {
+        DataValue::Date64(Some(value.and_utc().timestamp()))
+    }
+}
+
+impl From<Option<&NaiveDateTime>> for DataValue {
+    fn from(value: Option<&NaiveDateTime>) -> Self {
+        DataValue::Date64(value.map(|d| d.and_utc().timestamp()))
+    }
+}
+
+impl From<&NaiveTime> for DataValue {
+    fn from(value: &NaiveTime) -> Self {
+        DataValue::Time(Some(value.num_seconds_from_midnight()))
+    }
+}
+
+impl From<Option<&NaiveTime>> for DataValue {
+    fn from(value: Option<&NaiveTime>) -> Self {
+        DataValue::Time(value.map(|d| d.num_seconds_from_midnight()))
     }
 }
 

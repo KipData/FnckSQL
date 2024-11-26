@@ -23,7 +23,6 @@ use crate::utils::lru::SharedLruCache;
 use ahash::HashMap;
 use parking_lot::lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard};
 use parking_lot::{RawRwLock, RwLock};
-use sqlparser::ast::Statement;
 use std::cell::RefCell;
 use std::hash::RandomState;
 use std::marker::PhantomData;
@@ -35,6 +34,7 @@ pub(crate) type ScalaFunctions = HashMap<FunctionSummary, Arc<dyn ScalarFunction
 pub(crate) type TableFunctions = HashMap<FunctionSummary, Arc<dyn TableFunctionImpl>>;
 
 pub type Args = Vec<(&'static str, DataValue)>;
+pub type Statement = sqlparser::ast::Statement;
 
 #[allow(dead_code)]
 pub(crate) enum MetaDataLock {
