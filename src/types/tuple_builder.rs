@@ -49,7 +49,7 @@ impl TupleIdBuilder {
                 }
                 self.tmp_keys.clear();
 
-                DataValue::Tuple(Some(primary_keys))
+                DataValue::Tuple(Some((primary_keys, false)))
             }
         })
     }

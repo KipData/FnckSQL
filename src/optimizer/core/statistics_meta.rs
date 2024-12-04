@@ -123,6 +123,7 @@ mod tests {
             column_ids: vec![Ulid::new()],
             table_name: Arc::new("t1".to_string()),
             pk_ty: LogicalType::Integer,
+            value_ty: LogicalType::Integer,
             name: "pk_c1".to_string(),
             ty: IndexType::PrimaryKey { is_multiple: false },
         };

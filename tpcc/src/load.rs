@@ -340,15 +340,18 @@ impl<S: Storage> Load<S> {
                             ol_dist_info char(24),
                             PRIMARY KEY(ol_w_id, ol_d_id, ol_o_id, ol_number) );",
         )?;
+        let _ =
+            db.run("CREATE INDEX fkey_order_line_1 ON order_line (ol_o_id, ol_d_id, ol_w_id);")?;
         let _ = db.run("CREATE INDEX fkey_order_line_2 ON order_line (ol_supply_w_id,ol_i_id);")?;
         for w_id in 1..num_ware + 1 {
             for d_id in 1..DIST_PER_WARE + 1 {
                 Self::load_orders(rng, db, d_id, w_id)?;
             }
         }
-        println!("[Analyze Table: orders & order_line]");
+        println!("[Analyze Table: orders & order_line & new_order]");
         let _ = db.run("analyze table orders")?;
         let _ = db.run("analyze table order_line")?;
+        let _ = db.run("analyze table new_orders")?;
 
         Ok(())
     }

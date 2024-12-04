@@ -63,13 +63,13 @@ run `cargo run -p tpcc --release` to run tpcc
 - Tips: TPCC currently only supports single thread
 ```shell
 <90th Percentile RT (MaxRT)>
-   New-Order : 0.005  (0.007)
-     Payment : 0.084  (0.141)
-Order-Status : 0.492  (0.575)
-    Delivery : 6.109  (6.473)
- Stock-Level : 0.001  (0.001)
+   New-Order : 0.003  (0.006)
+     Payment : 0.001  (0.003)
+Order-Status : 0.062  (0.188)
+    Delivery : 0.022  (0.052)
+ Stock-Level : 0.004  (0.006)
 <TpmC>
-98 Tpmc
+6669 Tpmc
 ```
 #### PG Wire Service
 run `cargo run --features="net"` to start server

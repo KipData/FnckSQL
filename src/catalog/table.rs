@@ -143,11 +143,28 @@ impl TableCatalog {
                 }
             })
             .clone();
+
+        let mut val_tys = Vec::with_capacity(column_ids.len());
+        for column_id in column_ids.iter() {
+            let val_ty = self
+                .get_column_by_id(column_id)
+                .ok_or_else(|| DatabaseError::ColumnNotFound(column_id.to_string()))?
+                .datatype()
+                .clone();
+            val_tys.push(val_ty)
+        }
+        let value_ty = if val_tys.len() == 1 {
+            val_tys.pop().unwrap()
+        } else {
+            LogicalType::Tuple(val_tys)
+        };
+
         let index = IndexMeta {
             id: index_id,
             column_ids,
             table_name: self.name.clone(),
             pk_ty,
+            value_ty,
             name,
             ty,
         };

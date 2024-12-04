@@ -1,5 +1,6 @@
 use super::LogicalType;
 use crate::errors::DatabaseError;
+use crate::storage::table_codec::{BOUND_MAX_TAG, BOUND_MIN_TAG};
 use chrono::format::{DelayedFormat, StrftimeItems};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use itertools::Itertools;
@@ -60,7 +61,8 @@ pub enum DataValue {
     Date64(Option<i64>),
     Time(Option<u32>),
     Decimal(Option<Decimal>),
-    Tuple(Option<Vec<DataValue>>),
+    /// (values, is_upper)
+    Tuple(Option<(Vec<DataValue>, bool)>),
 }
 
 macro_rules! generate_get_option {
@@ -477,7 +479,7 @@ impl DataValue {
             LogicalType::Tuple(types) => {
                 let values = types.iter().map(DataValue::init).collect_vec();
 
-                DataValue::Tuple(Some(values))
+                DataValue::Tuple(Some((values, false)))
             }
         }
     }
@@ -722,7 +724,7 @@ impl DataValue {
             DataValue::Time(_) => LogicalType::Time,
             DataValue::Decimal(_) => LogicalType::Decimal(None, None),
             DataValue::Tuple(values) => {
-                if let Some(values) = values {
+                if let Some((values, _)) = values {
                     let types = values.iter().map(|v| v.logical_type()).collect_vec();
                     LogicalType::Tuple(types)
                 } else {
@@ -820,10 +822,16 @@ impl DataValue {
             }
             DataValue::Null => (),
             DataValue::Decimal(Some(_v)) => todo!(),
-            DataValue::Tuple(Some(values)) => {
-                for v in values.iter() {
+            DataValue::Tuple(Some((values, is_upper))) => {
+                let last = values.len() - 1;
+
+                for (i, v) in values.iter().enumerate() {
                     v.memcomparable_encode(b)?;
-                    b.push(0u8);
+                    if (v.is_null() || i == last) && *is_upper {
+                        b.push(BOUND_MAX_TAG);
+                    } else {
+                        b.push(BOUND_MIN_TAG);
+                    }
                 }
             }
             value => {
@@ -1385,13 +1393,13 @@ impl DataValue {
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::Tuple(values) => match to {
-                LogicalType::Tuple(types) => Ok(if let Some(mut values) = values {
+                LogicalType::Tuple(types) => Ok(if let Some((mut values, is_upper)) = values {
                     for (i, value) in values.iter_mut().enumerate() {
                         if types[i] != value.logical_type() {
                             *value = mem::replace(value, DataValue::Null).cast(&types[i])?;
                         }
                     }
-                    DataValue::Tuple(Some(values))
+                    DataValue::Tuple(Some((values, is_upper)))
                 } else {
                     DataValue::Tuple(None)
                 }),
@@ -1433,6 +1441,14 @@ impl DataValue {
             return Some(min_len);
         }
         Some(0)
+    }
+
+    pub(crate) fn values_to_tuple(mut values: Vec<DataValue>) -> Option<DataValue> {
+        if values.len() > 1 {
+            Some(DataValue::Tuple(Some((values, false))))
+        } else {
+            values.pop()
+        }
     }
 
     fn decimal_round_i(option: &Option<u8>, decimal: &mut Decimal) {
@@ -1628,7 +1644,7 @@ impl fmt::Display for DataValue {
             DataValue::Decimal(e) => format_option!(f, e.as_ref().map(DataValue::decimal_format))?,
             DataValue::Tuple(e) => {
                 write!(f, "(")?;
-                if let Some(values) = e {
+                if let Some((values, _)) = e {
                     let len = values.len();
 
                     for (i, value) in values.iter().enumerate() {
@@ -1666,7 +1682,13 @@ impl fmt::Debug for DataValue {
             DataValue::Date64(_) => write!(f, "Date64({})", self),
             DataValue::Time(_) => write!(f, "Time({})", self),
             DataValue::Decimal(_) => write!(f, "Decimal({})", self),
-            DataValue::Tuple(_) => write!(f, "Tuple({})", self),
+            DataValue::Tuple(_) => {
+                write!(f, "Tuple({}", self)?;
+                if matches!(self, DataValue::Tuple(Some((_, true)))) {
+                    write!(f, " [is upper]")?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
@@ -1765,34 +1787,85 @@ mod test {
     }
 
     #[test]
-    fn test_mem_comparable_tuple() -> Result<(), DatabaseError> {
+    fn test_mem_comparable_tuple_lower() -> Result<(), DatabaseError> {
         let mut key_tuple_1 = Vec::new();
         let mut key_tuple_2 = Vec::new();
         let mut key_tuple_3 = Vec::new();
 
-        DataValue::Tuple(Some(vec![
-            DataValue::Int8(None),
-            DataValue::Int8(Some(0)),
-            DataValue::Int8(Some(1)),
-        ]))
+        DataValue::Tuple(Some((
+            vec![
+                DataValue::Int8(None),
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(1)),
+            ],
+            false,
+        )))
         .memcomparable_encode(&mut key_tuple_1)?;
-        DataValue::Tuple(Some(vec![
-            DataValue::Int8(Some(0)),
-            DataValue::Int8(Some(0)),
-            DataValue::Int8(Some(1)),
-        ]))
+        DataValue::Tuple(Some((
+            vec![
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(1)),
+            ],
+            false,
+        )))
         .memcomparable_encode(&mut key_tuple_2)?;
-        DataValue::Tuple(Some(vec![
-            DataValue::Int8(Some(0)),
-            DataValue::Int8(Some(0)),
-            DataValue::Int8(Some(2)),
-        ]))
+        DataValue::Tuple(Some((
+            vec![
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(2)),
+            ],
+            false,
+        )))
         .memcomparable_encode(&mut key_tuple_3)?;
 
         println!("{:?} < {:?}", key_tuple_1, key_tuple_2);
         println!("{:?} < {:?}", key_tuple_2, key_tuple_3);
         assert!(key_tuple_1 < key_tuple_2);
         assert!(key_tuple_2 < key_tuple_3);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_mem_comparable_tuple_upper() -> Result<(), DatabaseError> {
+        let mut key_tuple_1 = Vec::new();
+        let mut key_tuple_2 = Vec::new();
+        let mut key_tuple_3 = Vec::new();
+
+        DataValue::Tuple(Some((
+            vec![
+                DataValue::Int8(None),
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(1)),
+            ],
+            true,
+        )))
+        .memcomparable_encode(&mut key_tuple_1)?;
+        DataValue::Tuple(Some((
+            vec![
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(1)),
+            ],
+            true,
+        )))
+        .memcomparable_encode(&mut key_tuple_2)?;
+        DataValue::Tuple(Some((
+            vec![
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(0)),
+                DataValue::Int8(Some(2)),
+            ],
+            true,
+        )))
+        .memcomparable_encode(&mut key_tuple_3)?;
+
+        println!("{:?} < {:?}", key_tuple_2, key_tuple_3);
+        println!("{:?} < {:?}", key_tuple_3, key_tuple_1);
+        assert!(key_tuple_2 < key_tuple_3);
+        assert!(key_tuple_3 < key_tuple_1);
 
         Ok(())
     }

@@ -9,6 +9,7 @@ use crate::throw;
 use crate::types::index::Index;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::TupleBuilder;
+use crate::types::value::DataValue;
 use crate::types::ColumnId;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
@@ -86,7 +87,10 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateIndex {
                 }
                 drop(coroutine);
                 for (tuple_id, values) in index_values {
-                    let index = Index::new(index_id, &values, ty);
+                    let Some(value) = DataValue::values_to_tuple(values) else {
+                        continue;
+                    };
+                    let index = Index::new(index_id, &value, ty);
                     throw!(transaction.add_index(table_name.as_str(), index, &tuple_id));
                 }
                 yield Ok(TupleBuilder::build_result("1".to_string()));

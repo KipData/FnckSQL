@@ -12,8 +12,8 @@ use bytes::Bytes;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::sync::LazyLock;
 
-const BOUND_MIN_TAG: u8 = 0;
-const BOUND_MAX_TAG: u8 = 1;
+pub(crate) const BOUND_MIN_TAG: u8 = u8::MIN;
+pub(crate) const BOUND_MAX_TAG: u8 = u8::MAX;
 
 static ROOT_BYTES: LazyLock<Vec<u8>> = LazyLock::new(|| b"Root".to_vec());
 static VIEW_BYTES: LazyLock<Vec<u8>> = LazyLock::new(|| b"View".to_vec());
@@ -42,7 +42,7 @@ impl TableCodec {
             return Err(DatabaseError::NotNull);
         }
 
-        if let DataValue::Tuple(Some(values)) = &value {
+        if let DataValue::Tuple(Some((values, _))) = &value {
             for value in values {
                 Self::check_primary_key(value, indentation + 1)?
             }
@@ -304,31 +304,14 @@ impl TableCodec {
         Ok((Bytes::from(key), Bytes::from(bytes)))
     }
 
-    fn _encode_index_key(name: &str, index: &Index) -> Result<Vec<u8>, DatabaseError> {
+    pub fn encode_index_bound_key(name: &str, index: &Index) -> Result<Vec<u8>, DatabaseError> {
         let mut key_prefix = Self::key_prefix(CodecType::Index, name);
         key_prefix.push(BOUND_MIN_TAG);
         key_prefix.extend_from_slice(&index.id.to_be_bytes());
         key_prefix.push(BOUND_MIN_TAG);
 
-        for col_v in index.column_values {
-            col_v.memcomparable_encode(&mut key_prefix)?;
-            key_prefix.push(BOUND_MIN_TAG);
-        }
-        Ok(key_prefix)
-    }
+        index.value.memcomparable_encode(&mut key_prefix)?;
 
-    pub fn encode_index_bound_key(
-        name: &str,
-        index: &Index,
-        is_upper: bool,
-    ) -> Result<Vec<u8>, DatabaseError> {
-        let mut key_prefix = Self::_encode_index_key(name, index)?;
-
-        if is_upper {
-            if let Some(last) = key_prefix.last_mut() {
-                *last = BOUND_MAX_TAG
-            }
-        }
         Ok(key_prefix)
     }
 
@@ -337,11 +320,11 @@ impl TableCodec {
         index: &Index,
         tuple_id: Option<&TupleId>,
     ) -> Result<Vec<u8>, DatabaseError> {
-        let mut key_prefix = Self::_encode_index_key(name, index)?;
+        let mut key_prefix = Self::encode_index_bound_key(name, index)?;
 
         if let Some(tuple_id) = tuple_id {
             if matches!(index.ty, IndexType::Normal | IndexType::Composite) {
-                tuple_id.inner_encode(&mut key_prefix, &tuple_id.logical_type())?;
+                tuple_id.memcomparable_encode(&mut key_prefix)?;
             }
         }
         Ok(key_prefix)
@@ -505,7 +488,6 @@ mod tests {
     use std::collections::BTreeSet;
     use std::io::Cursor;
     use std::ops::Bound;
-    use std::slice;
     use std::sync::Arc;
     use ulid::Ulid;
 
@@ -587,6 +569,7 @@ mod tests {
             column_ids: vec![Ulid::new()],
             table_name: Arc::new("T1".to_string()),
             pk_ty: LogicalType::Integer,
+            value_ty: LogicalType::Integer,
             name: "index_1".to_string(),
             ty: IndexType::PrimaryKey { is_multiple: false },
         };
@@ -604,11 +587,7 @@ mod tests {
     fn test_table_codec_index() -> Result<(), DatabaseError> {
         let table_catalog = build_table_codec();
         let value = Arc::new(DataValue::Int32(Some(0)));
-        let index = Index::new(
-            0,
-            slice::from_ref(&value),
-            IndexType::PrimaryKey { is_multiple: false },
-        );
+        let index = Index::new(0, &value, IndexType::PrimaryKey { is_multiple: false });
         let tuple_id = DataValue::Int32(Some(0));
         let (_, bytes) = TableCodec::encode_index(&table_catalog.name, &index, &tuple_id)?;
 
@@ -759,6 +738,7 @@ mod tests {
                 column_ids: vec![],
                 table_name: Arc::new(table_name.to_string()),
                 pk_ty: LogicalType::Integer,
+                value_ty: LogicalType::Integer,
                 name: format!("{}_index", index_id),
                 ty: IndexType::PrimaryKey { is_multiple: false },
             };
@@ -810,7 +790,7 @@ mod tests {
             let value = Arc::new(value);
             let index = Index::new(
                 index_id as u32,
-                slice::from_ref(&value),
+                &value,
                 IndexType::PrimaryKey { is_multiple: false },
             );
 
@@ -866,7 +846,7 @@ mod tests {
             let value = Arc::new(value);
             let index = Index::new(
                 index_id as u32,
-                slice::from_ref(&value),
+                &value,
                 IndexType::PrimaryKey { is_multiple: false },
             );
 

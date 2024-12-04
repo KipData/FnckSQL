@@ -109,7 +109,9 @@ impl InnerIter for RocksIter<'_, '_> {
         for result in self.iter.by_ref() {
             let (key, value) = result?;
             let upper_bound_check = match &self.upper {
-                Bound::Included(ref upper) => key.as_ref() <= upper.as_slice(),
+                Bound::Included(ref upper) => {
+                    key.as_ref() <= upper.as_slice() || key.starts_with(upper.as_slice())
+                }
                 Bound::Excluded(ref upper) => key.as_ref() < upper.as_slice(),
                 Bound::Unbounded => true,
             };
@@ -137,7 +139,8 @@ mod test {
     use crate::expression::range_detacher::Range;
     use crate::storage::rocksdb::RocksStorage;
     use crate::storage::{
-        IndexImplEnum, IndexImplParams, IndexIter, Iter, PrimaryKeyIndexImpl, Storage, Transaction,
+        IndexImplEnum, IndexImplParams, IndexIter, IndexIterState, Iter, PrimaryKeyIndexImpl,
+        Storage, Transaction,
     };
     use crate::types::index::{IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
@@ -146,7 +149,7 @@ mod test {
     use crate::types::LogicalType;
     use crate::utils::lru::SharedLruCache;
     use itertools::Itertools;
-    use std::collections::{Bound, VecDeque};
+    use std::collections::Bound;
     use std::hash::RandomState;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -257,6 +260,7 @@ mod test {
                     column_ids: vec![*a_column_id],
                     table_name,
                     pk_ty: LogicalType::Integer,
+                    value_ty: LogicalType::Integer,
                     name: "pk_a".to_string(),
                     ty: IndexType::PrimaryKey { is_multiple: false },
                 }),
@@ -264,14 +268,15 @@ mod test {
                 table_types: table.types(),
                 tx: &transaction,
             },
-            ranges: VecDeque::from(vec![
+            ranges: vec![
                 Range::Eq(DataValue::Int32(Some(0))),
                 Range::Scope {
                     min: Bound::Included(DataValue::Int32(Some(2))),
                     max: Bound::Included(DataValue::Int32(Some(4))),
                 },
-            ]),
-            scope_iter: None,
+            ]
+            .into_iter(),
+            state: IndexIterState::Init,
             inner: IndexImplEnum::PrimaryKey(PrimaryKeyIndexImpl),
         };
         let mut result = Vec::new();

@@ -17,7 +17,10 @@ pub struct TupleLtBinaryEvaluator;
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub struct TupleLtEqBinaryEvaluator;
 
-fn tuple_cmp(v1: &[DataValue], v2: &[DataValue]) -> Option<Ordering> {
+fn tuple_cmp(
+    (v1, v1_is_upper): &(Vec<DataValue>, bool),
+    (v2, v2_is_upper): &(Vec<DataValue>, bool),
+) -> Option<Ordering> {
     let mut order = Ordering::Equal;
     let mut v1_iter = v1.iter();
     let mut v2_iter = v2.iter();
@@ -25,8 +28,20 @@ fn tuple_cmp(v1: &[DataValue], v2: &[DataValue]) -> Option<Ordering> {
     while order == Ordering::Equal {
         order = match (v1_iter.next(), v2_iter.next()) {
             (Some(v1), Some(v2)) => v1.partial_cmp(v2)?,
-            (Some(_), None) => Ordering::Greater,
-            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => {
+                if *v2_is_upper {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
+            }
+            (None, Some(_)) => {
+                if *v1_is_upper {
+                    Ordering::Greater
+                } else {
+                    Ordering::Less
+                }
+            }
             (None, None) => break,
         }
     }
