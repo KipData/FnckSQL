@@ -20,12 +20,13 @@ impl DataValue {
         if let DataValue::Tuple(values) = self {
             match values {
                 None => writer.write_all(&[0u8])?,
-                Some(values) => {
+                Some((values, is_upper)) => {
                     writer.write_all(&[1u8])?;
                     writer.write_all(&(values.len() as u32).to_le_bytes())?;
                     for value in values.iter() {
                         value.inner_encode(writer, &value.logical_type())?
                     }
+                    writer.write_all(&[if *is_upper { 1u8 } else { 0u8 }])?;
                 }
             }
 
@@ -65,7 +66,9 @@ impl DataValue {
                     for ty in types.iter() {
                         vec.push(Self::inner_decode(reader, ty)?);
                     }
-                    Some(vec)
+                    let mut bytes = [0u8];
+                    reader.read_exact(&mut bytes)?;
+                    Some((vec, bytes[0] == 1))
                 }
                 _ => unreachable!(),
             };
@@ -135,10 +138,10 @@ pub(crate) mod test {
             unit: CharLengthUnits::Characters,
         };
         let source_4 = DataValue::Tuple(None);
-        let source_5 = DataValue::Tuple(Some(vec![
-            DataValue::Int32(None),
-            DataValue::Int32(Some(42)),
-        ]));
+        let source_5 = DataValue::Tuple(Some((
+            vec![DataValue::Int32(None), DataValue::Int32(Some(42))],
+            false,
+        )));
 
         let mut reference_tables = ReferenceTables::new();
         let mut bytes = Vec::new();

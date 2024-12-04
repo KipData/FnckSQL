@@ -90,7 +90,9 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                         if values.len() == 1 {
                             throw!(builder.append(&values[0]));
                         } else {
-                            throw!(builder.append(&Arc::new(DataValue::Tuple(Some(values)))));
+                            throw!(
+                                builder.append(&Arc::new(DataValue::Tuple(Some((values, false)))))
+                            );
                         }
                     }
                 }

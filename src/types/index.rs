@@ -32,6 +32,7 @@ pub struct IndexMeta {
     pub column_ids: Vec<ColumnId>,
     pub table_name: TableName,
     pub pk_ty: LogicalType,
+    pub value_ty: LogicalType,
     pub name: String,
     pub ty: IndexType,
 }
@@ -57,17 +58,13 @@ impl IndexMeta {
 #[derive(Debug, Clone)]
 pub struct Index<'a> {
     pub id: IndexId,
-    pub column_values: &'a [DataValue],
+    pub value: &'a DataValue,
     pub ty: IndexType,
 }
 
 impl<'a> Index<'a> {
-    pub fn new(id: IndexId, column_values: &'a [DataValue], ty: IndexType) -> Self {
-        Index {
-            id,
-            column_values,
-            ty,
-        }
+    pub fn new(id: IndexId, value: &'a DataValue, ty: IndexType) -> Self {
+        Index { id, value, ty }
     }
 }
 

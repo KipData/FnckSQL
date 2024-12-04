@@ -109,7 +109,9 @@ impl InnerIter for RocksIter<'_, '_> {
         for result in self.iter.by_ref() {
             let (key, value) = result?;
             let upper_bound_check = match &self.upper {
-                Bound::Included(ref upper) => key.as_ref() <= upper.as_slice(),
+                Bound::Included(ref upper) => {
+                    key.as_ref() <= upper.as_slice() || key.starts_with(upper.as_slice())
+                }
                 Bound::Excluded(ref upper) => key.as_ref() < upper.as_slice(),
                 Bound::Unbounded => true,
             };
@@ -257,6 +259,7 @@ mod test {
                     column_ids: vec![*a_column_id],
                     table_name,
                     pk_ty: LogicalType::Integer,
+                    value_ty: LogicalType::Integer,
                     name: "pk_a".to_string(),
                     ty: IndexType::PrimaryKey { is_multiple: false },
                 }),

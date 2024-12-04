@@ -10,8 +10,11 @@ use crate::planner::operator::filter::FilterOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::Operator;
 use crate::types::index::{IndexInfo, IndexMetaRef, IndexType};
+use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use itertools::Itertools;
+use std::mem;
+use std::ops::Bound;
 use std::sync::LazyLock;
 
 static PUSH_PREDICATE_THROUGH_JOIN: LazyLock<Pattern> = LazyLock::new(|| Pattern {
@@ -262,12 +265,30 @@ impl PushPredicateIntoScan {
                 res = range.combining_eqs(&eq_ranges);
             }
         }
-        res.and_then(|range| {
+        res.map(|range| {
             if range.only_eq() && apply_column_count != meta.column_ids.len() {
-                None
-            } else {
-                Some(range)
+                fn eq_to_scope(range: Range) -> Range {
+                    match range {
+                        Range::Eq(DataValue::Tuple(Some((values, _)))) => {
+                            let min =
+                                Bound::Included(DataValue::Tuple(Some((values.clone(), false))));
+                            let max = Bound::Excluded(DataValue::Tuple(Some((values, true))));
+
+                            Range::Scope { min, max }
+                        }
+                        Range::SortedRanges(mut ranges) => {
+                            for range in ranges.iter_mut() {
+                                let tmp = mem::replace(range, Range::Dummy);
+                                *range = eq_to_scope(tmp);
+                            }
+                            Range::SortedRanges(ranges)
+                        }
+                        range => range,
+                    }
+                }
+                return eq_to_scope(range);
             }
+            range
         })
     }
 }

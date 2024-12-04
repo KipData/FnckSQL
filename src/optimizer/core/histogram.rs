@@ -317,10 +317,13 @@ impl Histogram {
                 | LogicalType::Double
                 | LogicalType::Decimal(_, _) => value.clone().cast(&LogicalType::Double)?.double(),
                 LogicalType::Tuple(_) => match value {
-                    DataValue::Tuple(Some(values)) => {
+                    DataValue::Tuple(Some((values, _))) => {
                         let mut float = 0.0;
 
                         for (i, value) in values.iter().enumerate() {
+                            if !value.logical_type().is_numeric() {
+                                continue;
+                            }
                             if let Some(f) =
                                 DataValue::clone(value).cast(&LogicalType::Double)?.double()
                             {
@@ -474,6 +477,7 @@ mod tests {
             column_ids: vec![Ulid::new()],
             table_name: Arc::new("t1".to_string()),
             pk_ty: LogicalType::Integer,
+            value_ty: LogicalType::Integer,
             name: "pk_c1".to_string(),
             ty: IndexType::PrimaryKey { is_multiple: false },
         }

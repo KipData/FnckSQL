@@ -88,9 +88,13 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
                 ) in indexes
                 {
                     for (i, values) in value_rows.into_iter().enumerate() {
+                        let Some(value) = DataValue::values_to_tuple(values) else {
+                            continue;
+                        };
+
                         throw!(transaction.del_index(
                             &table_name,
-                            &Index::new(index_id, &values, index_ty),
+                            &Index::new(index_id, &value, index_ty),
                             Some(&tuple_ids[i]),
                         ));
                     }

@@ -131,7 +131,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                             id: Some(if primary_keys.len() == 1 {
                                 tuple_id.pop().unwrap()
                             } else {
-                                DataValue::Tuple(Some(tuple_id))
+                                DataValue::Tuple(Some((tuple_id, false)))
                             }),
                             values,
                         });
@@ -142,7 +142,10 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
 
                         for tuple in tuples.iter() {
                             let values = throw!(Projection::projection(tuple, &exprs, &schema));
-                            let index = Index::new(index_meta.id, &values, index_meta.ty);
+                            let Some(value) = DataValue::values_to_tuple(values) else {
+                                continue;
+                            };
+                            let index = Index::new(index_meta.id, &value, index_meta.ty);
 
                             throw!(transaction.add_index(
                                 &table_name,

@@ -189,6 +189,7 @@ mod tests {
                     column_ids: vec![*c1_column_id],
                     table_name: Arc::new("t1".to_string()),
                     pk_ty: LogicalType::Integer,
+                    value_ty: LogicalType::Integer,
                     name: "pk_index".to_string(),
                     ty: IndexType::PrimaryKey { is_multiple: false },
                 }),

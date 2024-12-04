@@ -10,6 +10,7 @@ use crate::types::index::Index;
 use crate::types::tuple::types;
 use crate::types::tuple::Tuple;
 use crate::types::tuple_builder::{TupleBuilder, TupleIdBuilder};
+use crate::types::value::DataValue;
 use std::collections::HashMap;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
@@ -82,7 +83,10 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                         for tuple in tuples.iter() {
                             let values =
                                 throw!(Projection::projection(tuple, &exprs, &input_schema));
-                            let index = Index::new(index_meta.id, &values, index_meta.ty);
+                            let Some(value) = DataValue::values_to_tuple(values) else {
+                                continue;
+                            };
+                            let index = Index::new(index_meta.id, &value, index_meta.ty);
                             throw!(transaction.del_index(
                                 &table_name,
                                 &index,
@@ -116,7 +120,10 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                         for (index_meta, exprs) in index_metas.iter() {
                             let values =
                                 throw!(Projection::projection(&tuple, exprs, &input_schema));
-                            let index = Index::new(index_meta.id, &values, index_meta.ty);
+                            let Some(value) = DataValue::values_to_tuple(values) else {
+                                continue;
+                            };
+                            let index = Index::new(index_meta.id, &value, index_meta.ty);
                             throw!(transaction.add_index(
                                 &table_name,
                                 index,

@@ -274,7 +274,9 @@ impl ScalarExpression {
                 for expr in exprs {
                     values.push(expr.eval(tuple, schema)?);
                 }
-                Ok(DataValue::Tuple((!values.is_empty()).then_some(values)))
+                Ok(DataValue::Tuple(
+                    (!values.is_empty()).then_some((values, false)),
+                ))
             }
             ScalarExpression::ScalaFunction(ScalarFunction { inner, args, .. }) => {
                 inner.eval(args, tuple, schema)?.cast(inner.return_type())

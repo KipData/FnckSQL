@@ -11,7 +11,6 @@ use crate::{
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
-use std::slice;
 
 pub struct AddColumn {
     op: AddColumnOperator,
@@ -80,8 +79,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
                         .cloned(),
                 ) {
                     for (tuple_id, value) in unique_values {
-                        let index =
-                            Index::new(unique_meta.id, slice::from_ref(&value), IndexType::Unique);
+                        let index = Index::new(unique_meta.id, &value, IndexType::Unique);
                         throw!(transaction.add_index(table_name, index, &tuple_id));
                     }
                 }
