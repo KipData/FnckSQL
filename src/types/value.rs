@@ -823,17 +823,14 @@ impl DataValue {
             DataValue::Null => (),
             DataValue::Decimal(Some(_v)) => todo!(),
             DataValue::Tuple(Some((values, is_upper))) => {
-                for v in values.iter() {
+                let last = values.len() - 1;
+
+                for (i, v) in values.iter().enumerate() {
                     v.memcomparable_encode(b)?;
-                    if v.is_null() && *is_upper {
+                    if (v.is_null() || i == last) && *is_upper {
                         b.push(BOUND_MAX_TAG);
                     } else {
                         b.push(BOUND_MIN_TAG);
-                    }
-                }
-                if *is_upper && !values.is_empty() {
-                    if let Some(v) = b.last_mut() {
-                        *v = BOUND_MAX_TAG
                     }
                 }
             }
@@ -1688,7 +1685,7 @@ impl fmt::Debug for DataValue {
             DataValue::Tuple(_) => {
                 write!(f, "Tuple({}", self)?;
                 if matches!(self, DataValue::Tuple(Some((_, true)))) {
-                    write!(f, " [is_upper]")?;
+                    write!(f, " [is upper]")?;
                 }
                 write!(f, ")")
             }

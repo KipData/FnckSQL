@@ -1922,7 +1922,23 @@ mod test {
             Range::Eq(DataValue::Int32(Some(7))),
             Range::Eq(DataValue::Int32(Some(10))),
         ]);
-        println!("{:#?}", range);
+        assert_eq!(
+            range,
+            Some(Range::Scope {
+                min: Bound::Included(DataValue::Tuple(Some((
+                    vec![
+                        DataValue::Int32(Some(7)),
+                        DataValue::Int32(Some(10)),
+                        DataValue::Int32(Some(2))
+                    ],
+                    false
+                )))),
+                max: Bound::Excluded(DataValue::Tuple(Some((
+                    vec![DataValue::Int32(Some(7)), DataValue::Int32(Some(10))],
+                    true
+                )))),
+            })
+        );
         let Range::Scope {
             min: Bound::Included(min),
             max: Bound::Excluded(max),
@@ -1930,7 +1946,9 @@ mod test {
         else {
             unreachable!()
         };
-        let evaluator = TupleLtBinaryEvaluator;
-        println!("{:#?}", evaluator.binary_eval(&min, &max));
+        assert_eq!(
+            TupleLtBinaryEvaluator.binary_eval(&min, &max),
+            DataValue::Boolean(Some(true))
+        )
     }
 }

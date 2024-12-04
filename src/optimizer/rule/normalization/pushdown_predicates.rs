@@ -271,7 +271,7 @@ impl PushPredicateIntoScan {
                     match range {
                         Range::Eq(DataValue::Tuple(Some((values, _)))) => {
                             let min =
-                                Bound::Included(DataValue::Tuple(Some((values.clone(), false))));
+                                Bound::Excluded(DataValue::Tuple(Some((values.clone(), false))));
                             let max = Bound::Excluded(DataValue::Tuple(Some((values, true))));
 
                             Range::Scope { min, max }

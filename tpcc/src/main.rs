@@ -10,10 +10,10 @@ use clap::Parser;
 use fnck_sql::db::{DBTransaction, DataBaseBuilder, Statement};
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::storage::Storage;
+use fnck_sql::types::tuple::create_table;
 use rand::prelude::ThreadRng;
 use rand::Rng;
 use std::time::{Duration, Instant};
-use fnck_sql::types::tuple::create_table;
 
 mod delivery;
 mod load;
@@ -320,7 +320,7 @@ pub enum TpccError {
 }
 
 #[test]
-fn debug_tpcc() -> Result<(), DatabaseError> {
+fn explain_tpcc() -> Result<(), DatabaseError> {
     let database = DataBaseBuilder::path("./fnck_sql_tpcc").build()?;
     let mut tx = database.new_transaction()?;
 
