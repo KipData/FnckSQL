@@ -41,8 +41,7 @@ use crate::planner::LogicalPlan;
 use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::types::index::IndexInfo;
 use crate::types::tuple::Tuple;
-use std::ops::{Coroutine, CoroutineState};
-use std::pin::Pin;
+use std::ops::Coroutine;
 
 pub type Executor<'a> =
     Box<dyn Coroutine<Yield = Result<Tuple, DatabaseError>, Return = ()> + 'a + Unpin>;
@@ -217,10 +216,11 @@ pub fn build_write<'a, T: Transaction + 'a>(
     }
 }
 
+#[cfg(test)]
 pub fn try_collect(mut executor: Executor) -> Result<Vec<Tuple>, DatabaseError> {
     let mut output = Vec::new();
 
-    while let CoroutineState::Yielded(tuple) = Pin::new(&mut executor).resume(()) {
+    while let std::ops::CoroutineState::Yielded(tuple) = std::pin::Pin::new(&mut executor).resume(()) {
         output.push(tuple?);
     }
     Ok(output)

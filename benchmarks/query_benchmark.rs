@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use fnck_sql::db::DataBaseBuilder;
+use fnck_sql::db::{DataBaseBuilder, ResultIter};
 use fnck_sql::errors::DatabaseError;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
@@ -26,9 +26,8 @@ fn query_cases() -> Vec<(&'static str, &'static str)> {
 
 fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
     let database = DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH)
-        .build()
-        .unwrap();
-    database.run("create table t1 (c1 int primary key, c2 int)")?;
+        .build()?;
+    database.run("create table t1 (c1 int primary key, c2 int)")?.done()?;
     let pb = ProgressBar::new(TABLE_ROW_NUM);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -36,12 +35,12 @@ fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
             .unwrap(),
     );
     for i in 0..TABLE_ROW_NUM {
-        let _ = database.run(format!("insert into t1 values({}, {})", i, i + 1).as_str())?;
+        database.run(format!("insert into t1 values({}, {})", i, i + 1).as_str())?.done()?;
         pb.set_position(i + 1);
     }
     pb.finish_with_message("Insert completed!");
 
-    let _ = database.run("analyze table t1")?;
+    database.run("analyze table t1")?.done()?;
 
     Ok(())
 }
@@ -98,19 +97,20 @@ fn query_on_execute(c: &mut Criterion) {
     for (name, case) in query_cases() {
         c.bench_function(format!("FnckSQL: {} by '{}'", name, case).as_str(), |b| {
             b.iter(|| {
-                let _tuples = database.run(case).unwrap();
+                for tuple in database.run(case).unwrap() {
+                    let _ = tuple.unwrap();
+                }
             })
         });
 
         let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned()).unwrap();
         c.bench_function(format!("SQLite: {} by '{}'", name, case).as_str(), |b| {
             b.iter(|| {
-                let _tuples = connection
+                for row in connection
                     .prepare(case)
-                    .unwrap()
-                    .into_iter()
-                    .map(|row| row.unwrap())
-                    .collect_vec();
+                    .unwrap() {
+                    let _ = row.unwrap();
+                }
             })
         });
     }

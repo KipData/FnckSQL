@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use clap::Parser;
-use fnck_sql::db::{DBTransaction, DataBaseBuilder, Database};
+use fnck_sql::db::{DBTransaction, DataBaseBuilder, Database, ResultIter};
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::storage::rocksdb::RocksStorage;
 use fnck_sql::types::tuple::{Schema, Tuple};
@@ -172,14 +172,17 @@ impl SimpleQueryHandler for SessionBackend {
             _ => {
                 let mut guard = self.tx.lock();
 
-                let (schema, tuples) = if let Some(transaction) = guard.as_mut() {
-                    unsafe { transaction.as_mut().run(query) }
+                let iter = if let Some(transaction) = guard.as_mut() {
+                    unsafe { transaction.as_mut().run(query) }.map(Box::new) as Result<Box<dyn ResultIter>, _>
                 } else {
-                    self.inner.run(query)
-                }
-                .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
+                    self.inner.run(query).map(Box::new)
+                }.map_err(|e| PgWireError::ApiError(Box::new(e)))?;
 
-                Ok(vec![Response::Query(encode_tuples(&schema, tuples)?)])
+                let mut tuples = Vec::new();
+                for tuple in iter {
+                    tuples.push(tuple.map_err(|e| PgWireError::ApiError(Box::new(e)))?);
+                }
+                Ok(vec![Response::Query(encode_tuples(iter.schema(), tuples)?)])
             }
         }
     }

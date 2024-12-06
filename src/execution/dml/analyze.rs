@@ -156,7 +156,7 @@ impl fmt::Display for AnalyzeOperator {
 
 #[cfg(test)]
 mod test {
-    use crate::db::DataBaseBuilder;
+    use crate::db::{DataBaseBuilder, ResultIter};
     use crate::errors::DatabaseError;
     use crate::execution::dml::analyze::{DEFAULT_NUM_OF_BUCKETS, DEFAULT_STATISTICS_META_PATH};
     use crate::optimizer::core::statistics_meta::StatisticsMeta;
@@ -177,14 +177,18 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
 
-        let _ = fnck_sql.run("create table t1 (a int primary key, b int)")?;
-        let _ = fnck_sql.run("create index b_index on t1 (b)")?;
-        let _ = fnck_sql.run("create index p_index on t1 (a, b)")?;
+        fnck_sql
+            .run("create table t1 (a int primary key, b int)")?
+            .done()?;
+        fnck_sql.run("create index b_index on t1 (b)")?.done()?;
+        fnck_sql.run("create index p_index on t1 (a, b)")?.done()?;
 
         for i in 0..DEFAULT_NUM_OF_BUCKETS + 1 {
-            let _ = fnck_sql.run(format!("insert into t1 values({i}, {})", i % 20))?;
+            fnck_sql
+                .run(format!("insert into t1 values({i}, {})", i % 20))?
+                .done()?;
         }
-        let _ = fnck_sql.run("analyze table t1")?;
+        fnck_sql.run("analyze table t1")?.done()?;
 
         let dir_path = dirs::home_dir()
             .expect("Your system does not have a Config directory!")
@@ -220,14 +224,18 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
 
-        let _ = fnck_sql.run("create table t1 (a int primary key, b int)")?;
-        let _ = fnck_sql.run("create index b_index on t1 (b)")?;
-        let _ = fnck_sql.run("create index p_index on t1 (a, b)")?;
+        fnck_sql
+            .run("create table t1 (a int primary key, b int)")?
+            .done()?;
+        fnck_sql.run("create index b_index on t1 (b)")?.done()?;
+        fnck_sql.run("create index p_index on t1 (a, b)")?.done()?;
 
         for i in 0..DEFAULT_NUM_OF_BUCKETS + 1 {
-            let _ = fnck_sql.run(format!("insert into t1 values({i}, {i})"))?;
+            fnck_sql
+                .run(format!("insert into t1 values({i}, {i})"))?
+                .done()?;
         }
-        let _ = fnck_sql.run("analyze table t1")?;
+        fnck_sql.run("analyze table t1")?.done()?;
 
         let dir_path = dirs::home_dir()
             .expect("Your system does not have a Config directory!")
@@ -246,8 +254,8 @@ mod test {
         assert_eq!(file_names[1], OsStr::new("1"));
         assert_eq!(file_names[2], OsStr::new("2"));
 
-        let _ = fnck_sql.run("alter table t1 drop column b")?;
-        let _ = fnck_sql.run("analyze table t1")?;
+        fnck_sql.run("alter table t1 drop column b")?.done()?;
+        fnck_sql.run("analyze table t1")?.done()?;
 
         let mut entries = fs::read_dir(&dir_path)?;
 

@@ -1,6 +1,6 @@
 use crate::binder::{command_type, Binder, BinderContext, CommandType};
 use crate::errors::DatabaseError;
-use crate::execution::{build_write, try_collect};
+use crate::execution::{build_write, Executor};
 use crate::expression::function::scala::ScalarFunctionImpl;
 use crate::expression::function::table::TableFunctionImpl;
 use crate::expression::function::FunctionSummary;
@@ -26,7 +26,10 @@ use parking_lot::{RawRwLock, RwLock};
 use std::cell::RefCell;
 use std::hash::RandomState;
 use std::marker::PhantomData;
+use std::mem;
+use std::ops::{Coroutine, CoroutineState};
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
@@ -251,12 +254,12 @@ impl<S: Storage> State<S> {
         stmts.pop().ok_or(DatabaseError::EmptyStatement)
     }
 
-    fn execute(
-        &self,
-        transaction: &mut S::TransactionType<'_>,
+    fn execute<'a>(
+        &'a self,
+        transaction: &'a mut S::TransactionType<'_>,
         stmt: &Statement,
         args: Args,
-    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+    ) -> Result<(SchemaRef, Executor<'a>), DatabaseError> {
         let args = RefCell::new(args);
 
         let mut plan = Self::build_plan(
@@ -270,14 +273,13 @@ impl<S: Storage> State<S> {
             self.table_functions(),
         )?;
         let schema = plan.output_schema().clone();
-        let iterator = build_write(
+        let executor = build_write(
             plan,
             (&self.table_cache, &self.view_cache, &self.meta_cache),
             transaction,
         );
-        let tuples = try_collect(iterator)?;
 
-        Ok((schema, tuples))
+        Ok((schema, executor))
     }
 }
 
@@ -289,7 +291,7 @@ pub struct Database<S: Storage> {
 
 impl<S: Storage> Database<S> {
     /// Run SQL queries.
-    pub fn run<T: AsRef<str>>(&self, sql: T) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+    pub fn run<T: AsRef<str>>(&self, sql: T) -> Result<DatabaseIter<'_, S>, DatabaseError> {
         let statement = self.prepare(sql)?;
 
         self.execute(&statement, vec![])
@@ -299,21 +301,18 @@ impl<S: Storage> Database<S> {
         self.state.prepare(sql)
     }
 
-    fn execute(
-        &self,
-        statement: &Statement,
-        args: Args,
-    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+    fn execute(&self, statement: &Statement, args: Args) -> Result<DatabaseIter<'_, S>, DatabaseError> {
         let _guard = if matches!(command_type(statement)?, CommandType::DDL) {
             MetaDataLock::Write(self.mdl.write_arc())
         } else {
             MetaDataLock::Read(self.mdl.read_arc())
         };
-        let mut transaction = self.storage.transaction()?;
-        let (schema, tuples) = self.state.execute(&mut transaction, statement, args)?;
-        transaction.commit()?;
-
-        Ok((schema, tuples))
+        let transaction = Box::into_raw(Box::new(self.storage.transaction()?));
+        let (schema, executor) =
+            self.state
+                .execute(unsafe { &mut (*transaction) }, statement, args)?;
+        let inner = Box::into_raw(Box::new(TransactionIter::new(schema, executor)));
+        Ok(DatabaseIter { transaction, inner })
     }
 
     pub fn new_transaction(&self) -> Result<DBTransaction<S>, DatabaseError> {
@@ -329,6 +328,52 @@ impl<S: Storage> Database<S> {
     }
 }
 
+pub trait ResultIter: Iterator<Item = Result<Tuple, DatabaseError>> + Sized {
+    fn schema(&self) -> &SchemaRef;
+
+    fn done(self) -> Result<(), DatabaseError>;
+}
+
+pub struct DatabaseIter<'a, S: Storage + 'a> {
+    transaction: *mut S::TransactionType<'a>,
+    inner: *mut TransactionIter<'a>,
+}
+
+impl<S: Storage> Drop for DatabaseIter<'_, S> {
+    fn drop(&mut self) {
+        if !self.transaction.is_null() {
+            unsafe { drop(Box::from_raw(self.transaction)) }
+        }
+        if !self.inner.is_null() {
+            unsafe { drop(Box::from_raw(self.inner)) }
+        }
+    }
+}
+
+impl<S: Storage> Iterator for DatabaseIter<'_, S> {
+    type Item = Result<Tuple, DatabaseError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe { (*self.inner).next() }
+    }
+}
+
+impl<S: Storage> ResultIter for DatabaseIter<'_, S> {
+    fn schema(&self) -> &SchemaRef {
+        unsafe { (*self.inner).schema() }
+    }
+
+    fn done(mut self) -> Result<(), DatabaseError> {
+        unsafe {
+            Box::from_raw(mem::replace(&mut self.inner, std::ptr::null_mut())).done()?;
+        }
+        unsafe {
+            Box::from_raw(mem::replace(&mut self.transaction, std::ptr::null_mut())).commit()?;
+        }
+        Ok(())
+    }
+}
+
 pub struct DBTransaction<'a, S: Storage + 'a> {
     inner: S::TransactionType<'a>,
     _guard: ArcRwLockReadGuard<RawRwLock, ()>,
@@ -336,7 +381,7 @@ pub struct DBTransaction<'a, S: Storage + 'a> {
 }
 
 impl<S: Storage> DBTransaction<'_, S> {
-    pub fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+    pub fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<TransactionIter<'_>, DatabaseError> {
         let statement = self.state.prepare(sql)?;
 
         self.execute(&statement, vec![])
@@ -350,13 +395,14 @@ impl<S: Storage> DBTransaction<'_, S> {
         &mut self,
         statement: &Statement,
         args: Args,
-    ) -> Result<(SchemaRef, Vec<Tuple>), DatabaseError> {
+    ) -> Result<TransactionIter, DatabaseError> {
         if matches!(command_type(statement)?, CommandType::DDL) {
             return Err(DatabaseError::UnsupportedStmt(
                 "`DDL` is not allowed to execute within a transaction".to_string(),
             ));
         }
-        self.state.execute(&mut self.inner, statement, args)
+        let (schema, executor) = self.state.execute(&mut self.inner, statement, args)?;
+        Ok(TransactionIter::new(schema, executor))
     }
 
     pub fn commit(self) -> Result<(), DatabaseError> {
@@ -366,12 +412,57 @@ impl<S: Storage> DBTransaction<'_, S> {
     }
 }
 
+pub struct TransactionIter<'a> {
+    executor: Executor<'a>,
+    schema: SchemaRef,
+    is_over: bool,
+}
+
+impl<'a> TransactionIter<'a> {
+    fn new(schema: SchemaRef, executor: Executor<'a>) -> Self {
+        Self {
+            executor,
+            schema,
+            is_over: false,
+        }
+    }
+}
+
+impl Iterator for TransactionIter<'_> {
+    type Item = Result<Tuple, DatabaseError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_over {
+            return None;
+        }
+        if let CoroutineState::Yielded(tuple) = Pin::new(&mut self.executor).resume(()) {
+            Some(tuple)
+        } else {
+            self.is_over = true;
+            None
+        }
+    }
+}
+
+impl ResultIter for TransactionIter<'_> {
+    fn schema(&self) -> &SchemaRef {
+        &self.schema
+    }
+
+    fn done(mut self) -> Result<(), DatabaseError> {
+        for result in self.by_ref() {
+            let _ = result?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
-    use crate::db::{DataBaseBuilder, DatabaseError};
+    use crate::db::{DataBaseBuilder, DatabaseError, ResultIter};
     use crate::storage::{Storage, TableCache, Transaction};
-    use crate::types::tuple::{create_table, Tuple};
+    use crate::types::tuple::Tuple;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use chrono::{Datelike, Local};
@@ -414,9 +505,9 @@ pub(crate) mod test {
         build_table(&database.state.table_cache(), &mut transaction)?;
         transaction.commit()?;
 
-        let batch = database.run("select * from t1")?;
-
-        println!("{:#?}", batch);
+        for result in database.run("select * from t1")? {
+            println!("{:#?}", result?);
+        }
         Ok(())
     }
 
@@ -425,24 +516,25 @@ pub(crate) mod test {
     fn test_udf() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
-        let (schema, tuples) = fnck_sql.run("select current_date()")?;
-        println!("{}", create_table(&schema, &tuples));
+        let mut iter = fnck_sql.run("select current_date()")?;
 
         assert_eq!(
-            schema,
-            Arc::new(vec![ColumnRef::from(ColumnCatalog::new(
+            iter.schema(),
+            &Arc::new(vec![ColumnRef::from(ColumnCatalog::new(
                 "current_date()".to_string(),
                 true,
                 ColumnDesc::new(LogicalType::Date, None, false, None).unwrap()
             ))])
         );
         assert_eq!(
-            tuples,
-            vec![Tuple {
+            iter.next().unwrap()?,
+            Tuple {
                 id: None,
                 values: vec![DataValue::Date32(Some(Local::now().num_days_from_ce()))],
-            }]
+            }
         );
+        assert!(iter.next().is_none());
+
         Ok(())
     }
 
@@ -451,32 +543,32 @@ pub(crate) mod test {
     fn test_udtf() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
-        let (schema, tuples) = fnck_sql.run(
+        let mut iter = fnck_sql.run(
             "SELECT * FROM (select * from table(numbers(10)) a ORDER BY number LIMIT 5) OFFSET 3",
         )?;
-        println!("{}", create_table(&schema, &tuples));
 
         let mut column = ColumnCatalog::new(
             "number".to_string(),
             true,
             ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
         );
-        let number_column_id = schema[0].id().unwrap();
+        let number_column_id = iter.schema()[0].id().unwrap();
         column.set_ref_table(Arc::new("a".to_string()), number_column_id, false);
 
-        assert_eq!(schema, Arc::new(vec![ColumnRef::from(column)]));
+        assert_eq!(iter.schema(), &Arc::new(vec![ColumnRef::from(column)]));
         assert_eq!(
-            tuples,
-            vec![
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(Some(3))],
-                },
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(Some(4))],
-                },
-            ]
+            iter.next().unwrap()?,
+            Tuple {
+                id: None,
+                values: vec![DataValue::Int32(Some(3))],
+            }
+        );
+        assert_eq!(
+            iter.next().unwrap()?,
+            Tuple {
+                id: None,
+                values: vec![DataValue::Int32(Some(4))],
+            }
         );
         Ok(())
     }
@@ -486,20 +578,21 @@ pub(crate) mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
 
-        let _ = fnck_sql.run("create table t1 (a int primary key, b int)")?;
-        let _ = fnck_sql.run("insert into t1 values(0, 0)")?;
-        let _ = fnck_sql.run("insert into t1 values(1, 1)")?;
-        let _ = fnck_sql.run("insert into t1 values(2, 2)")?;
+        fnck_sql
+            .run("create table t1 (a int primary key, b int)")?
+            .done()?;
+        fnck_sql.run("insert into t1 values(0, 0)")?.done()?;
+        fnck_sql.run("insert into t1 values(1, 1)")?.done()?;
+        fnck_sql.run("insert into t1 values(2, 2)")?.done()?;
 
         // Filter
         {
             let statement = fnck_sql.prepare("explain select * from t1 where b > ?1")?;
 
-            let (_, tuples) =
-                fnck_sql.execute(&statement, vec![("?1", DataValue::Int32(Some(0)))])?;
+            let mut iter = fnck_sql.execute(&statement, vec![("?1", DataValue::Int32(Some(0)))])?;
 
             assert_eq!(
-                tuples[0].values[0].utf8().unwrap(),
+                iter.next().unwrap()?.values[0].utf8().unwrap(),
                 "Projection [t1.a, t1.b] [Project]
   Filter (t1.b > 0), Is Having: false [Filter]
     TableScan t1 -> [a, b] [SeqScan]"
@@ -511,7 +604,7 @@ pub(crate) mod test {
                 "explain select a + ?1, max(b + ?2) from t1 where b > ?3 group by a + ?4",
             )?;
 
-            let (_, tuples) = fnck_sql.execute(
+            let mut iter = fnck_sql.execute(
                 &statement,
                 vec![
                     ("?1", DataValue::Int32(Some(0))),
@@ -521,7 +614,7 @@ pub(crate) mod test {
                 ],
             )?;
             assert_eq!(
-                tuples[0].values[0].utf8().unwrap(),
+                iter.next().unwrap()?.values[0].utf8().unwrap(),
                 "Projection [(t1.a + 0), Max((t1.b + 0))] [Project]
   Aggregate [Max((t1.b + 0))] -> Group By [(t1.a + 0)] [HashAggregate]
     Filter (t1.b > 1), Is Having: false [Filter]
@@ -531,7 +624,7 @@ pub(crate) mod test {
         {
             let statement = fnck_sql.prepare("explain select *, ?1 from (select * from t1 where b > ?2) left join (select * from t1 where a > ?3) on a > ?4")?;
 
-            let (_, tuples) = fnck_sql.execute(
+            let mut iter = fnck_sql.execute(
                 &statement,
                 vec![
                     ("?1", DataValue::Int32(Some(9))),
@@ -541,7 +634,7 @@ pub(crate) mod test {
                 ],
             )?;
             assert_eq!(
-                tuples[0].values[0].utf8().unwrap(),
+                iter.next().unwrap()?.values[0].utf8().unwrap(),
                 "Projection [t1.a, t1.b, 9] [Project]
   LeftOuter Join Where (t1.a > 0) [NestLoopJoin]
     Projection [t1.a, t1.b] [Project]
@@ -561,40 +654,41 @@ pub(crate) mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
 
-        let _ = fnck_sql.run("create table t1 (a int primary key, b int)")?;
+        fnck_sql
+            .run("create table t1 (a int primary key, b int)")?
+            .done()?;
 
         let mut tx_1 = fnck_sql.new_transaction()?;
         let mut tx_2 = fnck_sql.new_transaction()?;
 
-        let _ = tx_1.run("insert into t1 values(0, 0)")?;
-        let _ = tx_1.run("insert into t1 values(1, 1)")?;
+        tx_1.run("insert into t1 values(0, 0)")?.done()?;
+        tx_1.run("insert into t1 values(1, 1)")?.done()?;
 
-        let _ = tx_2.run("insert into t1 values(0, 0)")?;
-        let _ = tx_2.run("insert into t1 values(3, 3)")?;
+        tx_2.run("insert into t1 values(0, 0)")?.done()?;
+        tx_2.run("insert into t1 values(3, 3)")?.done()?;
 
-        let (_, tuples_1) = tx_1.run("select * from t1")?;
-        let (_, tuples_2) = tx_2.run("select * from t1")?;
-
-        assert_eq!(tuples_1.len(), 2);
-        assert_eq!(tuples_2.len(), 2);
+        let mut iter_1 = tx_1.run("select * from t1")?;
+        let mut iter_2 = tx_2.run("select * from t1")?;
 
         assert_eq!(
-            tuples_1[0].values,
+            iter_1.next().unwrap()?.values,
             vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
         );
         assert_eq!(
-            tuples_1[1].values,
+            iter_1.next().unwrap()?.values,
             vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1))]
         );
 
         assert_eq!(
-            tuples_2[0].values,
+            iter_2.next().unwrap()?.values,
             vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
         );
         assert_eq!(
-            tuples_2[1].values,
+            iter_2.next().unwrap()?.values,
             vec![DataValue::Int32(Some(3)), DataValue::Int32(Some(3))]
         );
+        drop(iter_1);
+        drop(iter_2);
 
         tx_1.commit()?;
 
