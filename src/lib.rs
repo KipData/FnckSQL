@@ -63,7 +63,7 @@
 //!     )
 //! );
 //!
-//! #[cfg(feature = "marcos")]
+//! #[cfg(feature = "macros")]
 //! fn main() -> Result<(), DatabaseError> {
 //!     let database = DataBaseBuilder::path("./hello_world").build()?;
 //!
@@ -103,7 +103,7 @@ pub mod errors;
 pub mod execution;
 pub mod expression;
 mod function;
-#[cfg(feature = "marcos")]
+#[cfg(feature = "macros")]
 pub mod macros;
 mod optimizer;
 pub mod parser;

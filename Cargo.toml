@@ -23,8 +23,8 @@ required-features = ["net"]
 doctest = false
 
 [features]
-default = ["marcos"]
-marcos  = []
+default = ["macros"]
+macros  = []
 net     = ["dep:pgwire", "dep:async-trait", "dep:clap", "dep:env_logger", "dep:futures", "dep:log", "dep:tokio"]
 
 [[bench]]

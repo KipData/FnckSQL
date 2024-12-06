@@ -24,7 +24,7 @@ implement_from_tuple!(
     )
 );
 
-#[cfg(feature = "marcos")]
+#[cfg(feature = "macros")]
 fn main() -> Result<(), DatabaseError> {
     let database = DataBaseBuilder::path("./hello_world").build()?;
 
