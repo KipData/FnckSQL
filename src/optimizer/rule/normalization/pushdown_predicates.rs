@@ -327,7 +327,8 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        if let Operator::TableScan(op) = &best_plan.childrens[0].childrens[0].operator {
+        let scan_op = best_plan.childrens.pop_only().childrens.pop_only();
+        if let Operator::TableScan(op) = &scan_op.operator {
             let mock_range = Range::Scope {
                 min: Bound::Excluded(DataValue::Int32(Some(1))),
                 max: Bound::Unbounded,
@@ -355,7 +356,8 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        if let Operator::Filter(op) = &best_plan.childrens[0].operator {
+        let filter_op = best_plan.childrens.pop_only();
+        if let Operator::Filter(op) = &filter_op.operator {
             match op.predicate {
                 ScalarExpression::Binary {
                     op: BinaryOperator::Lt,
@@ -368,7 +370,8 @@ mod tests {
             unreachable!("Should be a filter operator")
         }
 
-        if let Operator::Filter(op) = &best_plan.childrens[0].childrens[0].childrens[0].operator {
+        let filter_op = filter_op.childrens.pop_only().childrens.pop_twins().0;
+        if let Operator::Filter(op) = &filter_op.operator {
             match op.predicate {
                 ScalarExpression::Binary {
                     op: BinaryOperator::Gt,
@@ -398,7 +401,8 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        if let Operator::Filter(op) = &best_plan.childrens[0].operator {
+        let filter_op = best_plan.childrens.pop_only();
+        if let Operator::Filter(op) = &filter_op.operator {
             match op.predicate {
                 ScalarExpression::Binary {
                     op: BinaryOperator::Gt,
@@ -411,7 +415,8 @@ mod tests {
             unreachable!("Should be a filter operator")
         }
 
-        if let Operator::Filter(op) = &best_plan.childrens[0].childrens[0].childrens[1].operator {
+        let filter_op = filter_op.childrens.pop_only().childrens.pop_twins().1;
+        if let Operator::Filter(op) = &filter_op.operator {
             match op.predicate {
                 ScalarExpression::Binary {
                     op: BinaryOperator::Lt,
@@ -441,12 +446,14 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        if let Operator::Join(_) = &best_plan.childrens[0].operator {
+        let join_op = best_plan.childrens.pop_only();
+        if let Operator::Join(_) = &join_op.operator {
         } else {
             unreachable!("Should be a filter operator")
         }
 
-        if let Operator::Filter(op) = &best_plan.childrens[0].childrens[0].operator {
+        let (left_filter_op, right_filter_op) = join_op.childrens.pop_twins();
+        if let Operator::Filter(op) = &left_filter_op.operator {
             match op.predicate {
                 ScalarExpression::Binary {
                     op: BinaryOperator::Gt,
@@ -459,7 +466,7 @@ mod tests {
             unreachable!("Should be a filter operator")
         }
 
-        if let Operator::Filter(op) = &best_plan.childrens[0].childrens[1].operator {
+        if let Operator::Filter(op) = &right_filter_op.operator {
             match op.predicate {
                 ScalarExpression::Binary {
                     op: BinaryOperator::Lt,

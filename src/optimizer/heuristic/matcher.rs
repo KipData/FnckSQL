@@ -63,7 +63,7 @@ mod tests {
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::optimizer::heuristic::matcher::HepMatcher;
     use crate::planner::operator::Operator;
-    use crate::planner::LogicalPlan;
+    use crate::planner::{Childrens, LogicalPlan};
 
     #[test]
     fn test_predicate() -> Result<(), DatabaseError> {
@@ -97,25 +97,25 @@ mod tests {
     fn test_recursive() {
         let all_dummy_plan = LogicalPlan {
             operator: Operator::Dummy,
-            childrens: vec![
-                LogicalPlan {
+            childrens: Box::new(Childrens::Twins {
+                left: LogicalPlan {
                     operator: Operator::Dummy,
-                    childrens: vec![LogicalPlan {
+                    childrens: Box::new(Childrens::Only(LogicalPlan {
                         operator: Operator::Dummy,
-                        childrens: vec![],
+                        childrens: Box::new(Childrens::None),
                         physical_option: None,
                         _output_schema_ref: None,
-                    }],
+                    })),
                     physical_option: None,
                     _output_schema_ref: None,
                 },
-                LogicalPlan {
+                right: LogicalPlan {
                     operator: Operator::Dummy,
-                    childrens: vec![],
+                    childrens: Box::new(Childrens::None),
                     physical_option: None,
                     _output_schema_ref: None,
                 },
-            ],
+            }),
             physical_option: None,
             _output_schema_ref: None,
         };

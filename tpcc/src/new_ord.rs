@@ -1,7 +1,7 @@
 use crate::load::{nu_rand, CUST_PER_DIST, DIST_PER_WARE, MAX_ITEMS, MAX_NUM_ITEMS};
 use crate::{other_ware, TpccArgs, TpccError, TpccTest, TpccTransaction, ALLOW_MULTI_WAREHOUSE_TX};
 use chrono::Utc;
-use fnck_sql::db::{DBTransaction, Statement};
+use fnck_sql::db::{DBTransaction, ResultIter, Statement};
 use fnck_sql::storage::Storage;
 use fnck_sql::types::value::DataValue;
 use rand::prelude::ThreadRng;
@@ -68,65 +68,78 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
 
         let (c_discount, c_last, c_credit, w_tax) = if args.joins {
             // "SELECT c_discount, c_last, c_credit, w_tax FROM customer, warehouse WHERE w_id = ? AND c_w_id = w_id AND c_d_id = ? AND c_id = ?"
-            let (_, tuples) = tx.execute(
-                &statements[0],
-                vec![
-                    ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                    ("?2", DataValue::Int16(Some(args.w_id as i16))),
-                    ("?3", DataValue::Int8(Some(args.d_id as i8))),
-                    ("?4", DataValue::Int64(Some(args.c_id as i64))),
-                ],
-            )?;
-            let c_discount = tuples[0].values[0].decimal().unwrap();
-            let c_last = tuples[0].values[1].utf8().unwrap();
-            let c_credit = tuples[0].values[2].utf8().unwrap();
-            let w_tax = tuples[0].values[3].decimal().unwrap();
+            let tuple = tx
+                .execute(
+                    &statements[0],
+                    vec![
+                        ("?1", DataValue::Int16(Some(args.w_id as i16))),
+                        ("?2", DataValue::Int16(Some(args.w_id as i16))),
+                        ("?3", DataValue::Int8(Some(args.d_id as i8))),
+                        ("?4", DataValue::Int64(Some(args.c_id as i64))),
+                    ],
+                )?
+                .next()
+                .unwrap()?;
+            let c_discount = tuple.values[0].decimal().unwrap();
+            let c_last = tuple.values[1].utf8().unwrap();
+            let c_credit = tuple.values[2].utf8().unwrap();
+            let w_tax = tuple.values[3].decimal().unwrap();
 
             (c_discount, c_last, c_credit, w_tax)
         } else {
             // "SELECT c_discount, c_last, c_credit FROM customer WHERE c_w_id = ? AND c_d_id = ? AND c_id = ?"
-            let (_, tuples) = tx.execute(
-                &statements[1],
-                vec![
-                    ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                    ("?2", DataValue::Int8(Some(args.d_id as i8))),
-                    ("?3", DataValue::Int32(Some(args.c_id as i32))),
-                ],
-            )?;
-            let c_discount = tuples[0].values[0].decimal().unwrap();
-            let c_last = tuples[0].values[1].utf8().unwrap();
-            let c_credit = tuples[0].values[2].utf8().unwrap();
+            let tuple = tx
+                .execute(
+                    &statements[1],
+                    vec![
+                        ("?1", DataValue::Int16(Some(args.w_id as i16))),
+                        ("?2", DataValue::Int8(Some(args.d_id as i8))),
+                        ("?3", DataValue::Int32(Some(args.c_id as i32))),
+                    ],
+                )?
+                .next()
+                .unwrap()?;
+            let c_discount = tuple.values[0].decimal().unwrap();
+            let c_last = tuple.values[1].utf8().unwrap();
+            let c_credit = tuple.values[2].utf8().unwrap();
             // "SELECT w_tax FROM warehouse WHERE w_id = ?"
-            let (_, tuples) = tx.execute(
-                &statements[2],
-                vec![("?1", DataValue::Int16(Some(args.w_id as i16)))],
-            )?;
-            let w_tax = tuples[0].values[0].decimal().unwrap();
+            let tuple = tx
+                .execute(
+                    &statements[2],
+                    vec![("?1", DataValue::Int16(Some(args.w_id as i16)))],
+                )?
+                .next()
+                .unwrap()?;
+            let w_tax = tuple.values[0].decimal().unwrap();
 
             (c_discount, c_last, c_credit, w_tax)
         };
         // "SELECT d_next_o_id, d_tax FROM district WHERE d_id = ? AND d_w_id = ? FOR UPDATE"
-        let (_, tuples) = tx.execute(
-            &statements[3],
-            vec![
-                ("?1", DataValue::Int8(Some(args.d_id as i8))),
-                ("?2", DataValue::Int16(Some(args.w_id as i16))),
-            ],
-        )?;
-        let d_next_o_id = tuples[0].values[0].i32().unwrap();
-        let d_tax = tuples[0].values[1].decimal().unwrap();
+        let tuple = tx
+            .execute(
+                &statements[3],
+                vec![
+                    ("?1", DataValue::Int8(Some(args.d_id as i8))),
+                    ("?2", DataValue::Int16(Some(args.w_id as i16))),
+                ],
+            )?
+            .next()
+            .unwrap()?;
+        let d_next_o_id = tuple.values[0].i32().unwrap();
+        let d_tax = tuple.values[1].decimal().unwrap();
         // "UPDATE district SET d_next_o_id = ? + 1 WHERE d_id = ? AND d_w_id = ?"
-        let (_, tuples) = tx.execute(
+        tx.execute(
             &statements[4],
             vec![
                 ("?1", DataValue::Int32(Some(d_next_o_id))),
                 ("?2", DataValue::Int8(Some(args.d_id as i8))),
                 ("?3", DataValue::Int16(Some(args.w_id as i16))),
             ],
-        )?;
+        )?
+        .done()?;
         let o_id = d_next_o_id;
         // "INSERT INTO orders (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local) VALUES(?, ?, ?, ?, ?, ?, ?)"
-        let (_, tuples) = tx.execute(
+        tx.execute(
             &statements[5],
             vec![
                 ("?1", DataValue::Int32(Some(o_id))),
@@ -137,16 +150,18 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
                 ("?6", DataValue::Int8(Some(args.o_ol_cnt as i8))),
                 ("?7", DataValue::Int8(Some(args.o_all_local as i8))),
             ],
-        )?;
+        )?
+        .done()?;
         // "INSERT INTO new_orders (no_o_id, no_d_id, no_w_id) VALUES (?,?,?)
-        let (_, tuples) = tx.execute(
+        tx.execute(
             &statements[6],
             vec![
                 ("?1", DataValue::Int32(Some(o_id))),
                 ("?2", DataValue::Int8(Some(args.d_id as i8))),
                 ("?3", DataValue::Int16(Some(args.w_id as i16))),
             ],
-        )?;
+        )?
+        .done()?;
         let mut ol_num_seq = vec![0; MAX_NUM_ITEMS];
 
         for i in 0..args.o_ol_cnt {
@@ -175,40 +190,46 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
             let ol_i_id = args.item_id[ol_num_seq[ol_number - 1]];
             let ol_quantity = args.qty[ol_num_seq[ol_number - 1]];
             // "SELECT i_price, i_name, i_data FROM item WHERE i_id = ?"
-            let (_, tuples) = tx.execute(
-                &statements[7],
-                vec![("?1", DataValue::Int32(Some(ol_i_id as i32)))],
-            )?;
-            if tuples.is_empty() {
+            let tuple = tx
+                .execute(
+                    &statements[7],
+                    vec![("?1", DataValue::Int32(Some(ol_i_id as i32)))],
+                )?
+                .next();
+            let Some(tuple) = tuple else {
                 return Err(TpccError::EmptyTuples);
-            }
-            let i_price = tuples[0].values[0].decimal().unwrap();
-            let i_name = tuples[0].values[1].utf8().unwrap();
-            let i_data = tuples[0].values[2].utf8().unwrap();
+            };
+            let tuple = tuple?;
+            let i_price = tuple.values[0].decimal().unwrap();
+            let i_name = tuple.values[1].utf8().unwrap();
+            let i_data = tuple.values[2].utf8().unwrap();
 
             price[ol_num_seq[ol_number - 1]] = i_price;
             iname[ol_num_seq[ol_number - 1]] = i_name;
 
             // "SELECT s_quantity, s_data, s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05, s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10 FROM stock WHERE s_i_id = ? AND s_w_id = ? FOR UPDATE"
-            let (_, tuples) = tx.execute(
-                &statements[8],
-                vec![
-                    ("?1", DataValue::Int32(Some(ol_i_id as i32))),
-                    ("?2", DataValue::Int16(Some(ol_supply_w_id as i16))),
-                ],
-            )?;
-            let mut s_quantity = tuples[0].values[0].i16().unwrap();
-            let s_data = tuples[0].values[1].utf8().unwrap();
-            let s_dist_01 = tuples[0].values[2].utf8().unwrap();
-            let s_dist_02 = tuples[0].values[3].utf8().unwrap();
-            let s_dist_03 = tuples[0].values[4].utf8().unwrap();
-            let s_dist_04 = tuples[0].values[5].utf8().unwrap();
-            let s_dist_05 = tuples[0].values[6].utf8().unwrap();
-            let s_dist_06 = tuples[0].values[7].utf8().unwrap();
-            let s_dist_07 = tuples[0].values[8].utf8().unwrap();
-            let s_dist_08 = tuples[0].values[9].utf8().unwrap();
-            let s_dist_09 = tuples[0].values[10].utf8().unwrap();
-            let s_dist_10 = tuples[0].values[11].utf8().unwrap();
+            let tuple = tx
+                .execute(
+                    &statements[8],
+                    vec![
+                        ("?1", DataValue::Int32(Some(ol_i_id as i32))),
+                        ("?2", DataValue::Int16(Some(ol_supply_w_id as i16))),
+                    ],
+                )?
+                .next()
+                .unwrap()?;
+            let mut s_quantity = tuple.values[0].i16().unwrap();
+            let s_data = tuple.values[1].utf8().unwrap();
+            let s_dist_01 = tuple.values[2].utf8().unwrap();
+            let s_dist_02 = tuple.values[3].utf8().unwrap();
+            let s_dist_03 = tuple.values[4].utf8().unwrap();
+            let s_dist_04 = tuple.values[5].utf8().unwrap();
+            let s_dist_05 = tuple.values[6].utf8().unwrap();
+            let s_dist_06 = tuple.values[7].utf8().unwrap();
+            let s_dist_07 = tuple.values[8].utf8().unwrap();
+            let s_dist_08 = tuple.values[9].utf8().unwrap();
+            let s_dist_09 = tuple.values[10].utf8().unwrap();
+            let s_dist_10 = tuple.values[11].utf8().unwrap();
 
             let ol_dist_info = pick_dist_info(
                 args.d_id, s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05, s_dist_06,
@@ -228,14 +249,15 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
                 s_quantity - ol_quantity as i16 + 91
             };
             // "UPDATE stock SET s_quantity = ? WHERE s_i_id = ? AND s_w_id = ?"
-            let (_, tuples) = tx.execute(
+            tx.execute(
                 &statements[9],
                 vec![
                     ("?1", DataValue::Int16(Some(s_quantity))),
                     ("?2", DataValue::Int32(Some(ol_i_id as i32))),
                     ("?3", DataValue::Int16(Some(ol_supply_w_id as i16))),
                 ],
-            )?;
+            )?
+            .done()?;
 
             // Tips: Integers always have 7 digits, so divide by 10 here
             let mut ol_amount = Decimal::from(ol_quantity)
@@ -248,7 +270,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
 
             amt[ol_num_seq[ol_number - 1]] = ol_amount;
             // "INSERT INTO order_line (ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            let (_, tuples) = tx.execute(
+            tx.execute(
                 &statements[10],
                 vec![
                     ("?1", DataValue::Int32(Some(o_id))),
@@ -261,7 +283,8 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
                     ("?8", DataValue::Decimal(Some(ol_amount.round_dp(2)))),
                     ("?9", DataValue::from(ol_dist_info)),
                 ],
-            )?;
+            )?
+            .done()?;
         }
 
         Ok(())

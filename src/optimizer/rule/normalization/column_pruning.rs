@@ -197,6 +197,7 @@ mod tests {
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::join::JoinCondition;
     use crate::planner::operator::Operator;
+    use crate::planner::Childrens;
     use crate::storage::rocksdb::RocksTransaction;
 
     #[test]
@@ -212,14 +213,15 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        assert_eq!(best_plan.childrens.len(), 1);
+        assert!(matches!(best_plan.childrens.as_ref(), Childrens::Only(_)));
         match best_plan.operator {
             Operator::Project(op) => {
                 assert_eq!(op.exprs.len(), 2);
             }
             _ => unreachable!("Should be a project operator"),
         }
-        match &best_plan.childrens[0].operator {
+        let join_op = best_plan.childrens.pop_only();
+        match &join_op.operator {
             Operator::Join(op) => match &op.on {
                 JoinCondition::On { on, filter } => {
                     assert_eq!(on.len(), 1);
@@ -229,10 +231,12 @@ mod tests {
             },
             _ => unreachable!("Should be a join operator"),
         }
+        assert!(matches!(
+            join_op.childrens.as_ref(),
+            Childrens::Twins { .. }
+        ));
 
-        assert_eq!(best_plan.childrens[0].childrens.len(), 2);
-
-        for grandson_plan in &best_plan.childrens[0].childrens {
+        for grandson_plan in join_op.childrens.iter() {
             match &grandson_plan.operator {
                 Operator::TableScan(op) => {
                     assert_eq!(op.columns.len(), 1);

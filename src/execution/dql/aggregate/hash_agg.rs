@@ -169,10 +169,9 @@ mod test {
     use crate::planner::operator::aggregate::AggregateOperator;
     use crate::planner::operator::values::ValuesOperator;
     use crate::planner::operator::Operator;
-    use crate::planner::LogicalPlan;
+    use crate::planner::{Childrens, LogicalPlan};
     use crate::storage::rocksdb::RocksStorage;
     use crate::storage::Storage;
-    use crate::types::tuple::create_table;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use crate::utils::lru::SharedLruCache;
@@ -235,7 +234,7 @@ mod test {
                 ],
                 schema_ref: t1_schema.clone(),
             }),
-            childrens: vec![],
+            childrens: Box::new(Childrens::None),
             physical_option: None,
             _output_schema_ref: None,
         };
@@ -244,14 +243,6 @@ mod test {
             HashAggExecutor::from((operator, input))
                 .execute((&table_cache, &view_cache, &meta_cache), &transaction),
         )?;
-
-        println!(
-            "hash_agg_test: \n{}",
-            create_table(
-                &Arc::new(vec![t1_schema[0].clone(), t1_schema[1].clone()]),
-                &tuples
-            )
-        );
 
         assert_eq!(tuples.len(), 2);
 

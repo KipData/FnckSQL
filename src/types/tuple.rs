@@ -1,4 +1,5 @@
 use crate::catalog::ColumnRef;
+use crate::db::ResultIter;
 use crate::errors::DatabaseError;
 use crate::types::tuple_builder::TupleIdBuilder;
 use crate::types::value::DataValue;
@@ -131,20 +132,18 @@ impl Tuple {
     }
 }
 
-pub fn create_table(schema: &Schema, tuples: &[Tuple]) -> Table {
+pub fn create_table<I: ResultIter>(iter: I) -> Result<Table, DatabaseError> {
     let mut table = Table::new();
-
-    if tuples.is_empty() {
-        return table;
-    }
-
     let mut header = Vec::new();
+    let schema = iter.schema().clone();
+
     for col in schema.iter() {
         header.push(Cell::new(col.full_name()));
     }
     table.set_header(header);
 
-    for tuple in tuples {
+    for tuple in iter {
+        let tuple = tuple?;
         debug_assert_eq!(schema.len(), tuple.values.len());
 
         let cells = tuple
@@ -156,7 +155,7 @@ pub fn create_table(schema: &Schema, tuples: &[Tuple]) -> Table {
         table.add_row(cells);
     }
 
-    table
+    Ok(table)
 }
 
 #[cfg(test)]

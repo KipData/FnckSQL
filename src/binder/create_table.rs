@@ -10,7 +10,7 @@ use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::create_table::CreateTableOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use crate::types::LogicalType;
 
@@ -90,7 +90,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 columns,
                 if_not_exists,
             }),
-            vec![],
+            Childrens::None,
         ))
     }
 

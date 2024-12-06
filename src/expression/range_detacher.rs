@@ -116,7 +116,7 @@ impl Range {
 
             DataValue::Tuple(Some((merge_tuple, is_upper)))
         }
-        fn _to_tuple_range(tuple: &[&DataValue], range: Range) -> Range {
+        fn collect_tuple_range(result_ranges: &mut Vec<Range>, tuple: &[&DataValue], range: Range) {
             fn merge_value_on_bound(
                 tuple: &[&DataValue],
                 is_upper: bool,
@@ -136,17 +136,16 @@ impl Range {
             }
 
             match range {
-                Range::Scope { min, max } => Range::Scope {
+                Range::Scope { min, max } => result_ranges.push(Range::Scope {
                     min: merge_value_on_bound(tuple, false, min),
                     max: merge_value_on_bound(tuple, true, max),
-                },
-                Range::Eq(v) => Range::Eq(merge_value(tuple, false, v)),
-                Range::Dummy => Range::Dummy,
+                }),
+                Range::Eq(v) => result_ranges.push(Range::Eq(merge_value(tuple, false, v))),
+                Range::Dummy => result_ranges.push(Range::Dummy),
                 Range::SortedRanges(mut ranges) => {
                     for range in &mut ranges {
-                        *range = _to_tuple_range(tuple, mem::replace(range, Range::Dummy));
+                        collect_tuple_range(result_ranges, tuple, mem::replace(range, Range::Dummy))
                     }
-                    Range::SortedRanges(ranges)
                 }
             }
         }
@@ -159,10 +158,7 @@ impl Range {
         let mut ranges = Vec::new();
 
         for tuple in combinations {
-            match _to_tuple_range(&tuple, self.clone()) {
-                Range::SortedRanges(mut res_ranges) => ranges.append(&mut res_ranges),
-                range => ranges.push(range),
-            }
+            collect_tuple_range(&mut ranges, &tuple, self.clone())
         }
         Some(RangeDetacher::ranges2range(ranges))
     }
@@ -801,7 +797,7 @@ mod test {
                 vec![NormalizationRuleImpl::SimplifyFilter],
             )
             .find_best::<RocksTransaction>(None)?;
-        if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+        if let Operator::Filter(filter_op) = best_plan.childrens.pop_only().operator {
             Ok(Some(filter_op))
         } else {
             Ok(None)

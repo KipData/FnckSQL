@@ -111,7 +111,7 @@ mod tests {
     use super::*;
     use crate::binder::copy::ExtSource;
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
-    use crate::db::DataBaseBuilder;
+    use crate::db::{DataBaseBuilder, ResultIter};
     use crate::errors::DatabaseError;
     use crate::storage::Storage;
     use crate::types::LogicalType;
@@ -197,7 +197,8 @@ mod tests {
 
         let temp_dir = TempDir::new().unwrap();
         let db = DataBaseBuilder::path(temp_dir.path()).build()?;
-        let _ = db.run("create table test_copy (a int primary key, b float, c varchar(10))");
+        db.run("create table test_copy (a int primary key, b float, c varchar(10))")?
+            .done()?;
         let storage = db.storage;
         let mut transaction = storage.transaction()?;
 

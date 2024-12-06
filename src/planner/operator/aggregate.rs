@@ -1,4 +1,4 @@
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::{expression::ScalarExpression, planner::operator::Operator};
 use fnck_sql_serde_macros::ReferenceSerialization;
 use itertools::Itertools;
@@ -25,7 +25,7 @@ impl AggregateOperator {
                 agg_calls,
                 is_distinct,
             }),
-            vec![children],
+            Childrens::Only(children),
         )
     }
 }

@@ -1,8 +1,7 @@
-use fnck_sql::db::DataBaseBuilder;
+use fnck_sql::db::{DataBaseBuilder, ResultIter};
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::implement_from_tuple;
 use fnck_sql::types::value::DataValue;
-use itertools::Itertools;
 
 #[derive(Default, Debug, PartialEq)]
 struct MyStruct {
@@ -25,21 +24,24 @@ implement_from_tuple!(
     )
 );
 
-#[cfg(feature = "marcos")]
+#[cfg(feature = "macros")]
 fn main() -> Result<(), DatabaseError> {
     let database = DataBaseBuilder::path("./hello_world").build()?;
 
-    let _ = database.run("create table if not exists my_struct (c1 int primary key, c2 int)")?;
-    let _ = database.run("insert into my_struct values(0, 0), (1, 1)")?;
-    let (schema, tuples) = database.run("select * from my_struct")?;
-    let tuples = tuples
-        .into_iter()
-        .map(|tuple| MyStruct::from((&schema, tuple)))
-        .collect_vec();
+    database
+        .run("create table if not exists my_struct (c1 int primary key, c2 int)")?
+        .done()?;
+    database
+        .run("insert into my_struct values(0, 0), (1, 1)")?
+        .done()?;
 
-    println!("{:#?}", tuples);
+    let iter = database.run("select * from my_struct")?;
+    let schema = iter.schema().clone();
 
-    let _ = database.run("drop table my_struct")?;
+    for tuple in iter {
+        println!("{:?}", MyStruct::from((&schema, tuple?)));
+    }
+    database.run("drop table my_struct")?.done()?;
 
     Ok(())
 }

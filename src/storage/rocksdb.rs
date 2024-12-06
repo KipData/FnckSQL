@@ -134,7 +134,7 @@ impl InnerIter for RocksIter<'_, '_> {
 #[cfg(test)]
 mod test {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
-    use crate::db::DataBaseBuilder;
+    use crate::db::{DataBaseBuilder, ResultIter};
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
     use crate::storage::rocksdb::RocksStorage;
@@ -231,8 +231,12 @@ mod test {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
 
-        let _ = fnck_sql.run("create table t1 (a int primary key)")?;
-        let _ = fnck_sql.run("insert into t1 (a) values (0), (1), (2), (3), (4)")?;
+        fnck_sql
+            .run("create table t1 (a int primary key)")?
+            .done()?;
+        fnck_sql
+            .run("insert into t1 (a) values (0), (1), (2), (3), (4)")?
+            .done()?;
         let transaction = fnck_sql.storage.transaction()?;
 
         let table_name = Arc::new("t1".to_string());
@@ -294,8 +298,12 @@ mod test {
     fn test_read_by_index() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let fnck_sql = DataBaseBuilder::path(temp_dir.path()).build()?;
-        let _ = fnck_sql.run("create table t1 (a int primary key, b int unique)")?;
-        let _ = fnck_sql.run("insert into t1 (a, b) values (0, 0), (1, 1), (2, 2)")?;
+        fnck_sql
+            .run("create table t1 (a int primary key, b int unique)")?
+            .done()?;
+        fnck_sql
+            .run("insert into t1 (a, b) values (0, 0), (1, 1), (2, 2)")?
+            .done()?;
         let transaction = fnck_sql.storage.transaction().unwrap();
 
         let table = transaction

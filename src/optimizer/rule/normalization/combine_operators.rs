@@ -148,6 +148,7 @@ mod tests {
     use crate::optimizer::heuristic::optimizer::HepOptimizer;
     use crate::optimizer::rule::normalization::NormalizationRuleImpl;
     use crate::planner::operator::Operator;
+    use crate::planner::Childrens;
     use crate::storage::rocksdb::RocksTransaction;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
@@ -181,8 +182,9 @@ mod tests {
             unreachable!("Should be a project operator")
         }
 
-        if let Operator::TableScan(_) = &best_plan.childrens[0].operator {
-            assert_eq!(best_plan.childrens[0].childrens.len(), 0)
+        let scan_op = best_plan.childrens.pop_only();
+        if let Operator::TableScan(_) = &scan_op.operator {
+            assert!(matches!(scan_op.childrens.as_ref(), Childrens::None));
         } else {
             unreachable!("Should be a scan operator")
         }
@@ -221,7 +223,8 @@ mod tests {
 
         let best_plan = optimizer.find_best::<RocksTransaction>(None)?;
 
-        if let Operator::Filter(op) = &best_plan.childrens[0].operator {
+        let filter_op = best_plan.childrens.pop_only();
+        if let Operator::Filter(op) = &filter_op.operator {
             if let ScalarExpression::Binary { op, .. } = &op.predicate {
                 assert_eq!(op, &BinaryOperator::And);
             } else {
@@ -247,8 +250,10 @@ mod tests {
 
         let best_plan = optimizer.find_best::<RocksTransaction>(None)?;
 
-        if let Operator::Aggregate(_) = &best_plan.childrens[0].operator {
-            if let Operator::Aggregate(_) = &best_plan.childrens[0].childrens[0].operator {
+        let agg_op = best_plan.childrens.pop_only();
+        if let Operator::Aggregate(_) = &agg_op.operator {
+            let inner_agg_op = agg_op.childrens.pop_only();
+            if let Operator::Aggregate(_) = &inner_agg_op.operator {
                 unreachable!("Should not be a agg operator")
             } else {
                 return Ok(());

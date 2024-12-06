@@ -151,7 +151,8 @@ mod test {
         } else {
             unreachable!();
         }
-        if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+        let filter_op = best_plan.childrens.pop_only();
+        if let Operator::Filter(filter_op) = filter_op.operator {
             let range = RangeDetacher::new("t1", table_state.column_id_by_name("c1"))
                 .detach(&filter_op.predicate)
                 .unwrap();
@@ -202,7 +203,9 @@ mod test {
                     vec![NormalizationRuleImpl::SimplifyFilter],
                 )
                 .find_best::<RocksTransaction>(None)?;
-            if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+
+            let filter_op = best_plan.childrens.pop_only();
+            if let Operator::Filter(filter_op) = filter_op.operator {
                 Ok(
                     RangeDetacher::new("t1", table_state.column_id_by_name("c1"))
                         .detach(&filter_op.predicate),
@@ -245,7 +248,9 @@ mod test {
                 vec![NormalizationRuleImpl::SimplifyFilter],
             )
             .find_best::<RocksTransaction>(None)?;
-        if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+
+        let filter_op = best_plan.childrens.pop_only();
+        if let Operator::Filter(filter_op) = filter_op.operator {
             let c1_col = ColumnCatalog::direct_new(
                 ColumnSummary {
                     name: "c1".to_string(),
@@ -317,7 +322,9 @@ mod test {
                 vec![NormalizationRuleImpl::SimplifyFilter],
             )
             .find_best::<RocksTransaction>(None)?;
-        if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+
+        let filter_op = best_plan.childrens.pop_only();
+        if let Operator::Filter(filter_op) = filter_op.operator {
             Ok(RangeDetacher::new("t1", &column_id).detach(&filter_op.predicate))
         } else {
             Ok(None)

@@ -4,7 +4,7 @@ use crate::expression::ScalarExpression;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::values::ValuesOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use crate::types::tuple::SchemaRef;
 use crate::types::value::DataValue;
@@ -99,7 +99,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 is_overwrite,
                 is_mapping_by_name,
             }),
-            vec![values_plan],
+            Childrens::Only(values_plan),
         ))
     }
 
@@ -110,7 +110,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
     ) -> LogicalPlan {
         LogicalPlan::new(
             Operator::Values(ValuesOperator { rows, schema_ref }),
-            vec![],
+            Childrens::None,
         )
     }
 }

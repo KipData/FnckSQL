@@ -1,7 +1,7 @@
 pub(crate) mod ddl;
 pub(crate) mod dml;
 pub(crate) mod dql;
-pub(crate) mod marcos;
+pub(crate) mod macros;
 
 use crate::errors::DatabaseError;
 use crate::optimizer::core::memo::GroupExpression;

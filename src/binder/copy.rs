@@ -7,6 +7,7 @@ use crate::errors::DatabaseError;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
 use crate::planner::operator::Operator;
+use crate::planner::Childrens;
 use fnck_sql_serde_macros::ReferenceSerialization;
 use serde::{Deserialize, Serialize};
 use sqlparser::ast::{CopyOption, CopySource, CopyTarget};
@@ -98,7 +99,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                         target: ext_source,
                         schema_ref,
                     }),
-                    vec![],
+                    Childrens::None,
                 ))
             } else {
                 // COPY <dest_table> FROM <source_file>
@@ -108,7 +109,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                         schema_ref,
                         table: table_name.to_string(),
                     }),
-                    vec![],
+                    Childrens::None,
                 ))
             }
         } else {

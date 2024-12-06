@@ -1,5 +1,5 @@
 use super::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use fnck_sql_serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
@@ -18,7 +18,7 @@ impl LimitOperator {
     ) -> LogicalPlan {
         LogicalPlan::new(
             Operator::Limit(LimitOperator { offset, limit }),
-            vec![children],
+            Childrens::Only(children),
         )
     }
 }

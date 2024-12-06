@@ -94,7 +94,7 @@ mod tests {
     use super::*;
     use crate::binder::copy::ExtSource;
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
-    use crate::db::DataBaseBuilder;
+    use crate::db::{DataBaseBuilder, ResultIter};
     use crate::errors::DatabaseError;
     use crate::storage::Storage;
     use crate::types::LogicalType;
@@ -173,10 +173,11 @@ mod tests {
 
         let temp_dir = TempDir::new().unwrap();
         let db = DataBaseBuilder::path(temp_dir.path()).build()?;
-        let _ = db.run("create table t1 (a int primary key, b float, c varchar(10))");
-        let _ = db.run("insert into t1 values (1, 1.1, 'foo')");
-        let _ = db.run("insert into t1 values (2, 2.0, 'fooo')");
-        let _ = db.run("insert into t1 values (3, 2.1, 'fnck')");
+        db.run("create table t1 (a int primary key, b float, c varchar(10))")?
+            .done()?;
+        db.run("insert into t1 values (1, 1.1, 'foo')")?.done()?;
+        db.run("insert into t1 values (2, 2.0, 'fooo')")?.done()?;
+        db.run("insert into t1 values (3, 2.1, 'fnck')")?.done()?;
 
         let storage = db.storage;
         let mut transaction = storage.transaction()?;

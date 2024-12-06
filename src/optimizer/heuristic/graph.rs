@@ -1,15 +1,14 @@
 use crate::optimizer::core::memo::Memo;
-use crate::optimizer::core::opt_expr::OptExprNodeId;
 use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use itertools::Itertools;
 use petgraph::stable_graph::{NodeIndex, StableDiGraph};
 use petgraph::visit::{Bfs, EdgeRef};
 use std::mem;
 
 /// HepNodeId is used in optimizer to identify a node.
-pub type HepNodeId = NodeIndex<OptExprNodeId>;
+pub type HepNodeId = NodeIndex<usize>;
 
 #[derive(Debug, Clone)]
 pub struct HepGraph {
@@ -30,11 +29,19 @@ impl HepGraph {
         ) -> HepNodeId {
             let index = graph.add_node(operator);
 
-            for (order, child) in childrens.into_iter().enumerate() {
-                let child_index = graph_filling(graph, child);
-                let _ = graph.add_edge(index, child_index, order);
+            match *childrens {
+                Childrens::None => (),
+                Childrens::Only(child) => {
+                    let child_index = graph_filling(graph, child);
+                    let _ = graph.add_edge(index, child_index, 0);
+                }
+                Childrens::Twins { left, right } => {
+                    let child_index = graph_filling(graph, left);
+                    let _ = graph.add_edge(index, child_index, 0);
+                    let child_index = graph_filling(graph, right);
+                    let _ = graph.add_edge(index, child_index, 1);
+                }
             }
-
             index
         }
 
@@ -194,18 +201,29 @@ impl HepGraph {
     }
 
     fn build_childrens(&mut self, start: HepNodeId, memo: Option<&Memo>) -> Option<LogicalPlan> {
-        let mut childrens = Vec::with_capacity(2);
         let physical_option = memo.and_then(|memo| memo.cheapest_physical_option(&start));
 
-        for child_id in self.children_at(start).collect_vec() {
-            if let Some(child_plan) = self.build_childrens(child_id, memo) {
-                childrens.push(child_plan);
-            }
-        }
+        let mut iter = self.children_at(start);
+
+        let child_0 = iter.next();
+        let child_1 = iter.next();
+        drop(iter);
+
+        let child_0 = child_0.and_then(|id| self.build_childrens(id, memo));
+        let child_1 = child_1.and_then(|id| self.build_childrens(id, memo));
+
+        let childrens = match (child_0, child_1) {
+            (Some(child_0), Some(child_1)) => Childrens::Twins {
+                left: child_0,
+                right: child_1,
+            },
+            (Some(child), None) | (None, Some(child)) => Childrens::Only(child),
+            (None, None) => Childrens::None,
+        };
 
         self.graph.remove_node(start).map(|operator| LogicalPlan {
             operator,
-            childrens,
+            childrens: Box::new(childrens),
             physical_option,
             _output_schema_ref: None,
         })
@@ -218,7 +236,7 @@ mod tests {
     use crate::errors::DatabaseError;
     use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
     use crate::planner::operator::Operator;
-    use crate::planner::LogicalPlan;
+    use crate::planner::{Childrens, LogicalPlan};
     use petgraph::stable_graph::{EdgeIndex, NodeIndex};
 
     #[test]
@@ -361,8 +379,15 @@ mod tests {
         fn clear_output_schema_buf(plan: &mut LogicalPlan) {
             plan._output_schema_ref = None;
 
-            for child in plan.childrens.iter_mut() {
-                clear_output_schema_buf(child);
+            match plan.childrens.as_mut() {
+                Childrens::Only(child) => {
+                    clear_output_schema_buf(child);
+                }
+                Childrens::Twins { left, right } => {
+                    clear_output_schema_buf(left);
+                    clear_output_schema_buf(right);
+                }
+                Childrens::None => (),
             }
         }
 

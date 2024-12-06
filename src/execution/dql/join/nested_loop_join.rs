@@ -394,6 +394,7 @@ mod test {
     use crate::expression::ScalarExpression;
     use crate::planner::operator::values::ValuesOperator;
     use crate::planner::operator::Operator;
+    use crate::planner::Childrens;
     use crate::storage::rocksdb::RocksStorage;
     use crate::storage::Storage;
     use crate::types::evaluator::int32::Int32GtBinaryEvaluator;
@@ -463,7 +464,7 @@ mod test {
                 ],
                 schema_ref: Arc::new(t1_columns),
             }),
-            childrens: vec![],
+            childrens: Box::new(Childrens::None),
             physical_option: None,
             _output_schema_ref: None,
         };
@@ -494,7 +495,7 @@ mod test {
                 ],
                 schema_ref: Arc::new(t2_columns),
             }),
-            childrens: vec![],
+            childrens: Box::new(Childrens::None),
             physical_option: None,
             _output_schema_ref: None,
         };

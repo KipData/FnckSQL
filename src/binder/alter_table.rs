@@ -9,7 +9,7 @@ use crate::planner::operator::alter_table::add_column::AddColumnOperator;
 use crate::planner::operator::alter_table::drop_column::DropColumnOperator;
 use crate::planner::operator::table_scan::TableScanOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 
 impl<T: Transaction> Binder<'_, '_, T> {
@@ -43,7 +43,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                         if_not_exists: *if_not_exists,
                         column,
                     }),
-                    vec![plan],
+                    Childrens::Only(plan),
                 )
             }
             AlterTableOperation::DropColumn {
@@ -60,7 +60,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                         if_exists: *if_exists,
                         column_name,
                     }),
-                    vec![plan],
+                    Childrens::Only(plan),
                 )
             }
             AlterTableOperation::DropPrimaryKey => todo!(),

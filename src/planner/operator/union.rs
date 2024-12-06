@@ -1,5 +1,5 @@
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::types::tuple::SchemaRef;
 use fnck_sql_serde_macros::ReferenceSerialization;
 use itertools::Itertools;
@@ -25,7 +25,10 @@ impl UnionOperator {
                 left_schema_ref,
                 _right_schema_ref: right_schema_ref,
             }),
-            vec![left_plan, right_plan],
+            Childrens::Twins {
+                left: left_plan,
+                right: right_plan,
+            },
         )
     }
 }

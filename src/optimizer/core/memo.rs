@@ -82,7 +82,7 @@ impl Memo {
 #[cfg(test)]
 mod tests {
     use crate::binder::{Binder, BinderContext};
-    use crate::db::DataBaseBuilder;
+    use crate::db::{DataBaseBuilder, ResultIter};
     use crate::errors::DatabaseError;
     use crate::expression::range_detacher::Range;
     use crate::optimizer::core::memo::Memo;
@@ -108,13 +108,19 @@ mod tests {
     fn test_build_memo() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let database = DataBaseBuilder::path(temp_dir.path()).build()?;
-        database.run("create table t1 (c1 int primary key, c2 int)")?;
-        database.run("create table t2 (c3 int primary key, c4 int)")?;
+        database
+            .run("create table t1 (c1 int primary key, c2 int)")?
+            .done()?;
+        database
+            .run("create table t2 (c3 int primary key, c4 int)")?
+            .done()?;
 
         for i in 0..1000 {
-            let _ = database.run(format!("insert into t1 values({}, {})", i, i + 1).as_str())?;
+            let _ = database
+                .run(format!("insert into t1 values({}, {})", i, i + 1).as_str())?
+                .done()?;
         }
-        database.run("analyze table t1")?;
+        database.run("analyze table t1")?.done()?;
 
         let transaction = database.storage.transaction()?;
         let c1_column_id = {
@@ -182,7 +188,16 @@ mod tests {
         assert!(exprs.exprs[1].cost.unwrap() >= 960);
         assert!(matches!(exprs.exprs[1].op, PhysicalOption::IndexScan(_)));
         assert_eq!(
-            best_plan.as_ref().unwrap().childrens[0].childrens[0].childrens[0].physical_option,
+            best_plan
+                .unwrap()
+                .childrens
+                .pop_only()
+                .childrens
+                .pop_twins()
+                .0
+                .childrens
+                .pop_only()
+                .physical_option,
             Some(PhysicalOption::IndexScan(IndexInfo {
                 meta: Arc::new(IndexMeta {
                     id: 0,
