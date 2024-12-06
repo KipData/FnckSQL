@@ -5,7 +5,7 @@ use crate::errors::DatabaseError;
 use crate::expression::{AliasType, ScalarExpression};
 use crate::planner::operator::create_view::CreateViewOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use itertools::Itertools;
 use sqlparser::ast::{Ident, ObjectName, Query};
@@ -56,7 +56,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 },
                 or_replace: *or_replace,
             }),
-            vec![],
+            Childrens::None,
         ))
     }
 }

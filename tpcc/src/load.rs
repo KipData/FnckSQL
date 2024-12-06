@@ -1,6 +1,6 @@
 use crate::TpccError;
 use chrono::Utc;
-use fnck_sql::db::Database;
+use fnck_sql::db::{Database, ResultIter};
 use fnck_sql::storage::Storage;
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::rngs::ThreadRng;
@@ -89,8 +89,8 @@ impl<S: Storage> Load<S> {
     ///
     /// primary key (i_id)
     pub fn load_items(rng: &mut ThreadRng, db: &Database<S>) -> Result<(), TpccError> {
-        let _ = db.run("drop table if exists item;")?;
-        let _ = db.run(
+        db.run("drop table if exists item;")?.done()?;
+        db.run(
             "create table item (
                       i_id int not null,
                       i_im_id int,
@@ -98,7 +98,8 @@ impl<S: Storage> Load<S> {
                       i_price decimal(5,2),
                       i_data varchar(50),
                       PRIMARY KEY(i_id) );",
-        )?;
+        )?
+        .done()?;
         let pb = ProgressBar::new(MAX_ITEMS as u64);
         pb.set_style(
             ProgressStyle::default_bar()
@@ -124,14 +125,15 @@ impl<S: Storage> Load<S> {
                 i_data = format!("{}original{}", prefix, remainder);
             }
 
-            let _ = db.run(format!(
+            db.run(format!(
                 "insert into item values ({i_id}, {i_im_id}, '{i_name}', {i_price}, '{i_data}')"
-            ))?;
+            ))?
+            .done()?;
             pb.set_position(i_id as u64);
         }
         pb.finish_with_message("load completed!");
         println!("[Analyze Table: item]");
-        let _ = db.run("analyze table item")?;
+        db.run("analyze table item")?.done()?;
         Ok(())
     }
 
@@ -153,8 +155,8 @@ impl<S: Storage> Load<S> {
         db: &Database<S>,
         num_ware: usize,
     ) -> Result<(), TpccError> {
-        let _ = db.run("drop table if exists warehouse;")?;
-        let _ = db.run(
+        db.run("drop table if exists warehouse;")?.done()?;
+        db.run(
             "create table warehouse (
                            w_id smallint not null,
                            w_name varchar(10),
@@ -166,9 +168,10 @@ impl<S: Storage> Load<S> {
                            w_tax decimal(4,2),
                            w_ytd decimal(12,2),
                            PRIMARY KEY(w_id) );",
-        )?;
-        let _ = db.run("drop table if exists stock;")?;
-        let _ = db.run(
+        )?
+        .done()?;
+        db.run("drop table if exists stock;")?.done()?;
+        db.run(
             "create table stock (
                        s_i_id int not null,
                        s_w_id smallint not null,
@@ -188,10 +191,12 @@ impl<S: Storage> Load<S> {
                        s_remote_cnt smallint,
                        s_data varchar(50),
                        PRIMARY KEY(s_w_id, s_i_id) );",
-        )?;
-        let _ = db.run("CREATE INDEX fkey_stock_2 ON stock (s_i_id);")?;
-        let _ = db.run("drop table if exists district;")?;
-        let _ = db.run(
+        )?
+        .done()?;
+        db.run("CREATE INDEX fkey_stock_2 ON stock (s_i_id);")?
+            .done()?;
+        db.run("drop table if exists district;")?.done()?;
+        db.run(
             "create table district (
                           d_id tinyint not null,
                           d_w_id smallint not null,
@@ -205,7 +210,8 @@ impl<S: Storage> Load<S> {
                           d_ytd decimal(12,2),
                           d_next_o_id int,
                           primary key (d_w_id, d_id) );",
-        )?;
+        )?
+        .done()?;
         let pb = ProgressBar::new(num_ware as u64);
         pb.set_style(
             ProgressStyle::default_bar()
@@ -227,10 +233,11 @@ impl<S: Storage> Load<S> {
                 .round_dp(2);
             let w_ytd = Decimal::from_f64_retain(3000000.00).unwrap().round_dp(2);
 
-            let _ = db.run(format!(
+            db.run(format!(
                 "insert into warehouse values({}, '{}', '{}', '{}', '{}', '{}', '{}', {}, {})",
                 w_id, w_name, w_street_1, w_street_2, w_city, w_state, w_zip, w_tax, w_ytd,
-            ))?;
+            ))?
+            .done()?;
             Self::stock(rng, db, w_id)?;
             Self::district(rng, db, w_id)?;
 
@@ -238,7 +245,7 @@ impl<S: Storage> Load<S> {
         }
         pb.finish_with_message("load completed!");
         println!("[Analyze Table: stock]");
-        let _ = db.run("analyze table stock")?;
+        db.run("analyze table stock")?.done()?;
         Ok(())
     }
 
@@ -247,8 +254,8 @@ impl<S: Storage> Load<S> {
         db: &Database<S>,
         num_ware: usize,
     ) -> Result<(), TpccError> {
-        let _ = db.run("drop table if exists customer;")?;
-        let _ = db.run(
+        db.run("drop table if exists customer;")?.done()?;
+        db.run(
             "create table customer (
                           c_id int not null,
                           c_d_id tinyint not null,
@@ -272,10 +279,12 @@ impl<S: Storage> Load<S> {
                           c_delivery_cnt smallint,
                           c_data text,
                           PRIMARY KEY(c_w_id, c_d_id, c_id) );",
-        )?;
-        let _ = db.run("CREATE INDEX idx_customer ON customer (c_w_id,c_d_id,c_last,c_first);")?;
-        let _ = db.run("drop table if exists history;")?;
-        let _ = db.run(
+        )?
+        .done()?;
+        db.run("CREATE INDEX idx_customer ON customer (c_w_id,c_d_id,c_last,c_first);")?
+            .done()?;
+        db.run("drop table if exists history;")?.done()?;
+        db.run(
             "create table history (
                          h_c_id int,
                          h_c_d_id tinyint,
@@ -286,14 +295,15 @@ impl<S: Storage> Load<S> {
                          h_amount decimal(6,2),
                          h_data varchar(24),
                          PRIMARY KEY(h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id) );",
-        )?;
+        )?
+        .done()?;
         for w_id in 1..num_ware + 1 {
             for d_id in 1..DIST_PER_WARE + 1 {
                 Self::load_customers(rng, db, d_id, w_id)?;
             }
         }
         println!("[Analyze Table: customer]");
-        let _ = db.run("analyze table customer")?;
+        db.run("analyze table customer")?.done()?;
 
         Ok(())
     }
@@ -303,8 +313,8 @@ impl<S: Storage> Load<S> {
         db: &Database<S>,
         num_ware: usize,
     ) -> Result<(), TpccError> {
-        let _ = db.run("drop table if exists orders;")?;
-        let _ = db.run(
+        db.run("drop table if exists orders;")?.done()?;
+        db.run(
             "create table orders (
                         o_id int not null,
                         o_d_id tinyint not null,
@@ -315,18 +325,21 @@ impl<S: Storage> Load<S> {
                         o_ol_cnt tinyint,
                         o_all_local tinyint,
                         PRIMARY KEY(o_w_id, o_d_id, o_id) );",
-        )?;
-        let _ = db.run("CREATE INDEX idx_orders ON orders (o_w_id,o_d_id,o_c_id,o_id);")?;
-        let _ = db.run("drop table if exists new_orders;")?;
-        let _ = db.run(
+        )?
+        .done()?;
+        db.run("CREATE INDEX idx_orders ON orders (o_w_id,o_d_id,o_c_id,o_id);")?
+            .done()?;
+        db.run("drop table if exists new_orders;")?.done()?;
+        db.run(
             "create table new_orders (
                             no_o_id int not null,
                             no_d_id tinyint not null,
                             no_w_id smallint not null,
                             PRIMARY KEY(no_w_id, no_d_id, no_o_id));",
-        )?;
-        let _ = db.run("drop table if exists order_line;")?;
-        let _ = db.run(
+        )?
+        .done()?;
+        db.run("drop table if exists order_line;")?.done()?;
+        db.run(
             "create table order_line (
                             ol_o_id int not null,
                             ol_d_id tinyint not null,
@@ -339,19 +352,21 @@ impl<S: Storage> Load<S> {
                             ol_amount decimal(6,2),
                             ol_dist_info char(24),
                             PRIMARY KEY(ol_w_id, ol_d_id, ol_o_id, ol_number) );",
-        )?;
-        let _ =
-            db.run("CREATE INDEX fkey_order_line_1 ON order_line (ol_o_id, ol_d_id, ol_w_id);")?;
-        let _ = db.run("CREATE INDEX fkey_order_line_2 ON order_line (ol_supply_w_id,ol_i_id);")?;
+        )?
+        .done()?;
+        db.run("CREATE INDEX fkey_order_line_1 ON order_line (ol_o_id, ol_d_id, ol_w_id);")?
+            .done()?;
+        db.run("CREATE INDEX fkey_order_line_2 ON order_line (ol_supply_w_id,ol_i_id);")?
+            .done()?;
         for w_id in 1..num_ware + 1 {
             for d_id in 1..DIST_PER_WARE + 1 {
                 Self::load_orders(rng, db, d_id, w_id)?;
             }
         }
         println!("[Analyze Table: orders & order_line & new_order]");
-        let _ = db.run("analyze table orders")?;
-        let _ = db.run("analyze table order_line")?;
-        let _ = db.run("analyze table new_orders")?;
+        db.run("analyze table orders")?.done()?;
+        db.run("analyze table order_line")?.done()?;
+        db.run("analyze table new_orders")?.done()?;
 
         Ok(())
     }
@@ -407,7 +422,7 @@ impl<S: Storage> Load<S> {
             } else {
                 generate_string(rng, 26, 50)
             };
-            let _ = db.run(format!(
+            db.run(format!(
                 "insert into stock values({}, {}, {}, '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', {}, {}, {}, '{}')",
                 s_i_id,
                 s_w_id,
@@ -426,7 +441,7 @@ impl<S: Storage> Load<S> {
                 0,
                 0,
                 s_data,
-            ))?;
+            ))?.done()?;
             pb.set_position(s_i_id as u64);
         }
         pb.finish_with_message("load completed!");
@@ -493,7 +508,7 @@ impl<S: Storage> Load<S> {
                 .unwrap()
                 .round_dp(2);
 
-            let _ = db.run(format!(
+            db.run(format!(
                 "insert into district values({}, {}, '{}', '{}', '{}', '{}', '{}', '{}', {}, {}, {})",
                 d_id,
                 d_w_id,
@@ -506,7 +521,7 @@ impl<S: Storage> Load<S> {
                 d_tax,
                 d_ytd,
                 d_next_o_id,
-            ))?;
+            ))?.done()?;
             pb.set_position(d_id as u64);
         }
         pb.finish_with_message("load completed!");
@@ -601,7 +616,7 @@ impl<S: Storage> Load<S> {
 
             let c_data = generate_string(rng, 300, 500);
 
-            let _ = db.run(format!(
+            db.run(format!(
                 "insert into customer values({}, {}, {}, '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', {}, {}, {}, {}, {}, {}, '{}')",
                 c_id,
                 c_d_id,
@@ -624,16 +639,17 @@ impl<S: Storage> Load<S> {
                 c_payment_cnt,
                 c_delivery_cnt,
                 c_data,
-            ))?;
+            ))?.done()?;
 
             let h_date = &date;
             let h_amount = Decimal::from_f64_retain(10.0).unwrap().round_dp(2);
             let h_data = generate_string(rng, 12, 24);
 
-            let _ = db.run(format!(
+            db.run(format!(
                 "insert into history values({}, {}, {}, {}, {}, '{}', {}, '{}')",
                 c_id, c_d_id, c_w_id, c_d_id, c_w_id, h_date, h_amount, h_data,
-            ))?;
+            ))?
+            .done()?;
             pb.set_position(c_id as u64);
         }
         pb.finish_with_message("load completed!");
@@ -705,18 +721,20 @@ impl<S: Storage> Load<S> {
             let date = format!("'{}'", Utc::now().format("%Y-%m-%d %H:%M:%S"));
 
             let o_carrier_id = if o_id > 2100 {
-                let _ = db.run(format!(
+                db.run(format!(
                     "insert into new_orders values({}, {}, {})",
                     o_id, o_d_id, o_w_id,
-                ))?;
+                ))?
+                .done()?;
                 "null".to_string()
             } else {
                 o_carrier_id.to_string()
             };
-            let _ = db.run(format!(
+            db.run(format!(
                 "insert into orders values({}, {}, {}, {}, {}, {}, {}, {})",
                 o_id, o_d_id, o_w_id, o_c_id, date, o_carrier_id, o_ol_cnt, "1",
-            ))?;
+            ))?
+            .done()?;
 
             for ol in 1..o_ol_cnt + 1 {
                 let ol_i_id = rng.gen_range(1..MAX_ITEMS);
@@ -730,7 +748,7 @@ impl<S: Storage> Load<S> {
                 } else {
                     (date.as_str(), rng.gen_range(0.1..100.0))
                 };
-                let _ = db.run(format!(
+                db.run(format!(
                     "insert into order_line values({}, {}, {}, {}, {}, {}, {}, {}, {}, '{}')",
                     o_id,
                     o_d_id,
@@ -742,7 +760,8 @@ impl<S: Storage> Load<S> {
                     ol_quantity,
                     ol_amount,
                     ol_dist_info,
-                ))?;
+                ))?
+                .done()?;
             }
             pb.set_position((o_id - 1) as u64);
         }

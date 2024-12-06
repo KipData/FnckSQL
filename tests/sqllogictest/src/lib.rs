@@ -20,10 +20,13 @@ impl DB for SQLBase {
         let mut rows = Vec::new();
 
         for tuple in iter.by_ref() {
-            rows.push(tuple?.values
-                .into_iter()
-                .map(|value| format!("{}", value))
-                .collect())
+            rows.push(
+                tuple?
+                    .values
+                    .into_iter()
+                    .map(|value| format!("{}", value))
+                    .collect(),
+            )
         }
         iter.done()?;
         println!(" |— time spent: {:?}", start.elapsed());

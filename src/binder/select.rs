@@ -27,7 +27,7 @@ use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::operator::union::UnionOperator;
-use crate::planner::{LogicalPlan, SchemaOutput};
+use crate::planner::{Childrens, LogicalPlan, SchemaOutput};
 use crate::storage::Transaction;
 use crate::types::tuple::{Schema, SchemaRef};
 use crate::types::{ColumnId, LogicalType};
@@ -75,7 +75,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
         orderby: &[OrderByExpr],
     ) -> Result<LogicalPlan, DatabaseError> {
         let mut plan = if select.from.is_empty() {
-            LogicalPlan::new(Operator::Dummy, vec![])
+            LogicalPlan::new(Operator::Dummy, Childrens::None)
         } else {
             let mut plan = self.bind_table_ref(&select.from[0])?;
 
@@ -152,7 +152,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                     is_overwrite: false,
                     is_mapping_by_name: true,
                 }),
-                vec![plan],
+                Childrens::Only(plan),
             )
         }
 
@@ -224,7 +224,13 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                     .collect_vec();
 
                 Ok(self.bind_distinct(
-                    LogicalPlan::new(union_op, vec![left_plan, right_plan]),
+                    LogicalPlan::new(
+                        union_op,
+                        Childrens::Twins {
+                            left: left_plan,
+                            right: right_plan,
+                        },
+                    ),
                     distinct_exprs,
                 ))
             }
@@ -669,7 +675,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
 
         Ok(LogicalPlan::new(
             Operator::Project(ProjectOperator { exprs: select_list }),
-            vec![children],
+            Childrens::Only(children),
         ))
     }
 
@@ -681,7 +687,7 @@ impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
                 sort_fields,
                 limit: None,
             }),
-            vec![children],
+            Childrens::Only(children),
         )
     }
 

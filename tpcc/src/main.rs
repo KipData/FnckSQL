@@ -7,10 +7,9 @@ use crate::rt_hist::RtHist;
 use crate::slev::SlevTest;
 use crate::utils::SeqGen;
 use clap::Parser;
-use fnck_sql::db::{DBTransaction, DataBaseBuilder, ResultIter, Statement};
+use fnck_sql::db::{DBTransaction, DataBaseBuilder, Statement};
 use fnck_sql::errors::DatabaseError;
 use fnck_sql::storage::Storage;
-use fnck_sql::types::tuple::create_table;
 use rand::prelude::ThreadRng;
 use rand::Rng;
 use std::time::{Duration, Instant};
@@ -322,6 +321,9 @@ pub enum TpccError {
 #[ignore]
 #[test]
 fn explain_tpcc() -> Result<(), DatabaseError> {
+    use fnck_sql::db::ResultIter;
+    use fnck_sql::types::tuple::create_table;
+
     let database = DataBaseBuilder::path("./fnck_sql_tpcc").build()?;
     let mut tx = database.new_transaction()?;
 
@@ -388,7 +390,7 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
         {
             println!("{}", format!("explain SELECT c_discount, c_last, c_credit FROM customer WHERE c_w_id = {} AND c_d_id = {} AND c_id = {}", c_w_id, c_d_id, c_id));
             let iter = tx.run(format!("explain SELECT c_discount, c_last, c_credit FROM customer WHERE c_w_id = {} AND c_d_id = {} AND c_id = {}", c_w_id, c_d_id, c_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
@@ -396,7 +398,7 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
                 "explain SELECT d_next_o_id, d_tax FROM district WHERE d_id = {} AND d_w_id = {}",
                 d_id, d_w_id
             ))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
@@ -404,7 +406,7 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
                 "explain UPDATE district SET d_next_o_id = {} + 1 WHERE d_id = {} AND d_w_id = {}",
                 d_next_o_id, d_id, d_w_id
             ))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
@@ -412,12 +414,12 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
                 "explain SELECT i_price, i_name, i_data FROM item WHERE i_id = {}",
                 i_id
             ))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT s_quantity, s_data, s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05, s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10 FROM stock WHERE s_i_id = {} AND s_w_id = {}", s_i_id, s_w_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
@@ -425,7 +427,7 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
                 "explain UPDATE stock SET s_quantity = {} WHERE s_i_id = {} AND s_w_id = {}",
                 s_quantity, s_i_id, s_w_id
             ))?;
-            
+
             println!("{}", create_table(iter)?);
         }
     }
@@ -438,42 +440,42 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
                 "explain UPDATE stock SET s_quantity = {} WHERE s_i_id = {} AND s_w_id = {}",
                 s_quantity, s_i_id, s_w_id
             ))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT d_street_1, d_street_2, d_city, d_state, d_zip, d_name FROM district WHERE d_w_id = {} AND d_id = {}", d_w_id, d_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT count(c_id) FROM customer WHERE c_w_id = {} AND c_d_id = {} AND c_last = '{}'", c_w_id, c_d_id, c_last))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT c_id FROM customer WHERE c_w_id = {} AND c_d_id = {} AND c_last = '{}' ORDER BY c_first", c_w_id, c_d_id, c_last))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT c_first, c_middle, c_last, c_street_1, c_street_2, c_city, c_state, c_zip, c_phone, c_credit, c_credit_lim, c_discount, c_balance, c_since FROM customer WHERE c_w_id = {} AND c_d_id = {} AND c_id = {}", c_w_id, c_d_id, c_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT c_data FROM customer WHERE c_w_id = {} AND c_d_id = {} AND c_id = {}", c_w_id, c_d_id, c_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain UPDATE customer SET c_balance = {}, c_data = '{}' WHERE c_w_id = {} AND c_d_id = {} AND c_id = {}", c_balance, c_data, c_w_id, c_d_id, c_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain UPDATE customer SET c_balance = {} WHERE c_w_id = {} AND c_d_id = {} AND c_id = {}", c_balance, c_w_id, c_d_id, c_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
     }
@@ -483,27 +485,27 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
         println!("========Explain on Order-Stat");
         {
             let iter = tx.run(format!("explain SELECT count(c_id) FROM customer WHERE c_w_id = {} AND c_d_id = {} AND c_last = '{}'", c_w_id, c_d_id, c_last))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT c_balance, c_first, c_middle, c_last FROM customer WHERE c_w_id = {} AND c_d_id = {} AND c_last = '{}' ORDER BY c_first", c_w_id, c_d_id, c_last))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT c_balance, c_first, c_middle, c_last FROM customer WHERE c_w_id = {} AND c_d_id = {} AND c_id = {}", c_w_id, c_d_id, c_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT o_id, o_entry_d, COALESCE(o_carrier_id,0) FROM orders WHERE o_w_id = {} AND o_d_id = {} AND o_c_id = {} AND o_id = (SELECT MAX(o_id) FROM orders WHERE o_w_id = {} AND o_d_id = {} AND o_c_id = {})", o_w_id, o_d_id, o_c_id, o_w_id, o_d_id, o_c_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d FROM order_line WHERE ol_w_id = {} AND ol_d_id = {} AND ol_o_id = {}", ol_w_id, ol_d_id, ol_o_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
     }
@@ -513,12 +515,12 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
         println!("========Explain on Deliver");
         {
             let iter = tx.run(format!("explain SELECT COALESCE(MIN(no_o_id),0) FROM new_orders WHERE no_d_id = {} AND no_w_id = {}", no_d_id, no_w_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain DELETE FROM new_orders WHERE no_o_id = {} AND no_d_id = {} AND no_w_id = {}", no_o_id, no_d_id, no_w_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
@@ -526,27 +528,27 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
                 "explain SELECT o_c_id FROM orders WHERE o_id = {} AND o_d_id = {} AND o_w_id = {}",
                 o_id, o_d_id, o_w_id
             ))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain UPDATE orders SET o_carrier_id = {} WHERE o_id = {} AND o_d_id = {} AND o_w_id = {}", o_carrier_id, o_id, o_d_id, o_w_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain UPDATE order_line SET ol_delivery_d = '{}' WHERE ol_o_id = {} AND ol_d_id = {} AND ol_w_id = {}", ol_delivery_d, ol_o_id, ol_d_id, ol_w_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT SUM(ol_amount) FROM order_line WHERE ol_o_id = {} AND ol_d_id = {} AND ol_w_id = {}", ol_o_id, ol_d_id, ol_w_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain UPDATE customer SET c_balance = c_balance + 1 , c_delivery_cnt = c_delivery_cnt + 1 WHERE c_id = {} AND c_d_id = {} AND c_w_id = {}", c_id, c_d_id, c_w_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
     }
@@ -559,17 +561,17 @@ fn explain_tpcc() -> Result<(), DatabaseError> {
                 "explain SELECT d_next_o_id FROM district WHERE d_id = {} AND d_w_id = {}",
                 d_id, d_w_id
             ))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT DISTINCT ol_i_id FROM order_line WHERE ol_w_id = {} AND ol_d_id = {} AND ol_o_id < {} AND ol_o_id >= ({} - 20)", ol_w_id, ol_d_id, ol_o_id, ol_o_id))?;
-            
+
             println!("{}", create_table(iter)?);
         }
         {
             let iter = tx.run(format!("explain SELECT count(*) FROM stock WHERE s_w_id = {} AND s_i_id = {} AND s_quantity < {}", s_w_id, s_i_id, s_quantity))?;
-            
+
             println!("{}", create_table(iter)?);
         }
     }

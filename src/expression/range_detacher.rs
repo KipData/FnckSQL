@@ -797,7 +797,7 @@ mod test {
                 vec![NormalizationRuleImpl::SimplifyFilter],
             )
             .find_best::<RocksTransaction>(None)?;
-        if let Operator::Filter(filter_op) = best_plan.childrens[0].clone().operator {
+        if let Operator::Filter(filter_op) = best_plan.childrens.pop_only().operator {
             Ok(Some(filter_op))
         } else {
             Ok(None)

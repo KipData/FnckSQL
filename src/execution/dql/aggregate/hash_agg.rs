@@ -169,7 +169,7 @@ mod test {
     use crate::planner::operator::aggregate::AggregateOperator;
     use crate::planner::operator::values::ValuesOperator;
     use crate::planner::operator::Operator;
-    use crate::planner::LogicalPlan;
+    use crate::planner::{Childrens, LogicalPlan};
     use crate::storage::rocksdb::RocksStorage;
     use crate::storage::Storage;
     use crate::types::value::DataValue;
@@ -234,7 +234,7 @@ mod test {
                 ],
                 schema_ref: t1_schema.clone(),
             }),
-            childrens: vec![],
+            childrens: Box::new(Childrens::None),
             physical_option: None,
             _output_schema_ref: None,
         };

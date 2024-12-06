@@ -301,7 +301,11 @@ impl<S: Storage> Database<S> {
         self.state.prepare(sql)
     }
 
-    fn execute(&self, statement: &Statement, args: Args) -> Result<DatabaseIter<'_, S>, DatabaseError> {
+    fn execute(
+        &self,
+        statement: &Statement,
+        args: Args,
+    ) -> Result<DatabaseIter<'_, S>, DatabaseError> {
         let _guard = if matches!(command_type(statement)?, CommandType::DDL) {
             MetaDataLock::Write(self.mdl.write_arc())
         } else {

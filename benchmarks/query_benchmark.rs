@@ -25,9 +25,10 @@ fn query_cases() -> Vec<(&'static str, &'static str)> {
 }
 
 fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
-    let database = DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH)
-        .build()?;
-    database.run("create table t1 (c1 int primary key, c2 int)")?.done()?;
+    let database = DataBaseBuilder::path(QUERY_BENCH_FNCK_SQL_PATH).build()?;
+    database
+        .run("create table t1 (c1 int primary key, c2 int)")?
+        .done()?;
     let pb = ProgressBar::new(TABLE_ROW_NUM);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -35,7 +36,9 @@ fn init_fncksql_query_bench() -> Result<(), DatabaseError> {
             .unwrap(),
     );
     for i in 0..TABLE_ROW_NUM {
-        database.run(format!("insert into t1 values({}, {})", i, i + 1).as_str())?.done()?;
+        database
+            .run(format!("insert into t1 values({}, {})", i, i + 1).as_str())?
+            .done()?;
         pb.set_position(i + 1);
     }
     pb.finish_with_message("Insert completed!");
@@ -106,9 +109,7 @@ fn query_on_execute(c: &mut Criterion) {
         let connection = sqlite::open(QUERY_BENCH_SQLITE_PATH.to_owned()).unwrap();
         c.bench_function(format!("SQLite: {} by '{}'", name, case).as_str(), |b| {
             b.iter(|| {
-                for row in connection
-                    .prepare(case)
-                    .unwrap() {
+                for row in connection.prepare(case).unwrap() {
                     let _ = row.unwrap();
                 }
             })

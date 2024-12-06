@@ -4,7 +4,7 @@ use crate::expression::ScalarExpression;
 use crate::planner::operator::create_index::CreateIndexOperator;
 use crate::planner::operator::table_scan::TableScanOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use crate::types::index::IndexType;
 use sqlparser::ast::{ObjectName, OrderByExpr};
@@ -60,7 +60,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 if_not_exists,
                 ty,
             }),
-            vec![plan],
+            Childrens::Only(plan),
         ))
     }
 }

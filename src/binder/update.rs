@@ -3,7 +3,7 @@ use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use sqlparser::ast::{Assignment, Expr, TableFactor, TableWithJoins};
 use std::slice;
@@ -66,7 +66,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                     table_name,
                     value_exprs,
                 }),
-                vec![plan],
+                Childrens::Only(plan),
             ))
         } else {
             unreachable!("only table")

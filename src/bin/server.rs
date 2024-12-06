@@ -173,10 +173,12 @@ impl SimpleQueryHandler for SessionBackend {
                 let mut guard = self.tx.lock();
 
                 let iter = if let Some(transaction) = guard.as_mut() {
-                    unsafe { transaction.as_mut().run(query) }.map(Box::new) as Result<Box<dyn ResultIter>, _>
+                    unsafe { transaction.as_mut().run(query) }.map(Box::new)
+                        as Result<Box<dyn ResultIter>, _>
                 } else {
                     self.inner.run(query).map(Box::new)
-                }.map_err(|e| PgWireError::ApiError(Box::new(e)))?;
+                }
+                .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
 
                 let mut tuples = Vec::new();
                 for tuple in iter {

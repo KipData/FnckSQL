@@ -2,7 +2,7 @@ use crate::binder::{lower_case_name, Binder};
 use crate::errors::DatabaseError;
 use crate::planner::operator::truncate::TruncateOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use sqlparser::ast::ObjectName;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
 
         Ok(LogicalPlan::new(
             Operator::Truncate(TruncateOperator { table_name }),
-            vec![],
+            Childrens::None,
         ))
     }
 }

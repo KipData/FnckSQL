@@ -3,7 +3,7 @@ use crate::errors::DatabaseError;
 use crate::planner::operator::delete::DeleteOperator;
 use crate::planner::operator::table_scan::TableScanOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use itertools::Itertools;
 use sqlparser::ast::{Expr, TableAlias, TableFactor, TableWithJoins};
@@ -52,7 +52,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                     table_name,
                     primary_keys,
                 }),
-                vec![plan],
+                Childrens::Only(plan),
             ))
         } else {
             unreachable!("only table")

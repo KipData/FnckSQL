@@ -3,7 +3,7 @@ use crate::errors::DatabaseError;
 use crate::planner::operator::analyze::AnalyzeOperator;
 use crate::planner::operator::table_scan::TableScanOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use sqlparser::ast::ObjectName;
 use std::sync::Arc;
@@ -31,7 +31,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 table_name,
                 index_metas,
             }),
-            vec![scan_op],
+            Childrens::Only(scan_op),
         ))
     }
 }

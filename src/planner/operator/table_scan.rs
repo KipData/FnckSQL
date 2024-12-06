@@ -1,6 +1,6 @@
 use super::Operator;
 use crate::catalog::{ColumnRef, TableCatalog, TableName};
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Bounds;
 use crate::types::index::IndexInfo;
 use crate::types::ColumnId;
@@ -52,7 +52,7 @@ impl TableScanOperator {
                 columns,
                 limit: (None, None),
             }),
-            vec![],
+            Childrens::None,
         )
     }
 }

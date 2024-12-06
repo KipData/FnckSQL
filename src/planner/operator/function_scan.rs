@@ -1,6 +1,6 @@
 use crate::expression::function::table::TableFunction;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use fnck_sql_serde_macros::ReferenceSerialization;
 use std::fmt;
 use std::fmt::Formatter;
@@ -14,7 +14,7 @@ impl FunctionScanOperator {
     pub fn build(table_function: TableFunction) -> LogicalPlan {
         LogicalPlan::new(
             Operator::FunctionScan(FunctionScanOperator { table_function }),
-            vec![],
+            Childrens::None,
         )
     }
 }

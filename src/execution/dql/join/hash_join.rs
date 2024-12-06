@@ -428,7 +428,7 @@ mod test {
     use crate::planner::operator::join::{JoinCondition, JoinOperator, JoinType};
     use crate::planner::operator::values::ValuesOperator;
     use crate::planner::operator::Operator;
-    use crate::planner::LogicalPlan;
+    use crate::planner::{Childrens, LogicalPlan};
     use crate::storage::rocksdb::RocksStorage;
     use crate::storage::Storage;
     use crate::types::value::DataValue;
@@ -483,7 +483,7 @@ mod test {
                 ],
                 schema_ref: Arc::new(t1_columns),
             }),
-            childrens: vec![],
+            childrens: Box::new(Childrens::None),
             physical_option: None,
             _output_schema_ref: None,
         };
@@ -514,7 +514,7 @@ mod test {
                 ],
                 schema_ref: Arc::new(t2_columns),
             }),
-            childrens: vec![],
+            childrens: Box::new(Childrens::None),
             physical_option: None,
             _output_schema_ref: None,
         };

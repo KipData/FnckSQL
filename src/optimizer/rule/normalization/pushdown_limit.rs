@@ -150,7 +150,8 @@ mod tests {
             unreachable!("Should be a project operator")
         }
 
-        if let Operator::Limit(_) = &best_plan.childrens[0].operator {
+        let limit_op = best_plan.childrens.pop_only();
+        if let Operator::Limit(_) = &limit_op.operator {
         } else {
             unreachable!("Should be a limit operator")
         }
@@ -174,12 +175,14 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        if let Operator::Join(_) = &best_plan.childrens[0].childrens[0].operator {
+        let join_op = best_plan.childrens.pop_only().childrens.pop_only();
+        if let Operator::Join(_) = &join_op.operator {
         } else {
             unreachable!("Should be a join operator")
         }
 
-        if let Operator::Limit(op) = &best_plan.childrens[0].childrens[0].childrens[0].operator {
+        let limit_op = join_op.childrens.pop_twins().0;
+        if let Operator::Limit(op) = &limit_op.operator {
             assert_eq!(op.limit, Some(1));
         } else {
             unreachable!("Should be a limit operator")
@@ -204,7 +207,8 @@ mod tests {
             )
             .find_best::<RocksTransaction>(None)?;
 
-        if let Operator::TableScan(op) = &best_plan.childrens[0].operator {
+        let scan_op = best_plan.childrens.pop_only();
+        if let Operator::TableScan(op) = &scan_op.operator {
             assert_eq!(op.limit, (Some(1), Some(1)))
         } else {
             unreachable!("Should be a project operator")

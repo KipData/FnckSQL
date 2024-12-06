@@ -188,7 +188,16 @@ mod tests {
         assert!(exprs.exprs[1].cost.unwrap() >= 960);
         assert!(matches!(exprs.exprs[1].op, PhysicalOption::IndexScan(_)));
         assert_eq!(
-            best_plan.as_ref().unwrap().childrens[0].childrens[0].childrens[0].physical_option,
+            best_plan
+                .unwrap()
+                .childrens
+                .pop_only()
+                .childrens
+                .pop_twins()
+                .0
+                .childrens
+                .pop_only()
+                .physical_option,
             Some(PhysicalOption::IndexScan(IndexInfo {
                 meta: Arc::new(IndexMeta {
                     id: 0,

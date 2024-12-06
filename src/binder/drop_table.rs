@@ -2,7 +2,7 @@ use crate::binder::{lower_case_name, Binder};
 use crate::errors::DatabaseError;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::Operator;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use sqlparser::ast::ObjectName;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 table_name,
                 if_exists: *if_exists,
             }),
-            vec![],
+            Childrens::None,
         ))
     }
 }

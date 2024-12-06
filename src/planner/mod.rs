@@ -17,9 +17,75 @@ pub(crate) enum SchemaOutput {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
+pub enum Childrens {
+    None,
+    Only(LogicalPlan),
+    Twins {
+        left: LogicalPlan,
+        right: LogicalPlan,
+    },
+}
+
+impl Childrens {
+    pub fn iter(&self) -> ChildrensIter {
+        ChildrensIter {
+            inner: self,
+            pos: 0,
+        }
+    }
+
+    pub fn pop_only(self) -> LogicalPlan {
+        match self {
+            Childrens::Only(plan) => plan,
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+
+    pub fn pop_twins(self) -> (LogicalPlan, LogicalPlan) {
+        match self {
+            Childrens::Twins { left, right } => (left, right),
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub struct ChildrensIter<'a> {
+    inner: &'a Childrens,
+    pos: usize,
+}
+
+impl<'a> Iterator for ChildrensIter<'a> {
+    type Item = &'a LogicalPlan;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner {
+            Childrens::Only(plan) => {
+                if self.pos > 0 {
+                    return None;
+                }
+                self.pos += 1;
+                Some(plan)
+            }
+            Childrens::Twins { left, right } => {
+                let option = match self.pos {
+                    0 => Some(left),
+                    1 => Some(right),
+                    _ => None,
+                };
+                self.pos += 1;
+                option
+            }
+            Childrens::None => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct LogicalPlan {
     pub(crate) operator: Operator,
-    pub(crate) childrens: Vec<LogicalPlan>,
+    pub(crate) childrens: Box<Childrens>,
     pub(crate) physical_option: Option<PhysicalOption>,
 
     pub(crate) _output_schema_ref: Option<SchemaRef>,
@@ -35,17 +101,13 @@ impl SchemaOutput {
 }
 
 impl LogicalPlan {
-    pub fn new(operator: Operator, childrens: Vec<LogicalPlan>) -> Self {
+    pub fn new(operator: Operator, childrens: Childrens) -> Self {
         Self {
             operator,
-            childrens,
+            childrens: Box::new(childrens),
             physical_option: None,
             _output_schema_ref: None,
         }
-    }
-
-    pub fn child(&self, index: usize) -> Option<&LogicalPlan> {
-        self.childrens.get(index)
     }
 
     pub fn referenced_table(&self) -> Vec<TableName> {
@@ -53,7 +115,7 @@ impl LogicalPlan {
             if let Operator::TableScan(op) = &plan.operator {
                 results.push(op.table_name.clone());
             }
-            for child in &plan.childrens {
+            for child in plan.childrens.iter() {
                 collect_table(child, results);
             }
         }
@@ -65,11 +127,11 @@ impl LogicalPlan {
 
     pub(crate) fn _output_schema_direct(
         operator: &Operator,
-        childrens: &[LogicalPlan],
+        mut childrens_iter: ChildrensIter,
     ) -> SchemaOutput {
         match operator {
             Operator::Filter(_) | Operator::Sort(_) | Operator::Limit(_) => {
-                childrens[0].output_schema_direct()
+                childrens_iter.next().unwrap().output_schema_direct()
             }
             Operator::Aggregate(op) => SchemaOutput::Schema(
                 op.agg_calls
@@ -80,11 +142,11 @@ impl LogicalPlan {
             ),
             Operator::Join(op) => {
                 if matches!(op.join_type, JoinType::LeftSemi | JoinType::LeftAnti) {
-                    return childrens[0].output_schema_direct();
+                    return childrens_iter.next().unwrap().output_schema_direct();
                 }
                 let mut columns = Vec::new();
 
-                for plan in childrens.iter() {
+                for plan in childrens_iter {
                     for column in plan.output_schema_direct().columns() {
                         columns.push(column.clone());
                     }
@@ -172,12 +234,12 @@ impl LogicalPlan {
     }
 
     pub(crate) fn output_schema_direct(&self) -> SchemaOutput {
-        Self::_output_schema_direct(&self.operator, &self.childrens)
+        Self::_output_schema_direct(&self.operator, self.childrens.iter())
     }
 
     pub fn output_schema(&mut self) -> &SchemaRef {
         self._output_schema_ref.get_or_insert_with(|| {
-            match Self::_output_schema_direct(&self.operator, &self.childrens) {
+            match Self::_output_schema_direct(&self.operator, self.childrens.iter()) {
                 SchemaOutput::Schema(schema) => Arc::new(schema),
                 SchemaOutput::SchemaRef(schema_ref) => schema_ref.clone(),
             }
@@ -191,7 +253,7 @@ impl LogicalPlan {
             result.push_str(&format!(" [{}]", physical_option));
         }
 
-        for child in &self.childrens {
+        for child in self.childrens.iter() {
             result.push('\n');
             result.push_str(&child.explain(indentation + 2));
         }

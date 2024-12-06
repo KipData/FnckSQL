@@ -1,8 +1,8 @@
 use crate::expression::ScalarExpression;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use fnck_sql_serde_macros::ReferenceSerialization;
+use std::fmt;
 use std::fmt::Formatter;
-use std::{fmt, vec};
 
 use super::Operator;
 
@@ -16,7 +16,7 @@ impl FilterOperator {
     pub fn build(predicate: ScalarExpression, children: LogicalPlan, having: bool) -> LogicalPlan {
         LogicalPlan::new(
             Operator::Filter(FilterOperator { predicate, having }),
-            vec![children],
+            Childrens::Only(children),
         )
     }
 }

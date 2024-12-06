@@ -1,6 +1,6 @@
 use super::Operator;
 use crate::expression::ScalarExpression;
-use crate::planner::LogicalPlan;
+use crate::planner::{Childrens, LogicalPlan};
 use fnck_sql_serde_macros::ReferenceSerialization;
 use itertools::Itertools;
 use std::fmt;
@@ -42,7 +42,7 @@ impl JoinOperator {
     ) -> LogicalPlan {
         LogicalPlan::new(
             Operator::Join(JoinOperator { on, join_type }),
-            vec![left, right],
+            Childrens::Twins { left, right },
         )
     }
 }
