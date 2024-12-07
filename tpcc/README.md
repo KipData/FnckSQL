@@ -41,5 +41,10 @@ Order-Status : 0.062  (0.188)
 
 ```
 
+## Explain
+run `cargo test -p tpcc explain_tpcc -- --ignored` to explain tpcc statements
+
+Tips: after TPCC loaded tables
+
 ## Refer to
 - https://github.com/AgilData/tpcc
