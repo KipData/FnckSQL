@@ -272,18 +272,12 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         Ok(source)
     }
 
-    pub fn bind_source<'b: 'a>(
-        &self,
-        table_name: &str,
-        parent: Option<&'b Binder<'a, 'b, T>>,
-    ) -> Result<&Source, DatabaseError> {
+    pub fn bind_source<'b: 'a>(&self, table_name: &str) -> Result<&Source, DatabaseError> {
         if let Some(source) = self.bind_table.iter().find(|((t, alias, _), _)| {
             t.as_str() == table_name
                 || matches!(alias.as_ref().map(|a| a.as_str() == table_name), Some(true))
         }) {
             Ok(source.1)
-        } else if let Some(binder) = parent {
-            binder.context.bind_source(table_name, binder.parent)
         } else {
             Err(DatabaseError::InvalidTable(table_name.into()))
         }

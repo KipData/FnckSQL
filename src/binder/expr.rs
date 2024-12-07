@@ -342,7 +342,7 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             try_default!(&full_name.0, full_name.1);
         }
         if let Some(table) = full_name.0.or(bind_table_name) {
-            let source = self.context.bind_source(&table, self.parent)?;
+            let source = self.context.bind_source(&table)?;
             let schema_buf = self.table_schema_buf.entry(Arc::new(table)).or_default();
 
             Ok(ScalarExpression::ColumnRef(
