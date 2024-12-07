@@ -41,7 +41,7 @@ Built by @KipData
 - Supports extending storage for customized workloads
 - Supports most of the SQL 2016 syntax
 
-#### [check more](docs/features.md)
+#### 👉[check more](docs/features.md)
 
 ## Examples
 
@@ -60,7 +60,7 @@ for tuple in fnck_sql.run("select * from t1")? {
 }
 ```
 
-**more examples**
+👉**more examples**
 - [hello_word](examples/hello_world.rs)
 - [transaction](examples/transaction.rs)
 
@@ -81,7 +81,7 @@ Order-Status : 0.062  (0.188)
 <TpmC>
 6669 Tpmc
 ```
-#### [check more](tpcc/README.md)
+#### 👉[check more](tpcc/README.md)
 
 ## Roadmap
 - Get [SQL 2016](https://github.com/KipData/FnckSQL/issues/130) mostly supported
