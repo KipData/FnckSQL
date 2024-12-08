@@ -11,6 +11,7 @@ use std::{slice, vec};
 use ulid::Generator;
 
 pub type TableName = Arc<String>;
+pub type PrimaryKeyIndices = Arc<Vec<usize>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableCatalog {
@@ -22,6 +23,7 @@ pub struct TableCatalog {
 
     schema_ref: SchemaRef,
     primary_keys: Vec<(usize, ColumnRef)>,
+    primary_key_indices: PrimaryKeyIndices,
     primary_key_type: Option<LogicalType>,
 }
 
@@ -32,6 +34,10 @@ pub struct TableMeta {
 }
 
 impl TableCatalog {
+    pub(crate) fn name(&self) -> &TableName {
+        &self.name
+    }
+
     pub(crate) fn get_unique_index(&self, col_id: &ColumnId) -> Option<&IndexMetaRef> {
         self.indexes
             .iter()
@@ -77,6 +83,10 @@ impl TableCatalog {
 
     pub(crate) fn primary_keys(&self) -> &[(usize, ColumnRef)] {
         &self.primary_keys
+    }
+
+    pub(crate) fn primary_keys_indices(&self) -> &PrimaryKeyIndices {
+        &self.primary_key_indices
     }
 
     pub(crate) fn types(&self) -> Vec<LogicalType> {
@@ -186,6 +196,7 @@ impl TableCatalog {
             indexes: vec![],
             schema_ref: Arc::new(vec![]),
             primary_keys: vec![],
+            primary_key_indices: Default::default(),
             primary_key_type: None,
         };
         let mut generator = Generator::new();
@@ -194,7 +205,11 @@ impl TableCatalog {
                 .add_column(col_catalog, &mut generator)
                 .unwrap();
         }
-        table_catalog.primary_keys = Self::build_primary_keys(&table_catalog.schema_ref);
+        let (primary_keys, primary_key_indices) =
+            Self::build_primary_keys(&table_catalog.schema_ref);
+
+        table_catalog.primary_keys = primary_keys;
+        table_catalog.primary_key_indices = primary_key_indices;
 
         Ok(table_catalog)
     }
@@ -216,7 +231,7 @@ impl TableCatalog {
             columns.insert(column_id, i);
         }
         let schema_ref = Arc::new(column_refs.clone());
-        let primary_keys = Self::build_primary_keys(&schema_ref);
+        let (primary_keys, primary_key_indices) = Self::build_primary_keys(&schema_ref);
 
         Ok(TableCatalog {
             name,
@@ -225,12 +240,18 @@ impl TableCatalog {
             indexes,
             schema_ref,
             primary_keys,
+            primary_key_indices,
             primary_key_type: None,
         })
     }
 
-    fn build_primary_keys(schema_ref: &Arc<Vec<ColumnRef>>) -> Vec<(usize, ColumnRef)> {
-        schema_ref
+    fn build_primary_keys(
+        schema_ref: &Arc<Vec<ColumnRef>>,
+    ) -> (Vec<(usize, ColumnRef)>, PrimaryKeyIndices) {
+        let mut primary_keys = Vec::new();
+        let mut primary_key_indices = Vec::new();
+
+        for (_, (i, column)) in schema_ref
             .iter()
             .enumerate()
             .filter_map(|(i, column)| {
@@ -240,8 +261,12 @@ impl TableCatalog {
                     .map(|p_i| (p_i, (i, column.clone())))
             })
             .sorted_by_key(|(p_i, _)| *p_i)
-            .map(|(_, entry)| entry)
-            .collect_vec()
+        {
+            primary_key_indices.push(i);
+            primary_keys.push((i, column));
+        }
+
+        (primary_keys, Arc::new(primary_key_indices))
     }
 }
 

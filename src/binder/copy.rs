@@ -80,8 +80,9 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 return Err(DatabaseError::UnsupportedStmt("'COPY SOURCE'".to_string()));
             }
         };
+        let table_name = Arc::new(lower_case_name(&table_name)?);
 
-        if let Some(table) = self.context.table(Arc::new(table_name.to_string()))? {
+        if let Some(table) = self.context.table(table_name.clone())? {
             let schema_ref = table.schema_ref().clone();
             let ext_source = ExtSource {
                 path: match target {
@@ -107,7 +108,7 @@ impl<T: Transaction> Binder<'_, '_, T> {
                     Operator::CopyFromFile(CopyFromFileOperator {
                         source: ext_source,
                         schema_ref,
-                        table: table_name.to_string(),
+                        table: table_name,
                     }),
                     Childrens::None,
                 ))

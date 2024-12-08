@@ -18,14 +18,14 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Truncate {
     fn execute_mut(
         self,
         _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
                 let TruncateOperator { table_name } = self.op;
 
-                throw!(transaction.drop_data(&table_name));
+                throw!(unsafe { &mut (*transaction) }.drop_data(&table_name));
 
                 yield Ok(TupleBuilder::build_result(format!("{}", table_name)));
             },

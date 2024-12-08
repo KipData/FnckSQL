@@ -228,7 +228,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Sort {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -310,27 +310,9 @@ mod test {
             ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
         ))]);
         let tuples = NullableVec(vec![
-            Some((
-                0_usize,
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(None)],
-                },
-            )),
-            Some((
-                1_usize,
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(Some(0))],
-                },
-            )),
-            Some((
-                2_usize,
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(Some(1))],
-                },
-            )),
+            Some((0_usize, Tuple::new(None, vec![DataValue::Int32(None)]))),
+            Some((1_usize, Tuple::new(None, vec![DataValue::Int32(Some(0))]))),
+            Some((2_usize, Tuple::new(None, vec![DataValue::Int32(Some(1))]))),
         ]);
 
         let fn_asc_and_nulls_last_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
@@ -487,45 +469,42 @@ mod test {
         let tuples = NullableVec(vec![
             Some((
                 0_usize,
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(None), DataValue::Int32(None)],
-                },
+                Tuple::new(None, vec![DataValue::Int32(None), DataValue::Int32(None)]),
             )),
             Some((
                 1_usize,
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(Some(0)), DataValue::Int32(None)],
-                },
+                Tuple::new(
+                    None,
+                    vec![DataValue::Int32(Some(0)), DataValue::Int32(None)],
+                ),
             )),
             Some((
                 2_usize,
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(Some(1)), DataValue::Int32(None)],
-                },
+                Tuple::new(
+                    None,
+                    vec![DataValue::Int32(Some(1)), DataValue::Int32(None)],
+                ),
             )),
             Some((
                 3_usize,
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(None), DataValue::Int32(Some(0))],
-                },
+                Tuple::new(
+                    None,
+                    vec![DataValue::Int32(None), DataValue::Int32(Some(0))],
+                ),
             )),
             Some((
                 4_usize,
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))],
-                },
+                Tuple::new(
+                    None,
+                    vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))],
+                ),
             )),
             Some((
                 5_usize,
-                Tuple {
-                    id: None,
-                    values: vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))],
-                },
+                Tuple::new(
+                    None,
+                    vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))],
+                ),
             )),
         ]);
         let fn_asc_1_and_nulls_first_1_and_asc_2_and_nulls_first_2_eq =

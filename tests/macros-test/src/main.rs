@@ -45,7 +45,7 @@ mod test {
             },
         ];
 
-        (Tuple { id: None, values }, schema_ref)
+        (Tuple::new(None, values), schema_ref)
     }
 
     #[derive(Default, Debug, PartialEq)]
@@ -80,24 +80,21 @@ mod test {
         assert_eq!(my_struct.c2, "LOL");
     }
 
-    scala_function!(MyScalaFunction::sum(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: DataValue, v2: DataValue| {
+    scala_function!(MyScalaFunction::SUM(LogicalType::Integer, LogicalType::Integer) -> LogicalType::Integer => (|v1: DataValue, v2: DataValue| {
         let plus_evaluator = EvaluatorFactory::binary_create(LogicalType::Integer, BinaryOperator::Plus)?;
 
         Ok(plus_evaluator.0.binary_eval(&v1, &v2))
     }));
 
-    table_function!(MyTableFunction::test_numbers(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: DataValue| {
+    table_function!(MyTableFunction::TEST_NUMBERS(LogicalType::Integer) -> [c1: LogicalType::Integer, c2: LogicalType::Integer] => (|v1: DataValue| {
         let num = v1.i32().unwrap();
 
         Ok(Box::new((0..num)
             .into_iter()
-            .map(|i| Ok(Tuple {
-                id: None,
-                values: vec![
+            .map(|i| Ok(Tuple::new(None, vec![
                     DataValue::Int32(Some(i)),
                     DataValue::Int32(Some(i)),
-                ]
-            }))) as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
+                ])))) as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
     }));
 
     #[test]
@@ -112,10 +109,7 @@ mod test {
                     unit: CharLengthUnits::Characters,
                 }),
             ],
-            &Tuple {
-                id: None,
-                values: vec![],
-            },
+            &Tuple::new(None, vec![]),
             &vec![],
         )?;
 
@@ -148,17 +142,17 @@ mod test {
         );
         assert_eq!(
             numbers.next().unwrap().unwrap(),
-            Tuple {
-                id: None,
-                values: vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0)),]
-            }
+            Tuple::new(
+                None,
+                vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0)),]
+            )
         );
         assert_eq!(
             numbers.next().unwrap().unwrap(),
-            Tuple {
-                id: None,
-                values: vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1)),]
-            }
+            Tuple::new(
+                None,
+                vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1)),]
+            )
         );
         assert!(numbers.next().is_none());
 

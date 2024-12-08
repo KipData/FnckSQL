@@ -17,7 +17,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SeqScan {
     fn execute(
         self,
         (table_cache, _, _): (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -29,7 +29,12 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SeqScan {
                     ..
                 } = self.op;
 
-                let mut iter = throw!(transaction.read(table_cache, table_name, limit, columns));
+                let mut iter = throw!(unsafe { &mut (*transaction) }.read(
+                    table_cache,
+                    table_name,
+                    limit,
+                    columns
+                ));
 
                 while let Some(tuple) = throw!(iter.next_tuple()) {
                     yield Ok(tuple);

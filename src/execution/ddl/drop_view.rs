@@ -18,7 +18,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropView {
     fn execute_mut(
         self,
         (table_cache, view_cache, _): (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -28,7 +28,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropView {
                     if_exists,
                 } = self.op;
 
-                throw!(transaction.drop_view(
+                throw!(unsafe { &mut (*transaction) }.drop_view(
                     view_cache,
                     table_cache,
                     view_name.clone(),

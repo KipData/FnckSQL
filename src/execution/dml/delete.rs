@@ -31,7 +31,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
     fn execute_mut(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -42,66 +42,66 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
                 } = self;
 
                 let schema = input.output_schema().clone();
-                let table = throw!(throw!(transaction.table(cache.0, table_name.clone()))
-                    .cloned()
-                    .ok_or(DatabaseError::TableNotFound));
-                let mut tuple_ids = Vec::new();
+                let table = throw!(throw!(
+                    unsafe { &mut (*transaction) }.table(cache.0, table_name.clone())
+                )
+                .ok_or(DatabaseError::TableNotFound));
                 let mut indexes: HashMap<IndexId, Value> = HashMap::new();
 
                 let mut coroutine = build_read(input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
-                    let tuple: Tuple = throw!(tuple);
+                    let mut tuple: Tuple = throw!(tuple);
 
                     for index_meta in table.indexes() {
-                        if let Some(Value {
-                            exprs, value_rows, ..
-                        }) = indexes.get_mut(&index_meta.id)
-                        {
-                            value_rows.push(throw!(Projection::projection(&tuple, exprs, &schema)));
+                        if let Some(Value { exprs, values, .. }) = indexes.get_mut(&index_meta.id) {
+                            let Some(data_value) = DataValue::values_to_tuple(throw!(
+                                Projection::projection(&tuple, exprs, &schema)
+                            )) else {
+                                continue;
+                            };
+                            values.push(data_value);
                         } else {
-                            let exprs = throw!(index_meta.column_exprs(&table));
-                            let values = throw!(Projection::projection(&tuple, &exprs, &schema));
+                            let mut values = Vec::with_capacity(table.indexes().len());
+                            let exprs = throw!(index_meta.column_exprs(table));
+                            let Some(data_value) = DataValue::values_to_tuple(throw!(
+                                Projection::projection(&tuple, &exprs, &schema)
+                            )) else {
+                                continue;
+                            };
+                            values.push(data_value);
 
                             indexes.insert(
                                 index_meta.id,
                                 Value {
                                     exprs,
-                                    value_rows: vec![values],
+                                    values,
                                     index_ty: index_meta.ty,
                                 },
                             );
                         }
                     }
-                    if let Some(tuple_id) = tuple.id {
-                        tuple_ids.push(tuple_id);
+                    if let Some(tuple_id) = tuple.id() {
+                        for (
+                            index_id,
+                            Value {
+                                values, index_ty, ..
+                            },
+                        ) in indexes.iter_mut()
+                        {
+                            for value in values {
+                                throw!(unsafe { &mut (*transaction) }.del_index(
+                                    &table_name,
+                                    &Index::new(*index_id, value, *index_ty),
+                                    tuple_id,
+                                ));
+                            }
+                        }
+
+                        throw!(unsafe { &mut (*transaction) }.remove_tuple(&table_name, tuple_id));
                     }
                 }
                 drop(coroutine);
-                for (
-                    index_id,
-                    Value {
-                        value_rows,
-                        index_ty,
-                        ..
-                    },
-                ) in indexes
-                {
-                    for (i, values) in value_rows.into_iter().enumerate() {
-                        let Some(value) = DataValue::values_to_tuple(values) else {
-                            continue;
-                        };
-
-                        throw!(transaction.del_index(
-                            &table_name,
-                            &Index::new(index_id, &value, index_ty),
-                            Some(&tuple_ids[i]),
-                        ));
-                    }
-                }
-                for tuple_id in tuple_ids {
-                    throw!(transaction.remove_tuple(&table_name, &tuple_id));
-                }
                 yield Ok(TupleBuilder::build_result("1".to_string()));
             },
         )
@@ -110,6 +110,6 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
 
 struct Value {
     exprs: Vec<ScalarExpression>,
-    value_rows: Vec<Vec<DataValue>>,
+    values: Vec<DataValue>,
     index_ty: IndexType,
 }

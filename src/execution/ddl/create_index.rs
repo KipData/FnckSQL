@@ -30,7 +30,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateIndex {
     fn execute_mut(
         mut self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -52,7 +52,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateIndex {
                     })
                     .unzip();
                 let schema = self.input.output_schema().clone();
-                let index_id = match transaction.add_index_meta(
+                let index_id = match unsafe { &mut (*transaction) }.add_index_meta(
                     cache.0,
                     &table_name,
                     index_name,
@@ -69,29 +69,29 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateIndex {
                     }
                     err => throw!(err),
                 };
-                let mut index_values = Vec::new();
                 let mut coroutine = build_read(self.input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let mut tuple: Tuple = throw!(tuple);
 
-                    let tuple_id = if let Some(tuple_id) = tuple.id.take() {
+                    let Some(value) = DataValue::values_to_tuple(throw!(Projection::projection(
+                        &tuple,
+                        &column_exprs,
+                        &schema
+                    ))) else {
+                        continue;
+                    };
+                    let tuple_id = if let Some(tuple_id) = tuple.id().take() {
                         tuple_id
                     } else {
                         continue;
                     };
-                    index_values.push((
-                        tuple_id,
-                        throw!(Projection::projection(&tuple, &column_exprs, &schema)),
-                    ));
-                }
-                drop(coroutine);
-                for (tuple_id, values) in index_values {
-                    let Some(value) = DataValue::values_to_tuple(values) else {
-                        continue;
-                    };
                     let index = Index::new(index_id, &value, ty);
-                    throw!(transaction.add_index(table_name.as_str(), index, &tuple_id));
+                    throw!(unsafe { &mut (*transaction) }.add_index(
+                        table_name.as_str(),
+                        index,
+                        tuple_id
+                    ));
                 }
                 yield Ok(TupleBuilder::build_result("1".to_string()));
             },

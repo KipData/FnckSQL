@@ -29,7 +29,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SimpleAggExecutor {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -62,7 +62,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SimpleAggExecutor {
                 let values: Vec<DataValue> =
                     throw!(accs.into_iter().map(|acc| acc.evaluate()).try_collect());
 
-                yield Ok(Tuple { id: None, values });
+                yield Ok(Tuple::new(None, values));
             },
         )
     }

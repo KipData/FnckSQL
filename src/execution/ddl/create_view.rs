@@ -18,7 +18,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateView {
     fn execute_mut(
         self,
         (_, view_cache, _): (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -26,7 +26,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateView {
                 let CreateViewOperator { view, or_replace } = self.op;
 
                 let result_tuple = TupleBuilder::build_result(format!("{}", view.name));
-                throw!(transaction.create_view(view_cache, view, or_replace));
+                throw!(unsafe { &mut (*transaction) }.create_view(view_cache, view, or_replace));
 
                 yield Ok(result_tuple);
             },

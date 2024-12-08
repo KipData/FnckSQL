@@ -20,7 +20,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for FunctionScan {
     fn execute(
         self,
         _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        _: &'a T,
+        _: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]

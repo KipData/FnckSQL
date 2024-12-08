@@ -1,7 +1,6 @@
-use crate::catalog::ColumnRef;
+use crate::catalog::{ColumnRef, PrimaryKeyIndices};
 use crate::db::ResultIter;
 use crate::errors::DatabaseError;
-use crate::types::tuple_builder::TupleIdBuilder;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
@@ -10,8 +9,9 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 
 pub static EMPTY_TUPLE: LazyLock<Tuple> = LazyLock::new(|| Tuple {
-    id: None,
+    pk_indices: None,
     values: vec![],
+    id_buf: None,
 });
 
 const BITS_MAX_INDEX: usize = 8;
@@ -29,14 +29,42 @@ pub fn types(schema: &Schema) -> Vec<LogicalType> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuple {
-    pub id: Option<TupleId>,
+    pub(crate) pk_indices: Option<PrimaryKeyIndices>,
     pub values: Vec<DataValue>,
+    id_buf: Option<Option<TupleId>>,
 }
 
 impl Tuple {
+    pub fn new(pk_indices: Option<PrimaryKeyIndices>, values: Vec<DataValue>) -> Self {
+        Tuple {
+            pk_indices,
+            values,
+            id_buf: None,
+        }
+    }
+
+    pub fn id(&mut self) -> Option<&TupleId> {
+        self.id_buf
+            .get_or_insert_with(|| {
+                self.pk_indices.as_ref().map(|pk_indices| {
+                    if pk_indices.len() == 1 {
+                        self.values[0].clone()
+                    } else {
+                        let mut values = Vec::with_capacity(pk_indices.len());
+
+                        for i in pk_indices.iter() {
+                            values.push(self.values[*i].clone());
+                        }
+                        DataValue::Tuple(Some((values, false)))
+                    }
+                })
+            })
+            .as_ref()
+    }
+
     pub fn deserialize_from(
         table_types: &[LogicalType],
-        id_builder: &mut TupleIdBuilder,
+        pk_indices: &PrimaryKeyIndices,
         projections: &[usize],
         schema: &Schema,
         bytes: &[u8],
@@ -62,13 +90,13 @@ impl Tuple {
             if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
                 if projections[projection_i] == i {
                     tuple_values.push(DataValue::none(logic_type));
-                    Self::values_push(schema, &tuple_values, id_builder, &mut projection_i);
+                    projection_i += 1;
                 }
             } else if let Some(len) = logic_type.raw_len() {
                 /// fixed length (e.g.: int)
                 if projections[projection_i] == i {
                     tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
-                    Self::values_push(schema, &tuple_values, id_builder, &mut projection_i);
+                    projection_i += 1;
                 }
                 pos += len;
             } else {
@@ -77,27 +105,16 @@ impl Tuple {
                 pos += 4;
                 if projections[projection_i] == i {
                     tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
-                    Self::values_push(schema, &tuple_values, id_builder, &mut projection_i);
+                    projection_i += 1;
                 }
                 pos += len;
             }
         }
         Tuple {
-            id: id_builder.build(),
+            pk_indices: Some(pk_indices.clone()),
             values: tuple_values,
+            id_buf: None,
         }
-    }
-
-    fn values_push(
-        tuple_columns: &Schema,
-        tuple_values: &[DataValue],
-        id_builder: &mut TupleIdBuilder,
-        projection_i: &mut usize,
-    ) {
-        if tuple_columns[*projection_i].desc().is_primary() {
-            id_builder.append(tuple_values[*projection_i].clone());
-        }
-        *projection_i += 1;
     }
 
     /// e.g.: bits(u8)..|data_0(len for utf8_1)|utf8_0|data_1|
@@ -129,6 +146,10 @@ impl Tuple {
         }
 
         Ok(bytes)
+    }
+
+    pub(crate) fn clear_id(&mut self) {
+        self.id_buf = None;
     }
 }
 
@@ -162,7 +183,6 @@ pub fn create_table<I: ResultIter>(iter: I) -> Result<Table, DatabaseError> {
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::types::tuple::Tuple;
-    use crate::types::tuple_builder::TupleIdBuilder;
     use crate::types::value::{DataValue, Utf8Type};
     use crate::types::LogicalType;
     use itertools::Itertools;
@@ -280,9 +300,9 @@ mod tests {
         ]);
 
         let tuples = vec![
-            Tuple {
-                id: Some(DataValue::Int32(Some(0))),
-                values: vec![
+            Tuple::new(
+                Some(Arc::new(vec![0])),
+                vec![
                     DataValue::Int32(Some(0)),
                     DataValue::UInt32(Some(1)),
                     DataValue::Utf8 {
@@ -316,10 +336,10 @@ mod tests {
                         unit: CharLengthUnits::Octets,
                     },
                 ],
-            },
-            Tuple {
-                id: Some(DataValue::Int32(Some(1))),
-                values: vec![
+            ),
+            Tuple::new(
+                Some(Arc::new(vec![0])),
+                vec![
                     DataValue::Int32(Some(1)),
                     DataValue::UInt32(None),
                     DataValue::Utf8 {
@@ -353,25 +373,24 @@ mod tests {
                         unit: CharLengthUnits::Octets,
                     },
                 ],
-            },
+            ),
         ];
         let types = columns
             .iter()
             .map(|column| column.datatype().clone())
             .collect_vec();
         let columns = Arc::new(columns);
-        let mut id_builder = TupleIdBuilder::new(&columns);
 
         let tuple_0 = Tuple::deserialize_from(
             &types,
-            &mut id_builder,
+            &Arc::new(vec![0]),
             &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
             &columns,
             &tuples[0].serialize_to(&types).unwrap(),
         );
         let tuple_1 = Tuple::deserialize_from(
             &types,
-            &mut id_builder,
+            &Arc::new(vec![0]),
             &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
             &columns,
             &tuples[1].serialize_to(&types).unwrap(),

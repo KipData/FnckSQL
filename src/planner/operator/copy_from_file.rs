@@ -1,4 +1,5 @@
 use crate::binder::copy::ExtSource;
+use crate::catalog::TableName;
 use crate::types::tuple::SchemaRef;
 use fnck_sql_serde_macros::ReferenceSerialization;
 use itertools::Itertools;
@@ -7,7 +8,7 @@ use std::fmt::Formatter;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct CopyFromFileOperator {
-    pub table: String,
+    pub table: TableName,
     pub source: ExtSource,
     pub schema_ref: SchemaRef,
 }

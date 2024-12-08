@@ -5,8 +5,8 @@ use crate::errors::DatabaseError;
 use crate::expression::function::table::TableFunctionImpl;
 use crate::expression::function::FunctionSummary;
 use crate::expression::ScalarExpression;
-use crate::types::tuple::SchemaRef;
 use crate::types::tuple::Tuple;
+use crate::types::tuple::{SchemaRef, EMPTY_TUPLE};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use serde::Deserialize;
@@ -52,25 +52,17 @@ impl TableFunctionImpl for Numbers {
         &self,
         args: &[ScalarExpression],
     ) -> Result<Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>, DatabaseError> {
-        let tuple = Tuple {
-            id: None,
-            values: Vec::new(),
-        };
-
-        let mut value = args[0].eval(&tuple, &[])?;
+        let mut value = args[0].eval(&EMPTY_TUPLE, &[])?;
 
         if value.logical_type() != LogicalType::Integer {
             value = value.cast(&LogicalType::Integer)?;
         }
         let num = value.i32().ok_or(DatabaseError::NotNull)?;
 
-        Ok(Box::new((0..num).map(|i| {
-            Ok(Tuple {
-                id: None,
-                values: vec![DataValue::Int32(Some(i))],
-            })
-        }))
-            as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
+        Ok(
+            Box::new((0..num).map(|i| Ok(Tuple::new(None, vec![DataValue::Int32(Some(i))]))))
+                as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>,
+        )
     }
 
     fn output_schema(&self) -> &SchemaRef {

@@ -26,7 +26,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Limit {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]

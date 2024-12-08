@@ -25,7 +25,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
     fn execute_mut(
         mut self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -67,9 +67,19 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropColumn {
                     }
                     drop(coroutine);
                     for tuple in tuples {
-                        throw!(transaction.append_tuple(&table_name, tuple, &types, true));
+                        throw!(unsafe { &mut (*transaction) }.append_tuple(
+                            &table_name,
+                            tuple,
+                            &types,
+                            true
+                        ));
                     }
-                    throw!(transaction.drop_column(cache.0, cache.2, &table_name, &column_name));
+                    throw!(unsafe { &mut (*transaction) }.drop_column(
+                        cache.0,
+                        cache.2,
+                        &table_name,
+                        &column_name
+                    ));
 
                     yield Ok(TupleBuilder::build_result("1".to_string()));
                 } else if if_exists {

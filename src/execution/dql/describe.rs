@@ -43,13 +43,15 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Describe {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
-                let table = throw!(throw!(transaction.table(cache.0, self.table_name.clone()))
-                    .ok_or(DatabaseError::TableNotFound));
+                let table = throw!(throw!(
+                    unsafe { &mut (*transaction) }.table(cache.0, self.table_name.clone())
+                )
+                .ok_or(DatabaseError::TableNotFound));
                 let key_fn = |column: &ColumnCatalog| {
                     if column.desc().is_primary() {
                         PRIMARY_KEY_TYPE.clone()
@@ -96,7 +98,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Describe {
                             unit: CharLengthUnits::Characters,
                         },
                     ];
-                    yield Ok(Tuple { id: None, values });
+                    yield Ok(Tuple::new(None, values));
                 }
             },
         )

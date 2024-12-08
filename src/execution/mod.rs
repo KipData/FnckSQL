@@ -50,7 +50,7 @@ pub trait ReadExecutor<'a, T: Transaction + 'a> {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a>;
 }
 
@@ -58,14 +58,14 @@ pub trait WriteExecutor<'a, T: Transaction + 'a> {
     fn execute_mut(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a>;
 }
 
 pub fn build_read<'a, T: Transaction + 'a>(
     plan: LogicalPlan,
     cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-    transaction: &'a T,
+    transaction: *mut T,
 ) -> Executor<'a> {
     let LogicalPlan {
         operator,
@@ -150,7 +150,7 @@ pub fn build_read<'a, T: Transaction + 'a>(
 pub fn build_write<'a, T: Transaction + 'a>(
     plan: LogicalPlan,
     cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-    transaction: &'a mut T,
+    transaction: *mut T,
 ) -> Executor<'a> {
     let LogicalPlan {
         operator,
