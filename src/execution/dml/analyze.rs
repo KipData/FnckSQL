@@ -54,7 +54,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
     fn execute_mut(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -67,9 +67,11 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
 
                 let schema = input.output_schema().clone();
                 let mut builders = Vec::with_capacity(index_metas.len());
-                let table = throw!(throw!(transaction.table(cache.0, table_name.clone()))
-                    .cloned()
-                    .ok_or(DatabaseError::TableNotFound));
+                let table = throw!(throw!(
+                    unsafe { &mut (*transaction) }.table(cache.0, table_name.clone())
+                )
+                .cloned()
+                .ok_or(DatabaseError::TableNotFound));
 
                 for index in table.indexes() {
                     builders.push((
@@ -123,7 +125,12 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
                     });
-                    throw!(transaction.save_table_meta(cache.2, &table_name, path_str, meta));
+                    throw!(unsafe { &mut (*transaction) }.save_table_meta(
+                        cache.2,
+                        &table_name,
+                        path_str,
+                        meta
+                    ));
                     throw!(fs::rename(&temp_path, &path).map_err(DatabaseError::IO));
 
                     active_index_paths.insert(index_file);
@@ -138,7 +145,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                     }
                 }
 
-                yield Ok(Tuple { id: None, values });
+                yield Ok(Tuple::new(None, values));
             },
         )
     }

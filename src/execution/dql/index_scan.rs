@@ -30,7 +30,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for IndexScan {
     fn execute(
         self,
         (table_cache, _, _): (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -42,7 +42,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for IndexScan {
                     ..
                 } = self.op;
 
-                let mut iter = transaction
+                let mut iter = unsafe { &(*transaction) }
                     .read_by_index(
                         table_cache,
                         table_name,

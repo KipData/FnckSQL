@@ -43,7 +43,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashAggExecutor {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -97,7 +97,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashAggExecutor {
                         .map(|acc| acc.evaluate())
                         .chain(group_keys.into_iter().map(Ok))
                         .try_collect());
-                    yield Ok(Tuple { id: None, values });
+                    yield Ok(Tuple::new(None, values));
                 }
             },
         )
@@ -135,7 +135,7 @@ mod test {
 
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path()).unwrap();
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let desc = ColumnDesc::new(LogicalType::Integer, None, false, None)?;
 
         let t1_schema = Arc::new(vec![
@@ -188,7 +188,7 @@ mod test {
 
         let tuples = try_collect(
             HashAggExecutor::from((operator, input))
-                .execute((&table_cache, &view_cache, &meta_cache), &transaction),
+                .execute((&table_cache, &view_cache, &meta_cache), &mut transaction),
         )?;
 
         assert_eq!(tuples.len(), 2);

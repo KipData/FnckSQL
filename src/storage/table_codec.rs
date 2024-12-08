@@ -1,11 +1,10 @@
 use crate::catalog::view::View;
-use crate::catalog::{ColumnRef, ColumnRelation, TableMeta};
+use crate::catalog::{ColumnRef, ColumnRelation, PrimaryKeyIndices, TableMeta};
 use crate::errors::DatabaseError;
 use crate::serdes::{ReferenceSerialization, ReferenceTables};
 use crate::storage::{TableCache, Transaction};
 use crate::types::index::{Index, IndexId, IndexMeta, IndexType};
 use crate::types::tuple::{Schema, Tuple, TupleId};
-use crate::types::tuple_builder::TupleIdBuilder;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use bytes::Bytes;
@@ -223,11 +222,11 @@ impl TableCodec {
     /// Value: Tuple
     pub fn encode_tuple(
         table_name: &str,
-        tuple: &Tuple,
+        tuple: &mut Tuple,
         types: &[LogicalType],
     ) -> Result<(Bytes, Bytes), DatabaseError> {
-        let tuple_id = tuple.id.clone().ok_or(DatabaseError::PrimaryKeyNotFound)?;
-        let key = Self::encode_tuple_key(table_name, &tuple_id)?;
+        let tuple_id = tuple.id().ok_or(DatabaseError::PrimaryKeyNotFound)?;
+        let key = Self::encode_tuple_key(table_name, tuple_id)?;
 
         Ok((Bytes::from(key), Bytes::from(tuple.serialize_to(types)?)))
     }
@@ -248,12 +247,12 @@ impl TableCodec {
 
     pub fn decode_tuple(
         table_types: &[LogicalType],
-        id_builder: &mut TupleIdBuilder,
+        pk_indices: &PrimaryKeyIndices,
         projections: &[usize],
         schema: &Schema,
         bytes: &[u8],
     ) -> Tuple {
-        Tuple::deserialize_from(table_types, id_builder, projections, schema, bytes)
+        Tuple::deserialize_from(table_types, pk_indices, projections, schema, bytes)
     }
 
     /// Key: {TableName}{INDEX_META_TAG}{BOUND_MIN_TAG}{IndexID}
@@ -479,7 +478,6 @@ mod tests {
     use crate::storage::Storage;
     use crate::types::index::{Index, IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
-    use crate::types::tuple_builder::TupleIdBuilder;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use bytes::Bytes;
@@ -511,29 +509,24 @@ mod tests {
     fn test_table_codec_tuple() -> Result<(), DatabaseError> {
         let table_catalog = build_table_codec();
 
-        let tuple = Tuple {
-            id: Some(DataValue::Int32(Some(0))),
-            values: vec![
+        let mut tuple = Tuple::new(
+            Some(Arc::new(vec![0])),
+            vec![
                 DataValue::Int32(Some(0)),
                 DataValue::Decimal(Some(Decimal::new(1, 0))),
             ],
-        };
+        );
         let (_, bytes) = TableCodec::encode_tuple(
             &table_catalog.name,
-            &tuple,
+            &mut tuple,
             &[LogicalType::Integer, LogicalType::Decimal(None, None)],
         )?;
         let schema = table_catalog.schema_ref();
-        let mut id_builder = TupleIdBuilder::new(schema);
+        let pk_indices = table_catalog.primary_keys_indices();
 
+        tuple.clear_id();
         assert_eq!(
-            TableCodec::decode_tuple(
-                &table_catalog.types(),
-                &mut id_builder,
-                &[0, 1],
-                schema,
-                &bytes
-            ),
+            TableCodec::decode_tuple(&table_catalog.types(), pk_indices, &[0, 1], schema, &bytes),
             tuple
         );
 

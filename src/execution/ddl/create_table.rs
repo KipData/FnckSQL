@@ -18,7 +18,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateTable {
     fn execute_mut(
         self,
         (table_cache, _, _): (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -29,7 +29,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateTable {
                     if_not_exists,
                 } = self.op;
 
-                let _ = throw!(transaction.create_table(
+                let _ = throw!(unsafe { &mut (*transaction) }.create_table(
                     table_cache,
                     table_name.clone(),
                     columns,

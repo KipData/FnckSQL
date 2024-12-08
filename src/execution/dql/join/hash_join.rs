@@ -93,7 +93,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -205,10 +205,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
                                 .chain(tuple.values.iter())
                                 .cloned()
                                 .collect_vec();
-                            let tuple = Tuple {
-                                id: None,
-                                values: full_values,
-                            };
+                            let tuple = Tuple::new(None, full_values);
                             if let Some(tuple) = throw!(Self::filter(
                                 tuple,
                                 &full_schema_ref,
@@ -238,7 +235,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
                             .map(|_| NULL_VALUE.clone())
                             .chain(tuple.values)
                             .collect_vec();
-                        let tuple = Tuple { id: None, values };
+                        let tuple = Tuple::new(None, values);
                         if let Some(tuple) = throw!(Self::filter(
                             tuple,
                             &full_schema_ref,
@@ -411,7 +408,7 @@ mod test {
     fn test_inner_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -425,7 +422,7 @@ mod test {
             join_type: JoinType::Inner,
         };
         let executor = HashJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         assert_eq!(tuples.len(), 3);
@@ -450,7 +447,7 @@ mod test {
     fn test_left_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -464,37 +461,37 @@ mod test {
             join_type: JoinType::LeftOuter,
         };
         //Outer
-        // {
-        //     let executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
-        //     let tuples = try_collect(
-        //         executor.execute((&table_cache, &view_cache, &meta_cache), &transaction),
-        //     )?;
-        //
-        //     assert_eq!(tuples.len(), 4);
-        //
-        //     assert_eq!(
-        //         tuples[0].values,
-        //         build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
-        //     );
-        //     assert_eq!(
-        //         tuples[1].values,
-        //         build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
-        //     );
-        //     assert_eq!(
-        //         tuples[2].values,
-        //         build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
-        //     );
-        //     assert_eq!(
-        //         tuples[3].values,
-        //         build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
-        //     );
-        // }
+        {
+            let executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
+            let tuples = try_collect(
+                executor.execute((&table_cache, &view_cache, &meta_cache), &mut transaction),
+            )?;
+
+            assert_eq!(tuples.len(), 4);
+
+            assert_eq!(
+                tuples[0].values,
+                build_integers(vec![Some(0), Some(2), Some(4), Some(0), Some(2), Some(4)])
+            );
+            assert_eq!(
+                tuples[1].values,
+                build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(3), Some(5)])
+            );
+            assert_eq!(
+                tuples[2].values,
+                build_integers(vec![Some(1), Some(3), Some(5), Some(1), Some(1), Some(1)])
+            );
+            assert_eq!(
+                tuples[3].values,
+                build_integers(vec![Some(3), Some(5), Some(7), None, None, None])
+            );
+        }
         // Semi
         {
             let mut executor = HashJoin::from((op.clone(), left.clone(), right.clone()));
             executor.ty = JoinType::LeftSemi;
             let mut tuples = try_collect(
-                executor.execute((&table_cache, &view_cache, &meta_cache), &transaction),
+                executor.execute((&table_cache, &view_cache, &meta_cache), &mut transaction),
             )?;
 
             assert_eq!(tuples.len(), 2);
@@ -518,7 +515,7 @@ mod test {
             let mut executor = HashJoin::from((op, left, right));
             executor.ty = JoinType::LeftAnti;
             let tuples = try_collect(
-                executor.execute((&table_cache, &view_cache, &meta_cache), &transaction),
+                executor.execute((&table_cache, &view_cache, &meta_cache), &mut transaction),
             )?;
 
             assert_eq!(tuples.len(), 1);
@@ -535,7 +532,7 @@ mod test {
     fn test_right_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -549,7 +546,7 @@ mod test {
             join_type: JoinType::RightOuter,
         };
         let executor = HashJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         assert_eq!(tuples.len(), 4);
@@ -578,7 +575,7 @@ mod test {
     fn test_full_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -592,7 +589,7 @@ mod test {
             join_type: JoinType::Full,
         };
         let executor = HashJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         assert_eq!(tuples.len(), 5);

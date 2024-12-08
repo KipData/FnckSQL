@@ -27,7 +27,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Projection {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -37,10 +37,12 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Projection {
                 let mut coroutine = build_read(input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
-                    let mut tuple = throw!(tuple);
+                    let tuple = throw!(tuple);
 
-                    tuple.values = throw!(Self::projection(&tuple, &exprs, &schema));
-                    yield Ok(tuple);
+                    yield Ok(Tuple::new(
+                        None,
+                        throw!(Self::projection(&tuple, &exprs, &schema)),
+                    ));
                 }
             },
         )

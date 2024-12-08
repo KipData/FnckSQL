@@ -27,7 +27,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
     fn execute_mut(
         mut self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -55,7 +55,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
 
                     if let Some(value) = throw!(column.default_value()) {
                         if let Some(unique_values) = &mut unique_values {
-                            unique_values.push((tuple.id.clone().unwrap(), value.clone()));
+                            unique_values.push((tuple.id().unwrap().clone(), value.clone()));
                         }
                         tuple.values.push(value);
                     } else {
@@ -66,21 +66,28 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for AddColumn {
                 drop(coroutine);
 
                 for tuple in tuples {
-                    throw!(transaction.append_tuple(table_name, tuple, &types, true));
+                    throw!(unsafe { &mut (*transaction) }
+                        .append_tuple(table_name, tuple, &types, true));
                 }
-                let col_id =
-                    throw!(transaction.add_column(cache.0, table_name, column, *if_not_exists));
+                let col_id = throw!(unsafe { &mut (*transaction) }.add_column(
+                    cache.0,
+                    table_name,
+                    column,
+                    *if_not_exists
+                ));
 
                 // Unique Index
                 if let (Some(unique_values), Some(unique_meta)) = (
                     unique_values,
-                    throw!(transaction.table(cache.0, table_name.clone()))
+                    throw!(unsafe { &mut (*transaction) }.table(cache.0, table_name.clone()))
                         .and_then(|table| table.get_unique_index(&col_id))
                         .cloned(),
                 ) {
                     for (tuple_id, value) in unique_values {
                         let index = Index::new(unique_meta.id, &value, IndexType::Unique);
-                        throw!(transaction.add_index(table_name, index, &tuple_id));
+                        throw!(
+                            unsafe { &mut (*transaction) }.add_index(table_name, index, &tuple_id)
+                        );
                     }
                 }
 

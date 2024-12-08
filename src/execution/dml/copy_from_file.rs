@@ -1,4 +1,5 @@
 use crate::binder::copy::FileFormat;
+use crate::catalog::PrimaryKeyIndices;
 use crate::errors::DatabaseError;
 use crate::execution::{Executor, WriteExecutor};
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
@@ -26,8 +27,8 @@ impl From<CopyFromFileOperator> for CopyFromFile {
 impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CopyFromFile {
     fn execute_mut(
         self,
-        _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        (table_cache, _, _): (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -38,11 +39,20 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CopyFromFile {
                 // # Cancellation
                 // When this stream is dropped, the `rx` is dropped, the spawned task will fail to send to
                 // `tx`, then the task will finish.
-                let table_name = self.op.table.clone();
-                let handle = thread::spawn(|| self.read_file_blocking(tx));
+                let table = throw!(throw!(
+                    unsafe { &mut (*transaction) }.table(table_cache, self.op.table.clone())
+                )
+                .ok_or(DatabaseError::TableNotFound));
+                let primary_keys_indices = table.primary_keys_indices().clone();
+                let handle = thread::spawn(|| self.read_file_blocking(tx, primary_keys_indices));
                 let mut size = 0_usize;
                 while let Ok(chunk) = rx.recv() {
-                    throw!(transaction.append_tuple(&table_name, chunk, &types, false));
+                    throw!(unsafe { &mut (*transaction) }.append_tuple(
+                        table.name(),
+                        chunk,
+                        &types,
+                        false
+                    ));
                     size += 1;
                 }
                 throw!(handle.join().unwrap());
@@ -61,7 +71,11 @@ impl CopyFromFile {
     /// Read records from file using blocking IO.
     ///
     /// The read data chunks will be sent through `tx`.
-    fn read_file_blocking(mut self, tx: Sender<Tuple>) -> Result<(), DatabaseError> {
+    fn read_file_blocking(
+        mut self,
+        tx: Sender<Tuple>,
+        pk_indices: PrimaryKeyIndices,
+    ) -> Result<(), DatabaseError> {
         let file = File::open(self.op.source.path)?;
         let mut buf_reader = BufReader::new(file);
         let mut reader = match self.op.source.format {
@@ -79,7 +93,7 @@ impl CopyFromFile {
         };
 
         let column_count = self.op.schema_ref.len();
-        let tuple_builder = TupleBuilder::new(&self.op.schema_ref);
+        let tuple_builder = TupleBuilder::new(&self.op.schema_ref, Some(&pk_indices));
 
         for record in reader.records() {
             // read records and push raw str rows into data chunk builder
@@ -178,7 +192,7 @@ mod tests {
         ];
 
         let op = CopyFromFileOperator {
-            table: "test_copy".to_string(),
+            table: Arc::new("test_copy".to_string()),
             source: ExtSource {
                 path: file.path().into(),
                 format: FileFormat::Csv {

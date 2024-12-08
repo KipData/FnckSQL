@@ -64,7 +64,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
     fn execute_mut(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -76,7 +76,6 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                     is_mapping_by_name,
                 } = self;
 
-                let mut tuples = Vec::new();
                 let schema = input.output_schema().clone();
 
                 let primary_keys = schema
@@ -90,25 +89,25 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                 }
 
                 if let Some(table_catalog) =
-                    throw!(transaction.table(cache.0, table_name.clone())).cloned()
+                    throw!(unsafe { &mut (*transaction) }.table(cache.0, table_name.clone()))
+                        .cloned()
                 {
+                    let mut index_metas = Vec::new();
+                    for index_meta in table_catalog.indexes() {
+                        let exprs = throw!(index_meta.column_exprs(&table_catalog));
+                        index_metas.push((index_meta, exprs));
+                    }
+
                     let types = table_catalog.types();
+                    let indices = table_catalog.primary_keys_indices();
                     let mut coroutine = build_read(input, cache, transaction);
 
                     while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                         let Tuple { values, .. } = throw!(tuple);
 
-                        let mut tuple_id = Vec::with_capacity(primary_keys.len());
                         let mut tuple_map = HashMap::new();
                         for (i, value) in values.into_iter().enumerate() {
                             tuple_map.insert(schema[i].key(is_mapping_by_name), value);
-                        }
-
-                        for primary_key in primary_keys.iter() {
-                            tuple_id.push(throw!(tuple_map
-                                .get(primary_key)
-                                .cloned()
-                                .ok_or(DatabaseError::NotNull)));
                         }
                         let mut values = Vec::with_capacity(table_catalog.columns_len());
 
@@ -127,36 +126,31 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                             }
                             values.push(value)
                         }
-                        tuples.push(Tuple {
-                            id: Some(if primary_keys.len() == 1 {
-                                tuple_id.pop().unwrap()
-                            } else {
-                                DataValue::Tuple(Some((tuple_id, false)))
-                            }),
-                            values,
-                        });
-                    }
-                    drop(coroutine);
-                    for index_meta in table_catalog.indexes() {
-                        let exprs = throw!(index_meta.column_exprs(&table_catalog));
+                        let mut tuple = Tuple::new(Some(indices.clone()), values);
 
-                        for tuple in tuples.iter() {
-                            let values = throw!(Projection::projection(tuple, &exprs, &schema));
+                        for (index_meta, exprs) in index_metas.iter() {
+                            let values = throw!(Projection::projection(&tuple, exprs, &schema));
                             let Some(value) = DataValue::values_to_tuple(values) else {
                                 continue;
                             };
+                            let Some(tuple_id) = tuple.id() else {
+                                unreachable!()
+                            };
                             let index = Index::new(index_meta.id, &value, index_meta.ty);
-
-                            throw!(transaction.add_index(
+                            throw!(unsafe { &mut (*transaction) }.add_index(
                                 &table_name,
                                 index,
-                                tuple.id.as_ref().unwrap()
+                                tuple_id
                             ));
                         }
+                        throw!(unsafe { &mut (*transaction) }.append_tuple(
+                            &table_name,
+                            tuple,
+                            &types,
+                            is_overwrite
+                        ));
                     }
-                    for tuple in tuples {
-                        throw!(transaction.append_tuple(&table_name, tuple, &types, is_overwrite));
-                    }
+                    drop(coroutine);
                 }
                 yield Ok(TupleBuilder::build_result("1".to_string()));
             },

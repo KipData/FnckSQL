@@ -21,14 +21,14 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for CopyToFile {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
                 let mut writer = throw!(self.create_writer());
 
-                let mut iter = throw!(transaction.read(
+                let mut iter = throw!(unsafe { &mut (*transaction) }.read(
                     cache.0,
                     Arc::new(self.op.table.clone()),
                     (None, None),

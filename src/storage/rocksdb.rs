@@ -68,11 +68,11 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
     }
 
     // Tips: rocksdb has weak support for `Include` and `Exclude`, so precision will be lost
-    fn range<'a>(
-        &'a self,
-        min: Bound<&[u8]>,
-        max: Bound<&[u8]>,
-    ) -> Result<Self::IterType<'a>, DatabaseError> {
+    fn range(
+        &self,
+        min: Bound<Vec<u8>>,
+        max: Bound<Vec<u8>>,
+    ) -> Result<Self::IterType<'_>, DatabaseError> {
         fn bound_to_include(bound: Bound<&[u8]>) -> Option<&[u8]> {
             match bound {
                 Bound::Included(bytes) | Bound::Excluded(bytes) => Some(bytes),
@@ -80,14 +80,14 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
             }
         }
 
-        let lower = bound_to_include(min)
+        let lower = bound_to_include(min.as_ref().map(Vec::as_slice))
             .map(|bytes| IteratorMode::From(bytes, Direction::Forward))
             .unwrap_or(IteratorMode::Start);
         let iter = self.tx.iterator(lower);
 
         Ok(RocksIter {
-            lower: min.map(|bytes| bytes.to_vec()),
-            upper: max.map(|bytes| bytes.to_vec()),
+            lower: min,
+            upper: max,
             iter,
         })
     }
@@ -144,7 +144,6 @@ mod test {
     };
     use crate::types::index::{IndexMeta, IndexType};
     use crate::types::tuple::Tuple;
-    use crate::types::tuple_builder::TupleIdBuilder;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use crate::utils::lru::SharedLruCache;
@@ -193,19 +192,19 @@ mod test {
 
         transaction.append_tuple(
             &"test".to_string(),
-            Tuple {
-                id: Some(DataValue::Int32(Some(1))),
-                values: vec![DataValue::Int32(Some(1)), DataValue::Boolean(Some(true))],
-            },
+            Tuple::new(
+                Some(Arc::new(vec![0])),
+                vec![DataValue::Int32(Some(1)), DataValue::Boolean(Some(true))],
+            ),
             &[LogicalType::Integer, LogicalType::Boolean],
             false,
         )?;
         transaction.append_tuple(
             &"test".to_string(),
-            Tuple {
-                id: Some(DataValue::Int32(Some(2))),
-                values: vec![DataValue::Int32(Some(2)), DataValue::Boolean(Some(false))],
-            },
+            Tuple::new(
+                Some(Arc::new(vec![0])),
+                vec![DataValue::Int32(Some(2)), DataValue::Boolean(Some(true))],
+            ),
             &[LogicalType::Integer, LogicalType::Boolean],
             false,
         )?;
@@ -218,7 +217,7 @@ mod test {
         )?;
 
         let option_1 = iter.next_tuple()?;
-        assert_eq!(option_1.unwrap().id, Some(DataValue::Int32(Some(2))));
+        assert_eq!(option_1.unwrap().pk_indices, Some(Arc::new(vec![0])));
 
         let option_2 = iter.next_tuple()?;
         assert_eq!(option_2, None);
@@ -251,11 +250,11 @@ mod test {
             DataValue::Int32(Some(3)),
             DataValue::Int32(Some(4)),
         ];
-        let id_builder = TupleIdBuilder::new(table.schema_ref());
+        let pk_indices = Arc::new(vec![0]);
         let mut iter = IndexIter {
             offset: 0,
             limit: None,
-            id_builder,
+            pk_indices: &pk_indices,
             params: IndexImplParams {
                 tuple_schema_ref: table.schema_ref().clone(),
                 projections: vec![0],
@@ -285,8 +284,8 @@ mod test {
         };
         let mut result = Vec::new();
 
-        while let Some(tuple) = iter.next_tuple()? {
-            result.push(tuple.id.unwrap());
+        while let Some(mut tuple) = iter.next_tuple()? {
+            result.push(tuple.id().unwrap().clone());
         }
 
         assert_eq!(result, tuple_ids);
@@ -326,7 +325,7 @@ mod test {
             .unwrap();
 
         while let Some(tuple) = iter.next_tuple()? {
-            assert_eq!(tuple.id, Some(DataValue::Int32(Some(1))));
+            assert_eq!(tuple.pk_indices, Some(Arc::new(vec![0])));
             assert_eq!(
                 tuple.values,
                 vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1))]

@@ -532,10 +532,10 @@ pub(crate) mod test {
         );
         assert_eq!(
             iter.next().unwrap()?,
-            Tuple {
-                id: None,
-                values: vec![DataValue::Date32(Some(Local::now().num_days_from_ce()))],
-            }
+            Tuple::new(
+                None,
+                vec![DataValue::Date32(Some(Local::now().num_days_from_ce()))]
+            )
         );
         assert!(iter.next().is_none());
 
@@ -562,17 +562,11 @@ pub(crate) mod test {
         assert_eq!(iter.schema(), &Arc::new(vec![ColumnRef::from(column)]));
         assert_eq!(
             iter.next().unwrap()?,
-            Tuple {
-                id: None,
-                values: vec![DataValue::Int32(Some(3))],
-            }
+            Tuple::new(None, vec![DataValue::Int32(Some(3))])
         );
         assert_eq!(
             iter.next().unwrap()?,
-            Tuple {
-                id: None,
-                values: vec![DataValue::Int32(Some(4))],
-            }
+            Tuple::new(None, vec![DataValue::Int32(Some(4))])
         );
         Ok(())
     }

@@ -130,13 +130,10 @@ macro_rules! scala_function {
 ///
 ///     Ok(Box::new((0..num)
 ///         .into_iter()
-///         .map(|i| Ok(Tuple {
-///             id: None,
-///             values: vec![
+///         .map(|i| Ok(Tuple::new(None, vec![
 ///                 DataValue::Int32(Some(i)),
 ///                 DataValue::Int32(Some(i)),
-///             ]
-///         }))) as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
+///             ])))) as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
 ///     }));
 ///
 ///     let fnck_sql = DataBaseBuilder::path("./example")
@@ -185,13 +182,9 @@ macro_rules! table_function {
             #[allow(unused_variables, clippy::redundant_closure_call)]
             fn eval(&self, args: &[::fnck_sql::expression::ScalarExpression]) -> Result<Box<dyn Iterator<Item=Result<::fnck_sql::types::tuple::Tuple, ::fnck_sql::errors::DatabaseError>>>, ::fnck_sql::errors::DatabaseError> {
                 let mut _index = 0;
-                let tuple = ::fnck_sql::types::tuple::Tuple {
-                    id: None,
-                    values: Vec::new(),
-                };
 
                 $closure($({
-                    let mut value = args[_index].eval(&tuple, &[])?;
+                    let mut value = args[_index].eval(&::fnck_sql::types::tuple::EMPTY_TUPLE, &[])?;
                     _index += 1;
 
                     if value.logical_type() != $arg_ty {

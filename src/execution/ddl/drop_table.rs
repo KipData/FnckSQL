@@ -18,7 +18,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropTable {
     fn execute_mut(
         self,
         (table_cache, _, _): (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a mut T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -28,7 +28,11 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for DropTable {
                     if_exists,
                 } = self.op;
 
-                throw!(transaction.drop_table(table_cache, table_name.clone(), if_exists));
+                throw!(unsafe { &mut (*transaction) }.drop_table(
+                    table_cache,
+                    table_name.clone(),
+                    if_exists
+                ));
 
                 yield Ok(TupleBuilder::build_result(format!("{}", table_name)));
             },

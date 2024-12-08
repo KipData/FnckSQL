@@ -129,7 +129,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
     fn execute(
         self,
         cache: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
@@ -239,10 +239,8 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
                         | JoinType::Full
                             if !has_matched =>
                         {
-                            let right_tuple = Tuple {
-                                id: None,
-                                values: vec![NULL_VALUE.clone(); right_schema_len],
-                            };
+                            let right_tuple =
+                                Tuple::new(None, vec![NULL_VALUE.clone(); right_schema_len]);
                             if matches!(ty, JoinType::RightOuter) {
                                 Self::emit_tuple(&right_tuple, &left_tuple, ty, false)
                             } else {
@@ -271,7 +269,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
                             let mut values = vec![NULL_VALUE.clone(); right_schema_len];
                             values.append(&mut right_tuple.values);
 
-                            yield Ok(Tuple { id: None, values })
+                            yield Ok(Tuple::new(None, values))
                         }
                         idx += 1;
                     }
@@ -329,7 +327,7 @@ impl NestedLoopJoin {
             return None;
         }
 
-        Some(Tuple { id: None, values })
+        Some(Tuple::new(None, values))
     }
 
     /// Merge the two tuples.
@@ -337,24 +335,24 @@ impl NestedLoopJoin {
     /// `right_tuple` must be from the `NestedLoopJoin.right_input`
     fn merge_tuple(left_tuple: &Tuple, right_tuple: &Tuple, ty: &JoinType) -> Tuple {
         match ty {
-            JoinType::RightOuter => Tuple {
-                id: None,
-                values: right_tuple
+            JoinType::RightOuter => Tuple::new(
+                None,
+                right_tuple
                     .values
                     .iter()
+                    .chain(left_tuple.values.iter())
                     .cloned()
-                    .chain(left_tuple.clone().values)
                     .collect_vec(),
-            },
-            _ => Tuple {
-                id: None,
-                values: left_tuple
+            ),
+            _ => Tuple::new(
+                None,
+                left_tuple
                     .values
                     .iter()
+                    .chain(right_tuple.values.iter())
                     .cloned()
-                    .chain(right_tuple.clone().values)
                     .collect_vec(),
-            },
+            ),
         }
     }
 
@@ -540,7 +538,7 @@ mod test {
     fn test_nested_inner_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -553,7 +551,7 @@ mod test {
             join_type: JoinType::Inner,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(1);
@@ -569,7 +567,7 @@ mod test {
     fn test_nested_left_out_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -582,7 +580,7 @@ mod test {
             join_type: JoinType::LeftOuter,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         assert_eq!(
@@ -610,7 +608,7 @@ mod test {
     fn test_nested_cross_join_with_on() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -623,7 +621,7 @@ mod test {
             join_type: JoinType::Cross,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(1);
@@ -640,7 +638,7 @@ mod test {
     fn test_nested_cross_join_without_filter() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -653,7 +651,7 @@ mod test {
             join_type: JoinType::Cross,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(3);
@@ -673,7 +671,7 @@ mod test {
     fn test_nested_cross_join_without_on() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -686,7 +684,7 @@ mod test {
             join_type: JoinType::Cross,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         assert_eq!(tuples.len(), 16);
@@ -698,7 +696,7 @@ mod test {
     fn test_nested_left_semi_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -711,7 +709,7 @@ mod test {
             join_type: JoinType::LeftSemi,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(1);
@@ -726,7 +724,7 @@ mod test {
     fn test_nested_left_anti_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -739,7 +737,7 @@ mod test {
             join_type: JoinType::LeftAnti,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(3);
@@ -756,7 +754,7 @@ mod test {
     fn test_nested_right_out_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -769,7 +767,7 @@ mod test {
             join_type: JoinType::RightOuter,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         let mut expected_set = HashSet::with_capacity(4);
@@ -791,7 +789,7 @@ mod test {
     fn test_nested_full_join() -> Result<(), DatabaseError> {
         let temp_dir = TempDir::new().expect("unable to create temporary working directory");
         let storage = RocksStorage::new(temp_dir.path())?;
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
         let meta_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let view_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
         let table_cache = Arc::new(SharedLruCache::new(4, 1, RandomState::new())?);
@@ -804,7 +802,7 @@ mod test {
             join_type: JoinType::Full,
         };
         let executor = NestedLoopJoin::from((op, left, right))
-            .execute((&table_cache, &view_cache, &meta_cache), &transaction);
+            .execute((&table_cache, &view_cache, &meta_cache), &mut transaction);
         let tuples = try_collect(executor)?;
 
         assert_eq!(

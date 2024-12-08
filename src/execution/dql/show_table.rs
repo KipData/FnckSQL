@@ -12,12 +12,12 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for ShowTables {
     fn execute(
         self,
         _: (&'a TableCache, &'a ViewCache, &'a StatisticsMetaCache),
-        transaction: &'a T,
+        transaction: *mut T,
     ) -> Executor<'a> {
         Box::new(
             #[coroutine]
             move || {
-                let metas = throw!(transaction.table_metas());
+                let metas = throw!(unsafe { &mut (*transaction) }.table_metas());
 
                 for TableMeta { table_name } in metas {
                     let values = vec![DataValue::Utf8 {
@@ -26,7 +26,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for ShowTables {
                         unit: CharLengthUnits::Characters,
                     }];
 
-                    yield Ok(Tuple { id: None, values });
+                    yield Ok(Tuple::new(None, values));
                 }
             },
         )
