@@ -1,5 +1,9 @@
+# The length of Octets for Char must be at least 8
+statement error
+create table t1(id int primary key, v1 char, v2 char(5 characters), v3 char(7 octets))
+
 statement ok
-create table t1(id int primary key, v1 char, v2 char(5 characters), v3 char(5 octets))
+create table t1(id int primary key, v1 char, v2 char(5 characters), v3 char(8 octets))
 
 statement ok
 insert into t1 values(0, '🖕', '🖕🖕🖕🖕🖕', '🖕');

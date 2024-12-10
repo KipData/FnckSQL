@@ -111,7 +111,7 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             tx.execute(
                 &statements[6],
                 vec![
-                    ("?1", DataValue::Decimal(Some(ol_total))),
+                    ("?1", DataValue::from(ol_total)),
                     ("?2", DataValue::Int32(Some(c_id))),
                     ("?3", DataValue::Int8(Some(d_id as i8))),
                     ("?4", DataValue::Int16(Some(args.w_id as i16))),

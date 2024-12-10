@@ -9,13 +9,12 @@ use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
 use crate::optimizer::core::statistics_meta::{StatisticMetaLoader, StatisticsMeta};
 use crate::serdes::ReferenceTables;
-use crate::storage::table_codec::TableCodec;
+use crate::storage::table_codec::{Bytes, TableCodec};
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use crate::utils::lru::SharedLruCache;
-use bytes::Bytes;
 use itertools::Itertools;
 use std::collections::Bound;
 use std::io::Cursor;
@@ -23,6 +22,7 @@ use std::mem;
 use std::ops::SubAssign;
 use std::sync::Arc;
 use std::vec::IntoIter;
+use rkyv::util::AlignedVec;
 use ulid::Generator;
 
 pub(crate) type StatisticsMetaCache = SharedLruCache<(TableName, IndexId), StatisticsMeta>;
@@ -64,8 +64,9 @@ pub trait Transaction: Sized {
         let pk_indices = table.primary_keys_indices();
         let table_types = table.types();
         if columns.is_empty() {
-            let (i, column) = &table.primary_keys()[0];
-            columns.push((*i, column.clone()));
+            for (i, column) in table.primary_keys() {
+                columns.push((*i, column.clone()));
+            }
         }
         let mut tuple_columns = Vec::with_capacity(columns.len());
         let mut projections = Vec::with_capacity(columns.len());
@@ -167,7 +168,7 @@ pub trait Transaction: Sized {
 
         if matches!(index.ty, IndexType::Unique) {
             if let Some(bytes) = self.get(&key)? {
-                return if bytes != value {
+                return if bytes.as_slice() != value.as_slice() {
                     Err(DatabaseError::DuplicateUniqueValue)
                 } else {
                     Ok(())
@@ -602,9 +603,9 @@ pub trait Transaction: Sized {
         Ok(())
     }
 
-    fn get(&self, key: &[u8]) -> Result<Option<Bytes>, DatabaseError>;
+    fn get(&self, key: &[u8]) -> Result<Option<AlignedVec>, DatabaseError>;
 
-    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), DatabaseError>;
+    fn set(&mut self, key: Bytes, value: AlignedVec) -> Result<(), DatabaseError>;
 
     fn remove(&mut self, key: &[u8]) -> Result<(), DatabaseError>;
 
@@ -620,7 +621,7 @@ pub trait Transaction: Sized {
 trait IndexImpl<T: Transaction> {
     fn index_lookup(
         &self,
-        bytes: &Bytes,
+        bytes: &AlignedVec,
         pk_indices: &PrimaryKeyIndices,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError>;
@@ -693,7 +694,7 @@ impl<T: Transaction> IndexImplParams<'_, T> {
     ) -> Result<Option<Tuple>, DatabaseError> {
         let key = TableCodec::encode_tuple_key(self.table_name, tuple_id)?;
 
-        Ok(self.tx.get(&key)?.map(|bytes| {
+        self.tx.get(&key)?.map(|bytes| {
             TableCodec::decode_tuple(
                 &self.table_types,
                 pk_indices,
@@ -701,7 +702,7 @@ impl<T: Transaction> IndexImplParams<'_, T> {
                 &self.tuple_schema_ref,
                 &bytes,
             )
-        }))
+        }).transpose()
     }
 }
 
@@ -713,7 +714,7 @@ enum IndexResult<'a, T: Transaction + 'a> {
 impl<T: Transaction> IndexImpl<T> for IndexImplEnum {
     fn index_lookup(
         &self,
-        bytes: &Bytes,
+        bytes: &AlignedVec,
         pk_indices: &PrimaryKeyIndices,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
@@ -756,17 +757,17 @@ impl<T: Transaction> IndexImpl<T> for IndexImplEnum {
 impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
     fn index_lookup(
         &self,
-        bytes: &Bytes,
+        bytes: &AlignedVec,
         pk_indices: &PrimaryKeyIndices,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
-        Ok(TableCodec::decode_tuple(
+        TableCodec::decode_tuple(
             &params.table_types,
             pk_indices,
             &params.projections,
             &params.tuple_schema_ref,
             bytes,
-        ))
+        )
     }
 
     fn eq_to_res<'a>(
@@ -786,7 +787,7 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
                     &params.tuple_schema_ref,
                     &bytes,
                 )
-            });
+            }).transpose()?;
         Ok(IndexResult::Tuple(tuple))
     }
 
@@ -800,11 +801,11 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
 }
 
 fn secondary_index_lookup<T: Transaction>(
-    bytes: &Bytes,
+    bytes: &AlignedVec,
     pk_indices: &PrimaryKeyIndices,
     params: &IndexImplParams<T>,
 ) -> Result<Tuple, DatabaseError> {
-    let tuple_id = TableCodec::decode_index(bytes, &params.index_meta.pk_ty)?;
+    let tuple_id = TableCodec::decode_index(bytes)?;
     params
         .get_tuple_by_id(pk_indices, &tuple_id)?
         .ok_or(DatabaseError::TupleIdNotFound(tuple_id))
@@ -813,7 +814,7 @@ fn secondary_index_lookup<T: Transaction>(
 impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
     fn index_lookup(
         &self,
-        bytes: &Bytes,
+        bytes: &AlignedVec,
         pk_indices: &PrimaryKeyIndices,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
@@ -829,7 +830,7 @@ impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
         let Some(bytes) = params.tx.get(&self.bound_key(params, value)?)? else {
             return Ok(IndexResult::Tuple(None));
         };
-        let tuple_id = TableCodec::decode_index(&bytes, &params.index_meta.pk_ty)?;
+        let tuple_id = TableCodec::decode_index(&bytes)?;
         let tuple = params
             .get_tuple_by_id(pk_indices, &tuple_id)?
             .ok_or(DatabaseError::TupleIdNotFound(tuple_id))?;
@@ -850,7 +851,7 @@ impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
 impl<T: Transaction> IndexImpl<T> for NormalIndexImpl {
     fn index_lookup(
         &self,
-        bytes: &Bytes,
+        bytes: &AlignedVec,
         pk_indices: &PrimaryKeyIndices,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
@@ -886,7 +887,7 @@ impl<T: Transaction> IndexImpl<T> for NormalIndexImpl {
 impl<T: Transaction> IndexImpl<T> for CompositeIndexImpl {
     fn index_lookup(
         &self,
-        bytes: &Bytes,
+        bytes: &AlignedVec,
         pk_indices: &PrimaryKeyIndices,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
@@ -950,7 +951,7 @@ impl<'a, T: Transaction + 'a> Iter for TupleIter<'a, T> {
                 &self.projections,
                 &self.tuple_columns,
                 &value,
-            );
+            )?;
 
             if let Some(num) = self.limit.as_mut() {
                 num.sub_assign(1);
@@ -1100,7 +1101,7 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
 }
 
 pub trait InnerIter {
-    fn try_next(&mut self) -> Result<Option<(Bytes, Bytes)>, DatabaseError>;
+    fn try_next(&mut self) -> Result<Option<(AlignedVec, AlignedVec)>, DatabaseError>;
 }
 
 pub trait Iter {

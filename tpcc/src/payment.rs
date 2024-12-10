@@ -62,7 +62,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         tx.execute(
             &statements[0],
             vec![
-                ("?1", DataValue::Decimal(Some(args.h_amount))),
+                ("?1", DataValue::from(args.h_amount)),
                 ("?2", DataValue::Int16(Some(args.w_id as i16))),
             ],
         )?
@@ -86,7 +86,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         tx.execute(
             &statements[2],
             vec![
-                ("?1", DataValue::Decimal(Some(args.h_amount))),
+                ("?1", DataValue::from(args.h_amount)),
                 ("?2", DataValue::Int16(Some(args.w_id as i16))),
                 ("?3", DataValue::Int8(Some(args.d_id as i8))),
             ],
@@ -195,7 +195,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                 tx.execute(
                     &statements[8],
                     vec![
-                        ("?1", DataValue::Decimal(Some(c_balance))),
+                        ("?1", DataValue::from(c_balance)),
                         ("?2", DataValue::from(c_data)),
                         ("?3", DataValue::Int16(Some(args.c_w_id as i16))),
                         ("?4", DataValue::Int8(Some(args.c_d_id as i8))),
@@ -208,7 +208,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                 tx.execute(
                     &statements[9],
                     vec![
-                        ("?1", DataValue::Decimal(Some(c_balance))),
+                        ("?1", DataValue::from(c_balance)),
                         ("?2", DataValue::Int16(Some(args.c_w_id as i16))),
                         ("?3", DataValue::Int8(Some(args.c_d_id as i8))),
                         ("?4", DataValue::Int32(Some(c_id))),
@@ -221,7 +221,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
             tx.execute(
                 &statements[9],
                 vec![
-                    ("?1", DataValue::Decimal(Some(c_balance))),
+                    ("?1", DataValue::from(c_balance)),
                     ("?2", DataValue::Int16(Some(args.c_w_id as i16))),
                     ("?3", DataValue::Int8(Some(args.c_d_id as i8))),
                     ("?4", DataValue::Int32(Some(c_id))),
@@ -240,7 +240,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                 ("?4", DataValue::Int8(Some(args.d_id as i8))),
                 ("?5", DataValue::Int16(Some(args.w_id as i16))),
                 ("?6", DataValue::from(&now.naive_utc())),
-                ("?7", DataValue::Decimal(Some(args.h_amount))),
+                ("?7", DataValue::from(args.h_amount)),
                 ("?8", DataValue::from(h_data)),
             ],
         )?

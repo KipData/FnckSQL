@@ -280,7 +280,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
                     ("?5", DataValue::Int32(Some(ol_i_id as i32))),
                     ("?6", DataValue::Int16(Some(ol_supply_w_id as i16))),
                     ("?7", DataValue::Int8(Some(ol_quantity as i8))),
-                    ("?8", DataValue::Decimal(Some(ol_amount.round_dp(2)))),
+                    ("?8", DataValue::from(ol_amount.round_dp(2))),
                     ("?9", DataValue::from(ol_dist_info)),
                 ],
             )?

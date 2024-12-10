@@ -7,6 +7,7 @@ use comfy_table::{Cell, Table};
 use itertools::Itertools;
 use std::sync::Arc;
 use std::sync::LazyLock;
+use rkyv::util::AlignedVec;
 
 pub static EMPTY_TUPLE: LazyLock<Tuple> = LazyLock::new(|| Tuple {
     pk_indices: None,
@@ -68,7 +69,7 @@ impl Tuple {
         projections: &[usize],
         schema: &Schema,
         bytes: &[u8],
-    ) -> Self {
+    ) -> Result<Self, DatabaseError> {
         debug_assert!(!schema.is_empty());
         debug_assert_eq!(projections.len(), schema.len());
 
@@ -78,7 +79,9 @@ impl Tuple {
 
         let values_len = table_types.len();
         let mut tuple_values = Vec::with_capacity(values_len);
-        let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
+        let mut bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
+        // for align 2
+        bits_len += (2 - bits_len % 2) % 2;
 
         let mut projection_i = 0;
         let mut pos = bits_len;
@@ -92,34 +95,26 @@ impl Tuple {
                     tuple_values.push(DataValue::none(logic_type));
                     projection_i += 1;
                 }
-            } else if let Some(len) = logic_type.raw_len() {
-                /// fixed length (e.g.: int)
-                if projections[projection_i] == i {
-                    tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
-                    projection_i += 1;
-                }
-                pos += len;
             } else {
-                /// variable length (e.g.: varchar)
-                let len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
-                pos += 4;
-                if projections[projection_i] == i {
-                    tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
+                let aligned_len = logic_type.aligned_len();
+                pos += (aligned_len - pos % aligned_len) % aligned_len;
+
+                if let Some(value) = DataValue::from_raw(bytes, logic_type, &mut pos, projections[projection_i] == i)? {
+                    tuple_values.push(value);
                     projection_i += 1;
                 }
-                pos += len;
             }
         }
-        Tuple {
+        Ok(Tuple {
             pk_indices: Some(pk_indices.clone()),
             values: tuple_values,
             id_buf: None,
-        }
+        })
     }
 
     /// e.g.: bits(u8)..|data_0(len for utf8_1)|utf8_0|data_1|
     /// Tips: all len is u32
-    pub fn serialize_to(&self, types: &[LogicalType]) -> Result<Vec<u8>, DatabaseError> {
+    pub fn serialize_to(&self, types: &[LogicalType]) -> Result<AlignedVec, DatabaseError> {
         debug_assert_eq!(self.values.len(), types.len());
 
         fn flip_bit(bits: u8, i: usize) -> u8 {
@@ -127,24 +122,24 @@ impl Tuple {
         }
 
         let values_len = self.values.len();
-        let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
-        let mut bytes = vec![0_u8; bits_len];
+        let mut bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
+        let mut bytes = AlignedVec::with_capacity(bits_len);
+
+        // for align 2
+        bits_len += (2 - bits_len % 2) % 2;
+        bytes.resize(bits_len, 0u8);
 
         for (i, value) in self.values.iter().enumerate() {
             if value.is_null() {
                 bytes[i / BITS_MAX_INDEX] = flip_bit(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX);
             } else {
-                let logical_type = &types[i];
-                let value_len = value.to_raw(&mut bytes)?;
+                // for align value, e.g. int32 need align 4
+                let aligned_len = types[i].aligned_len();
+                bytes.resize(bytes.len() + (aligned_len - bytes.len() % aligned_len) % aligned_len, 0u8);
 
-                if logical_type.raw_len().is_none() {
-                    let index = bytes.len() - value_len;
-
-                    bytes.splice(index..index, (value_len as u32).to_le_bytes());
-                }
+                value.to_raw::<AlignedVec>(&mut bytes)?;
             }
         }
-
         Ok(bytes)
     }
 
@@ -183,7 +178,7 @@ pub fn create_table<I: ResultIter>(iter: I) -> Result<Table, DatabaseError> {
 mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
     use crate::types::tuple::Tuple;
-    use crate::types::value::{DataValue, Utf8Type};
+    use crate::types::value::{DataValue, DecimalWrapper, Utf8Type};
     use crate::types::LogicalType;
     use itertools::Itertools;
     use rust_decimal::Decimal;
@@ -290,7 +285,7 @@ mod tests {
                 "c16".to_string(),
                 false,
                 ColumnDesc::new(
-                    LogicalType::Char(1, CharLengthUnits::Octets),
+                    LogicalType::Char(10, CharLengthUnits::Octets),
                     None,
                     false,
                     None,
@@ -319,7 +314,7 @@ mod tests {
                     DataValue::Boolean(Some(true)),
                     DataValue::Date64(Some(0)),
                     DataValue::Date32(Some(0)),
-                    DataValue::Decimal(Some(Decimal::new(0, 3))),
+                    DataValue::Decimal(Some(DecimalWrapper::from(Decimal::new(0, 3)))),
                     DataValue::Utf8 {
                         value: Some("K".to_string()),
                         ty: Utf8Type::Fixed(1),
@@ -332,7 +327,7 @@ mod tests {
                     },
                     DataValue::Utf8 {
                         value: Some("K".to_string()),
-                        ty: Utf8Type::Fixed(1),
+                        ty: Utf8Type::Fixed(10),
                         unit: CharLengthUnits::Octets,
                     },
                 ],
@@ -369,7 +364,7 @@ mod tests {
                     },
                     DataValue::Utf8 {
                         value: None,
-                        ty: Utf8Type::Fixed(1),
+                        ty: Utf8Type::Fixed(10),
                         unit: CharLengthUnits::Octets,
                     },
                 ],
@@ -381,22 +376,27 @@ mod tests {
             .collect_vec();
         let columns = Arc::new(columns);
 
-        let tuple_0 = Tuple::deserialize_from(
-            &types,
-            &Arc::new(vec![0]),
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-            &columns,
-            &tuples[0].serialize_to(&types).unwrap(),
-        );
-        let tuple_1 = Tuple::deserialize_from(
-            &types,
-            &Arc::new(vec![0]),
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-            &columns,
-            &tuples[1].serialize_to(&types).unwrap(),
-        );
+        {
+            let tuple_0 = Tuple::deserialize_from(
+                &types,
+                &Arc::new(vec![0]),
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                &columns,
+                &tuples[0].serialize_to(&types).unwrap(),
+            ).unwrap();
 
-        assert_eq!(tuples[0], tuple_0);
-        assert_eq!(tuples[1], tuple_1);
+            assert_eq!(tuples[0], tuple_0);
+        }
+        {
+            let tuple_1 = Tuple::deserialize_from(
+                &types,
+                &Arc::new(vec![0]),
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                &columns,
+                &tuples[1].serialize_to(&types).unwrap(),
+            ).unwrap();
+
+            assert_eq!(tuples[1], tuple_1);
+        }
     }
 }

@@ -35,7 +35,6 @@ harness = false
 [dependencies]
 ahash                 = { version = "0.8" }
 bincode               = { version = "1" }
-bytes                 = { version = "1" }
 chrono                = { version = "0.4" }
 comfy-table           = { version = "7" }
 csv                   = { version = "1" }
@@ -47,8 +46,9 @@ paste                 = { version = "1" }
 parking_lot           = { version = "0.12", features = ["arc_lock"] }
 petgraph              = { version = "0.6" }
 regex                 = { version = "1" }
+rkyv                  = { version = "0.8" }
 rocksdb               = { version = "0.22" }
-rust_decimal          = { version = "1" }
+rust_decimal          = { version = "1", features = ["rkyv"] }
 serde                 = { version = "1", features = ["derive", "rc"] }
 fnck_sql_serde_macros = { version = "0.1.0", path = "fnck_sql_serde_macros" }
 siphasher             = { version = "1", features = ["serde"] }

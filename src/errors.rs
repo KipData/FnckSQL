@@ -121,6 +121,12 @@ pub enum DatabaseError {
     PrimaryKeyNotFound,
     #[error("primaryKey only allows single or multiple values")]
     PrimaryKeyTooManyLayers,
+    #[error("rkyv: {0}")]
+    Rkyv(
+        #[source]
+        #[from]
+        rkyv::rancor::Error,
+    ),
     #[error("rocksdb: {0}")]
     RocksDB(
         #[source]

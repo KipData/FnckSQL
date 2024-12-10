@@ -9,12 +9,18 @@ use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
 use sqlparser::ast::CharLengthUnits;
 use std::cmp::Ordering;
-use std::fmt::Formatter;
 use std::hash::Hash;
-use std::io::Write;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{cmp, fmt, mem};
+use std::fmt::Formatter;
+use std::ops::Deref;
+use rkyv::api::high::to_bytes_in;
+use rkyv::{to_bytes, Archive, Deserialize, Serialize};
+use rkyv::primitive::{ArchivedF32, ArchivedF64, ArchivedI16, ArchivedI32, ArchivedI64, ArchivedU16, ArchivedU32, ArchivedU64};
+use rkyv::rancor::Error;
+use rkyv::ser::Writer;
+use rkyv::string::ArchivedString;
 
 pub static NULL_VALUE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Null);
 
@@ -30,13 +36,13 @@ pub const TIME_FMT: &str = "%H:%M:%S";
 const ENCODE_GROUP_SIZE: usize = 8;
 const ENCODE_MARKER: u8 = 0xFF;
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum Utf8Type {
     Variable(Option<u32>),
     Fixed(u32),
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum DataValue {
     Null,
     Boolean(Option<bool>),
@@ -60,9 +66,49 @@ pub enum DataValue {
     /// Date stored as a signed 64bit int timestamp since UNIX epoch 1970-01-01
     Date64(Option<i64>),
     Time(Option<u32>),
-    Decimal(Option<Decimal>),
+    Decimal(Option<DecimalWrapper>),
     /// (values, is_upper)
     Tuple(Option<(Vec<DataValue>, bool)>),
+}
+
+#[derive(Clone, Copy, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+pub struct DecimalWrapper {
+    #[rkyv(with = RkyvDecimal)]
+    value: Decimal,
+}
+
+impl fmt::Display for DecimalWrapper {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.value.fmt(f)
+    }
+}
+
+impl Deref for DecimalWrapper {
+    type Target = Decimal;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl From<Decimal> for DecimalWrapper {
+    fn from(value: Decimal) -> Self {
+        Self { value }
+    }
+}
+
+// https://github.com/paupino/rust-decimal/blob/master/examples/rkyv-remote.rs
+#[derive(Archive, Serialize, Deserialize)]
+#[rkyv(remote = Decimal)]
+struct RkyvDecimal {
+    #[rkyv(getter = Decimal::serialize)]
+    bytes: [u8; 16],
+}
+
+impl From<RkyvDecimal> for Decimal {
+    fn from(RkyvDecimal { bytes }: RkyvDecimal) -> Self {
+        Self::deserialize(bytes)
+    }
 }
 
 macro_rules! generate_get_option {
@@ -92,8 +138,7 @@ generate_get_option!(DataValue,
     u8 : UInt8(Option<u8>),
     u16 : UInt16(Option<u16>),
     u32 : UInt32(Option<u32>),
-    u64 : UInt64(Option<u64>),
-    decimal : Decimal(Option<Decimal>)
+    u64 : UInt64(Option<u64>)
 );
 
 impl PartialEq for DataValue {
@@ -278,6 +323,14 @@ macro_rules! numeric_to_boolean {
 }
 
 impl DataValue {
+    pub fn decimal(&self) -> Option<Decimal> {
+        if let DataValue::Decimal(Some(value)) = self {
+            Some(*value.deref())
+        } else {
+            None
+        }
+    }
+
     pub fn utf8(&self) -> Option<String> {
         if let DataValue::Utf8 {
             value: Some(val), ..
@@ -316,7 +369,7 @@ impl DataValue {
     pub(crate) fn check_string_len(string: &str, len: usize, unit: CharLengthUnits) -> bool {
         match unit {
             CharLengthUnits::Characters => string.chars().count() > len,
-            CharLengthUnits::Octets => string.len() > len,
+            CharLengthUnits::Octets => string.as_bytes().len() > len,
         }
     }
 
@@ -475,7 +528,7 @@ impl DataValue {
             LogicalType::Date => DataValue::Date32(Some(UNIX_DATETIME.num_days_from_ce())),
             LogicalType::DateTime => DataValue::Date64(Some(UNIX_DATETIME.and_utc().timestamp())),
             LogicalType::Time => DataValue::Time(Some(UNIX_TIME.num_seconds_from_midnight())),
-            LogicalType::Decimal(_, _) => DataValue::Decimal(Some(Decimal::new(0, 0))),
+            LogicalType::Decimal(_, _) => DataValue::Decimal(Some(DecimalWrapper::from(Decimal::new(0, 0)))),
             LogicalType::Tuple(types) => {
                 let values = types.iter().map(DataValue::init).collect_vec();
 
@@ -484,103 +537,107 @@ impl DataValue {
         }
     }
 
-    pub fn to_raw<W: Write>(&self, writer: &mut W) -> Result<usize, DatabaseError> {
+    pub fn to_raw<W>(&self, writer: *mut W) -> Result<(), DatabaseError>
+    where
+        W: Writer<Error>,
+    {
         match self {
             DataValue::Null => (),
             DataValue::Boolean(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&[*v as u8])?;
-                    return Ok(1);
+                    unsafe { &mut *writer }.write(&[*v as u8])?;
+                    return Ok(());
                 }
             }
             DataValue::Float32(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_ne_bytes())?;
-                    return Ok(4);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Float64(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_ne_bytes())?;
-                    return Ok(8);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Int8(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(1);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Int16(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(2);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Int32(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(4);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Int64(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(8);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::UInt8(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(1);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::UInt16(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(2);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::UInt32(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(4);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::UInt64(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(8);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Utf8 { value: v, ty, unit } => {
                 if let Some(v) = v {
                     match ty {
                         Utf8Type::Variable(_) => {
-                            let string_bytes = v.as_bytes();
-                            let len = string_bytes.len();
+                            let bytes = to_bytes::<Error>(v)?;
 
-                            writer.write_all(string_bytes)?;
-                            return Ok(len);
+                            to_bytes_in::<_, Error>(&(bytes.len() as u32), unsafe { &mut *writer })?;
+                            to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                            return Ok(());
                         }
                         Utf8Type::Fixed(len) => match unit {
                             CharLengthUnits::Characters => {
                                 let chars_len = *len as usize;
-                                let string_bytes =
-                                    format!("{:len$}", v, len = chars_len).into_bytes();
-                                let octets_len = string_bytes.len();
+                                let bytes =
+                                    to_bytes::<Error>(&format!("{:len$}", v, len = chars_len))?;
 
-                                writer.write_all(&string_bytes)?;
-                                return Ok(octets_len);
+                                to_bytes_in::<_, Error>(&(bytes.len() as u32), unsafe { &mut *writer })?;
+                                unsafe { &mut *writer }.write(&bytes)?;
+                                return Ok(());
                             }
                             CharLengthUnits::Octets => {
                                 let octets_len = *len as usize;
-                                let mut string_bytes = v.clone().into_bytes();
+                                let mut bytes =
+                                    to_bytes::<Error>(v)?;
+                                bytes.resize(octets_len, b' ');
+                                debug_assert_eq!(octets_len, bytes.len());
 
-                                string_bytes.resize(octets_len, b' ');
-                                debug_assert_eq!(octets_len, string_bytes.len());
-                                writer.write_all(&string_bytes)?;
-                                return Ok(octets_len);
+                                unsafe { &mut *writer }.write(&bytes)?;
+                                return Ok(());
                             }
                         },
                     }
@@ -588,111 +645,203 @@ impl DataValue {
             }
             DataValue::Date32(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(4);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Date64(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(8);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Time(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(4);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Decimal(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.serialize())?;
-                    return Ok(16);
+                    to_bytes_in::<_, Error>(v, unsafe { &mut *writer })?;
+                    return Ok(());
                 }
             }
             DataValue::Tuple(_) => unreachable!(),
         }
-        Ok(0)
+        Ok(())
     }
 
-    pub fn from_raw(bytes: &[u8], ty: &LogicalType) -> Self {
-        match ty {
+    pub fn from_raw(bytes: &[u8], ty: &LogicalType, pos: &mut usize, is_projection: bool) -> Result<Option<Self>, DatabaseError> {
+        let value = match ty {
             LogicalType::Invalid => panic!("invalid logical type"),
-            LogicalType::SqlNull => DataValue::Null,
-            LogicalType::Boolean => DataValue::Boolean(bytes.first().map(|v| *v != 0)),
-            LogicalType::Tinyint => DataValue::Int8(
-                (!bytes.is_empty()).then(|| i8::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::UTinyint => DataValue::UInt8(
-                (!bytes.is_empty()).then(|| u8::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Smallint => DataValue::Int16(
-                (!bytes.is_empty()).then(|| i16::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::USmallint => DataValue::UInt16(
-                (!bytes.is_empty()).then(|| u16::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Integer => DataValue::Int32(
-                (!bytes.is_empty()).then(|| i32::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::UInteger => DataValue::UInt32(
-                (!bytes.is_empty()).then(|| u32::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Bigint => DataValue::Int64(
-                (!bytes.is_empty()).then(|| i64::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::UBigint => DataValue::UInt64(
-                (!bytes.is_empty()).then(|| u64::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Float => DataValue::Float32((!bytes.is_empty()).then(|| {
-                let mut buf = [0; 4];
-                buf.copy_from_slice(bytes);
-                f32::from_ne_bytes(buf)
-            })),
-            LogicalType::Double => DataValue::Float64((!bytes.is_empty()).then(|| {
-                let mut buf = [0; 8];
-                buf.copy_from_slice(bytes);
-                f64::from_ne_bytes(buf)
-            })),
-            LogicalType::Char(len, unit) => {
+            LogicalType::SqlNull => {
+                if !is_projection {
+                    return Ok(None);
+                }
+                DataValue::Null
+            },
+            LogicalType::Boolean => {
+                *pos += 1;
+                if !is_projection {
+                    return Ok(None);
+                }
+                DataValue::Boolean(Some(bytes[*pos - 1] != 0))
+            },
+            LogicalType::Tinyint => {
+                *pos += 1;
+                if !is_projection {
+                    return Ok(None);
+                }
+                DataValue::Int8(Some(rkyv::access::<i8, Error>(&bytes[*pos - 1..*pos]).map(|v| *v)?))
+            },
+            LogicalType::UTinyint => {
+                *pos += 1;
+                if !is_projection {
+                    return Ok(None);
+                }
+                DataValue::UInt8(Some(rkyv::access::<u8, Error>(&bytes[*pos - 1..*pos]).map(|v| *v)?))
+            },
+            LogicalType::Smallint => {
+                *pos += 2;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedI16, Error>(&bytes[*pos - 2..*pos])?;
+                DataValue::Int16(Some(rkyv::deserialize::<_, Error>(archived)?))
+            },
+            LogicalType::USmallint => {
+                *pos += 2;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedU16, Error>(&bytes[*pos - 2..*pos])?;
+                DataValue::UInt16(Some(rkyv::deserialize::<_, Error>(archived)?))
+            },
+            LogicalType::Integer => {
+                *pos += 4;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedI32, Error>(&bytes[*pos - 4..*pos])?;
+                DataValue::Int32(Some(rkyv::deserialize::<_, Error>(archived)?))
+            },
+            LogicalType::UInteger => {
+                *pos += 4;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedU32, Error>(&bytes[*pos - 4..*pos])?;
+                DataValue::UInt32(Some(rkyv::deserialize::<_, Error>(archived)?))
+            },
+            LogicalType::Bigint => {
+                *pos += 8;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedI64, Error>(&bytes[*pos - 8..*pos])?;
+                DataValue::Int64(Some(rkyv::deserialize::<_, Error>(archived)?))
+            },
+            LogicalType::UBigint => {
+                *pos += 8;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedU64, Error>(&bytes[*pos - 8..*pos])?;
+                DataValue::UInt64(Some(rkyv::deserialize::<_, Error>(archived)?))
+            },
+            LogicalType::Float => {
+                *pos += 4;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedF32, Error>(&bytes[*pos - 4..*pos])?;
+                DataValue::Float32(Some(rkyv::deserialize::<_, Error>(archived)?))
+            },
+            LogicalType::Double => {
+                *pos += 8;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedF64, Error>(&bytes[*pos - 8..*pos])?;
+                DataValue::Float64(Some(rkyv::deserialize::<_, Error>(archived)?))
+            },
+            LogicalType::Char(ty_len, unit) => {
                 // https://dev.mysql.com/doc/refman/8.0/en/char.html#:~:text=If%20a%20given%20value%20is%20stored%20into%20the%20CHAR(4)%20and%20VARCHAR(4)%20columns%2C%20the%20values%20retrieved%20from%20the%20columns%20are%20not%20always%20the%20same%20because%20trailing%20spaces%20are%20removed%20from%20CHAR%20columns%20upon%20retrieval.%20The%20following%20example%20illustrates%20this%20difference%3A
-                let value = (!bytes.is_empty()).then(|| {
-                    let last_non_zero_index = match bytes.iter().rposition(|&x| x != b' ') {
-                        Some(index) => index + 1,
-                        None => 0,
-                    };
-                    String::from_utf8(bytes[0..last_non_zero_index].to_owned()).unwrap()
-                });
+                let len = match unit {
+                    CharLengthUnits::Characters => {
+                        *pos += 4;
+                        rkyv::from_bytes::<u32, Error>(&bytes[*pos - 4..*pos])?
+                    }
+                    CharLengthUnits::Octets => {
+                        *ty_len
+                    }
+                };
+                let bytes = &bytes[*pos..*pos + len as usize];
+                *pos += len as usize;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let last_non_zero_index = match bytes.iter().rposition(|&x| x != b' ') {
+                    Some(index) => index + 1,
+                    None => 0,
+                };
+                let archived = rkyv::access::<ArchivedString, Error>(&bytes[..last_non_zero_index])?;
+                let mut value = rkyv::deserialize::<String, Error>(archived)?;
+                value.truncate(value.trim_end().len());
                 DataValue::Utf8 {
-                    value,
-                    ty: Utf8Type::Fixed(*len),
+                    value: Some(value),
+                    ty: Utf8Type::Fixed(*ty_len),
                     unit: *unit,
                 }
             }
-            LogicalType::Varchar(len, unit) => {
-                let value =
-                    (!bytes.is_empty()).then(|| String::from_utf8(bytes.to_owned()).unwrap());
+            LogicalType::Varchar(ty_len, unit) => {
+                let len = rkyv::from_bytes::<u32, Error>(&bytes[*pos..*pos + 4])?;
+                *pos += 4;
+                let bytes = &bytes[*pos..*pos + len as usize];
+                *pos += len as usize;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedString, Error>(bytes)?;
                 DataValue::Utf8 {
-                    value,
-                    ty: Utf8Type::Variable(*len),
+                    value: Some(rkyv::deserialize::<String, Error>(archived)?),
+                    ty: Utf8Type::Variable(*ty_len),
                     unit: *unit,
                 }
             }
-            LogicalType::Date => DataValue::Date32(
-                (!bytes.is_empty()).then(|| i32::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::DateTime => DataValue::Date64(
-                (!bytes.is_empty()).then(|| i64::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Time => DataValue::Time(
-                (!bytes.is_empty()).then(|| u32::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Decimal(_, _) => DataValue::Decimal(
-                (!bytes.is_empty())
-                    .then(|| Decimal::deserialize(<[u8; 16]>::try_from(bytes).unwrap())),
-            ),
+            LogicalType::Date => {
+                *pos += 4;
+                if !is_projection {
+                    return Ok(None);
+                }
+                DataValue::Date32(Some(rkyv::from_bytes::<_, Error>(&bytes[*pos - 4..*pos])?))
+            },
+            LogicalType::DateTime => {
+                *pos += 8;
+                if !is_projection {
+                    return Ok(None);
+                }
+                DataValue::Date64(Some(rkyv::from_bytes::<_, Error>(&bytes[*pos - 8..*pos])?))
+            },
+            LogicalType::Time => {
+                *pos += 4;
+                if !is_projection {
+                    return Ok(None);
+                }
+                DataValue::Time(Some(rkyv::from_bytes::<_, Error>(&bytes[*pos - 4..*pos])?))
+            },
+            LogicalType::Decimal(_, _) => {
+                *pos += 16;
+                if !is_projection {
+                    return Ok(None);
+                }
+                let archived = rkyv::access::<ArchivedDecimalWrapper, Error>(&bytes[*pos - 16..*pos])?;
+                DataValue::Decimal(Some(rkyv::deserialize::<_, Error>(archived)?))
+            },
             LogicalType::Tuple(_) => unreachable!(),
-        }
+        };
+        Ok(Some(value))
     }
 
     pub fn logical_type(&self) -> LogicalType {
@@ -925,7 +1074,7 @@ impl DataValue {
                                 Decimal::from_f32(v).ok_or(DatabaseError::CastFail)?;
                             Self::decimal_round_f(option, &mut decimal);
 
-                            Ok::<Decimal, DatabaseError>(decimal)
+                            Ok::<DecimalWrapper, DatabaseError>(DecimalWrapper::from(decimal))
                         })
                         .transpose()?,
                 )),
@@ -948,7 +1097,7 @@ impl DataValue {
                                 Decimal::from_f64(v).ok_or(DatabaseError::CastFail)?;
                             Self::decimal_round_f(option, &mut decimal);
 
-                            Ok::<Decimal, DatabaseError>(decimal)
+                            Ok::<DecimalWrapper, DatabaseError>(DecimalWrapper::from(decimal))
                         })
                         .transpose()?,
                 )),
@@ -982,7 +1131,7 @@ impl DataValue {
                     let mut decimal = Decimal::from(v);
                     Self::decimal_round_i(option, &mut decimal);
 
-                    decimal
+                    DecimalWrapper::from(decimal)
                 }))),
                 LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
@@ -1015,7 +1164,7 @@ impl DataValue {
                     let mut decimal = Decimal::from(v);
                     Self::decimal_round_i(option, &mut decimal);
 
-                    decimal
+                    DecimalWrapper::from(decimal)
                 }))),
                 LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
@@ -1050,7 +1199,7 @@ impl DataValue {
                     let mut decimal = Decimal::from(v);
                     Self::decimal_round_i(option, &mut decimal);
 
-                    decimal
+                    DecimalWrapper::from(decimal)
                 }))),
                 LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
@@ -1085,7 +1234,7 @@ impl DataValue {
                     let mut decimal = Decimal::from(v);
                     Self::decimal_round_i(option, &mut decimal);
 
-                    decimal
+                    DecimalWrapper::from(decimal)
                 }))),
                 LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
@@ -1112,7 +1261,7 @@ impl DataValue {
                     let mut decimal = Decimal::from(v);
                     Self::decimal_round_i(option, &mut decimal);
 
-                    decimal
+                    DecimalWrapper::from(decimal)
                 }))),
                 LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
@@ -1141,7 +1290,7 @@ impl DataValue {
                     let mut decimal = Decimal::from(v);
                     Self::decimal_round_i(option, &mut decimal);
 
-                    decimal
+                    DecimalWrapper::from(decimal)
                 }))),
                 LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
@@ -1172,7 +1321,7 @@ impl DataValue {
                     let mut decimal = Decimal::from(v);
                     Self::decimal_round_i(option, &mut decimal);
 
-                    decimal
+                    DecimalWrapper::from(decimal)
                 }))),
                 LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
@@ -1205,7 +1354,7 @@ impl DataValue {
                     let mut decimal = Decimal::from(v);
                     Self::decimal_round_i(option, &mut decimal);
 
-                    decimal
+                    DecimalWrapper::from(decimal)
                 }))),
                 LogicalType::Boolean => numeric_to_boolean!(value),
                 _ => Err(DatabaseError::CastFail),
@@ -1287,7 +1436,7 @@ impl DataValue {
                     Ok(DataValue::Time(option))
                 }
                 LogicalType::Decimal(_, _) => Ok(DataValue::Decimal(
-                    value.map(|v| Decimal::from_str(&v)).transpose()?,
+                    value.map(|v| Decimal::from_str(&v).map(DecimalWrapper::from)).transpose()?,
                 )),
                 _ => Err(DatabaseError::CastFail),
             },
@@ -1512,7 +1661,18 @@ impl_scalar!(u8, UInt8);
 impl_scalar!(u16, UInt16);
 impl_scalar!(u32, UInt32);
 impl_scalar!(u64, UInt64);
-impl_scalar!(Decimal, Decimal);
+
+impl From<Decimal> for DataValue {
+    fn from(value: Decimal) -> Self {
+        DataValue::Decimal(Some(DecimalWrapper::from(value)))
+    }
+}
+
+impl From<Option<Decimal>> for DataValue {
+    fn from(value: Option<Decimal>) -> Self {
+        DataValue::Decimal(value.map(DecimalWrapper::from))
+    }
+}
 
 impl From<String> for DataValue {
     fn from(value: String) -> Self {
@@ -1641,7 +1801,7 @@ impl fmt::Display for DataValue {
             DataValue::Date32(e) => format_option!(f, e.and_then(DataValue::date_format))?,
             DataValue::Date64(e) => format_option!(f, e.and_then(DataValue::date_time_format))?,
             DataValue::Time(e) => format_option!(f, e.and_then(DataValue::time_format))?,
-            DataValue::Decimal(e) => format_option!(f, e.as_ref().map(DataValue::decimal_format))?,
+            DataValue::Decimal(e) => format_option!(f, e.as_ref().map(|v| DataValue::decimal_format(v.deref())))?,
             DataValue::Tuple(e) => {
                 write!(f, "(")?;
                 if let Some((values, _)) = e {

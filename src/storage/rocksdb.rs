@@ -1,10 +1,12 @@
 use crate::errors::DatabaseError;
 use crate::storage::{InnerIter, Storage, Transaction};
-use bytes::Bytes;
 use rocksdb::{DBIteratorWithThreadMode, Direction, IteratorMode, OptimisticTransactionDB};
 use std::collections::Bound;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Arc;
+use rkyv::util::AlignedVec;
+use crate::storage::table_codec::Bytes;
 
 #[derive(Clone)]
 pub struct RocksStorage {
@@ -51,11 +53,17 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
     where
         Self: 'iter;
 
-    fn get(&self, key: &[u8]) -> Result<Option<Bytes>, DatabaseError> {
-        Ok(self.tx.get(key)?.map(Bytes::from))
+    fn get(&self, key: &[u8]) -> Result<Option<AlignedVec>, DatabaseError> {
+        if let Some(value) = self.tx.get(key)? {
+            let mut aligned_value: AlignedVec = AlignedVec::with_capacity(value.len());
+            aligned_value.extend_from_reader(&mut Cursor::new(value))?;
+            Ok(Some(aligned_value))
+        } else {
+            Ok(None)
+        }
     }
 
-    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), DatabaseError> {
+    fn set(&mut self, key: Bytes, value: AlignedVec) -> Result<(), DatabaseError> {
         self.tx.put(key, value)?;
 
         Ok(())
@@ -105,7 +113,7 @@ pub struct RocksIter<'txn, 'iter> {
 }
 
 impl InnerIter for RocksIter<'_, '_> {
-    fn try_next(&mut self) -> Result<Option<(Bytes, Bytes)>, DatabaseError> {
+    fn try_next(&mut self) -> Result<Option<(AlignedVec, AlignedVec)>, DatabaseError> {
         for result in self.iter.by_ref() {
             let (key, value) = result?;
             let upper_bound_check = match &self.upper {
@@ -124,7 +132,13 @@ impl InnerIter for RocksIter<'_, '_> {
                 Bound::Unbounded => true,
             };
             if lower_bound_check {
-                return Ok(Some((Bytes::from(key), Bytes::from(value))));
+                let mut aligned_key = AlignedVec::with_capacity(key.len());
+                aligned_key.extend_from_reader(&mut Cursor::new(&key))?;
+
+                let mut aligned_value = AlignedVec::with_capacity(value.len());
+                aligned_value.extend_from_reader(&mut Cursor::new(&value))?;
+
+                return Ok(Some((aligned_key, aligned_value)));
             }
         }
         Ok(None)

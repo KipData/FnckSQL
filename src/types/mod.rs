@@ -94,6 +94,15 @@ impl LogicalType {
         }
     }
 
+    pub(crate) fn aligned_len(&self) -> usize {
+        let raw_len = self.raw_len().unwrap_or(8);
+        if raw_len > 4 {
+            raw_len & !3
+        } else {
+            raw_len
+        }
+    }
+
     pub fn raw_len(&self) -> Option<usize> {
         match self {
             LogicalType::SqlNull => Some(0),
@@ -384,6 +393,9 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                 if let Some(sqlparser::ast::CharacterLength { length, unit }) = char_len {
                     len = cmp::max(len, length);
                     char_unit = unit;
+                }
+                if matches!(char_unit, Some(CharLengthUnits::Octets)) && len < 8 {
+                    return Err(DatabaseError::UnsupportedStmt("The length of Octets for Char must be at least 8".to_string()))
                 }
                 Ok(LogicalType::Char(
                     len as u32,

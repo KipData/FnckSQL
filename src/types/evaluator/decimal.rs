@@ -2,6 +2,8 @@ use crate::types::evaluator::BinaryEvaluator;
 use crate::types::evaluator::DataValue;
 use serde::{Deserialize, Serialize};
 use std::hint;
+use std::ops::Deref;
+use crate::types::value::DecimalWrapper;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub struct DecimalPlusBinaryEvaluator;
@@ -40,11 +42,11 @@ impl BinaryEvaluator for DecimalPlusBinaryEvaluator {
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 + v2)
+            Some(v1.deref() + v2.deref())
         } else {
             None
         };
-        DataValue::Decimal(value)
+        DataValue::Decimal(value.map(DecimalWrapper::from))
     }
 }
 #[typetag::serde]
@@ -61,11 +63,11 @@ impl BinaryEvaluator for DecimalMinusBinaryEvaluator {
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 - v2)
+            Some(v1.deref() - v2.deref())
         } else {
             None
         };
-        DataValue::Decimal(value)
+        DataValue::Decimal(value.map(DecimalWrapper::from))
     }
 }
 #[typetag::serde]
@@ -82,11 +84,11 @@ impl BinaryEvaluator for DecimalMultiplyBinaryEvaluator {
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 * v2)
+            Some(v1.deref() * v2.deref())
         } else {
             None
         };
-        DataValue::Decimal(value)
+        DataValue::Decimal(value.map(DecimalWrapper::from))
     }
 }
 #[typetag::serde]
@@ -103,11 +105,11 @@ impl BinaryEvaluator for DecimalDivideBinaryEvaluator {
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 / v2)
+            Some(v1.deref() / v2.deref())
         } else {
             None
         };
-        DataValue::Decimal(value)
+        DataValue::Decimal(value.map(DecimalWrapper::from))
     }
 }
 #[typetag::serde]
@@ -250,10 +252,10 @@ impl BinaryEvaluator for DecimalModBinaryEvaluator {
             _ => unsafe { hint::unreachable_unchecked() },
         };
         let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 % v2)
+            Some(v1.deref() % v2.deref())
         } else {
             None
         };
-        DataValue::Decimal(value)
+        DataValue::Decimal(value.map(DecimalWrapper::from))
     }
 }
