@@ -9,13 +9,12 @@ use crate::errors::DatabaseError;
 use crate::expression::range_detacher::Range;
 use crate::optimizer::core::statistics_meta::{StatisticMetaLoader, StatisticsMeta};
 use crate::serdes::ReferenceTables;
-use crate::storage::table_codec::TableCodec;
+use crate::storage::table_codec::{Bytes, TableCodec};
 use crate::types::index::{Index, IndexId, IndexMetaRef, IndexType};
 use crate::types::tuple::{Tuple, TupleId};
 use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use crate::utils::lru::SharedLruCache;
-use bytes::Bytes;
 use itertools::Itertools;
 use std::collections::Bound;
 use std::io::Cursor;
@@ -64,8 +63,9 @@ pub trait Transaction: Sized {
         let pk_indices = table.primary_keys_indices();
         let table_types = table.types();
         if columns.is_empty() {
-            let (i, column) = &table.primary_keys()[0];
-            columns.push((*i, column.clone()));
+            for (i, column) in table.primary_keys() {
+                columns.push((*i, column.clone()));
+            }
         }
         let mut tuple_columns = Vec::with_capacity(columns.len());
         let mut projections = Vec::with_capacity(columns.len());
@@ -535,7 +535,7 @@ pub trait Transaction: Sized {
         // Tips: only `Column`, `IndexMeta`, `TableMeta`
         while let Some((key, value)) = column_iter.try_next().ok().flatten() {
             if key.starts_with(&table_min) {
-                let mut cursor = Cursor::new(value.as_ref());
+                let mut cursor = Cursor::new(value);
                 columns.push(TableCodec::decode_column::<Self, _>(
                     &mut cursor,
                     &reference_tables,
@@ -693,15 +693,18 @@ impl<T: Transaction> IndexImplParams<'_, T> {
     ) -> Result<Option<Tuple>, DatabaseError> {
         let key = TableCodec::encode_tuple_key(self.table_name, tuple_id)?;
 
-        Ok(self.tx.get(&key)?.map(|bytes| {
-            TableCodec::decode_tuple(
-                &self.table_types,
-                pk_indices,
-                &self.projections,
-                &self.tuple_schema_ref,
-                &bytes,
-            )
-        }))
+        self.tx
+            .get(&key)?
+            .map(|bytes| {
+                TableCodec::decode_tuple(
+                    &self.table_types,
+                    pk_indices,
+                    &self.projections,
+                    &self.tuple_schema_ref,
+                    &bytes,
+                )
+            })
+            .transpose()
     }
 }
 
@@ -760,13 +763,13 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
         pk_indices: &PrimaryKeyIndices,
         params: &IndexImplParams<T>,
     ) -> Result<Tuple, DatabaseError> {
-        Ok(TableCodec::decode_tuple(
+        TableCodec::decode_tuple(
             &params.table_types,
             pk_indices,
             &params.projections,
             &params.tuple_schema_ref,
             bytes,
-        ))
+        )
     }
 
     fn eq_to_res<'a>(
@@ -786,7 +789,8 @@ impl<T: Transaction> IndexImpl<T> for PrimaryKeyIndexImpl {
                     &params.tuple_schema_ref,
                     &bytes,
                 )
-            });
+            })
+            .transpose()?;
         Ok(IndexResult::Tuple(tuple))
     }
 
@@ -804,7 +808,7 @@ fn secondary_index_lookup<T: Transaction>(
     pk_indices: &PrimaryKeyIndices,
     params: &IndexImplParams<T>,
 ) -> Result<Tuple, DatabaseError> {
-    let tuple_id = TableCodec::decode_index(bytes, &params.index_meta.pk_ty)?;
+    let tuple_id = TableCodec::decode_index(bytes)?;
     params
         .get_tuple_by_id(pk_indices, &tuple_id)?
         .ok_or(DatabaseError::TupleIdNotFound(tuple_id))
@@ -829,7 +833,7 @@ impl<T: Transaction> IndexImpl<T> for UniqueIndexImpl {
         let Some(bytes) = params.tx.get(&self.bound_key(params, value)?)? else {
             return Ok(IndexResult::Tuple(None));
         };
-        let tuple_id = TableCodec::decode_index(&bytes, &params.index_meta.pk_ty)?;
+        let tuple_id = TableCodec::decode_index(&bytes)?;
         let tuple = params
             .get_tuple_by_id(pk_indices, &tuple_id)?
             .ok_or(DatabaseError::TupleIdNotFound(tuple_id))?;
@@ -950,7 +954,7 @@ impl<'a, T: Transaction + 'a> Iter for TupleIter<'a, T> {
                 &self.projections,
                 &self.tuple_columns,
                 &value,
-            );
+            )?;
 
             if let Some(num) = self.limit.as_mut() {
                 num.sub_assign(1);

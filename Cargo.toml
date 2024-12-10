@@ -35,11 +35,10 @@ harness = false
 [dependencies]
 ahash                 = { version = "0.8" }
 bincode               = { version = "1" }
-bytes                 = { version = "1" }
+byteorder             = { version = "1" }
 chrono                = { version = "0.4" }
 comfy-table           = { version = "7" }
 csv                   = { version = "1" }
-encode_unicode        = { version = "1" }
 dirs                  = { version = "5" }
 itertools             = { version = "0.12" }
 ordered-float         = { version = "4" }
@@ -68,10 +67,8 @@ tokio                 = { version = "1.36", features = ["full"], optional = true
 
 
 [dev-dependencies]
-cargo-tarpaulin       = { version = "0.27" }
 criterion             = { version = "0.5", features = ["html_reports"] }
 indicatif             = { version = "0.17" }
-rand_distr            = { version = "0.4" }
 tempfile              = { version = "3.10" }
 # Benchmark
 sqlite                = { version = "0.34" }

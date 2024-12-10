@@ -4,7 +4,7 @@ use crate::types::LogicalType;
 use chrono::ParseError;
 use sqlparser::parser::ParserError;
 use std::num::{ParseFloatError, ParseIntError, TryFromIntError};
-use std::str::ParseBoolError;
+use std::str::{ParseBoolError, Utf8Error};
 use std::string::FromUtf8Error;
 
 #[derive(thiserror::Error, Debug)]
@@ -161,6 +161,12 @@ pub enum DatabaseError {
     UnsupportedBinaryOperator(LogicalType, BinaryOperator),
     #[error("unsupported statement: {0}")]
     UnsupportedStmt(String),
+    #[error("utf8: {0}")]
+    Utf8(
+        #[source]
+        #[from]
+        Utf8Error,
+    ),
     #[error("values length not match, expect {0}, got {1}")]
     ValuesLenMismatch(usize, usize),
     #[error("the view already exists")]

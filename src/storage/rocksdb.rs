@@ -1,6 +1,6 @@
 use crate::errors::DatabaseError;
+use crate::storage::table_codec::Bytes;
 use crate::storage::{InnerIter, Storage, Transaction};
-use bytes::Bytes;
 use rocksdb::{DBIteratorWithThreadMode, Direction, IteratorMode, OptimisticTransactionDB};
 use std::collections::Bound;
 use std::path::PathBuf;
@@ -52,7 +52,7 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
         Self: 'iter;
 
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, DatabaseError> {
-        Ok(self.tx.get(key)?.map(Bytes::from))
+        Ok(self.tx.get(key)?)
     }
 
     fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), DatabaseError> {
@@ -124,7 +124,7 @@ impl InnerIter for RocksIter<'_, '_> {
                 Bound::Unbounded => true,
             };
             if lower_bound_check {
-                return Ok(Some((Bytes::from(key), Bytes::from(value))));
+                return Ok(Some((Vec::from(key), Vec::from(value))));
             }
         }
         Ok(None)

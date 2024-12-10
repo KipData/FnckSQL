@@ -1,10 +1,12 @@
 use crate::catalog::{ColumnRef, PrimaryKeyIndices};
 use crate::db::ResultIter;
 use crate::errors::DatabaseError;
+use crate::storage::table_codec::Bytes;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use comfy_table::{Cell, Table};
 use itertools::Itertools;
+use std::io::{Cursor, Seek, SeekFrom};
 use std::sync::Arc;
 use std::sync::LazyLock;
 
@@ -62,13 +64,14 @@ impl Tuple {
             .as_ref()
     }
 
+    #[inline]
     pub fn deserialize_from(
         table_types: &[LogicalType],
         pk_indices: &PrimaryKeyIndices,
         projections: &[usize],
         schema: &Schema,
         bytes: &[u8],
-    ) -> Self {
+    ) -> Result<Self, DatabaseError> {
         debug_assert!(!schema.is_empty());
         debug_assert_eq!(projections.len(), schema.len());
 
@@ -81,7 +84,7 @@ impl Tuple {
         let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
 
         let mut projection_i = 0;
-        let mut pos = bits_len;
+        let mut cursor = Cursor::new(&bytes[bits_len..]);
 
         for (i, logic_type) in table_types.iter().enumerate() {
             if projection_i >= values_len || projection_i > projections.len() - 1 {
@@ -92,34 +95,25 @@ impl Tuple {
                     tuple_values.push(DataValue::none(logic_type));
                     projection_i += 1;
                 }
-            } else if let Some(len) = logic_type.raw_len() {
-                /// fixed length (e.g.: int)
-                if projections[projection_i] == i {
-                    tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
-                    projection_i += 1;
-                }
-                pos += len;
             } else {
-                /// variable length (e.g.: varchar)
-                let len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
-                pos += 4;
-                if projections[projection_i] == i {
-                    tuple_values.push(DataValue::from_raw(&bytes[pos..pos + len], logic_type));
+                if let Some(value) =
+                    DataValue::from_raw(&mut cursor, logic_type, projections[projection_i] == i)?
+                {
+                    tuple_values.push(value);
                     projection_i += 1;
                 }
-                pos += len;
             }
         }
-        Tuple {
+        Ok(Tuple {
             pk_indices: Some(pk_indices.clone()),
             values: tuple_values,
             id_buf: None,
-        }
+        })
     }
 
     /// e.g.: bits(u8)..|data_0(len for utf8_1)|utf8_0|data_1|
     /// Tips: all len is u32
-    pub fn serialize_to(&self, types: &[LogicalType]) -> Result<Vec<u8>, DatabaseError> {
+    pub fn serialize_to(&self, types: &[LogicalType]) -> Result<Bytes, DatabaseError> {
         debug_assert_eq!(self.values.len(), types.len());
 
         fn flip_bit(bits: u8, i: usize) -> u8 {
@@ -129,22 +123,19 @@ impl Tuple {
         let values_len = self.values.len();
         let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
         let mut bytes = vec![0_u8; bits_len];
+        let null_bytes: *mut Vec<u8> = &mut bytes;
+        let mut value_bytes = Cursor::new(&mut bytes);
+        value_bytes.seek(SeekFrom::Start(bits_len as u64))?;
 
         for (i, value) in self.values.iter().enumerate() {
             if value.is_null() {
-                bytes[i / BITS_MAX_INDEX] = flip_bit(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX);
+                let null_bytes = unsafe { &mut *null_bytes };
+                null_bytes[i / BITS_MAX_INDEX] =
+                    flip_bit(null_bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX);
             } else {
-                let logical_type = &types[i];
-                let value_len = value.to_raw(&mut bytes)?;
-
-                if logical_type.raw_len().is_none() {
-                    let index = bytes.len() - value_len;
-
-                    bytes.splice(index..index, (value_len as u32).to_le_bytes());
-                }
+                value.to_raw(&mut value_bytes)?;
             }
         }
-
         Ok(bytes)
     }
 
@@ -290,7 +281,7 @@ mod tests {
                 "c16".to_string(),
                 false,
                 ColumnDesc::new(
-                    LogicalType::Char(1, CharLengthUnits::Octets),
+                    LogicalType::Char(10, CharLengthUnits::Octets),
                     None,
                     false,
                     None,
@@ -332,7 +323,7 @@ mod tests {
                     },
                     DataValue::Utf8 {
                         value: Some("K".to_string()),
-                        ty: Utf8Type::Fixed(1),
+                        ty: Utf8Type::Fixed(10),
                         unit: CharLengthUnits::Octets,
                     },
                 ],
@@ -369,7 +360,7 @@ mod tests {
                     },
                     DataValue::Utf8 {
                         value: None,
-                        ty: Utf8Type::Fixed(1),
+                        ty: Utf8Type::Fixed(10),
                         unit: CharLengthUnits::Octets,
                     },
                 ],
@@ -381,22 +372,29 @@ mod tests {
             .collect_vec();
         let columns = Arc::new(columns);
 
-        let tuple_0 = Tuple::deserialize_from(
-            &types,
-            &Arc::new(vec![0]),
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-            &columns,
-            &tuples[0].serialize_to(&types).unwrap(),
-        );
-        let tuple_1 = Tuple::deserialize_from(
-            &types,
-            &Arc::new(vec![0]),
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-            &columns,
-            &tuples[1].serialize_to(&types).unwrap(),
-        );
+        {
+            let tuple_0 = Tuple::deserialize_from(
+                &types,
+                &Arc::new(vec![0]),
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                &columns,
+                &tuples[0].serialize_to(&types).unwrap(),
+            )
+            .unwrap();
 
-        assert_eq!(tuples[0], tuple_0);
-        assert_eq!(tuples[1], tuple_1);
+            assert_eq!(tuples[0], tuple_0);
+        }
+        {
+            let tuple_1 = Tuple::deserialize_from(
+                &types,
+                &Arc::new(vec![0]),
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                &columns,
+                &tuples[1].serialize_to(&types).unwrap(),
+            )
+            .unwrap();
+
+            assert_eq!(tuples[1], tuple_1);
+        }
     }
 }
