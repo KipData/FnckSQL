@@ -312,10 +312,12 @@ mod test {
     use crate::planner::operator::Operator;
     use crate::planner::{Childrens, LogicalPlan};
     use crate::storage::rocksdb::RocksStorage;
+    use crate::storage::table_codec::BumpBytes;
     use crate::storage::Storage;
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use crate::utils::lru::SharedLruCache;
+    use bumpalo::Bump;
     use std::hash::RandomState;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -494,9 +496,10 @@ mod test {
                 executor.execute((&table_cache, &view_cache, &meta_cache), &mut transaction),
             )?;
 
+            let arena = Bump::new();
             assert_eq!(tuples.len(), 2);
             tuples.sort_by_key(|tuple| {
-                let mut bytes = Vec::new();
+                let mut bytes = BumpBytes::new_in(&arena);
                 tuple.values[0].memcomparable_encode(&mut bytes).unwrap();
                 bytes
             });

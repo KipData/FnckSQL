@@ -1,23 +1,28 @@
 use crate::errors::DatabaseError;
-use crate::execution::dql::sort::{radix_sort, NullableVec};
+use crate::execution::dql::sort::{radix_sort, BumpVec, NullableVec};
 use crate::expression::range_detacher::Range;
 use crate::expression::BinaryOperator;
 use crate::optimizer::core::cm_sketch::CountMinSketch;
+use crate::storage::table_codec::BumpBytes;
 use crate::types::evaluator::EvaluatorFactory;
 use crate::types::index::{IndexId, IndexMeta};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
+use bumpalo::Bump;
 use fnck_sql_serde_macros::ReferenceSerialization;
 use ordered_float::OrderedFloat;
 use std::collections::Bound;
 use std::{cmp, mem};
 
 pub struct HistogramBuilder {
+    arena: Bump,
     index_id: IndexId,
+    capacity: Option<usize>,
+    is_init: bool,
 
     null_count: usize,
-    values: NullableVec<(usize, DataValue)>,
-    sort_keys: Vec<(usize, Vec<u8>)>,
+    values: Option<NullableVec<'static, (usize, DataValue)>>,
+    sort_keys: Option<BumpVec<'static, (usize, BumpBytes<'static>)>>,
 
     value_index: usize,
 }
@@ -47,25 +52,56 @@ struct Bucket {
 }
 
 impl HistogramBuilder {
-    pub fn new(index_meta: &IndexMeta, capacity: Option<usize>) -> Result<Self, DatabaseError> {
-        Ok(Self {
-            index_id: index_meta.id,
-            null_count: 0,
-            values: capacity.map(NullableVec::with_capacity).unwrap_or_default(),
-            sort_keys: capacity.map(Vec::with_capacity).unwrap_or_default(),
-            value_index: 0,
-        })
+    #[allow(clippy::missing_transmute_annotations)]
+    pub(crate) fn init(&mut self) {
+        if self.is_init {
+            return;
+        }
+        let (values, sort_keys) = self
+            .capacity
+            .map(|capacity| {
+                (
+                    NullableVec::<(usize, DataValue)>::with_capacity(capacity, &self.arena),
+                    BumpVec::<(usize, BumpBytes<'static>)>::with_capacity_in(capacity, &self.arena),
+                )
+            })
+            .unwrap_or_else(|| (NullableVec::new(&self.arena), BumpVec::new_in(&self.arena)));
+
+        self.values = Some(unsafe { mem::transmute::<_, _>(values) });
+        self.sort_keys = Some(unsafe { mem::transmute::<_, _>(sort_keys) });
+        self.is_init = true;
     }
 
+    pub fn new(index_meta: &IndexMeta, capacity: Option<usize>) -> Self {
+        Self {
+            arena: Default::default(),
+            index_id: index_meta.id,
+            capacity,
+            is_init: false,
+            null_count: 0,
+            values: None,
+            sort_keys: None,
+            value_index: 0,
+        }
+    }
+
+    #[allow(clippy::missing_transmute_annotations)]
     pub fn append(&mut self, value: &DataValue) -> Result<(), DatabaseError> {
+        self.init();
         if value.is_null() {
             self.null_count += 1;
         } else {
-            let mut bytes = Vec::new();
+            let mut bytes = BumpBytes::new_in(&self.arena);
 
             value.memcomparable_encode(&mut bytes)?;
-            self.values.put((self.value_index, value.clone()));
-            self.sort_keys.push((self.value_index, bytes))
+            self.values
+                .as_mut()
+                .unwrap()
+                .put((self.value_index, value.clone()));
+            self.sort_keys
+                .as_mut()
+                .unwrap()
+                .push((self.value_index, unsafe { mem::transmute::<_, _>(bytes) }))
         }
 
         self.value_index += 1;
@@ -74,32 +110,33 @@ impl HistogramBuilder {
     }
 
     pub fn build(
-        self,
+        mut self,
         number_of_buckets: usize,
     ) -> Result<(Histogram, CountMinSketch<DataValue>), DatabaseError> {
-        if number_of_buckets > self.values.len() {
-            return Err(DatabaseError::TooManyBuckets(
-                number_of_buckets,
-                self.values.len(),
-            ));
+        self.init();
+        let values_len = self.values.as_ref().unwrap().len();
+        if number_of_buckets > values_len {
+            return Err(DatabaseError::TooManyBuckets(number_of_buckets, values_len));
         }
 
-        let mut sketch = CountMinSketch::new(self.values.len(), 0.95, 1.0);
+        let mut sketch = CountMinSketch::new(values_len, 0.95, 1.0);
         let HistogramBuilder {
+            arena,
             index_id,
             null_count,
-            mut values,
+            values,
             sort_keys,
             ..
         } = self;
+        let mut values = values.unwrap();
+        let sort_keys = sort_keys.unwrap();
         let mut buckets = Vec::with_capacity(number_of_buckets);
-        let values_len = values.len();
         let bucket_len = if values_len % number_of_buckets == 0 {
             values_len / number_of_buckets
         } else {
             (values_len + number_of_buckets) / number_of_buckets
         };
-        let sorted_indices = radix_sort(sort_keys);
+        let sorted_indices = radix_sort(sort_keys, &arena);
 
         for i in 0..number_of_buckets {
             let mut bucket = Bucket::empty();
@@ -134,6 +171,9 @@ impl HistogramBuilder {
             corr_xy_sum += i as f64 * ordinal as f64;
         }
         sketch.add(&DataValue::Null, self.null_count);
+
+        drop(values);
+        drop(arena);
 
         Ok((
             Histogram {
@@ -485,7 +525,7 @@ mod tests {
 
     #[test]
     fn test_sort_tuples_on_histogram() -> Result<(), DatabaseError> {
-        let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
+        let mut builder = HistogramBuilder::new(&index_meta(), Some(15));
 
         builder.append(&DataValue::Int32(Some(0)))?;
         builder.append(&DataValue::Int32(Some(1)))?;
@@ -551,7 +591,7 @@ mod tests {
 
     #[test]
     fn test_rev_sort_tuples_on_histogram() -> Result<(), DatabaseError> {
-        let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
+        let mut builder = HistogramBuilder::new(&index_meta(), Some(15));
 
         builder.append(&DataValue::Int32(Some(14)))?;
         builder.append(&DataValue::Int32(Some(13)))?;
@@ -615,7 +655,7 @@ mod tests {
 
     #[test]
     fn test_non_average_on_histogram() -> Result<(), DatabaseError> {
-        let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
+        let mut builder = HistogramBuilder::new(&index_meta(), Some(15));
 
         builder.append(&DataValue::Int32(Some(14)))?;
         builder.append(&DataValue::Int32(Some(13)))?;
@@ -674,7 +714,7 @@ mod tests {
 
     #[test]
     fn test_collect_count() -> Result<(), DatabaseError> {
-        let mut builder = HistogramBuilder::new(&index_meta(), Some(15))?;
+        let mut builder = HistogramBuilder::new(&index_meta(), Some(15));
 
         builder.append(&DataValue::Int32(Some(14)))?;
         builder.append(&DataValue::Int32(Some(13)))?;

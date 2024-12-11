@@ -77,7 +77,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                     builders.push((
                         index.id,
                         throw!(index.column_exprs(&table)),
-                        throw!(HistogramBuilder::new(index, None)),
+                        HistogramBuilder::new(index, None),
                     ));
                 }
 

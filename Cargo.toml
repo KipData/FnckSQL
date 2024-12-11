@@ -35,6 +35,7 @@ harness = false
 [dependencies]
 ahash                 = { version = "0.8" }
 bincode               = { version = "1" }
+bumpalo               = { version = "3", features = ["allocator-api2", "collections", "std"] }
 byteorder             = { version = "1" }
 chrono                = { version = "0.4" }
 comfy-table           = { version = "7" }

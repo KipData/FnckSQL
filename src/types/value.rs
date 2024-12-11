@@ -1,6 +1,6 @@
 use super::LogicalType;
 use crate::errors::DatabaseError;
-use crate::storage::table_codec::{BOUND_MAX_TAG, BOUND_MIN_TAG};
+use crate::storage::table_codec::{BumpBytes, BOUND_MAX_TAG, BOUND_MIN_TAG};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use chrono::format::{DelayedFormat, StrftimeItems};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
@@ -206,8 +206,8 @@ impl PartialOrd for DataValue {
 }
 
 macro_rules! encode_u {
-    ($b:ident, $u:expr) => {
-        $b.extend_from_slice(&$u.to_be_bytes())
+    ($writer:ident, $u:expr) => {
+        $writer.write_all(&$u.to_be_bytes())?
     };
 }
 
@@ -846,7 +846,7 @@ impl DataValue {
     //
     // Refer: https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format#memcomparable-format
     #[inline]
-    fn encode_bytes(b: &mut Vec<u8>, data: &[u8]) {
+    fn encode_bytes(b: &mut BumpBytes, data: &[u8]) {
         let d_len = data.len();
         let realloc_size = (d_len / ENCODE_GROUP_SIZE + 1) * (ENCODE_GROUP_SIZE + 1);
         Self::realloc_bytes(b, realloc_size);
@@ -871,7 +871,7 @@ impl DataValue {
     }
 
     #[inline]
-    fn realloc_bytes(b: &mut Vec<u8>, size: usize) {
+    fn realloc_bytes(b: &mut BumpBytes, size: usize) {
         let len = b.len();
 
         if size > len {
@@ -881,7 +881,7 @@ impl DataValue {
     }
 
     #[inline]
-    pub fn memcomparable_encode(&self, b: &mut Vec<u8>) -> Result<(), DatabaseError> {
+    pub fn memcomparable_encode(&self, b: &mut BumpBytes) -> Result<(), DatabaseError> {
         match self {
             DataValue::Int8(Some(v)) => encode_u!(b, *v as u8 ^ 0x80_u8),
             DataValue::Int16(Some(v)) => encode_u!(b, *v as u16 ^ 0x8000_u16),
@@ -1798,13 +1798,16 @@ impl fmt::Debug for DataValue {
 #[cfg(test)]
 mod test {
     use crate::errors::DatabaseError;
+    use crate::storage::table_codec::BumpBytes;
     use crate::types::value::DataValue;
+    use bumpalo::Bump;
 
     #[test]
     fn test_mem_comparable_int() -> Result<(), DatabaseError> {
-        let mut key_i8_1 = Vec::new();
-        let mut key_i8_2 = Vec::new();
-        let mut key_i8_3 = Vec::new();
+        let arena = Bump::new();
+        let mut key_i8_1 = BumpBytes::new_in(&arena);
+        let mut key_i8_2 = BumpBytes::new_in(&arena);
+        let mut key_i8_3 = BumpBytes::new_in(&arena);
 
         DataValue::Int8(Some(i8::MIN)).memcomparable_encode(&mut key_i8_1)?;
         DataValue::Int8(Some(-1_i8)).memcomparable_encode(&mut key_i8_2)?;
@@ -1815,9 +1818,9 @@ mod test {
         assert!(key_i8_1 < key_i8_2);
         assert!(key_i8_2 < key_i8_3);
 
-        let mut key_i16_1 = Vec::new();
-        let mut key_i16_2 = Vec::new();
-        let mut key_i16_3 = Vec::new();
+        let mut key_i16_1 = BumpBytes::new_in(&arena);
+        let mut key_i16_2 = BumpBytes::new_in(&arena);
+        let mut key_i16_3 = BumpBytes::new_in(&arena);
 
         DataValue::Int16(Some(i16::MIN)).memcomparable_encode(&mut key_i16_1)?;
         DataValue::Int16(Some(-1_i16)).memcomparable_encode(&mut key_i16_2)?;
@@ -1828,9 +1831,9 @@ mod test {
         assert!(key_i16_1 < key_i16_2);
         assert!(key_i16_2 < key_i16_3);
 
-        let mut key_i32_1 = Vec::new();
-        let mut key_i32_2 = Vec::new();
-        let mut key_i32_3 = Vec::new();
+        let mut key_i32_1 = BumpBytes::new_in(&arena);
+        let mut key_i32_2 = BumpBytes::new_in(&arena);
+        let mut key_i32_3 = BumpBytes::new_in(&arena);
 
         DataValue::Int32(Some(i32::MIN)).memcomparable_encode(&mut key_i32_1)?;
         DataValue::Int32(Some(-1_i32)).memcomparable_encode(&mut key_i32_2)?;
@@ -1841,9 +1844,9 @@ mod test {
         assert!(key_i32_1 < key_i32_2);
         assert!(key_i32_2 < key_i32_3);
 
-        let mut key_i64_1 = Vec::new();
-        let mut key_i64_2 = Vec::new();
-        let mut key_i64_3 = Vec::new();
+        let mut key_i64_1 = BumpBytes::new_in(&arena);
+        let mut key_i64_2 = BumpBytes::new_in(&arena);
+        let mut key_i64_3 = BumpBytes::new_in(&arena);
 
         DataValue::Int64(Some(i64::MIN)).memcomparable_encode(&mut key_i64_1)?;
         DataValue::Int64(Some(-1_i64)).memcomparable_encode(&mut key_i64_2)?;
@@ -1859,9 +1862,10 @@ mod test {
 
     #[test]
     fn test_mem_comparable_float() -> Result<(), DatabaseError> {
-        let mut key_f32_1 = Vec::new();
-        let mut key_f32_2 = Vec::new();
-        let mut key_f32_3 = Vec::new();
+        let arena = Bump::new();
+        let mut key_f32_1 = BumpBytes::new_in(&arena);
+        let mut key_f32_2 = BumpBytes::new_in(&arena);
+        let mut key_f32_3 = BumpBytes::new_in(&arena);
 
         DataValue::Float32(Some(f32::MIN)).memcomparable_encode(&mut key_f32_1)?;
         DataValue::Float32(Some(-1_f32)).memcomparable_encode(&mut key_f32_2)?;
@@ -1872,9 +1876,9 @@ mod test {
         assert!(key_f32_1 < key_f32_2);
         assert!(key_f32_2 < key_f32_3);
 
-        let mut key_f64_1 = Vec::new();
-        let mut key_f64_2 = Vec::new();
-        let mut key_f64_3 = Vec::new();
+        let mut key_f64_1 = BumpBytes::new_in(&arena);
+        let mut key_f64_2 = BumpBytes::new_in(&arena);
+        let mut key_f64_3 = BumpBytes::new_in(&arena);
 
         DataValue::Float64(Some(f64::MIN)).memcomparable_encode(&mut key_f64_1)?;
         DataValue::Float64(Some(-1_f64)).memcomparable_encode(&mut key_f64_2)?;
@@ -1890,9 +1894,10 @@ mod test {
 
     #[test]
     fn test_mem_comparable_tuple_lower() -> Result<(), DatabaseError> {
-        let mut key_tuple_1 = Vec::new();
-        let mut key_tuple_2 = Vec::new();
-        let mut key_tuple_3 = Vec::new();
+        let arena = Bump::new();
+        let mut key_tuple_1 = BumpBytes::new_in(&arena);
+        let mut key_tuple_2 = BumpBytes::new_in(&arena);
+        let mut key_tuple_3 = BumpBytes::new_in(&arena);
 
         DataValue::Tuple(Some((
             vec![
@@ -1932,9 +1937,10 @@ mod test {
 
     #[test]
     fn test_mem_comparable_tuple_upper() -> Result<(), DatabaseError> {
-        let mut key_tuple_1 = Vec::new();
-        let mut key_tuple_2 = Vec::new();
-        let mut key_tuple_3 = Vec::new();
+        let arena = Bump::new();
+        let mut key_tuple_1 = BumpBytes::new_in(&arena);
+        let mut key_tuple_2 = BumpBytes::new_in(&arena);
+        let mut key_tuple_3 = BumpBytes::new_in(&arena);
 
         DataValue::Tuple(Some((
             vec![

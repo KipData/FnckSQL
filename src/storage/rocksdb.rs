@@ -1,5 +1,5 @@
 use crate::errors::DatabaseError;
-use crate::storage::table_codec::Bytes;
+use crate::storage::table_codec::{BumpBytes, Bytes, TableCodec};
 use crate::storage::{InnerIter, Storage, Transaction};
 use rocksdb::{DBIteratorWithThreadMode, Direction, IteratorMode, OptimisticTransactionDB};
 use std::collections::Bound;
@@ -37,12 +37,14 @@ impl Storage for RocksStorage {
     fn transaction(&self) -> Result<Self::TransactionType<'_>, DatabaseError> {
         Ok(RocksTransaction {
             tx: self.inner.transaction(),
+            table_codec: Default::default(),
         })
     }
 }
 
 pub struct RocksTransaction<'db> {
     tx: rocksdb::Transaction<'db, OptimisticTransactionDB>,
+    table_codec: TableCodec,
 }
 
 impl<'txn> Transaction for RocksTransaction<'txn> {
@@ -51,16 +53,24 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
     where
         Self: 'iter;
 
+    #[inline]
+    fn table_codec(&self) -> *const TableCodec {
+        &self.table_codec
+    }
+
+    #[inline]
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>, DatabaseError> {
         Ok(self.tx.get(key)?)
     }
 
-    fn set(&mut self, key: Bytes, value: Bytes) -> Result<(), DatabaseError> {
+    #[inline]
+    fn set(&mut self, key: BumpBytes, value: BumpBytes) -> Result<(), DatabaseError> {
         self.tx.put(key, value)?;
 
         Ok(())
     }
 
+    #[inline]
     fn remove(&mut self, key: &[u8]) -> Result<(), DatabaseError> {
         self.tx.delete(key)?;
 
@@ -68,11 +78,13 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
     }
 
     // Tips: rocksdb has weak support for `Include` and `Exclude`, so precision will be lost
-    fn range(
-        &self,
-        min: Bound<Vec<u8>>,
-        max: Bound<Vec<u8>>,
-    ) -> Result<Self::IterType<'_>, DatabaseError> {
+    #[inline]
+    fn range<'a>(
+        &'a self,
+        min: Bound<BumpBytes<'a>>,
+        max: Bound<BumpBytes<'a>>,
+    ) -> Result<Self::IterType<'a>, DatabaseError> {
+        #[inline]
         fn bound_to_include(bound: Bound<&[u8]>) -> Option<&[u8]> {
             match bound {
                 Bound::Included(bytes) | Bound::Excluded(bytes) => Some(bytes),
@@ -80,7 +92,7 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
             }
         }
 
-        let lower = bound_to_include(min.as_ref().map(Vec::as_slice))
+        let lower = bound_to_include(min.as_ref().map(BumpBytes::as_slice))
             .map(|bytes| IteratorMode::From(bytes, Direction::Forward))
             .unwrap_or(IteratorMode::Start);
         let iter = self.tx.iterator(lower);
@@ -99,12 +111,13 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
 }
 
 pub struct RocksIter<'txn, 'iter> {
-    lower: Bound<Vec<u8>>,
-    upper: Bound<Vec<u8>>,
+    lower: Bound<BumpBytes<'iter>>,
+    upper: Bound<BumpBytes<'iter>>,
     iter: DBIteratorWithThreadMode<'iter, rocksdb::Transaction<'txn, OptimisticTransactionDB>>,
 }
 
 impl InnerIter for RocksIter<'_, '_> {
+    #[inline]
     fn try_next(&mut self) -> Result<Option<(Bytes, Bytes)>, DatabaseError> {
         for result in self.iter.by_ref() {
             let (key, value) = result?;
