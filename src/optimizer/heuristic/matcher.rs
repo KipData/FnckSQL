@@ -1,5 +1,4 @@
 use crate::optimizer::core::pattern::{Pattern, PatternChildrenPredicate, PatternMatcher};
-use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 
 /// Use pattern to determines which rule can be applied
@@ -30,10 +29,7 @@ impl PatternMatcher for HepMatcher<'_, '_> {
         match &self.pattern.children {
             PatternChildrenPredicate::Recursive => {
                 // check
-                for node_id in self
-                    .graph
-                    .nodes_iter(HepMatchOrder::TopDown, Some(self.start_id))
-                {
+                for node_id in self.graph.nodes_iter(Some(self.start_id)) {
                     if !(self.pattern.predicate)(self.graph.operator(node_id)) {
                         return false;
                     }

@@ -47,14 +47,16 @@ impl HepOptimizer {
         loader: Option<&StatisticMetaLoader<'_, T>>,
     ) -> Result<LogicalPlan, DatabaseError> {
         for ref batch in self.batches {
-            let mut batch_over = false;
-            let mut iteration = 1usize;
-
-            while iteration <= batch.strategy.max_iteration && !batch_over {
-                if Self::apply_batch(&mut self.graph, batch)? {
-                    iteration += 1;
-                } else {
-                    batch_over = true
+            match batch.strategy {
+                HepBatchStrategy::MaxTimes(max_iteration) => {
+                    for _ in 0..max_iteration {
+                        if !Self::apply_batch(&mut self.graph, batch)? {
+                            break;
+                        }
+                    }
+                }
+                HepBatchStrategy::LoopIfApplied => {
+                    while Self::apply_batch(&mut self.graph, batch)? {}
                 }
             }
         }
@@ -73,22 +75,21 @@ impl HepOptimizer {
     }
 
     fn apply_batch(
-        graph: &mut HepGraph,
-        HepBatch {
-            rules, strategy, ..
-        }: &HepBatch,
+        graph: *mut HepGraph,
+        HepBatch { rules, .. }: &HepBatch,
     ) -> Result<bool, DatabaseError> {
-        let before_version = graph.version;
+        let before_version = unsafe { &*graph }.version;
 
         for rule in rules {
-            for node_id in graph.nodes_iter(strategy.match_order, None) {
-                if Self::apply_rule(graph, rule, node_id)? {
+            // SAFETY: after successfully modifying the graph, the iterator is no longer used.
+            for node_id in unsafe { &*graph }.nodes_iter(None) {
+                if Self::apply_rule(unsafe { &mut *graph }, rule, node_id)? {
                     break;
                 }
             }
         }
 
-        Ok(before_version != graph.version)
+        Ok(before_version != unsafe { &*graph }.version)
     }
 
     fn apply_rule(

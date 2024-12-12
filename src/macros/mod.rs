@@ -93,11 +93,11 @@ macro_rules! scala_function {
         #[typetag::serde]
         impl ::fnck_sql::expression::function::scala::ScalarFunctionImpl for $struct_name {
             #[allow(unused_variables, clippy::redundant_closure_call)]
-            fn eval(&self, args: &[::fnck_sql::expression::ScalarExpression], tuple: &::fnck_sql::types::tuple::Tuple, schema: &[::fnck_sql::catalog::column::ColumnRef]) -> Result<::fnck_sql::types::value::DataValue, ::fnck_sql::errors::DatabaseError> {
+            fn eval(&self, args: &[::fnck_sql::expression::ScalarExpression], tuple: Option<(&::fnck_sql::types::tuple::Tuple, &[::fnck_sql::catalog::column::ColumnRef])>) -> Result<::fnck_sql::types::value::DataValue, ::fnck_sql::errors::DatabaseError> {
                 let mut _index = 0;
 
                 $closure($({
-                    let mut value = args[_index].eval(tuple, schema)?;
+                    let mut value = args[_index].eval(tuple)?;
                     _index += 1;
 
                     if value.logical_type() != $arg_ty {
@@ -184,7 +184,7 @@ macro_rules! table_function {
                 let mut _index = 0;
 
                 $closure($({
-                    let mut value = args[_index].eval(&::fnck_sql::types::tuple::EMPTY_TUPLE, &[])?;
+                    let mut value = args[_index].eval(None)?;
                     _index += 1;
 
                     if value.logical_type() != $arg_ty {

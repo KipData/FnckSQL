@@ -50,7 +50,8 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for SimpleAggExecutor {
                     let values: Vec<DataValue> = throw!(agg_calls
                         .iter()
                         .map(|expr| match expr {
-                            ScalarExpression::AggCall { args, .. } => args[0].eval(&tuple, &schema),
+                            ScalarExpression::AggCall { args, .. } =>
+                                args[0].eval(Some((&tuple, &schema))),
                             _ => unreachable!(),
                         })
                         .try_collect());

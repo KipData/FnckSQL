@@ -109,8 +109,7 @@ mod test {
                     unit: CharLengthUnits::Characters,
                 }),
             ],
-            &Tuple::new(None, vec![]),
-            &vec![],
+            None,
         )?;
 
         println!("{:?}", function);

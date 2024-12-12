@@ -9,8 +9,8 @@ use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{Schema, Tuple};
 use crate::types::value::{DataValue, NULL_VALUE};
-use crate::utils::bit_vector::BitVector;
 use ahash::{HashMap, HashMapExt};
+use fixedbitset::FixedBitSet;
 use itertools::Itertools;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
@@ -49,7 +49,7 @@ impl HashJoin {
         let mut values = Vec::with_capacity(on_keys.len());
 
         for expr in on_keys {
-            values.push(expr.eval(tuple, schema)?);
+            values.push(expr.eval(Some((tuple, schema)))?);
         }
         Ok(values)
     }
@@ -62,7 +62,7 @@ impl HashJoin {
         left_schema_len: usize,
     ) -> Result<Option<Tuple>, DatabaseError> {
         if let (Some(expr), false) = (filter, matches!(join_ty, JoinType::Full | JoinType::Cross)) {
-            match &expr.eval(&tuple, schema)? {
+            match &expr.eval(Some((&tuple, schema)))? {
                 DataValue::Boolean(Some(false) | None) => {
                     let full_schema_len = schema.len();
 
@@ -193,7 +193,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
                                 if *is_filtered {
                                     continue;
                                 } else {
-                                    bits_option = Some(BitVector::new(tuples.len()));
+                                    bits_option = Some(FixedBitSet::with_capacity(tuples.len()));
                                 }
                             }
                             JoinType::LeftAnti => continue,
@@ -214,7 +214,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
                                 left_schema_len
                             )) {
                                 if let Some(bits) = bits_option.as_mut() {
-                                    bits.set_bit(i, true);
+                                    bits.insert(i);
                                 } else {
                                     yield Ok(tuple);
                                 }
@@ -223,7 +223,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashJoin {
                         if let Some(bits) = bits_option {
                             let mut cnt = 0;
                             tuples.retain(|_| {
-                                let res = bits.get_bit(cnt);
+                                let res = bits.contains(cnt);
                                 cnt += 1;
                                 res
                             });

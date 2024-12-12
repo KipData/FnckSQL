@@ -107,13 +107,15 @@ impl NormalizationRule for PushLimitIntoScan {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Limit(limit_op) = graph.operator(node_id) {
             if let Some(child_index) = graph.eldest_child_at(node_id) {
-                if let Operator::TableScan(scan_op) = graph.operator(child_index) {
-                    let mut new_scan_op = scan_op.clone();
+                let mut is_apply = false;
+                let limit = (limit_op.offset, limit_op.limit);
 
-                    new_scan_op.limit = (limit_op.offset, limit_op.limit);
-
+                if let Operator::TableScan(scan_op) = graph.operator_mut(child_index) {
+                    scan_op.limit = limit;
+                    is_apply = true;
+                }
+                if is_apply {
                     graph.remove_node(node_id, false);
-                    graph.replace_node(child_index, Operator::TableScan(new_scan_op));
                 }
             }
         }

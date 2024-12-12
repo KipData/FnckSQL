@@ -72,6 +72,7 @@ fn reduce_filters(filters: Vec<ScalarExpression>, having: bool) -> Option<Filter
         })
         .map(|f| FilterOperator {
             predicate: f,
+            is_optimized: false,
             having,
         })
 }

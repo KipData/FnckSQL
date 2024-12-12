@@ -94,11 +94,18 @@ impl MatchPattern for SimplifyFilter {
 
 impl NormalizationRule for SimplifyFilter {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
-        if let Operator::Filter(mut filter_op) = graph.operator(node_id).clone() {
+        let mut is_optimized = false;
+        if let Operator::Filter(filter_op) = graph.operator_mut(node_id) {
+            if filter_op.is_optimized {
+                return Ok(());
+            }
             filter_op.predicate.simplify()?;
             filter_op.predicate.constant_calculation()?;
-
-            graph.replace_node(node_id, Operator::Filter(filter_op))
+            filter_op.is_optimized = true;
+            is_optimized = true;
+        }
+        if is_optimized {
+            graph.version += 1;
         }
 
         Ok(())

@@ -58,7 +58,7 @@ impl Projection {
         let mut values = Vec::with_capacity(exprs.len());
 
         for expr in exprs.iter() {
-            values.push(expr.eval(tuple, schmea)?);
+            values.push(expr.eval(Some((tuple, schmea)))?);
         }
         Ok(values)
     }

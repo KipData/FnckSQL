@@ -9,13 +9,6 @@ use comfy_table::{Cell, Table};
 use itertools::Itertools;
 use std::io::Cursor;
 use std::sync::Arc;
-use std::sync::LazyLock;
-
-pub static EMPTY_TUPLE: LazyLock<Tuple> = LazyLock::new(|| Tuple {
-    pk_indices: None,
-    values: vec![],
-    id_buf: None,
-});
 
 const BITS_MAX_INDEX: usize = 8;
 
@@ -80,32 +73,32 @@ impl Tuple {
             bits & (1 << (7 - i)) > 0
         }
 
-        let values_len = table_types.len();
-        let mut tuple_values = Vec::with_capacity(values_len);
-        let bits_len = (values_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
+        let types_len = table_types.len();
+        let bits_len = (types_len + BITS_MAX_INDEX) / BITS_MAX_INDEX;
+        let mut values = vec![DataValue::Null; projections.len()];
 
         let mut projection_i = 0;
         let mut cursor = Cursor::new(&bytes[bits_len..]);
 
         for (i, logic_type) in table_types.iter().enumerate() {
-            if projection_i >= values_len || projection_i > projections.len() - 1 {
+            if projections.len() <= projection_i {
                 break;
             }
+            debug_assert!(projection_i < types_len);
             if is_none(bytes[i / BITS_MAX_INDEX], i % BITS_MAX_INDEX) {
-                if projections[projection_i] == i {
-                    tuple_values.push(DataValue::none(logic_type));
-                    projection_i += 1;
-                }
-            } else if let Some(value) =
+                projection_i += 1;
+                continue;
+            }
+            if let Some(value) =
                 DataValue::from_raw(&mut cursor, logic_type, projections[projection_i] == i)?
             {
-                tuple_values.push(value);
+                values[projection_i] = value;
                 projection_i += 1;
             }
         }
         Ok(Tuple {
             pk_indices: Some(pk_indices.clone()),
-            values: tuple_values,
+            values,
             id_buf: None,
         })
     }
