@@ -1,7 +1,7 @@
 use crate::optimizer::core::memo::Memo;
-use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::planner::operator::Operator;
 use crate::planner::{Childrens, LogicalPlan};
+use fixedbitset::FixedBitSet;
 use itertools::Itertools;
 use petgraph::stable_graph::{NodeIndex, StableDiGraph};
 use petgraph::visit::{Bfs, EdgeRef};
@@ -136,29 +136,6 @@ impl HepGraph {
         self.graph.remove_node(source_id)
     }
 
-    /// Traverse the graph in BFS order.
-    fn bfs(&self, start: HepNodeId) -> Vec<HepNodeId> {
-        let mut ids = Vec::with_capacity(self.graph.node_count());
-        let mut iter = Bfs::new(&self.graph, start);
-        while let Some(node_id) = iter.next(&self.graph) {
-            ids.push(node_id);
-        }
-        ids
-    }
-
-    /// Use bfs to traverse the graph and return node ids
-    pub fn nodes_iter(
-        &self,
-        order: HepMatchOrder,
-        start_option: Option<HepNodeId>,
-    ) -> Box<dyn Iterator<Item = HepNodeId>> {
-        let ids = self.bfs(start_option.unwrap_or(self.root_index));
-        match order {
-            HepMatchOrder::TopDown => Box::new(ids.into_iter()),
-            HepMatchOrder::BottomUp => Box::new(ids.into_iter().rev()),
-        }
-    }
-
     #[allow(dead_code)]
     pub fn node(&self, node_id: HepNodeId) -> Option<&Operator> {
         self.graph.node_weight(node_id)
@@ -200,6 +177,15 @@ impl HepGraph {
         self.build_childrens(self.root_index, memo)
     }
 
+    /// Use bfs to traverse the graph and return node ids
+    pub fn nodes_iter(&self, start_option: Option<HepNodeId>) -> HepGraphIter {
+        let inner = Bfs::new(&self.graph, start_option.unwrap_or(self.root_index));
+        HepGraphIter {
+            inner,
+            graph: &self.graph,
+        }
+    }
+
     fn build_childrens(&mut self, start: HepNodeId, memo: Option<&Memo>) -> Option<LogicalPlan> {
         let physical_option = memo.and_then(|memo| memo.cheapest_physical_option(&start));
 
@@ -227,6 +213,19 @@ impl HepGraph {
             physical_option,
             _output_schema_ref: None,
         })
+    }
+}
+
+pub struct HepGraphIter<'a> {
+    inner: Bfs<HepNodeId, FixedBitSet>,
+    graph: &'a StableDiGraph<Operator, usize, usize>,
+}
+
+impl Iterator for HepGraphIter<'_> {
+    type Item = HepNodeId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next(self.graph)
     }
 }
 

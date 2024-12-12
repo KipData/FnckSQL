@@ -2,7 +2,6 @@ use crate::errors::DatabaseError;
 use crate::optimizer::core::pattern::PatternMatcher;
 use crate::optimizer::core::rule::{ImplementationRule, MatchPattern};
 use crate::optimizer::core::statistics_meta::StatisticMetaLoader;
-use crate::optimizer::heuristic::batch::HepMatchOrder;
 use crate::optimizer::heuristic::graph::{HepGraph, HepNodeId};
 use crate::optimizer::heuristic::matcher::HepMatcher;
 use crate::optimizer::rule::implementation::ImplementationRuleImpl;
@@ -47,7 +46,7 @@ impl Memo {
             return Err(DatabaseError::EmptyPlan);
         }
 
-        for node_id in graph.nodes_iter(HepMatchOrder::BottomUp, None) {
+        for node_id in graph.nodes_iter(None) {
             for rule in implementations {
                 if HepMatcher::new(rule.pattern(), node_id, graph).match_opt_expr() {
                     let op = graph.operator(node_id);

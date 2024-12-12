@@ -69,14 +69,14 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for HashAggExecutor {
                             if args.len() > 1 {
                                 throw!(Err(DatabaseError::UnsupportedStmt("currently aggregate functions only support a single Column as a parameter".to_string())))
                             }
-                            values.push(throw!(args[0].eval(&tuple, &schema_ref)));
+                            values.push(throw!(args[0].eval(Some((&tuple, &schema_ref)))));
                         } else {
                             unreachable!()
                         }
                     }
                     let group_keys: Vec<DataValue> = throw!(groupby_exprs
                         .iter()
-                        .map(|expr| expr.eval(&tuple, &schema_ref))
+                        .map(|expr| expr.eval(Some((&tuple, &schema_ref))))
                         .try_collect());
 
                     let entry = match group_hash_accs.entry(group_keys) {

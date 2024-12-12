@@ -1,7 +1,6 @@
 use crate::catalog::TableName;
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
-use crate::types::tuple::EMPTY_TUPLE;
 use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use fnck_sql_serde_macros::ReferenceSerialization;
@@ -170,7 +169,7 @@ impl ColumnCatalog {
         self.desc
             .default
             .as_ref()
-            .map(|expr| expr.eval(&EMPTY_TUPLE, &[]))
+            .map(|expr| expr.eval(None))
             .transpose()
     }
 

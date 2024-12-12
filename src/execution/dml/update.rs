@@ -96,7 +96,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                         }
                         for (i, column) in input_schema.iter().enumerate() {
                             if let Some(expr) = exprs_map.get(&column.id()) {
-                                tuple.values[i] = throw!(expr.eval(&tuple, &input_schema));
+                                tuple.values[i] = throw!(expr.eval(Some((&tuple, &input_schema))));
                             }
                         }
                         tuple.clear_id();

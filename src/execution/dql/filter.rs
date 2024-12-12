@@ -40,7 +40,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Filter {
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let tuple = throw!(tuple);
 
-                    if throw!(throw!(predicate.eval(&tuple, &schema)).is_true()) {
+                    if throw!(throw!(predicate.eval(Some((&tuple, &schema)))).is_true()) {
                         yield Ok(tuple);
                     }
                 }

@@ -73,13 +73,13 @@ run `cargo run -p tpcc --release` to run tpcc
 - Tips: TPC-C currently only supports single thread
 ```shell
 <90th Percentile RT (MaxRT)>
-   New-Order : 0.003  (0.053)
-     Payment : 0.001  (0.011)
-Order-Status : 0.052  (0.110)
-    Delivery : 0.021  (0.046)
- Stock-Level : 0.003  (0.005)
+   New-Order : 0.002  (0.122)
+     Payment : 0.001  (0.027)
+Order-Status : 0.054  (0.144)
+    Delivery : 0.020  (0.056)
+ Stock-Level : 0.003  (0.015)
 <TpmC>
-7567 Tpmc
+7755 Tpmc
 ```
 #### 👉[check more](tpcc/README.md)
 

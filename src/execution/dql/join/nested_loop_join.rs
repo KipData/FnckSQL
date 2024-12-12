@@ -13,7 +13,7 @@ use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple::{Schema, SchemaRef, Tuple};
 use crate::types::value::{DataValue, NULL_VALUE};
-use crate::utils::bit_vector::BitVector;
+use fixedbitset::FixedBitSet;
 use itertools::Itertools;
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
@@ -146,7 +146,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
 
                 let right_schema_len = eq_cond.right_schema.len();
                 let mut left_coroutine = build_read(left_input, cache, transaction);
-                let mut bitmap: Option<BitVector> = None;
+                let mut bitmap: Option<FixedBitSet> = None;
                 let mut first_matches = Vec::new();
 
                 while let CoroutineState::Yielded(left_tuple) =
@@ -177,7 +177,8 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
                             }
                             (Some(filter), true) => {
                                 let new_tuple = Self::merge_tuple(&left_tuple, &right_tuple, &ty);
-                                let value = throw!(filter.eval(&new_tuple, &output_schema_ref));
+                                let value =
+                                    throw!(filter.eval(Some((&new_tuple, &output_schema_ref))));
                                 match &value {
                                     DataValue::Boolean(Some(true)) => {
                                         let tuple = match ty {
@@ -215,7 +216,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
                                 break;
                             }
                             if let Some(bits) = bitmap.as_mut() {
-                                bits.set_bit(right_idx, true);
+                                bits.insert(right_idx);
                             } else if matches!(ty, JoinType::Full) {
                                 first_matches.push(right_idx);
                             }
@@ -227,7 +228,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
                     }
 
                     if matches!(self.ty, JoinType::Full) && bitmap.is_none() {
-                        bitmap = Some(BitVector::new(right_idx));
+                        bitmap = Some(FixedBitSet::with_capacity(right_idx));
                     }
 
                     // handle no matched tuple case
@@ -256,7 +257,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
 
                 if matches!(ty, JoinType::Full) {
                     for idx in first_matches.into_iter() {
-                        bitmap.as_mut().unwrap().set_bit(idx, true);
+                        bitmap.as_mut().unwrap().insert(idx);
                     }
 
                     let mut right_coroutine = build_read(right_input.clone(), cache, transaction);
@@ -264,7 +265,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for NestedLoopJoin {
                     while let CoroutineState::Yielded(right_tuple) =
                         Pin::new(&mut right_coroutine).resume(())
                     {
-                        if !bitmap.as_ref().unwrap().get_bit(idx) {
+                        if !bitmap.as_ref().unwrap().contains(idx) {
                             let mut right_tuple: Tuple = throw!(right_tuple);
                             let mut values = vec![NULL_VALUE.clone(); right_schema_len];
                             values.append(&mut right_tuple.values);

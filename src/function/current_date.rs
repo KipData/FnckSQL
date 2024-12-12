@@ -37,8 +37,7 @@ impl ScalarFunctionImpl for CurrentDate {
     fn eval(
         &self,
         _: &[ScalarExpression],
-        _: &Tuple,
-        _: &[ColumnRef],
+        _: Option<(&Tuple, &[ColumnRef])>,
     ) -> Result<DataValue, DatabaseError> {
         Ok(DataValue::Date32(Some(Local::now().num_days_from_ce())))
     }

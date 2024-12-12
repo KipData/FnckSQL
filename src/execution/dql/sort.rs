@@ -133,7 +133,8 @@ impl SortBy {
                         let mut key = BumpBytes::new_in(arena);
                         let tuple = tuple.as_ref().map(|(_, tuple)| tuple).unwrap();
 
-                        expr.eval(tuple, schema)?.memcomparable_encode(&mut key)?;
+                        expr.eval(Some((tuple, schema)))?
+                            .memcomparable_encode(&mut key)?;
                         if !asc {
                             for byte in key.iter_mut() {
                                 *byte ^= 0xFF;
@@ -169,7 +170,7 @@ impl SortBy {
                         debug_assert!(tuple.is_some());
 
                         let (_, tuple) = tuple.as_ref().unwrap();
-                        eval_values[x].push(expr.eval(tuple, schema)?);
+                        eval_values[x].push(expr.eval(Some((tuple, schema)))?);
                     }
                 }
 
