@@ -5,11 +5,12 @@ use crate::planner::operator::update::UpdateOperator;
 use crate::planner::operator::Operator;
 use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
+use crate::types::value::DataValue;
 use sqlparser::ast::{Assignment, Expr, TableFactor, TableWithJoins};
 use std::slice;
 use std::sync::Arc;
 
-impl<T: Transaction> Binder<'_, '_, T> {
+impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A> {
     pub(crate) fn bind_update(
         &mut self,
         to: &TableWithJoins,

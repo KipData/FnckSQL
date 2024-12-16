@@ -50,7 +50,7 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
             let tuple = tx
                 .execute(
                     &statements[0],
-                    vec![
+                    &[
                         ("?1", DataValue::Int16(Some(args.w_id as i16))),
                         ("?2", DataValue::Int8(Some(args.d_id as i8))),
                         ("?3", DataValue::from(args.c_last.clone())),
@@ -62,7 +62,7 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
             // SELECT c_balance, c_first, c_middle, c_last FROM customer WHERE c_w_id = ? AND c_d_id = ? AND c_last = ? ORDER BY c_first"
             let mut tuple_iter = tx.execute(
                 &statements[1],
-                vec![
+                &[
                     ("?1", DataValue::Int16(Some(args.w_id as i16))),
                     ("?2", DataValue::Int8(Some(args.d_id as i8))),
                     ("?3", DataValue::from(args.c_last.clone())),
@@ -91,7 +91,7 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
             let tuple = tx
                 .execute(
                     &statements[2],
-                    vec![
+                    &[
                         ("?1", DataValue::Int16(Some(args.w_id as i16))),
                         ("?2", DataValue::Int8(Some(args.d_id as i8))),
                         ("?3", DataValue::Int32(Some(args.c_id as i32))),
@@ -110,7 +110,7 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
         let tuple = tx
             .execute(
                 &statements[3],
-                vec![
+                &[
                     ("?1", DataValue::Int16(Some(args.w_id as i16))),
                     ("?2", DataValue::Int8(Some(args.d_id as i8))),
                     ("?3", DataValue::Int32(Some(args.c_id as i32))),
@@ -131,7 +131,7 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
         let tuple = tx
             .execute(
                 &statements[4],
-                vec![
+                &[
                     ("?1", DataValue::Int16(Some(args.w_id as i16))),
                     ("?2", DataValue::Int8(Some(args.d_id as i8))),
                     ("?3", DataValue::Int32(Some(o_id))),

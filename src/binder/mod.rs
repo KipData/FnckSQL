@@ -19,20 +19,20 @@ mod truncate;
 mod update;
 
 use sqlparser::ast::{Ident, ObjectName, ObjectType, SetExpr, Statement};
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::catalog::view::View;
 use crate::catalog::{ColumnRef, TableCatalog, TableName};
-use crate::db::{Args, ScalaFunctions, TableFunctions};
+use crate::db::{ScalaFunctions, TableFunctions};
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
 use crate::planner::operator::join::JoinType;
 use crate::planner::{LogicalPlan, SchemaOutput};
 use crate::storage::{TableCache, Transaction, ViewCache};
 use crate::types::tuple::SchemaRef;
+use crate::types::value::DataValue;
 
 pub enum InputRefType {
     AggCall,
@@ -313,18 +313,18 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
     }
 }
 
-pub struct Binder<'a, 'b, T: Transaction> {
+pub struct Binder<'a, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> {
     context: BinderContext<'a, T>,
     table_schema_buf: HashMap<TableName, Option<SchemaOutput>>,
-    args: &'a RefCell<Args>,
-    pub(crate) parent: Option<&'b Binder<'a, 'b, T>>,
+    args: &'a A,
+    pub(crate) parent: Option<&'b Binder<'a, 'b, T, A>>,
 }
 
-impl<'a, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<'a, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, 'b, T, A> {
     pub fn new(
         context: BinderContext<'a, T>,
-        args: &'a RefCell<Args>,
-        parent: Option<&'b Binder<'a, 'b, T>>,
+        args: &'a A,
+        parent: Option<&'b Binder<'a, 'b, T, A>>,
     ) -> Self {
         Binder {
             context,
@@ -488,7 +488,6 @@ pub mod test {
     use crate::types::ColumnId;
     use crate::types::LogicalType::Integer;
     use crate::utils::lru::SharedLruCache;
-    use std::cell::RefCell;
     use std::hash::RandomState;
     use std::path::PathBuf;
     use std::sync::atomic::AtomicUsize;
@@ -507,7 +506,6 @@ pub mod test {
             let scala_functions = Default::default();
             let table_functions = Default::default();
             let transaction = self.storage.transaction()?;
-            let args = RefCell::new(Vec::new());
             let mut binder = Binder::new(
                 BinderContext::new(
                     &self.table_cache,
@@ -517,7 +515,7 @@ pub mod test {
                     &table_functions,
                     Arc::new(AtomicUsize::new(0)),
                 ),
-                &args,
+                &[],
                 None,
             );
             let stmt = crate::parser::parse_sql(sql)?;

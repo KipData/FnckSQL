@@ -37,11 +37,9 @@ impl ScalarFunctionImpl for Lower {
     fn eval(
         &self,
         exprs: &[ScalarExpression],
-        tuples: &Tuple,
-        columns: &[ColumnRef],
+        tuples: Option<(&Tuple, &[ColumnRef])>,
     ) -> Result<DataValue, DatabaseError> {
-        let value = exprs[0].eval(tuples, columns)?;
-        let mut value = DataValue::clone(&value);
+        let mut value = exprs[0].eval(tuples)?;
         if !matches!(value.logical_type(), LogicalType::Varchar(_, _)) {
             value = value.cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?;
         }

@@ -1,6 +1,7 @@
 use super::LogicalType;
 use crate::errors::DatabaseError;
-use crate::storage::table_codec::{BOUND_MAX_TAG, BOUND_MIN_TAG};
+use crate::storage::table_codec::{BumpBytes, BOUND_MAX_TAG, BOUND_MIN_TAG};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use chrono::format::{DelayedFormat, StrftimeItems};
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use itertools::Itertools;
@@ -11,7 +12,7 @@ use sqlparser::ast::CharLengthUnits;
 use std::cmp::Ordering;
 use std::fmt::Formatter;
 use std::hash::Hash;
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{cmp, fmt, mem};
@@ -30,13 +31,13 @@ pub const TIME_FMT: &str = "%H:%M:%S";
 const ENCODE_GROUP_SIZE: usize = 8;
 const ENCODE_MARKER: u8 = 0xFF;
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum Utf8Type {
     Variable(Option<u32>),
     Fixed(u32),
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum DataValue {
     Null,
     Boolean(Option<bool>),
@@ -205,8 +206,8 @@ impl PartialOrd for DataValue {
 }
 
 macro_rules! encode_u {
-    ($b:ident, $u:expr) => {
-        $b.extend_from_slice(&$u.to_be_bytes())
+    ($writer:ident, $u:expr) => {
+        $writer.write_all(&$u.to_be_bytes())?
     };
 }
 
@@ -313,13 +314,15 @@ impl DataValue {
         }
     }
 
+    #[inline]
     pub(crate) fn check_string_len(string: &str, len: usize, unit: CharLengthUnits) -> bool {
         match unit {
             CharLengthUnits::Characters => string.chars().count() > len,
-            CharLengthUnits::Octets => string.len() > len,
+            CharLengthUnits::Octets => string.as_bytes().len() > len,
         }
     }
 
+    #[inline]
     pub(crate) fn check_len(&self, logic_type: &LogicalType) -> Result<(), DatabaseError> {
         let is_over_len = match (logic_type, self) {
             (LogicalType::Varchar(None, _), _) => false,
@@ -391,6 +394,7 @@ impl DataValue {
         value.and_then(|v| Self::time_format(v).map(|fmt| format!("{}", fmt)))
     }
 
+    #[inline]
     pub fn is_null(&self) -> bool {
         match self {
             DataValue::Null => true,
@@ -414,6 +418,7 @@ impl DataValue {
         }
     }
 
+    #[inline]
     pub fn none(logic_type: &LogicalType) -> DataValue {
         match logic_type {
             LogicalType::Invalid => panic!("invalid logical type"),
@@ -447,6 +452,7 @@ impl DataValue {
         }
     }
 
+    #[inline]
     pub fn init(logic_type: &LogicalType) -> DataValue {
         match logic_type {
             LogicalType::Invalid => panic!("invalid logical type"),
@@ -484,103 +490,106 @@ impl DataValue {
         }
     }
 
-    pub fn to_raw<W: Write>(&self, writer: &mut W) -> Result<usize, DatabaseError> {
+    #[inline]
+    pub fn to_raw<W: Write>(&self, writer: &mut W) -> Result<(), DatabaseError> {
         match self {
             DataValue::Null => (),
             DataValue::Boolean(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&[*v as u8])?;
-                    return Ok(1);
+                    writer.write_u8(*v as u8)?;
+                    return Ok(());
                 }
             }
             DataValue::Float32(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_ne_bytes())?;
-                    return Ok(4);
+                    writer.write_f32::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::Float64(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_ne_bytes())?;
-                    return Ok(8);
+                    writer.write_f64::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::Int8(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(1);
+                    writer.write_i8(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::Int16(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(2);
+                    writer.write_i16::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::Int32(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(4);
+                    writer.write_i32::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::Int64(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(8);
+                    writer.write_i64::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::UInt8(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(1);
+                    writer.write_u8(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::UInt16(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(2);
+                    writer.write_u16::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::UInt32(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(4);
+                    writer.write_u32::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::UInt64(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(8);
+                    writer.write_u64::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::Utf8 { value: v, ty, unit } => {
                 if let Some(v) = v {
                     match ty {
                         Utf8Type::Variable(_) => {
-                            let string_bytes = v.as_bytes();
-                            let len = string_bytes.len();
+                            let bytes = v.as_bytes();
 
-                            writer.write_all(string_bytes)?;
-                            return Ok(len);
+                            writer.write_u32::<LittleEndian>(bytes.len() as u32)?;
+                            writer.write_all(bytes)?;
+                            return Ok(());
                         }
                         Utf8Type::Fixed(len) => match unit {
                             CharLengthUnits::Characters => {
                                 let chars_len = *len as usize;
-                                let string_bytes =
-                                    format!("{:len$}", v, len = chars_len).into_bytes();
-                                let octets_len = string_bytes.len();
+                                let v = format!("{:len$}", v, len = chars_len);
+                                let bytes = v.as_bytes();
 
-                                writer.write_all(&string_bytes)?;
-                                return Ok(octets_len);
+                                writer.write_u32::<LittleEndian>(bytes.len() as u32)?;
+                                writer.write_all(bytes)?;
+                                return Ok(());
                             }
                             CharLengthUnits::Octets => {
                                 let octets_len = *len as usize;
-                                let mut string_bytes = v.clone().into_bytes();
+                                let bytes = v.as_bytes();
+                                debug_assert!(octets_len >= bytes.len());
 
-                                string_bytes.resize(octets_len, b' ');
-                                debug_assert_eq!(octets_len, string_bytes.len());
-                                writer.write_all(&string_bytes)?;
-                                return Ok(octets_len);
+                                writer.write_all(bytes)?;
+                                for _ in 0..octets_len - bytes.len() {
+                                    writer.write_u8(b' ')?;
+                                }
+                                return Ok(());
                             }
                         },
                     }
@@ -588,113 +597,200 @@ impl DataValue {
             }
             DataValue::Date32(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(4);
+                    writer.write_i32::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::Date64(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(8);
+                    writer.write_i64::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::Time(v) => {
                 if let Some(v) = v {
-                    writer.write_all(&v.to_le_bytes())?;
-                    return Ok(4);
+                    writer.write_u32::<LittleEndian>(*v)?;
+                    return Ok(());
                 }
             }
             DataValue::Decimal(v) => {
                 if let Some(v) = v {
                     writer.write_all(&v.serialize())?;
-                    return Ok(16);
+                    return Ok(());
                 }
             }
             DataValue::Tuple(_) => unreachable!(),
         }
-        Ok(0)
+        Ok(())
     }
 
-    pub fn from_raw(bytes: &[u8], ty: &LogicalType) -> Self {
-        match ty {
+    #[inline]
+    pub fn from_raw<R: Read + Seek>(
+        reader: &mut R,
+        ty: &LogicalType,
+        is_projection: bool,
+    ) -> Result<Option<Self>, DatabaseError> {
+        let value = match ty {
             LogicalType::Invalid => panic!("invalid logical type"),
-            LogicalType::SqlNull => DataValue::Null,
-            LogicalType::Boolean => DataValue::Boolean(bytes.first().map(|v| *v != 0)),
-            LogicalType::Tinyint => DataValue::Int8(
-                (!bytes.is_empty()).then(|| i8::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::UTinyint => DataValue::UInt8(
-                (!bytes.is_empty()).then(|| u8::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Smallint => DataValue::Int16(
-                (!bytes.is_empty()).then(|| i16::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::USmallint => DataValue::UInt16(
-                (!bytes.is_empty()).then(|| u16::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Integer => DataValue::Int32(
-                (!bytes.is_empty()).then(|| i32::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::UInteger => DataValue::UInt32(
-                (!bytes.is_empty()).then(|| u32::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Bigint => DataValue::Int64(
-                (!bytes.is_empty()).then(|| i64::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::UBigint => DataValue::UInt64(
-                (!bytes.is_empty()).then(|| u64::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Float => DataValue::Float32((!bytes.is_empty()).then(|| {
-                let mut buf = [0; 4];
-                buf.copy_from_slice(bytes);
-                f32::from_ne_bytes(buf)
-            })),
-            LogicalType::Double => DataValue::Float64((!bytes.is_empty()).then(|| {
-                let mut buf = [0; 8];
-                buf.copy_from_slice(bytes);
-                f64::from_ne_bytes(buf)
-            })),
-            LogicalType::Char(len, unit) => {
+            LogicalType::SqlNull => {
+                if !is_projection {
+                    return Ok(None);
+                }
+                DataValue::Null
+            }
+            LogicalType::Boolean => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(1))?;
+                    return Ok(None);
+                }
+                DataValue::Boolean(Some(reader.read_u8()? != 0))
+            }
+            LogicalType::Tinyint => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(1))?;
+                    return Ok(None);
+                }
+                DataValue::Int8(Some(reader.read_i8()?))
+            }
+            LogicalType::UTinyint => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(1))?;
+                    return Ok(None);
+                }
+                DataValue::UInt8(Some(reader.read_u8()?))
+            }
+            LogicalType::Smallint => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(2))?;
+                    return Ok(None);
+                }
+                DataValue::Int16(Some(reader.read_i16::<LittleEndian>()?))
+            }
+            LogicalType::USmallint => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(2))?;
+                    return Ok(None);
+                }
+                DataValue::UInt16(Some(reader.read_u16::<LittleEndian>()?))
+            }
+            LogicalType::Integer => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(4))?;
+                    return Ok(None);
+                }
+                DataValue::Int32(Some(reader.read_i32::<LittleEndian>()?))
+            }
+            LogicalType::UInteger => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(4))?;
+                    return Ok(None);
+                }
+                DataValue::UInt32(Some(reader.read_u32::<LittleEndian>()?))
+            }
+            LogicalType::Bigint => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(8))?;
+                    return Ok(None);
+                }
+                DataValue::Int64(Some(reader.read_i64::<LittleEndian>()?))
+            }
+            LogicalType::UBigint => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(8))?;
+                    return Ok(None);
+                }
+                DataValue::UInt64(Some(reader.read_u64::<LittleEndian>()?))
+            }
+            LogicalType::Float => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(4))?;
+                    return Ok(None);
+                }
+                DataValue::Float32(Some(reader.read_f32::<LittleEndian>()?))
+            }
+            LogicalType::Double => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(8))?;
+                    return Ok(None);
+                }
+                DataValue::Float64(Some(reader.read_f64::<LittleEndian>()?))
+            }
+            LogicalType::Char(ty_len, unit) => {
                 // https://dev.mysql.com/doc/refman/8.0/en/char.html#:~:text=If%20a%20given%20value%20is%20stored%20into%20the%20CHAR(4)%20and%20VARCHAR(4)%20columns%2C%20the%20values%20retrieved%20from%20the%20columns%20are%20not%20always%20the%20same%20because%20trailing%20spaces%20are%20removed%20from%20CHAR%20columns%20upon%20retrieval.%20The%20following%20example%20illustrates%20this%20difference%3A
-                let value = (!bytes.is_empty()).then(|| {
-                    let last_non_zero_index = match bytes.iter().rposition(|&x| x != b' ') {
-                        Some(index) => index + 1,
-                        None => 0,
-                    };
-                    String::from_utf8(bytes[0..last_non_zero_index].to_owned()).unwrap()
-                });
+                let len = match unit {
+                    CharLengthUnits::Characters => reader.read_u32::<LittleEndian>()?,
+                    CharLengthUnits::Octets => *ty_len,
+                } as usize;
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(len as i64))?;
+                    return Ok(None);
+                }
+                let mut bytes = vec![0; len];
+                reader.read_exact(&mut bytes)?;
+                let last_non_zero_index = match bytes.iter().rposition(|&x| x != b' ') {
+                    Some(index) => index + 1,
+                    None => 0,
+                };
+                bytes.truncate(last_non_zero_index);
+
                 DataValue::Utf8 {
-                    value,
-                    ty: Utf8Type::Fixed(*len),
+                    value: Some(String::from_utf8(bytes)?),
+                    ty: Utf8Type::Fixed(*ty_len),
                     unit: *unit,
                 }
             }
-            LogicalType::Varchar(len, unit) => {
-                let value =
-                    (!bytes.is_empty()).then(|| String::from_utf8(bytes.to_owned()).unwrap());
+            LogicalType::Varchar(ty_len, unit) => {
+                let len = reader.read_u32::<LittleEndian>()? as usize;
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(len as i64))?;
+                    return Ok(None);
+                }
+                let mut bytes = vec![0; len];
+                reader.read_exact(&mut bytes)?;
+
                 DataValue::Utf8 {
-                    value,
-                    ty: Utf8Type::Variable(*len),
+                    value: Some(String::from_utf8(bytes)?),
+                    ty: Utf8Type::Variable(*ty_len),
                     unit: *unit,
                 }
             }
-            LogicalType::Date => DataValue::Date32(
-                (!bytes.is_empty()).then(|| i32::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::DateTime => DataValue::Date64(
-                (!bytes.is_empty()).then(|| i64::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Time => DataValue::Time(
-                (!bytes.is_empty()).then(|| u32::from_le_bytes(bytes.try_into().unwrap())),
-            ),
-            LogicalType::Decimal(_, _) => DataValue::Decimal(
-                (!bytes.is_empty())
-                    .then(|| Decimal::deserialize(<[u8; 16]>::try_from(bytes).unwrap())),
-            ),
+            LogicalType::Date => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(4))?;
+                    return Ok(None);
+                }
+                DataValue::Date32(Some(reader.read_i32::<LittleEndian>()?))
+            }
+            LogicalType::DateTime => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(8))?;
+                    return Ok(None);
+                }
+                DataValue::Date64(Some(reader.read_i64::<LittleEndian>()?))
+            }
+            LogicalType::Time => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(4))?;
+                    return Ok(None);
+                }
+                DataValue::Time(Some(reader.read_u32::<LittleEndian>()?))
+            }
+            LogicalType::Decimal(_, _) => {
+                if !is_projection {
+                    reader.seek(SeekFrom::Current(16))?;
+                    return Ok(None);
+                }
+                let mut bytes = [0u8; 16];
+                reader.read_exact(&mut bytes)?;
+
+                DataValue::Decimal(Some(Decimal::deserialize(bytes)))
+            }
             LogicalType::Tuple(_) => unreachable!(),
-        }
+        };
+        Ok(Some(value))
     }
 
+    #[inline]
     pub fn logical_type(&self) -> LogicalType {
         match self {
             DataValue::Null => LogicalType::SqlNull,
@@ -749,7 +845,8 @@ impl DataValue {
     //	[1, 2, 3, 4, 5, 6, 7, 8] -> [1, 2, 3, 4, 5, 6, 7, 8, 255, 0, 0, 0, 0, 0, 0, 0, 0, 247]
     //
     // Refer: https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format#memcomparable-format
-    fn encode_bytes(b: &mut Vec<u8>, data: &[u8]) {
+    #[inline]
+    fn encode_bytes(b: &mut BumpBytes, data: &[u8]) {
         let d_len = data.len();
         let realloc_size = (d_len / ENCODE_GROUP_SIZE + 1) * (ENCODE_GROUP_SIZE + 1);
         Self::realloc_bytes(b, realloc_size);
@@ -773,7 +870,8 @@ impl DataValue {
         }
     }
 
-    fn realloc_bytes(b: &mut Vec<u8>, size: usize) {
+    #[inline]
+    fn realloc_bytes(b: &mut BumpBytes, size: usize) {
         let len = b.len();
 
         if size > len {
@@ -782,7 +880,8 @@ impl DataValue {
         }
     }
 
-    pub fn memcomparable_encode(&self, b: &mut Vec<u8>) -> Result<(), DatabaseError> {
+    #[inline]
+    pub fn memcomparable_encode(&self, b: &mut BumpBytes) -> Result<(), DatabaseError> {
         match self {
             DataValue::Int8(Some(v)) => encode_u!(b, *v as u8 ^ 0x80_u8),
             DataValue::Int16(Some(v)) => encode_u!(b, *v as u16 ^ 0x8000_u16),
@@ -844,6 +943,7 @@ impl DataValue {
         Ok(())
     }
 
+    #[inline]
     pub fn is_true(&self) -> Result<bool, DatabaseError> {
         if self.is_null() {
             return Ok(false);
@@ -1410,6 +1510,7 @@ impl DataValue {
         Ok(value)
     }
 
+    #[inline]
     pub fn common_prefix_length(&self, target: &DataValue) -> Option<usize> {
         if self.is_null() && target.is_null() {
             return Some(0);
@@ -1443,6 +1544,7 @@ impl DataValue {
         Some(0)
     }
 
+    #[inline]
     pub(crate) fn values_to_tuple(mut values: Vec<DataValue>) -> Option<DataValue> {
         if values.len() > 1 {
             Some(DataValue::Tuple(Some((values, false))))
@@ -1696,13 +1798,16 @@ impl fmt::Debug for DataValue {
 #[cfg(test)]
 mod test {
     use crate::errors::DatabaseError;
+    use crate::storage::table_codec::BumpBytes;
     use crate::types::value::DataValue;
+    use bumpalo::Bump;
 
     #[test]
     fn test_mem_comparable_int() -> Result<(), DatabaseError> {
-        let mut key_i8_1 = Vec::new();
-        let mut key_i8_2 = Vec::new();
-        let mut key_i8_3 = Vec::new();
+        let arena = Bump::new();
+        let mut key_i8_1 = BumpBytes::new_in(&arena);
+        let mut key_i8_2 = BumpBytes::new_in(&arena);
+        let mut key_i8_3 = BumpBytes::new_in(&arena);
 
         DataValue::Int8(Some(i8::MIN)).memcomparable_encode(&mut key_i8_1)?;
         DataValue::Int8(Some(-1_i8)).memcomparable_encode(&mut key_i8_2)?;
@@ -1713,9 +1818,9 @@ mod test {
         assert!(key_i8_1 < key_i8_2);
         assert!(key_i8_2 < key_i8_3);
 
-        let mut key_i16_1 = Vec::new();
-        let mut key_i16_2 = Vec::new();
-        let mut key_i16_3 = Vec::new();
+        let mut key_i16_1 = BumpBytes::new_in(&arena);
+        let mut key_i16_2 = BumpBytes::new_in(&arena);
+        let mut key_i16_3 = BumpBytes::new_in(&arena);
 
         DataValue::Int16(Some(i16::MIN)).memcomparable_encode(&mut key_i16_1)?;
         DataValue::Int16(Some(-1_i16)).memcomparable_encode(&mut key_i16_2)?;
@@ -1726,9 +1831,9 @@ mod test {
         assert!(key_i16_1 < key_i16_2);
         assert!(key_i16_2 < key_i16_3);
 
-        let mut key_i32_1 = Vec::new();
-        let mut key_i32_2 = Vec::new();
-        let mut key_i32_3 = Vec::new();
+        let mut key_i32_1 = BumpBytes::new_in(&arena);
+        let mut key_i32_2 = BumpBytes::new_in(&arena);
+        let mut key_i32_3 = BumpBytes::new_in(&arena);
 
         DataValue::Int32(Some(i32::MIN)).memcomparable_encode(&mut key_i32_1)?;
         DataValue::Int32(Some(-1_i32)).memcomparable_encode(&mut key_i32_2)?;
@@ -1739,9 +1844,9 @@ mod test {
         assert!(key_i32_1 < key_i32_2);
         assert!(key_i32_2 < key_i32_3);
 
-        let mut key_i64_1 = Vec::new();
-        let mut key_i64_2 = Vec::new();
-        let mut key_i64_3 = Vec::new();
+        let mut key_i64_1 = BumpBytes::new_in(&arena);
+        let mut key_i64_2 = BumpBytes::new_in(&arena);
+        let mut key_i64_3 = BumpBytes::new_in(&arena);
 
         DataValue::Int64(Some(i64::MIN)).memcomparable_encode(&mut key_i64_1)?;
         DataValue::Int64(Some(-1_i64)).memcomparable_encode(&mut key_i64_2)?;
@@ -1757,9 +1862,10 @@ mod test {
 
     #[test]
     fn test_mem_comparable_float() -> Result<(), DatabaseError> {
-        let mut key_f32_1 = Vec::new();
-        let mut key_f32_2 = Vec::new();
-        let mut key_f32_3 = Vec::new();
+        let arena = Bump::new();
+        let mut key_f32_1 = BumpBytes::new_in(&arena);
+        let mut key_f32_2 = BumpBytes::new_in(&arena);
+        let mut key_f32_3 = BumpBytes::new_in(&arena);
 
         DataValue::Float32(Some(f32::MIN)).memcomparable_encode(&mut key_f32_1)?;
         DataValue::Float32(Some(-1_f32)).memcomparable_encode(&mut key_f32_2)?;
@@ -1770,9 +1876,9 @@ mod test {
         assert!(key_f32_1 < key_f32_2);
         assert!(key_f32_2 < key_f32_3);
 
-        let mut key_f64_1 = Vec::new();
-        let mut key_f64_2 = Vec::new();
-        let mut key_f64_3 = Vec::new();
+        let mut key_f64_1 = BumpBytes::new_in(&arena);
+        let mut key_f64_2 = BumpBytes::new_in(&arena);
+        let mut key_f64_3 = BumpBytes::new_in(&arena);
 
         DataValue::Float64(Some(f64::MIN)).memcomparable_encode(&mut key_f64_1)?;
         DataValue::Float64(Some(-1_f64)).memcomparable_encode(&mut key_f64_2)?;
@@ -1788,9 +1894,10 @@ mod test {
 
     #[test]
     fn test_mem_comparable_tuple_lower() -> Result<(), DatabaseError> {
-        let mut key_tuple_1 = Vec::new();
-        let mut key_tuple_2 = Vec::new();
-        let mut key_tuple_3 = Vec::new();
+        let arena = Bump::new();
+        let mut key_tuple_1 = BumpBytes::new_in(&arena);
+        let mut key_tuple_2 = BumpBytes::new_in(&arena);
+        let mut key_tuple_3 = BumpBytes::new_in(&arena);
 
         DataValue::Tuple(Some((
             vec![
@@ -1830,9 +1937,10 @@ mod test {
 
     #[test]
     fn test_mem_comparable_tuple_upper() -> Result<(), DatabaseError> {
-        let mut key_tuple_1 = Vec::new();
-        let mut key_tuple_2 = Vec::new();
-        let mut key_tuple_3 = Vec::new();
+        let arena = Bump::new();
+        let mut key_tuple_1 = BumpBytes::new_in(&arena);
+        let mut key_tuple_2 = BumpBytes::new_in(&arena);
+        let mut key_tuple_3 = BumpBytes::new_in(&arena);
 
         DataValue::Tuple(Some((
             vec![

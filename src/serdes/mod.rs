@@ -33,37 +33,20 @@ macro_rules! implement_serialization_by_bincode {
             fn encode<W: std::io::Write>(
                 &self,
                 writer: &mut W,
-                is_direct: bool,
-                reference_tables: &mut $crate::serdes::ReferenceTables,
+                _: bool,
+                _: &mut $crate::serdes::ReferenceTables,
             ) -> Result<(), $crate::errors::DatabaseError> {
-                let bytes = bincode::serialize(self)?;
-                $crate::serdes::ReferenceSerialization::encode(
-                    &bytes.len(),
-                    writer,
-                    is_direct,
-                    reference_tables,
-                )?;
-                std::io::Write::write_all(writer, &bytes)?;
+                bincode::serialize_into(writer, self)?;
 
                 Ok(())
             }
 
             fn decode<T: $crate::storage::Transaction, R: std::io::Read>(
                 reader: &mut R,
-                drive: Option<(&T, &$crate::storage::TableCache)>,
-                reference_tables: &$crate::serdes::ReferenceTables,
+                _: Option<(&T, &$crate::storage::TableCache)>,
+                _: &$crate::serdes::ReferenceTables,
             ) -> Result<Self, $crate::errors::DatabaseError> {
-                let mut buf = vec![
-                    0u8;
-                    <usize as $crate::serdes::ReferenceSerialization>::decode(
-                        reader,
-                        drive,
-                        reference_tables
-                    )?
-                ];
-                std::io::Read::read_exact(reader, &mut buf)?;
-
-                Ok(bincode::deserialize::<Self>(&buf)?)
+                Ok(bincode::deserialize_from(reader)?)
             }
         }
     };

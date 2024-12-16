@@ -40,7 +40,7 @@ macro_rules! try_default {
     };
 }
 
-impl<'a, T: Transaction> Binder<'a, '_, T> {
+impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T, A> {
     pub(crate) fn bind_expr(&mut self, expr: &Expr) -> Result<ScalarExpression, DatabaseError> {
         match expr {
             Expr::Identifier(ident) => {
@@ -50,14 +50,11 @@ impl<'a, T: Transaction> Binder<'a, '_, T> {
             Expr::BinaryOp { left, right, op } => self.bind_binary_op_internal(left, right, op),
             Expr::Value(v) => {
                 let value = if let Value::Placeholder(name) = v {
-                    let (i, _) = self
-                        .args
-                        .borrow()
+                    self.args
+                        .as_ref()
                         .iter()
-                        .enumerate()
-                        .find(|(_, (key, _))| key == name)
-                        .ok_or_else(|| DatabaseError::ParametersNotFound(name.to_string()))?;
-                    self.args.borrow_mut().remove(i).1
+                        .find_map(|(key, value)| (key == name).then(|| value.clone()))
+                        .ok_or_else(|| DatabaseError::ParametersNotFound(name.to_string()))?
                 } else {
                     v.into()
                 };

@@ -1,7 +1,6 @@
 use crate::errors::DatabaseError;
 use crate::serdes::{ReferenceSerialization, ReferenceTables};
 use crate::storage::{TableCache, Transaction};
-use encode_unicode::CharExt;
 use std::io::{Read, Write};
 
 impl ReferenceSerialization for char {
@@ -11,9 +10,10 @@ impl ReferenceSerialization for char {
         _: bool,
         _: &mut ReferenceTables,
     ) -> Result<(), DatabaseError> {
-        let (bytes, _) = self.to_utf8_array();
+        let mut buf = [0u8; 2];
+        self.encode_utf8(&mut buf);
 
-        Ok(writer.write_all(&bytes)?)
+        Ok(writer.write_all(&buf)?)
     }
 
     fn decode<T: Transaction, R: Read>(
@@ -21,10 +21,10 @@ impl ReferenceSerialization for char {
         _: Option<(&T, &TableCache)>,
         _: &ReferenceTables,
     ) -> Result<Self, DatabaseError> {
-        let mut buf = [0u8; 4];
+        let mut buf = [0u8; 2];
         reader.read_exact(&mut buf)?;
 
         // SAFETY
-        Ok(char::from_utf8_array(buf).unwrap())
+        Ok(std::str::from_utf8(&buf)?.chars().next().unwrap())
     }
 }

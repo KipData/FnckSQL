@@ -23,7 +23,6 @@ use crate::utils::lru::SharedLruCache;
 use ahash::HashMap;
 use parking_lot::lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard};
 use parking_lot::{RawRwLock, RwLock};
-use std::cell::RefCell;
 use std::hash::RandomState;
 use std::marker::PhantomData;
 use std::mem;
@@ -36,7 +35,6 @@ use std::sync::Arc;
 pub(crate) type ScalaFunctions = HashMap<FunctionSummary, Arc<dyn ScalarFunctionImpl>>;
 pub(crate) type TableFunctions = HashMap<FunctionSummary, Arc<dyn TableFunctionImpl>>;
 
-pub type Args = Vec<(&'static str, DataValue)>;
 pub type Statement = sqlparser::ast::Statement;
 
 #[allow(dead_code)]
@@ -130,9 +128,9 @@ impl<S: Storage> State<S> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn build_plan(
+    pub(crate) fn build_plan<A: AsRef<[(&'static str, DataValue)]>>(
         stmt: &Statement,
-        args: &RefCell<Args>,
+        params: A,
         table_cache: &TableCache,
         view_cache: &ViewCache,
         meta_cache: &StatisticsMetaCache,
@@ -149,7 +147,7 @@ impl<S: Storage> State<S> {
                 table_functions,
                 Arc::new(AtomicUsize::new(0)),
             ),
-            args,
+            &params,
             None,
         );
         /// Build a logical plan.
@@ -254,17 +252,15 @@ impl<S: Storage> State<S> {
         stmts.pop().ok_or(DatabaseError::EmptyStatement)
     }
 
-    fn execute<'a>(
+    fn execute<'a, A: AsRef<[(&'static str, DataValue)]>>(
         &'a self,
         transaction: &'a mut S::TransactionType<'_>,
         stmt: &Statement,
-        args: Args,
+        params: A,
     ) -> Result<(SchemaRef, Executor<'a>), DatabaseError> {
-        let args = RefCell::new(args);
-
         let mut plan = Self::build_plan(
             stmt,
-            &args,
+            params,
             self.table_cache(),
             self.view_cache(),
             self.meta_cache(),
@@ -294,18 +290,18 @@ impl<S: Storage> Database<S> {
     pub fn run<T: AsRef<str>>(&self, sql: T) -> Result<DatabaseIter<'_, S>, DatabaseError> {
         let statement = self.prepare(sql)?;
 
-        self.execute(&statement, vec![])
+        self.execute(&statement, &[])
     }
 
     pub fn prepare<T: AsRef<str>>(&self, sql: T) -> Result<Statement, DatabaseError> {
         self.state.prepare(sql)
     }
 
-    fn execute(
+    fn execute<A: AsRef<[(&'static str, DataValue)]>>(
         &self,
         statement: &Statement,
-        args: Args,
-    ) -> Result<DatabaseIter<'_, S>, DatabaseError> {
+        params: A,
+    ) -> Result<DatabaseIter<S>, DatabaseError> {
         let _guard = if matches!(command_type(statement)?, CommandType::DDL) {
             MetaDataLock::Write(self.mdl.write_arc())
         } else {
@@ -314,7 +310,7 @@ impl<S: Storage> Database<S> {
         let transaction = Box::into_raw(Box::new(self.storage.transaction()?));
         let (schema, executor) =
             self.state
-                .execute(unsafe { &mut (*transaction) }, statement, args)?;
+                .execute(unsafe { &mut (*transaction) }, statement, params)?;
         let inner = Box::into_raw(Box::new(TransactionIter::new(schema, executor)));
         Ok(DatabaseIter { transaction, inner })
     }
@@ -388,24 +384,24 @@ impl<S: Storage> DBTransaction<'_, S> {
     pub fn run<T: AsRef<str>>(&mut self, sql: T) -> Result<TransactionIter<'_>, DatabaseError> {
         let statement = self.state.prepare(sql)?;
 
-        self.execute(&statement, vec![])
+        self.execute(&statement, &[])
     }
 
     pub fn prepare<T: AsRef<str>>(&self, sql: T) -> Result<Statement, DatabaseError> {
         self.state.prepare(sql)
     }
 
-    pub fn execute(
+    pub fn execute<A: AsRef<[(&'static str, DataValue)]>>(
         &mut self,
         statement: &Statement,
-        args: Args,
+        params: A,
     ) -> Result<TransactionIter, DatabaseError> {
         if matches!(command_type(statement)?, CommandType::DDL) {
             return Err(DatabaseError::UnsupportedStmt(
                 "`DDL` is not allowed to execute within a transaction".to_string(),
             ));
         }
-        let (schema, executor) = self.state.execute(&mut self.inner, statement, args)?;
+        let (schema, executor) = self.state.execute(&mut self.inner, statement, params)?;
         Ok(TransactionIter::new(schema, executor))
     }
 
@@ -587,7 +583,7 @@ pub(crate) mod test {
         {
             let statement = fnck_sql.prepare("explain select * from t1 where b > ?1")?;
 
-            let mut iter = fnck_sql.execute(&statement, vec![("?1", DataValue::Int32(Some(0)))])?;
+            let mut iter = fnck_sql.execute(&statement, &[("?1", DataValue::Int32(Some(0)))])?;
 
             assert_eq!(
                 iter.next().unwrap()?.values[0].utf8().unwrap(),
@@ -604,7 +600,7 @@ pub(crate) mod test {
 
             let mut iter = fnck_sql.execute(
                 &statement,
-                vec![
+                &[
                     ("?1", DataValue::Int32(Some(0))),
                     ("?2", DataValue::Int32(Some(0))),
                     ("?3", DataValue::Int32(Some(1))),
@@ -624,7 +620,7 @@ pub(crate) mod test {
 
             let mut iter = fnck_sql.execute(
                 &statement,
-                vec![
+                &[
                     ("?1", DataValue::Int32(Some(9))),
                     ("?2", DataValue::Int32(Some(0))),
                     ("?3", DataValue::Int32(Some(1))),

@@ -1,19 +1,23 @@
 use crate::binder::copy::FileFormat;
 use crate::errors::DatabaseError;
-use crate::execution::{Executor, ReadExecutor};
+use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
-use crate::storage::{Iter, StatisticsMetaCache, TableCache, Transaction, ViewCache};
+use crate::planner::LogicalPlan;
+use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
 use crate::types::tuple_builder::TupleBuilder;
-use std::sync::Arc;
+use std::ops::Coroutine;
+use std::ops::CoroutineState;
+use std::pin::Pin;
 
 pub struct CopyToFile {
-    pub op: CopyToFileOperator,
+    op: CopyToFileOperator,
+    input: LogicalPlan,
 }
 
-impl From<CopyToFileOperator> for CopyToFile {
-    fn from(op: CopyToFileOperator) -> Self {
-        CopyToFile { op }
+impl From<(CopyToFileOperator, LogicalPlan)> for CopyToFile {
+    fn from((op, input): (CopyToFileOperator, LogicalPlan)) -> Self {
+        CopyToFile { op, input }
     }
 }
 
@@ -27,20 +31,13 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for CopyToFile {
             #[coroutine]
             move || {
                 let mut writer = throw!(self.create_writer());
+                let CopyToFile { input, .. } = self;
 
-                let mut iter = throw!(unsafe { &mut (*transaction) }.read(
-                    cache.0,
-                    Arc::new(self.op.table.clone()),
-                    (None, None),
-                    self.op
-                        .schema_ref
-                        .iter()
-                        .enumerate()
-                        .map(|(index, column_ref)| (index, column_ref.clone()))
-                        .collect()
-                ));
+                let mut coroutine = build_read(input, cache, transaction);
 
-                while let Some(tuple) = throw!(iter.next_tuple()) {
+                while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
+                    let tuple = throw!(tuple);
+
                     throw!(writer
                         .write_record(
                             tuple
@@ -96,6 +93,7 @@ mod tests {
     use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnRelation, ColumnSummary};
     use crate::db::{DataBaseBuilder, ResultIter};
     use crate::errors::DatabaseError;
+    use crate::planner::operator::table_scan::TableScanOperator;
     use crate::storage::Storage;
     use crate::types::LogicalType;
     use sqlparser::ast::CharLengthUnits;
@@ -158,7 +156,6 @@ mod tests {
         let file_path = tmp_dir.path().join("test.csv");
 
         let op = CopyToFileOperator {
-            table: "t1".to_string(),
             target: ExtSource {
                 path: file_path.clone(),
                 format: FileFormat::Csv {
@@ -181,8 +178,14 @@ mod tests {
 
         let storage = db.storage;
         let mut transaction = storage.transaction()?;
+        let table = transaction
+            .table(&db.state.table_cache(), Arc::new("t1".to_string()))?
+            .unwrap();
 
-        let executor = CopyToFile { op: op.clone() };
+        let executor = CopyToFile {
+            op: op.clone(),
+            input: TableScanOperator::build(Arc::new("t1".to_string()), table),
+        };
         let mut coroutine = executor.execute(
             (
                 db.state.table_cache(),

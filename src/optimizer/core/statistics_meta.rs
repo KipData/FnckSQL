@@ -128,7 +128,7 @@ mod tests {
             ty: IndexType::PrimaryKey { is_multiple: false },
         };
 
-        let mut builder = HistogramBuilder::new(&index, Some(15))?;
+        let mut builder = HistogramBuilder::new(&index, Some(15));
 
         builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
         builder.append(&Arc::new(DataValue::Int32(Some(13))))?;

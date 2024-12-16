@@ -11,17 +11,10 @@ use regex::Regex;
 use sqlparser::ast::{CharLengthUnits, TrimWhereField};
 use std::cmp;
 use std::cmp::Ordering;
-use std::sync::LazyLock;
-
-static NULL_VALUE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Null);
 
 macro_rules! eval_to_num {
-    ($num_expr:expr, $tuple:expr, $schema:expr) => {
-        if let Some(num_i32) = $num_expr
-            .eval($tuple, $schema)?
-            .cast(&LogicalType::Integer)?
-            .i32()
-        {
+    ($num_expr:expr, $tuple:expr) => {
+        if let Some(num_i32) = $num_expr.eval($tuple)?.cast(&LogicalType::Integer)?.i32() {
             num_i32
         } else {
             return Ok(DataValue::Utf8 {
@@ -34,7 +27,7 @@ macro_rules! eval_to_num {
 }
 
 impl ScalarExpression {
-    pub fn eval(&self, tuple: &Tuple, schema: &[ColumnRef]) -> Result<DataValue, DatabaseError> {
+    pub fn eval(&self, tuple: Option<(&Tuple, &[ColumnRef])>) -> Result<DataValue, DatabaseError> {
         let check_cast = |value: DataValue, return_type: &LogicalType| {
             if value.logical_type() != *return_type {
                 return value.cast(return_type);
@@ -45,16 +38,21 @@ impl ScalarExpression {
         match self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
             ScalarExpression::ColumnRef(col) => {
+                let Some((tuple, schema)) = tuple else {
+                    return Ok(DataValue::Null);
+                };
                 let value = schema
                     .iter()
                     .find_position(|tul_col| tul_col.summary() == col.summary())
-                    .map(|(i, _)| &tuple.values[i])
-                    .unwrap_or(&NULL_VALUE)
-                    .clone();
+                    .map(|(i, _)| tuple.values[i].clone())
+                    .unwrap_or(DataValue::Null);
 
                 Ok(value)
             }
             ScalarExpression::Alias { expr, alias } => {
+                let Some((tuple, schema)) = tuple else {
+                    return Ok(DataValue::Null);
+                };
                 if let Some(value) = schema
                     .iter()
                     .find_position(|tul_col| match alias {
@@ -65,24 +63,22 @@ impl ScalarExpression {
                             alias_expr.output_column().summary() == tul_col.summary()
                         }
                     })
-                    .map(|(i, _)| &tuple.values[i])
+                    .map(|(i, _)| tuple.values[i].clone())
                 {
                     return Ok(value.clone());
                 }
 
-                expr.eval(tuple, schema)
+                expr.eval(Some((tuple, schema)))
             }
-            ScalarExpression::TypeCast { expr, ty, .. } => {
-                Ok(expr.eval(tuple, schema)?.cast(ty)?)
-            }
+            ScalarExpression::TypeCast { expr, ty, .. } => Ok(expr.eval(tuple)?.cast(ty)?),
             ScalarExpression::Binary {
                 left_expr,
                 right_expr,
                 evaluator,
                 ..
             } => {
-                let left = left_expr.eval(tuple, schema)?;
-                let right = right_expr.eval(tuple, schema)?;
+                let left = left_expr.eval(tuple)?;
+                let right = right_expr.eval(tuple)?;
 
                 Ok(evaluator
                     .as_ref()
@@ -91,7 +87,7 @@ impl ScalarExpression {
                     .binary_eval(&left, &right))
             }
             ScalarExpression::IsNull { expr, negated } => {
-                let mut is_null = expr.eval(tuple, schema)?.is_null();
+                let mut is_null = expr.eval(tuple)?.is_null();
                 if *negated {
                     is_null = !is_null;
                 }
@@ -102,13 +98,13 @@ impl ScalarExpression {
                 args,
                 negated,
             } => {
-                let value = expr.eval(tuple, schema)?;
+                let value = expr.eval(tuple)?;
                 if value.is_null() {
                     return Ok(DataValue::Boolean(None));
                 }
                 let mut is_in = false;
                 for arg in args {
-                    let arg_value = arg.eval(tuple, schema)?;
+                    let arg_value = arg.eval(tuple)?;
 
                     if arg_value.is_null() {
                         return Ok(DataValue::Boolean(None));
@@ -126,7 +122,7 @@ impl ScalarExpression {
             ScalarExpression::Unary {
                 expr, evaluator, ..
             } => {
-                let value = expr.eval(tuple, schema)?;
+                let value = expr.eval(tuple)?;
 
                 Ok(evaluator
                     .as_ref()
@@ -143,9 +139,9 @@ impl ScalarExpression {
                 right_expr,
                 negated,
             } => {
-                let value = expr.eval(tuple, schema)?;
-                let left = left_expr.eval(tuple, schema)?;
-                let right = right_expr.eval(tuple, schema)?;
+                let value = expr.eval(tuple)?;
+                let left = left_expr.eval(tuple)?;
+                let right = right_expr.eval(tuple)?;
 
                 let mut is_between = match (
                     value.partial_cmp(&left).map(Ordering::is_ge),
@@ -166,12 +162,12 @@ impl ScalarExpression {
                 from_expr,
             } => {
                 if let Some(mut string) = expr
-                    .eval(tuple, schema)?
+                    .eval(tuple)?
                     .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                     .utf8()
                 {
                     if let Some(from_expr) = from_expr {
-                        let mut from = eval_to_num!(from_expr, tuple, schema).saturating_sub(1);
+                        let mut from = eval_to_num!(from_expr, tuple).saturating_sub(1);
                         let len_i = string.len() as i32;
 
                         while from < 0 {
@@ -187,8 +183,7 @@ impl ScalarExpression {
                         string = string.split_off(from as usize);
                     }
                     if let Some(for_expr) = for_expr {
-                        let for_i =
-                            cmp::min(eval_to_num!(for_expr, tuple, schema) as usize, string.len());
+                        let for_i = cmp::min(eval_to_num!(for_expr, tuple) as usize, string.len());
                         let _ = string.split_off(for_i);
                     }
 
@@ -208,7 +203,7 @@ impl ScalarExpression {
             ScalarExpression::Position { expr, in_expr } => {
                 let unpack = |expr: &ScalarExpression| -> Result<String, DatabaseError> {
                     Ok(expr
-                        .eval(tuple, schema)?
+                        .eval(tuple)?
                         .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                         .utf8()
                         .unwrap_or("".to_owned()))
@@ -226,14 +221,14 @@ impl ScalarExpression {
             } => {
                 let mut value = None;
                 if let Some(string) = expr
-                    .eval(tuple, schema)?
+                    .eval(tuple)?
                     .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                     .utf8()
                 {
                     let mut trim_what = String::from(" ");
                     if let Some(trim_what_expr) = trim_what_expr {
                         trim_what = trim_what_expr
-                            .eval(tuple, schema)?
+                            .eval(tuple)?
                             .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                             .utf8()
                             .unwrap_or_default();
@@ -263,23 +258,24 @@ impl ScalarExpression {
                     unit: CharLengthUnits::Characters,
                 })
             }
-            ScalarExpression::Reference { pos, .. } => Ok(tuple
-                .values
-                .get(*pos)
-                .unwrap_or_else(|| &NULL_VALUE)
-                .clone()),
+            ScalarExpression::Reference { pos, .. } => {
+                let Some((tuple, _)) = tuple else {
+                    return Ok(DataValue::Null);
+                };
+                Ok(tuple.values.get(*pos).cloned().unwrap_or(DataValue::Null))
+            }
             ScalarExpression::Tuple(exprs) => {
                 let mut values = Vec::with_capacity(exprs.len());
 
                 for expr in exprs {
-                    values.push(expr.eval(tuple, schema)?);
+                    values.push(expr.eval(tuple)?);
                 }
                 Ok(DataValue::Tuple(
                     (!values.is_empty()).then_some((values, false)),
                 ))
             }
             ScalarExpression::ScalaFunction(ScalarFunction { inner, args, .. }) => {
-                inner.eval(args, tuple, schema)?.cast(inner.return_type())
+                inner.eval(args, tuple)?.cast(inner.return_type())
             }
             ScalarExpression::Empty => unreachable!(),
             ScalarExpression::If {
@@ -288,10 +284,10 @@ impl ScalarExpression {
                 right_expr,
                 ty,
             } => {
-                if condition.eval(tuple, schema)?.is_true()? {
-                    check_cast(left_expr.eval(tuple, schema)?, ty)
+                if condition.eval(tuple)?.is_true()? {
+                    check_cast(left_expr.eval(tuple)?, ty)
                 } else {
-                    check_cast(right_expr.eval(tuple, schema)?, ty)
+                    check_cast(right_expr.eval(tuple)?, ty)
                 }
             }
             ScalarExpression::IfNull {
@@ -299,10 +295,10 @@ impl ScalarExpression {
                 right_expr,
                 ty,
             } => {
-                let mut value = left_expr.eval(tuple, schema)?;
+                let mut value = left_expr.eval(tuple)?;
 
                 if value.is_null() {
-                    value = right_expr.eval(tuple, schema)?;
+                    value = right_expr.eval(tuple)?;
                 }
                 check_cast(value, ty)
             }
@@ -311,10 +307,10 @@ impl ScalarExpression {
                 right_expr,
                 ty,
             } => {
-                let mut value = left_expr.eval(tuple, schema)?;
+                let mut value = left_expr.eval(tuple)?;
 
-                if right_expr.eval(tuple, schema)? == value {
-                    value = NULL_VALUE.clone();
+                if right_expr.eval(tuple)? == value {
+                    value = DataValue::Null;
                 }
                 check_cast(value, ty)
             }
@@ -322,14 +318,14 @@ impl ScalarExpression {
                 let mut value = None;
 
                 for expr in exprs {
-                    let temp = expr.eval(tuple, schema)?;
+                    let temp = expr.eval(tuple)?;
 
                     if !temp.is_null() {
                         value = Some(temp);
                         break;
                     }
                 }
-                check_cast(value.unwrap_or_else(|| NULL_VALUE.clone()), ty)
+                check_cast(value.unwrap_or(DataValue::Null), ty)
             }
             ScalarExpression::CaseWhen {
                 operand_expr,
@@ -341,10 +337,10 @@ impl ScalarExpression {
                 let mut result = None;
 
                 if let Some(expr) = operand_expr {
-                    operand_value = Some(expr.eval(tuple, schema)?);
+                    operand_value = Some(expr.eval(tuple)?);
                 }
                 for (when_expr, result_expr) in expr_pairs {
-                    let mut when_value = when_expr.eval(tuple, schema)?;
+                    let mut when_value = when_expr.eval(tuple)?;
                     let is_true = if let Some(operand_value) = &operand_value {
                         let ty = operand_value.logical_type();
                         let evaluator =
@@ -361,16 +357,16 @@ impl ScalarExpression {
                         when_value.is_true()?
                     };
                     if is_true {
-                        result = Some(result_expr.eval(tuple, schema)?);
+                        result = Some(result_expr.eval(tuple)?);
                         break;
                     }
                 }
                 if result.is_none() {
                     if let Some(expr) = else_expr {
-                        result = Some(expr.eval(tuple, schema)?);
+                        result = Some(expr.eval(tuple)?);
                     }
                 }
-                check_cast(result.unwrap_or_else(|| NULL_VALUE.clone()), ty)
+                check_cast(result.unwrap_or(DataValue::Null), ty)
             }
             ScalarExpression::TableFunction(_) => unreachable!(),
         }

@@ -5,8 +5,8 @@ use crate::errors::DatabaseError;
 use crate::expression::function::table::TableFunctionImpl;
 use crate::expression::function::FunctionSummary;
 use crate::expression::ScalarExpression;
+use crate::types::tuple::SchemaRef;
 use crate::types::tuple::Tuple;
-use crate::types::tuple::{SchemaRef, EMPTY_TUPLE};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use serde::Deserialize;
@@ -52,7 +52,7 @@ impl TableFunctionImpl for Numbers {
         &self,
         args: &[ScalarExpression],
     ) -> Result<Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>, DatabaseError> {
-        let mut value = args[0].eval(&EMPTY_TUPLE, &[])?;
+        let mut value = args[0].eval(None)?;
 
         if value.logical_type() != LogicalType::Integer {
             value = value.cast(&LogicalType::Integer)?;

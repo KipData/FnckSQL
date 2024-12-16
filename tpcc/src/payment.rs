@@ -61,7 +61,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         // "UPDATE warehouse SET w_ytd = w_ytd + ? WHERE w_id = ?"
         tx.execute(
             &statements[0],
-            vec![
+            &[
                 ("?1", DataValue::Decimal(Some(args.h_amount))),
                 ("?2", DataValue::Int16(Some(args.w_id as i16))),
             ],
@@ -71,7 +71,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         let tuple = tx
             .execute(
                 &statements[1],
-                vec![("?1", DataValue::Int16(Some(args.w_id as i16)))],
+                &[("?1", DataValue::Int16(Some(args.w_id as i16)))],
             )?
             .next()
             .unwrap()?;
@@ -85,7 +85,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         // "UPDATE district SET d_ytd = d_ytd + ? WHERE d_w_id = ? AND d_id = ?"
         tx.execute(
             &statements[2],
-            vec![
+            &[
                 ("?1", DataValue::Decimal(Some(args.h_amount))),
                 ("?2", DataValue::Int16(Some(args.w_id as i16))),
                 ("?3", DataValue::Int8(Some(args.d_id as i8))),
@@ -97,7 +97,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         let tuple = tx
             .execute(
                 &statements[3],
-                vec![
+                &[
                     ("?1", DataValue::Int16(Some(args.w_id as i16))),
                     ("?2", DataValue::Int8(Some(args.d_id as i8))),
                 ],
@@ -117,7 +117,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
             let tuple = tx
                 .execute(
                     &statements[4],
-                    vec![
+                    &[
                         ("?1", DataValue::Int16(Some(args.c_w_id as i16))),
                         ("?2", DataValue::Int8(Some(args.c_d_id as i8))),
                         ("?3", DataValue::from(args.c_last.clone())),
@@ -130,7 +130,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
             // "SELECT c_id FROM customer WHERE c_w_id = ? AND c_d_id = ? AND c_last = ? ORDER BY c_first"
             let mut tuple_iter = tx.execute(
                 &statements[5],
-                vec![
+                &[
                     ("?1", DataValue::Int16(Some(args.c_w_id as i16))),
                     ("?2", DataValue::Int8(Some(args.c_d_id as i8))),
                     ("?3", DataValue::from(args.c_last.clone())),
@@ -148,7 +148,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         let tuple = tx
             .execute(
                 &statements[6],
-                vec![
+                &[
                     ("?1", DataValue::Int16(Some(args.c_w_id as i16))),
                     ("?2", DataValue::Int8(Some(args.c_d_id as i8))),
                     ("?3", DataValue::Int32(Some(c_id))),
@@ -178,7 +178,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                 let tuple = tx
                     .execute(
                         &statements[7],
-                        vec![
+                        &[
                             ("?1", DataValue::Int16(Some(args.c_w_id as i16))),
                             ("?2", DataValue::Int8(Some(args.c_d_id as i8))),
                             ("?3", DataValue::Int32(Some(c_id))),
@@ -194,7 +194,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                 // "UPDATE customer SET c_balance = ?, c_data = ? WHERE c_w_id = ? AND c_d_id = ? AND c_id = ?"
                 tx.execute(
                     &statements[8],
-                    vec![
+                    &[
                         ("?1", DataValue::Decimal(Some(c_balance))),
                         ("?2", DataValue::from(c_data)),
                         ("?3", DataValue::Int16(Some(args.c_w_id as i16))),
@@ -207,7 +207,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                 // "UPDATE customer SET c_balance = ? WHERE c_w_id = ? AND c_d_id = ? AND c_id = ?"
                 tx.execute(
                     &statements[9],
-                    vec![
+                    &[
                         ("?1", DataValue::Decimal(Some(c_balance))),
                         ("?2", DataValue::Int16(Some(args.c_w_id as i16))),
                         ("?3", DataValue::Int8(Some(args.c_d_id as i8))),
@@ -220,7 +220,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
             // "UPDATE customer SET c_balance = ? WHERE c_w_id = ? AND c_d_id = ? AND c_id = ?"
             tx.execute(
                 &statements[9],
-                vec![
+                &[
                     ("?1", DataValue::Decimal(Some(c_balance))),
                     ("?2", DataValue::Int16(Some(args.c_w_id as i16))),
                     ("?3", DataValue::Int8(Some(args.c_d_id as i8))),
@@ -233,7 +233,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         // "INSERT INTO history(h_c_d_id, h_c_w_id, h_c_id, h_d_id, h_w_id, h_date, h_amount, h_data) VALUES(?, ?, ?, ?, ?, ?, ?, ?)"
         tx.execute(
             &statements[10],
-            vec![
+            &[
                 ("?1", DataValue::Int8(Some(args.c_d_id as i8))),
                 ("?2", DataValue::Int16(Some(args.c_w_id as i16))),
                 ("?3", DataValue::Int32(Some(c_id))),
