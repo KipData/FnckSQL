@@ -71,7 +71,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
             let tuple = tx
                 .execute(
                     &statements[0],
-                    vec![
+                    &[
                         ("?1", DataValue::Int16(Some(args.w_id as i16))),
                         ("?2", DataValue::Int16(Some(args.w_id as i16))),
                         ("?3", DataValue::Int8(Some(args.d_id as i8))),
@@ -91,7 +91,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
             let tuple = tx
                 .execute(
                     &statements[1],
-                    vec![
+                    &[
                         ("?1", DataValue::Int16(Some(args.w_id as i16))),
                         ("?2", DataValue::Int8(Some(args.d_id as i8))),
                         ("?3", DataValue::Int32(Some(args.c_id as i32))),
@@ -106,7 +106,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
             let tuple = tx
                 .execute(
                     &statements[2],
-                    vec![("?1", DataValue::Int16(Some(args.w_id as i16)))],
+                    &[("?1", DataValue::Int16(Some(args.w_id as i16)))],
                 )?
                 .next()
                 .unwrap()?;
@@ -118,7 +118,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
         let tuple = tx
             .execute(
                 &statements[3],
-                vec![
+                &[
                     ("?1", DataValue::Int8(Some(args.d_id as i8))),
                     ("?2", DataValue::Int16(Some(args.w_id as i16))),
                 ],
@@ -130,7 +130,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
         // "UPDATE district SET d_next_o_id = ? + 1 WHERE d_id = ? AND d_w_id = ?"
         tx.execute(
             &statements[4],
-            vec![
+            &[
                 ("?1", DataValue::Int32(Some(d_next_o_id))),
                 ("?2", DataValue::Int8(Some(args.d_id as i8))),
                 ("?3", DataValue::Int16(Some(args.w_id as i16))),
@@ -141,7 +141,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
         // "INSERT INTO orders (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local) VALUES(?, ?, ?, ?, ?, ?, ?)"
         tx.execute(
             &statements[5],
-            vec![
+            &[
                 ("?1", DataValue::Int32(Some(o_id))),
                 ("?2", DataValue::Int8(Some(args.d_id as i8))),
                 ("?3", DataValue::Int16(Some(args.w_id as i16))),
@@ -155,7 +155,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
         // "INSERT INTO new_orders (no_o_id, no_d_id, no_w_id) VALUES (?,?,?)
         tx.execute(
             &statements[6],
-            vec![
+            &[
                 ("?1", DataValue::Int32(Some(o_id))),
                 ("?2", DataValue::Int8(Some(args.d_id as i8))),
                 ("?3", DataValue::Int16(Some(args.w_id as i16))),

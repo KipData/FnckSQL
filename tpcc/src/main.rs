@@ -321,7 +321,6 @@ pub enum TpccError {
 #[ignore]
 #[test]
 fn explain_tpcc() -> Result<(), DatabaseError> {
-    use fnck_sql::db::ResultIter;
     use fnck_sql::types::tuple::create_table;
 
     let database = DataBaseBuilder::path("./fnck_sql_tpcc").build()?;

@@ -4,10 +4,11 @@ use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::Operator;
 use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
+use crate::types::value::DataValue;
 use sqlparser::ast::ObjectName;
 use std::sync::Arc;
 
-impl<T: Transaction> Binder<'_, '_, T> {
+impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A> {
     pub(crate) fn bind_drop_table(
         &mut self,
         name: &ObjectName,

@@ -16,7 +16,6 @@ pub(crate) const DIST_PER_WARE: usize = 10;
 pub(crate) const ORD_PER_DIST: usize = 3000;
 
 pub(crate) static MAX_NUM_ITEMS: usize = 15;
-pub(crate) static MAX_ITEM_LEN: usize = 24;
 
 fn generate_string(rng: &mut ThreadRng, min: usize, max: usize) -> String {
     let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"

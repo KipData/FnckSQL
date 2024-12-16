@@ -34,7 +34,7 @@ impl<S: Storage> TpccTransaction<S> for Slev {
         let tuple = tx
             .execute(
                 &statements[0],
-                vec![
+                &[
                     ("?1", DataValue::Int8(Some(args.d_id as i8))),
                     ("?2", DataValue::Int16(Some(args.w_id as i16))),
                 ],
@@ -46,7 +46,7 @@ impl<S: Storage> TpccTransaction<S> for Slev {
         let tuple = tx
             .execute(
                 &statements[1],
-                vec![
+                &[
                     ("?1", DataValue::Int16(Some(args.w_id as i16))),
                     ("?2", DataValue::Int8(Some(args.d_id as i8))),
                     ("?3", DataValue::Int32(Some(d_next_o_id))),
@@ -60,7 +60,7 @@ impl<S: Storage> TpccTransaction<S> for Slev {
         let tuple = tx
             .execute(
                 &statements[2],
-                vec![
+                &[
                     ("?1", DataValue::Int16(Some(args.w_id as i16))),
                     ("?2", DataValue::Int8(Some(ol_i_id as i8))),
                     ("?3", DataValue::Int16(Some(args.level as i16))),

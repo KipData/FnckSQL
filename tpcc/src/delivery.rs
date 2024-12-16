@@ -37,7 +37,7 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             let tuple = tx
                 .execute(
                     &statements[0],
-                    vec![
+                    &[
                         ("?1", DataValue::Int8(Some(d_id as i8))),
                         ("?2", DataValue::Int16(Some(args.w_id as i16))),
                     ],
@@ -52,7 +52,7 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             // "DELETE FROM new_orders WHERE no_o_id = ? AND no_d_id = ? AND no_w_id = ?"
             tx.execute(
                 &statements[1],
-                vec![
+                &[
                     ("?1", DataValue::Int32(Some(no_o_id))),
                     ("?2", DataValue::Int8(Some(d_id as i8))),
                     ("?3", DataValue::Int16(Some(args.w_id as i16))),
@@ -63,7 +63,7 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             let tuple = tx
                 .execute(
                     &statements[2],
-                    vec![
+                    &[
                         ("?1", DataValue::Int32(Some(no_o_id))),
                         ("?2", DataValue::Int8(Some(d_id as i8))),
                         ("?3", DataValue::Int16(Some(args.w_id as i16))),
@@ -75,7 +75,7 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             // "UPDATE orders SET o_carrier_id = ? WHERE o_id = ? AND o_d_id = ? AND o_w_id = ?"
             tx.execute(
                 &statements[3],
-                vec![
+                &[
                     ("?1", DataValue::Int8(Some(args.o_carrier_id as i8))),
                     ("?2", DataValue::Int32(Some(no_o_id))),
                     ("?3", DataValue::Int8(Some(d_id as i8))),
@@ -86,7 +86,7 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             // "UPDATE order_line SET ol_delivery_d = ? WHERE ol_o_id = ? AND ol_d_id = ? AND ol_w_id = ?"
             tx.execute(
                 &statements[4],
-                vec![
+                &[
                     ("?1", DataValue::from(&now)),
                     ("?2", DataValue::Int32(Some(no_o_id))),
                     ("?3", DataValue::Int8(Some(d_id as i8))),
@@ -98,7 +98,7 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             let tuple = tx
                 .execute(
                     &statements[5],
-                    vec![
+                    &[
                         ("?1", DataValue::Int32(Some(no_o_id))),
                         ("?2", DataValue::Int8(Some(d_id as i8))),
                         ("?3", DataValue::Int16(Some(args.w_id as i16))),
@@ -110,7 +110,7 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             // "UPDATE customer SET c_balance = c_balance + ? , c_delivery_cnt = c_delivery_cnt + 1 WHERE c_id = ? AND c_d_id = ? AND c_w_id = ?"
             tx.execute(
                 &statements[6],
-                vec![
+                &[
                     ("?1", DataValue::Decimal(Some(ol_total))),
                     ("?2", DataValue::Int32(Some(c_id))),
                     ("?3", DataValue::Int8(Some(d_id as i8))),

@@ -64,7 +64,7 @@ impl FromStr for ExtSource {
     }
 }
 
-impl<T: Transaction> Binder<'_, '_, T> {
+impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A> {
     pub(super) fn bind_copy(
         &mut self,
         source: CopySource,

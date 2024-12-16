@@ -7,10 +7,11 @@ use crate::planner::operator::Operator;
 use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use crate::types::index::IndexType;
+use crate::types::value::DataValue;
 use sqlparser::ast::{ObjectName, OrderByExpr};
 use std::sync::Arc;
 
-impl<T: Transaction> Binder<'_, '_, T> {
+impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A> {
     pub(crate) fn bind_create_index(
         &mut self,
         table_name: &ObjectName,

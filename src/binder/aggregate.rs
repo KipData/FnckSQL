@@ -3,18 +3,18 @@ use itertools::Itertools;
 use sqlparser::ast::{Expr, OrderByExpr};
 use std::collections::HashSet;
 
+use super::{Binder, QueryBindStep};
 use crate::errors::DatabaseError;
 use crate::expression::function::scala::ScalarFunction;
 use crate::planner::LogicalPlan;
 use crate::storage::Transaction;
+use crate::types::value::DataValue;
 use crate::{
     expression::ScalarExpression,
     planner::operator::{aggregate::AggregateOperator, sort::SortField},
 };
 
-use super::{Binder, QueryBindStep};
-
-impl<T: Transaction> Binder<'_, '_, T> {
+impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A> {
     pub fn bind_aggregate(
         &mut self,
         children: LogicalPlan,

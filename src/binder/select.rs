@@ -38,7 +38,7 @@ use sqlparser::ast::{
     TableWithJoins,
 };
 
-impl<'a: 'b, 'b, T: Transaction> Binder<'a, 'b, T> {
+impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, 'b, T, A> {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, DatabaseError> {
         let origin_step = self.context.step_now();
 

@@ -97,7 +97,6 @@ mod tests {
     use crate::types::value::DataValue;
     use crate::types::LogicalType;
     use petgraph::stable_graph::NodeIndex;
-    use std::cell::RefCell;
     use std::ops::Bound;
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
@@ -131,7 +130,6 @@ mod tests {
         };
         let scala_functions = Default::default();
         let table_functions = Default::default();
-        let args = RefCell::new(Vec::new());
         let mut binder = Binder::new(
             BinderContext::new(
                 database.state.table_cache(),
@@ -141,7 +139,7 @@ mod tests {
                 &table_functions,
                 Arc::new(AtomicUsize::new(0)),
             ),
-            &args,
+            &[],
             None,
         );
         // where: c1 => 2, (40, +inf)

@@ -5,11 +5,12 @@ use crate::planner::operator::table_scan::TableScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
+use crate::types::value::DataValue;
 use itertools::Itertools;
 use sqlparser::ast::{Expr, TableAlias, TableFactor, TableWithJoins};
 use std::sync::Arc;
 
-impl<T: Transaction> Binder<'_, '_, T> {
+impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A> {
     pub(crate) fn bind_delete(
         &mut self,
         from: &TableWithJoins,

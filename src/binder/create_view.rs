@@ -7,12 +7,13 @@ use crate::planner::operator::create_view::CreateViewOperator;
 use crate::planner::operator::Operator;
 use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
+use crate::types::value::DataValue;
 use itertools::Itertools;
 use sqlparser::ast::{Ident, ObjectName, Query};
 use std::sync::Arc;
 use ulid::Ulid;
 
-impl<T: Transaction> Binder<'_, '_, T> {
+impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A> {
     pub(crate) fn bind_create_view(
         &mut self,
         or_replace: &bool,
