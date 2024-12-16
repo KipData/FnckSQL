@@ -194,7 +194,11 @@ pub fn build_write<'a, T: Transaction + 'a>(
         Operator::DropView(op) => DropView::from(op).execute_mut(cache, transaction),
         Operator::Truncate(op) => Truncate::from(op).execute_mut(cache, transaction),
         Operator::CopyFromFile(op) => CopyFromFile::from(op).execute_mut(cache, transaction),
-        Operator::CopyToFile(op) => CopyToFile::from(op).execute(cache, transaction),
+        Operator::CopyToFile(op) => {
+            let input = childrens.pop_only();
+
+            CopyToFile::from((op, input)).execute(cache, transaction)
+        }
 
         Operator::Analyze(op) => {
             let input = childrens.pop_only();

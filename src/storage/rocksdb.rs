@@ -1,7 +1,9 @@
 use crate::errors::DatabaseError;
 use crate::storage::table_codec::{BumpBytes, Bytes, TableCodec};
 use crate::storage::{InnerIter, Storage, Transaction};
-use rocksdb::{DBIteratorWithThreadMode, Direction, IteratorMode, OptimisticTransactionDB};
+use rocksdb::{
+    DBIteratorWithThreadMode, Direction, IteratorMode, OptimisticTransactionDB, SliceTransform,
+};
 use std::collections::Bound;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -15,10 +17,12 @@ impl RocksStorage {
     pub fn new(path: impl Into<PathBuf> + Send) -> Result<Self, DatabaseError> {
         let mut bb = rocksdb::BlockBasedOptions::default();
         bb.set_block_cache(&rocksdb::Cache::new_lru_cache(40 * 1_024 * 1_024));
+        bb.set_whole_key_filtering(false);
 
         let mut opts = rocksdb::Options::default();
         opts.set_block_based_table_factory(&bb);
         opts.create_if_missing(true);
+        opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(4));
 
         let storage = OptimisticTransactionDB::open(&opts, path.into())?;
 
@@ -84,24 +88,38 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
         min: Bound<BumpBytes<'a>>,
         max: Bound<BumpBytes<'a>>,
     ) -> Result<Self::IterType<'a>, DatabaseError> {
-        #[inline]
-        fn bound_to_include(bound: Bound<&[u8]>) -> Option<&[u8]> {
-            match bound {
-                Bound::Included(bytes) | Bound::Excluded(bytes) => Some(bytes),
-                Bound::Unbounded => None,
+        let min = match min {
+            Bound::Included(bytes) => Some(bytes),
+            Bound::Excluded(mut bytes) => {
+                // the prefix is the same, but the length is larger
+                bytes.push(0u8);
+                Some(bytes)
             }
-        }
-
-        let lower = bound_to_include(min.as_ref().map(BumpBytes::as_slice))
+            Bound::Unbounded => None,
+        };
+        let lower = min
+            .as_ref()
             .map(|bytes| IteratorMode::From(bytes, Direction::Forward))
             .unwrap_or(IteratorMode::Start);
+
+        if let (Some(min_bytes), Bound::Included(max_bytes) | Bound::Excluded(max_bytes)) =
+            (&min, &max)
+        {
+            let len = min_bytes
+                .iter()
+                .zip(max_bytes.iter())
+                .take_while(|(x, y)| x == y)
+                .count();
+
+            debug_assert!(len > 0);
+            let mut iter = self.tx.prefix_iterator(&min_bytes[..len]);
+            iter.set_mode(lower);
+
+            return Ok(RocksIter { upper: max, iter });
+        }
         let iter = self.tx.iterator(lower);
 
-        Ok(RocksIter {
-            lower: min,
-            upper: max,
-            iter,
-        })
+        Ok(RocksIter { upper: max, iter })
     }
 
     fn commit(self) -> Result<(), DatabaseError> {
@@ -111,7 +129,6 @@ impl<'txn> Transaction for RocksTransaction<'txn> {
 }
 
 pub struct RocksIter<'txn, 'iter> {
-    lower: Bound<BumpBytes<'iter>>,
     upper: Bound<BumpBytes<'iter>>,
     iter: DBIteratorWithThreadMode<'iter, rocksdb::Transaction<'txn, OptimisticTransactionDB>>,
 }
@@ -119,7 +136,7 @@ pub struct RocksIter<'txn, 'iter> {
 impl InnerIter for RocksIter<'_, '_> {
     #[inline]
     fn try_next(&mut self) -> Result<Option<(Bytes, Bytes)>, DatabaseError> {
-        for result in self.iter.by_ref() {
+        if let Some(result) = self.iter.by_ref().next() {
             let (key, value) = result?;
             let upper_bound_check = match &self.upper {
                 Bound::Included(ref upper) => {
@@ -129,16 +146,9 @@ impl InnerIter for RocksIter<'_, '_> {
                 Bound::Unbounded => true,
             };
             if !upper_bound_check {
-                break;
+                return Ok(None);
             }
-            let lower_bound_check = match &self.lower {
-                Bound::Included(ref lower) => key.as_ref() >= lower.as_slice(),
-                Bound::Excluded(ref lower) => key.as_ref() > lower.as_slice(),
-                Bound::Unbounded => true,
-            };
-            if lower_bound_check {
-                return Ok(Some((Vec::from(key), Vec::from(value))));
-            }
+            return Ok(Some((Vec::from(key), Vec::from(value))));
         }
         Ok(None)
     }

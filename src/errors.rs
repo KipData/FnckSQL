@@ -41,6 +41,8 @@ pub enum DatabaseError {
     DefaultNotExist,
     #[error("column: {0} already exists")]
     DuplicateColumn(String),
+    #[error("table or view: {0} hash already exists")]
+    DuplicateSourceHash(String),
     #[error("index: {0} already exists")]
     DuplicateIndex(String),
     #[error("duplicate primary key")]

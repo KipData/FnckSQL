@@ -317,8 +317,12 @@ pub trait Transaction: Sized {
     ) -> Result<(), DatabaseError> {
         let (view_key, value) = unsafe { &*self.table_codec() }.encode_view(&view)?;
 
-        if !or_replace && self.get(&view_key)?.is_some() {
+        let already_exists = self.get(&view_key)?.is_some();
+        if !or_replace && already_exists {
             return Err(DatabaseError::ViewExists);
+        }
+        if !already_exists {
+            self.check_name_hash(&view.name)?;
         }
         self.set(view_key, value)?;
         let _ = view_cache.put(view.name.clone(), view);
@@ -347,6 +351,7 @@ pub trait Transaction: Sized {
             }
             return Err(DatabaseError::TableExists);
         }
+        self.check_name_hash(&table_name)?;
         self.create_index_meta_from_column(&mut table_catalog)?;
         self.set(table_key, value)?;
 
@@ -362,6 +367,18 @@ pub trait Transaction: Sized {
         Ok(table_name)
     }
 
+    fn check_name_hash(&mut self, table_name: &TableName) -> Result<(), DatabaseError> {
+        let (hash_key, value) = unsafe { &*self.table_codec() }.encode_table_hash(table_name);
+        if self.get(&hash_key)?.is_some() {
+            return Err(DatabaseError::DuplicateSourceHash(table_name.to_string()));
+        }
+        self.set(hash_key, value)
+    }
+
+    fn drop_name_hash(&mut self, table_name: &TableName) -> Result<(), DatabaseError> {
+        self.remove(&unsafe { &*self.table_codec() }.encode_table_hash_key(table_name))
+    }
+
     fn drop_view(
         &mut self,
         view_cache: &ViewCache,
@@ -369,6 +386,7 @@ pub trait Transaction: Sized {
         view_name: TableName,
         if_exists: bool,
     ) -> Result<(), DatabaseError> {
+        self.drop_name_hash(&view_name)?;
         if self
             .view(table_cache, view_cache, view_name.clone())?
             .is_none()
@@ -392,6 +410,7 @@ pub trait Transaction: Sized {
         table_name: TableName,
         if_exists: bool,
     ) -> Result<(), DatabaseError> {
+        self.drop_name_hash(&table_name)?;
         if self.table(table_cache, table_name.clone())?.is_none() {
             if if_exists {
                 return Ok(());
@@ -590,9 +609,9 @@ pub trait Transaction: Sized {
         let table_name = table.name.clone();
         let mut primary_keys = Vec::new();
 
-        // FIXME: no clone
-        for col in table.columns().cloned().collect_vec() {
-            let col_id = col.id().unwrap();
+        let schema_ref = table.schema_ref().clone();
+        for col in schema_ref.iter() {
+            let col_id = col.id().ok_or(DatabaseError::PrimaryKeyNotFound)?;
             let index_ty = if let Some(i) = col.desc().primary() {
                 primary_keys.push((i, col_id));
                 continue;

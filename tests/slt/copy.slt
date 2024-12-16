@@ -16,4 +16,4 @@ SELECT * FROM test_copy
 query I
 COPY test_copy TO './copy.csv' ( DELIMITER ',' );
 ----
-Copy test_copy -> ./copy.csv [a, b, c]
+Copy To ./copy.csv [a, b, c]

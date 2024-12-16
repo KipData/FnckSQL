@@ -6,6 +6,7 @@ use super::*;
 use crate::errors::DatabaseError;
 use crate::planner::operator::copy_from_file::CopyFromFileOperator;
 use crate::planner::operator::copy_to_file::CopyToFileOperator;
+use crate::planner::operator::table_scan::TableScanOperator;
 use crate::planner::operator::Operator;
 use crate::planner::Childrens;
 use fnck_sql_serde_macros::ReferenceSerialization;
@@ -96,11 +97,10 @@ impl<T: Transaction> Binder<'_, '_, T> {
                 // COPY <source_table> TO <dest_file>
                 Ok(LogicalPlan::new(
                     Operator::CopyToFile(CopyToFileOperator {
-                        table: table.name.to_string(),
                         target: ext_source,
                         schema_ref,
                     }),
-                    Childrens::None,
+                    Childrens::Only(TableScanOperator::build(table_name, table)),
                 ))
             } else {
                 // COPY <dest_table> FROM <source_file>

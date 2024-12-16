@@ -7,7 +7,6 @@ use std::fmt::Formatter;
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct CopyToFileOperator {
-    pub table: String,
     pub target: ExtSource,
     pub schema_ref: SchemaRef,
 }
@@ -19,13 +18,7 @@ impl fmt::Display for CopyToFileOperator {
             .iter()
             .map(|column| column.name().to_string())
             .join(", ");
-        write!(
-            f,
-            "Copy {} -> {} [{}]",
-            self.table,
-            self.target.path.display(),
-            columns
-        )?;
+        write!(f, "Copy To {} [{}]", self.target.path.display(), columns)?;
 
         Ok(())
     }

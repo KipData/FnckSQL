@@ -8,6 +8,8 @@ use crate::types::tuple::{Schema, Tuple, TupleId};
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
 use bumpalo::Bump;
+use siphasher::sip::SipHasher;
+use std::hash::{Hash, Hasher};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::sync::LazyLock;
 
@@ -16,6 +18,7 @@ pub(crate) const BOUND_MAX_TAG: u8 = u8::MAX;
 
 static ROOT_BYTES: LazyLock<Vec<u8>> = LazyLock::new(|| b"Root".to_vec());
 static VIEW_BYTES: LazyLock<Vec<u8>> = LazyLock::new(|| b"View".to_vec());
+static HASH_BYTES: LazyLock<Vec<u8>> = LazyLock::new(|| b"Hash".to_vec());
 static EMPTY_REFERENCE_TABLES: LazyLock<ReferenceTables> = LazyLock::new(ReferenceTables::new);
 
 pub type Bytes = Vec<u8>;
@@ -35,9 +38,16 @@ enum CodecType {
     View,
     Tuple,
     Root,
+    Hash,
 }
 
 impl TableCodec {
+    fn hash_bytes(table_name: &str) -> [u8; 8] {
+        let mut hasher = SipHasher::new();
+        table_name.hash(&mut hasher);
+        hasher.finish().to_le_bytes()
+    }
+
     pub fn check_primary_key(value: &DataValue, indentation: usize) -> Result<(), DatabaseError> {
         if indentation > 1 {
             return Err(DatabaseError::PrimaryKeyTooManyLayers);
@@ -80,10 +90,12 @@ impl TableCodec {
 
     /// TableName + Type
     ///
-    /// Tips: Root & View full key = key_prefix
+    /// Tips:
+    /// 1. Root & View & Hash full key = key_prefix
+    /// 2. hash table name makes it 4 as a fixed length, and [prefix_extractor](https://github.com/facebook/rocksdb/wiki/Prefix-Seek#defining-a-prefix) can be enabled in rocksdb
     fn key_prefix(&self, ty: CodecType, name: &str) -> BumpBytes {
         let mut table_bytes = BumpBytes::new_in(&self.arena);
-        table_bytes.extend_from_slice(name.as_bytes());
+        table_bytes.extend_from_slice(Self::hash_bytes(name).as_slice());
 
         match ty {
             CodecType::Column => {
@@ -106,7 +118,7 @@ impl TableCodec {
 
                 bytes.extend_from_slice(&ROOT_BYTES);
                 bytes.push(BOUND_MIN_TAG);
-                bytes.append(&mut table_bytes);
+                bytes.extend_from_slice(&table_bytes);
 
                 return bytes;
             }
@@ -115,7 +127,17 @@ impl TableCodec {
 
                 bytes.extend_from_slice(&VIEW_BYTES);
                 bytes.push(BOUND_MIN_TAG);
+                bytes.extend_from_slice(&table_bytes);
+
+                return bytes;
+            }
+            CodecType::Hash => {
+                let mut bytes = BumpBytes::new_in(&self.arena);
+
+                bytes.extend_from_slice(&HASH_BYTES);
+                bytes.push(BOUND_MIN_TAG);
                 bytes.append(&mut table_bytes);
+                bytes.extend_from_slice(&table_bytes);
 
                 return bytes;
             }
@@ -480,6 +502,17 @@ impl TableCodec {
         let mut bytes = Cursor::new(bytes);
 
         TableMeta::decode::<T, _>(&mut bytes, None, &EMPTY_REFERENCE_TABLES)
+    }
+
+    pub fn encode_table_hash_key(&self, table_name: &str) -> BumpBytes {
+        self.key_prefix(CodecType::Hash, table_name)
+    }
+
+    pub fn encode_table_hash(&self, table_name: &str) -> (BumpBytes, BumpBytes) {
+        (
+            self.key_prefix(CodecType::Hash, table_name),
+            BumpBytes::new_in(&self.arena),
+        )
     }
 }
 
@@ -1035,8 +1068,8 @@ mod tests {
             ))
             .collect_vec();
 
-        assert_eq!(vec[0], &op("V0"));
-        assert_eq!(vec[1], &op("V1"));
-        assert_eq!(vec[2], &op("V2"));
+        assert_eq!(vec[2], &op("V0"));
+        assert_eq!(vec[0], &op("V1"));
+        assert_eq!(vec[1], &op("V2"));
     }
 }
