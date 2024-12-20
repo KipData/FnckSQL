@@ -172,19 +172,25 @@ impl SimpleQueryHandler for SessionBackend {
             _ => {
                 let mut guard = self.tx.lock();
 
-                let iter = if let Some(transaction) = guard.as_mut() {
-                    unsafe { transaction.as_mut().run(query) }.map(Box::new)
-                        as Result<Box<dyn ResultIter>, _>
-                } else {
-                    self.inner.run(query).map(Box::new)
-                }
-                .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
-
                 let mut tuples = Vec::new();
-                for tuple in iter {
-                    tuples.push(tuple.map_err(|e| PgWireError::ApiError(Box::new(e)))?);
-                }
-                Ok(vec![Response::Query(encode_tuples(iter.schema(), tuples)?)])
+                let response = if let Some(transaction) = guard.as_mut() {
+                    let mut iter = unsafe { transaction.as_mut().run(query) }
+                        .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
+                    for tuple in iter.by_ref() {
+                        tuples.push(tuple.map_err(|e| PgWireError::ApiError(Box::new(e)))?);
+                    }
+                    encode_tuples(iter.schema(), tuples)?
+                } else {
+                    let mut iter = self
+                        .inner
+                        .run(query)
+                        .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
+                    for tuple in iter.by_ref() {
+                        tuples.push(tuple.map_err(|e| PgWireError::ApiError(Box::new(e)))?);
+                    }
+                    encode_tuples(iter.schema(), tuples)?
+                };
+                Ok(vec![Response::Query(response)])
             }
         }
     }
@@ -235,7 +241,9 @@ fn encode_tuples<'a>(schema: &Schema, tuples: Vec<Tuple>) -> PgWireResult<QueryR
                 LogicalType::Date => encoder.encode_field(&value.date()),
                 LogicalType::DateTime => encoder.encode_field(&value.datetime()),
                 LogicalType::Time => encoder.encode_field(&value.time()),
-                LogicalType::Decimal(_, _) => todo!(),
+                LogicalType::Decimal(_, _) => {
+                    encoder.encode_field(&value.decimal().map(|decimal| decimal.to_string()))
+                }
                 _ => unreachable!(),
             }?;
         }
@@ -260,7 +268,7 @@ fn into_pg_type(data_type: &LogicalType) -> PgWireResult<Type> {
         LogicalType::Date | LogicalType::DateTime => Type::DATE,
         LogicalType::Char(..) => Type::CHAR,
         LogicalType::Time => Type::TIME,
-        LogicalType::Decimal(_, _) => todo!(),
+        LogicalType::Decimal(_, _) => Type::FLOAT8,
         _ => {
             return Err(PgWireError::UserError(Box::new(ErrorInfo::new(
                 "ERROR".to_owned(),

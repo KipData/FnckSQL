@@ -56,7 +56,7 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
                         .find_map(|(key, value)| (key == name).then(|| value.clone()))
                         .ok_or_else(|| DatabaseError::ParametersNotFound(name.to_string()))?
                 } else {
-                    v.into()
+                    v.try_into()?
                 };
                 Ok(ScalarExpression::Constant(value))
             }
@@ -473,7 +473,12 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
             match arg_expr {
                 FunctionArgExpr::Expr(expr) => args.push(self.bind_expr(expr)?),
                 FunctionArgExpr::Wildcard => args.push(Self::wildcard_expr()),
-                _ => todo!(),
+                expr => {
+                    return Err(DatabaseError::UnsupportedStmt(format!(
+                        "function arg: {:#?}",
+                        expr
+                    )))
+                }
             }
         }
         let function_name = func.name.to_string().to_lowercase();

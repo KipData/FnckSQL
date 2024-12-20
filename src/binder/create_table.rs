@@ -1,8 +1,3 @@
-use itertools::Itertools;
-use sqlparser::ast::{ColumnDef, ColumnOption, ObjectName, TableConstraint};
-use std::collections::HashSet;
-use std::sync::Arc;
-
 use super::{is_valid_identifier, Binder};
 use crate::binder::lower_case_name;
 use crate::catalog::{ColumnCatalog, ColumnDesc};
@@ -14,6 +9,10 @@ use crate::planner::{Childrens, LogicalPlan};
 use crate::storage::Transaction;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
+use itertools::Itertools;
+use sqlparser::ast::{ColumnDef, ColumnOption, ObjectName, TableConstraint};
+use std::collections::HashSet;
+use std::sync::Arc;
 
 impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A> {
     // TODO: TableConstraint
@@ -75,7 +74,12 @@ impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A>
                         }
                     }
                 }
-                _ => todo!(),
+                constraint => {
+                    return Err(DatabaseError::UnsupportedStmt(format!(
+                        "`CreateTable` does not currently support this constraint: {:?}",
+                        constraint
+                    )))?
+                }
             }
         }
 
@@ -140,7 +144,12 @@ impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A>
                     }
                     column_desc.default = Some(expr);
                 }
-                _ => todo!(),
+                option => {
+                    return Err(DatabaseError::UnsupportedStmt(format!(
+                        "`Column` does not currently support this option: {:?}",
+                        option
+                    )))
+                }
             }
         }
 

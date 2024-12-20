@@ -139,9 +139,7 @@ impl InnerIter for RocksIter<'_, '_> {
         if let Some(result) = self.iter.by_ref().next() {
             let (key, value) = result?;
             let upper_bound_check = match &self.upper {
-                Bound::Included(ref upper) => {
-                    key.as_ref() <= upper.as_slice() || key.starts_with(upper.as_slice())
-                }
+                Bound::Included(ref upper) => key.as_ref() <= upper.as_slice(),
                 Bound::Excluded(ref upper) => key.as_ref() < upper.as_slice(),
                 Bound::Unbounded => true,
             };

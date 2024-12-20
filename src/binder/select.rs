@@ -55,7 +55,12 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                 left,
                 right,
             } => self.bind_set_operation(op, set_quantifier, left, right),
-            _ => unimplemented!(),
+            expr => {
+                return Err(DatabaseError::UnsupportedStmt(format!(
+                    "query body: {:?}",
+                    expr
+                )))
+            }
         }?;
 
         let limit = &query.limit;
@@ -136,16 +141,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             plan = self.bind_project(plan, select_list)?;
         }
 
-        if let Some(SelectInto {
-            name,
-            unlogged,
-            temporary,
-            ..
-        }) = &select.into
-        {
-            if *unlogged || *temporary {
-                todo!()
-            }
+        if let Some(SelectInto { name, .. }) = &select.into {
             plan = LogicalPlan::new(
                 Operator::Insert(InsertOperator {
                     table_name: Arc::new(lower_case_name(name)?),
@@ -234,18 +230,10 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                     distinct_exprs,
                 ))
             }
-            (SetOperator::Intersect, true) => {
-                todo!()
-            }
-            (SetOperator::Intersect, false) => {
-                todo!()
-            }
-            (SetOperator::Except, true) => {
-                todo!()
-            }
-            (SetOperator::Except, false) => {
-                todo!()
-            }
+            (set_operator, _) => Err(DatabaseError::UnsupportedStmt(format!(
+                "set operator: {:?}",
+                set_operator
+            ))),
         }
     }
 
@@ -287,7 +275,9 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                 }) = alias
                 {
                     if tables.len() > 1 {
-                        todo!("Implement virtual tables for multiple table aliases");
+                        return Err(DatabaseError::UnsupportedStmt(
+                            "Implement virtual tables for multiple table aliases".to_string(),
+                        ));
                     }
                     let table_alias = Arc::new(name.value.to_lowercase());
 

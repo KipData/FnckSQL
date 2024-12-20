@@ -287,7 +287,7 @@ impl fmt::Display for Operator {
             Operator::DropView(op) => write!(f, "{}", op),
             Operator::Truncate(op) => write!(f, "{}", op),
             Operator::CopyFromFile(op) => write!(f, "{}", op),
-            Operator::CopyToFile(_) => todo!(),
+            Operator::CopyToFile(op) => write!(f, "{}", op),
             Operator::Union(op) => write!(f, "{}", op),
         }
     }

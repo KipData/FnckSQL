@@ -342,6 +342,7 @@ impl TableCodec {
         &self,
         name: &str,
         index: &Index,
+        is_upper: bool,
     ) -> Result<BumpBytes, DatabaseError> {
         let mut key_prefix = self.key_prefix(CodecType::Index, name);
         key_prefix.push(BOUND_MIN_TAG);
@@ -349,6 +350,9 @@ impl TableCodec {
         key_prefix.push(BOUND_MIN_TAG);
 
         index.value.memcomparable_encode(&mut key_prefix)?;
+        if is_upper {
+            key_prefix.push(BOUND_MAX_TAG)
+        }
 
         Ok(key_prefix)
     }
@@ -359,7 +363,7 @@ impl TableCodec {
         index: &Index,
         tuple_id: Option<&TupleId>,
     ) -> Result<BumpBytes, DatabaseError> {
-        let mut key_prefix = self.encode_index_bound_key(name, index)?;
+        let mut key_prefix = self.encode_index_bound_key(name, index, false)?;
 
         if let Some(tuple_id) = tuple_id {
             if matches!(index.ty, IndexType::Normal | IndexType::Composite) {

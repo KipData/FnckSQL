@@ -73,6 +73,8 @@ pub enum DatabaseError {
     InvalidTable(String),
     #[error("invalid type")]
     InvalidType,
+    #[error("invalid value: {0}")]
+    InvalidValue(String),
     #[error("io: {0}")]
     IO(
         #[source]

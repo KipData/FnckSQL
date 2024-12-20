@@ -676,6 +676,7 @@ trait IndexImpl<'bytes, T: Transaction + 'bytes> {
         &self,
         params: &IndexImplParams<T>,
         value: &DataValue,
+        is_upper: bool,
     ) -> Result<BumpBytes<'bytes>, DatabaseError>;
 }
 
@@ -792,12 +793,13 @@ impl<'bytes, T: Transaction + 'bytes> IndexImpl<'bytes, T> for IndexImplEnum {
         &self,
         params: &IndexImplParams<T>,
         value: &DataValue,
+        is_upper: bool,
     ) -> Result<BumpBytes<'bytes>, DatabaseError> {
         match self {
-            IndexImplEnum::PrimaryKey(inner) => inner.bound_key(params, value),
-            IndexImplEnum::Unique(inner) => inner.bound_key(params, value),
-            IndexImplEnum::Normal(inner) => inner.bound_key(params, value),
-            IndexImplEnum::Composite(inner) => inner.bound_key(params, value),
+            IndexImplEnum::PrimaryKey(inner) => inner.bound_key(params, value, is_upper),
+            IndexImplEnum::Unique(inner) => inner.bound_key(params, value, is_upper),
+            IndexImplEnum::Normal(inner) => inner.bound_key(params, value, is_upper),
+            IndexImplEnum::Composite(inner) => inner.bound_key(params, value, is_upper),
         }
     }
 }
@@ -844,6 +846,7 @@ impl<'bytes, T: Transaction + 'bytes> IndexImpl<'bytes, T> for PrimaryKeyIndexIm
         &self,
         params: &IndexImplParams<T>,
         value: &DataValue,
+        _: bool,
     ) -> Result<BumpBytes<'bytes>, DatabaseError> {
         unsafe { &*params.table_codec() }.encode_tuple_key(params.table_name, value)
     }
@@ -876,7 +879,7 @@ impl<'bytes, T: Transaction + 'bytes> IndexImpl<'bytes, T> for UniqueIndexImpl {
         pk_indices: &PrimaryKeyIndices,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
-        let Some(bytes) = params.tx.get(&self.bound_key(params, value)?)? else {
+        let Some(bytes) = params.tx.get(&self.bound_key(params, value, false)?)? else {
             return Ok(IndexResult::Tuple(None));
         };
         let tuple_id = TableCodec::decode_index(&bytes)?;
@@ -890,6 +893,7 @@ impl<'bytes, T: Transaction + 'bytes> IndexImpl<'bytes, T> for UniqueIndexImpl {
         &self,
         params: &IndexImplParams<T>,
         value: &DataValue,
+        _: bool,
     ) -> Result<BumpBytes<'bytes>, DatabaseError> {
         let index = Index::new(params.index_meta.id, value, IndexType::Unique);
 
@@ -913,8 +917,8 @@ impl<'bytes, T: Transaction + 'bytes> IndexImpl<'bytes, T> for NormalIndexImpl {
         _: &PrimaryKeyIndices,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
-        let min = self.bound_key(params, value)?;
-        let max = self.bound_key(params, value)?;
+        let min = self.bound_key(params, value, false)?;
+        let max = self.bound_key(params, value, true)?;
 
         let iter = params
             .tx
@@ -926,10 +930,15 @@ impl<'bytes, T: Transaction + 'bytes> IndexImpl<'bytes, T> for NormalIndexImpl {
         &self,
         params: &IndexImplParams<T>,
         value: &DataValue,
+        is_upper: bool,
     ) -> Result<BumpBytes<'bytes>, DatabaseError> {
         let index = Index::new(params.index_meta.id, value, IndexType::Normal);
 
-        unsafe { &*params.table_codec() }.encode_index_bound_key(params.table_name, &index)
+        unsafe { &*params.table_codec() }.encode_index_bound_key(
+            params.table_name,
+            &index,
+            is_upper,
+        )
     }
 }
 
@@ -949,8 +958,8 @@ impl<'bytes, T: Transaction + 'bytes> IndexImpl<'bytes, T> for CompositeIndexImp
         _: &PrimaryKeyIndices,
         params: &IndexImplParams<'a, T>,
     ) -> Result<IndexResult<'a, T>, DatabaseError> {
-        let min = self.bound_key(params, value)?;
-        let max = self.bound_key(params, value)?;
+        let min = self.bound_key(params, value, false)?;
+        let max = self.bound_key(params, value, true)?;
 
         let iter = params
             .tx
@@ -962,10 +971,15 @@ impl<'bytes, T: Transaction + 'bytes> IndexImpl<'bytes, T> for CompositeIndexImp
         &self,
         params: &IndexImplParams<T>,
         value: &DataValue,
+        is_upper: bool,
     ) -> Result<BumpBytes<'bytes>, DatabaseError> {
         let index = Index::new(params.index_meta.id, value, IndexType::Composite);
 
-        unsafe { &*params.table_codec() }.encode_index_bound_key(params.table_name, &index)
+        unsafe { &*params.table_codec() }.encode_index_bound_key(
+            params.table_name,
+            &index,
+            is_upper,
+        )
     }
 }
 
@@ -1075,21 +1089,27 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                             let table_name = self.params.table_name;
                             let index_meta = &self.params.index_meta;
                             let bound_encode =
-                                |bound: Bound<DataValue>| -> Result<_, DatabaseError> {
+                                |bound: Bound<DataValue>,
+                                 is_upper: bool|
+                                 -> Result<_, DatabaseError> {
                                     match bound {
                                         Bound::Included(mut val) => {
                                             val = self.params.try_cast(val)?;
 
-                                            Ok(Bound::Included(
-                                                self.inner.bound_key(&self.params, &val)?,
-                                            ))
+                                            Ok(Bound::Included(self.inner.bound_key(
+                                                &self.params,
+                                                &val,
+                                                is_upper,
+                                            )?))
                                         }
                                         Bound::Excluded(mut val) => {
                                             val = self.params.try_cast(val)?;
 
-                                            Ok(Bound::Excluded(
-                                                self.inner.bound_key(&self.params, &val)?,
-                                            ))
+                                            Ok(Bound::Excluded(self.inner.bound_key(
+                                                &self.params,
+                                                &val,
+                                                is_upper,
+                                            )?))
                                         }
                                         Bound::Unbounded => Ok(Bound::Unbounded),
                                     }
@@ -1101,10 +1121,10 @@ impl<T: Transaction> Iter for IndexIter<'_, T> {
                                     unsafe { &*self.params.table_codec() }
                                         .index_bound(table_name, &index_meta.id)?
                                 };
-                            let mut encode_min = bound_encode(min)?;
+                            let mut encode_min = bound_encode(min, false)?;
                             check_bound(&mut encode_min, bound_min);
 
-                            let mut encode_max = bound_encode(max)?;
+                            let mut encode_max = bound_encode(max, true)?;
                             check_bound(&mut encode_max, bound_max);
 
                             let iter = self.params.tx.range(encode_min, encode_max)?;

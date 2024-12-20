@@ -69,7 +69,7 @@ run `cargo run -p tpcc --release` to run tpcc
 
 - i9-13900HX
 - 32.0 GB
-- YMTC PC411-1024GB-B
+- KIOXIA-EXCERIA PLUS G3 SSD
 - Tips: TPC-C currently only supports single thread
 ```shell
 <90th Percentile RT (MaxRT)>

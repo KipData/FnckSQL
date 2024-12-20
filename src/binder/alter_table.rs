@@ -64,23 +64,12 @@ impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A>
                     Childrens::Only(plan),
                 )
             }
-            AlterTableOperation::DropPrimaryKey => todo!(),
-            AlterTableOperation::RenameColumn {
-                old_column_name: _,
-                new_column_name: _,
-            } => todo!(),
-            AlterTableOperation::RenameTable { table_name: _ } => todo!(),
-            AlterTableOperation::ChangeColumn {
-                old_name: _,
-                new_name: _,
-                data_type: _,
-                options: _,
-            } => todo!(),
-            AlterTableOperation::AlterColumn {
-                column_name: _,
-                op: _,
-            } => todo!(),
-            _ => todo!(),
+            op => {
+                return Err(DatabaseError::UnsupportedStmt(format!(
+                    "AlertOperation: {:?}",
+                    op
+                )))
+            }
         };
 
         Ok(plan)

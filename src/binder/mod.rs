@@ -350,13 +350,22 @@ impl<'a, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '
                 names,
                 if_exists,
                 ..
-            } => match object_type {
-                // todo handle all names
-                ObjectType::Table => self.bind_drop_table(&names[0], if_exists)?,
-                // todo handle all names
-                ObjectType::View => self.bind_drop_view(&names[0], if_exists)?,
-                _ => todo!(),
-            },
+            } => {
+                if names.len() > 1 {
+                    return Err(DatabaseError::UnsupportedStmt(
+                        "only Drop a single `Table` or `View` is allowed".to_string(),
+                    ));
+                }
+                match object_type {
+                    ObjectType::Table => self.bind_drop_table(&names[0], if_exists)?,
+                    ObjectType::View => self.bind_drop_view(&names[0], if_exists)?,
+                    _ => {
+                        return Err(DatabaseError::UnsupportedStmt(
+                            "only `Table` and `View` are allowed to be Dropped".to_string(),
+                        ))
+                    }
+                }
+            }
             Statement::Insert {
                 table_name,
                 columns,
@@ -364,10 +373,14 @@ impl<'a, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '
                 overwrite,
                 ..
             } => {
+                // TODO: support body on Insert
                 if let SetExpr::Values(values) = source.body.as_ref() {
                     self.bind_insert(table_name, columns, &values.rows, *overwrite, false)?
                 } else {
-                    todo!()
+                    return Err(DatabaseError::UnsupportedStmt(format!(
+                        "insert body: {:#?}",
+                        source.body
+                    )));
                 }
             }
             Statement::Update {
@@ -442,7 +455,10 @@ impl<'a, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '
                 left,
                 right,
             } => self.bind_set_operation(op, set_quantifier, left, right),
-            _ => todo!(),
+            expr => Err(DatabaseError::UnsupportedStmt(format!(
+                "set expression: {:?}",
+                expr
+            ))),
         }
     }
 
