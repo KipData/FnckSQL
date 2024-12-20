@@ -328,7 +328,7 @@ impl<S: Storage> Database<S> {
     }
 }
 
-pub trait ResultIter: Iterator<Item = Result<Tuple, DatabaseError>> + Sized {
+pub trait ResultIter: Iterator<Item = Result<Tuple, DatabaseError>> {
     fn schema(&self) -> &SchemaRef;
 
     fn done(self) -> Result<(), DatabaseError>;

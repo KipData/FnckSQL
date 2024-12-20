@@ -172,19 +172,25 @@ impl SimpleQueryHandler for SessionBackend {
             _ => {
                 let mut guard = self.tx.lock();
 
-                let iter = if let Some(transaction) = guard.as_mut() {
-                    unsafe { transaction.as_mut().run(query) }.map(Box::new)
-                        as Result<Box<dyn ResultIter>, _>
-                } else {
-                    self.inner.run(query).map(Box::new)
-                }
-                .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
-
                 let mut tuples = Vec::new();
-                for tuple in iter {
-                    tuples.push(tuple.map_err(|e| PgWireError::ApiError(Box::new(e)))?);
-                }
-                Ok(vec![Response::Query(encode_tuples(iter.schema(), tuples)?)])
+                let response = if let Some(transaction) = guard.as_mut() {
+                    let mut iter = unsafe { transaction.as_mut().run(query) }
+                        .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
+                    for tuple in iter.by_ref() {
+                        tuples.push(tuple.map_err(|e| PgWireError::ApiError(Box::new(e)))?);
+                    }
+                    encode_tuples(iter.schema(), tuples)?
+                } else {
+                    let mut iter = self
+                        .inner
+                        .run(query)
+                        .map_err(|e| PgWireError::ApiError(Box::new(e)))?;
+                    for tuple in iter.by_ref() {
+                        tuples.push(tuple.map_err(|e| PgWireError::ApiError(Box::new(e)))?);
+                    }
+                    encode_tuples(iter.schema(), tuples)?
+                };
+                Ok(vec![Response::Query(response)])
             }
         }
     }
