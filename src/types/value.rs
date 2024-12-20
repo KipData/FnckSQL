@@ -920,7 +920,7 @@ impl DataValue {
                 encode_u!(b, u);
             }
             DataValue::Null => (),
-            DataValue::Decimal(Some(_v)) => todo!(),
+            DataValue::Decimal(Some(v)) => Self::serialize_decimal(*v, b)?,
             DataValue::Tuple(Some((values, is_upper))) => {
                 let last = values.len() - 1;
 
@@ -941,6 +941,125 @@ impl DataValue {
         }
 
         Ok(())
+    }
+
+    // https://github.com/risingwavelabs/memcomparable/blob/main/src/ser.rs#L468
+    pub fn serialize_decimal(decimal: Decimal, bytes: &mut BumpBytes) -> Result<(), DatabaseError> {
+        if decimal.is_zero() {
+            bytes.push(0x15);
+            return Ok(());
+        }
+        let (exponent, significand) = Self::decimal_e_m(decimal);
+        if decimal.is_sign_positive() {
+            match exponent {
+                11.. => {
+                    bytes.push(0x22);
+                    bytes.push(exponent as u8);
+                }
+                0..=10 => {
+                    bytes.push(0x17 + exponent as u8);
+                }
+                _ => {
+                    bytes.push(0x16);
+                    bytes.push(!(-exponent) as u8);
+                }
+            }
+            bytes.extend_from_slice(&significand)
+        } else {
+            match exponent {
+                11.. => {
+                    bytes.push(0x8);
+                    bytes.push(!exponent as u8);
+                }
+                0..=10 => {
+                    bytes.push(0x13 - exponent as u8);
+                }
+                _ => {
+                    bytes.push(0x14);
+                    bytes.push(-exponent as u8);
+                }
+            }
+            for b in significand {
+                bytes.push(!b);
+            }
+        }
+        Ok(())
+    }
+
+    fn decimal_e_m(decimal: Decimal) -> (i8, Vec<u8>) {
+        if decimal.is_zero() {
+            return (0, vec![]);
+        }
+        const POW10: [u128; 30] = [
+            1,
+            10,
+            100,
+            1000,
+            10000,
+            100000,
+            1000000,
+            10000000,
+            100000000,
+            1000000000,
+            10000000000,
+            100000000000,
+            1000000000000,
+            10000000000000,
+            100000000000000,
+            1000000000000000,
+            10000000000000000,
+            100000000000000000,
+            1000000000000000000,
+            10000000000000000000,
+            100000000000000000000,
+            1000000000000000000000,
+            10000000000000000000000,
+            100000000000000000000000,
+            1000000000000000000000000,
+            10000000000000000000000000,
+            100000000000000000000000000,
+            1000000000000000000000000000,
+            10000000000000000000000000000,
+            100000000000000000000000000000,
+        ];
+        let mut mantissa = decimal.mantissa().unsigned_abs();
+        let prec = POW10.as_slice().partition_point(|&p| p <= mantissa);
+
+        let e10 = prec as i32 - decimal.scale() as i32;
+        let e100 = if e10 >= 0 { (e10 + 1) / 2 } else { e10 / 2 };
+        // Maybe need to add a zero at the beginning.
+        // e.g. 111.11 -> 2(exponent which is 100 based) + 0.011111(mantissa).
+        // So, the `digit_num` of 111.11 will be 6.
+        let mut digit_num = if e10 == 2 * e100 { prec } else { prec + 1 };
+
+        let mut byte_array = Vec::with_capacity(16);
+        // Remove trailing zero.
+        while mantissa % 10 == 0 && mantissa != 0 {
+            mantissa /= 10;
+            digit_num -= 1;
+        }
+
+        // Cases like: 0.12345, not 0.01111.
+        if digit_num % 2 == 1 {
+            mantissa *= 10;
+            // digit_num += 1;
+        }
+        while mantissa >> 64 != 0 {
+            let byte = (mantissa % 100) as u8 * 2 + 1;
+            byte_array.push(byte);
+            mantissa /= 100;
+        }
+        // optimize for division
+        let mut mantissa = mantissa as u64;
+        while mantissa != 0 {
+            let byte = (mantissa % 100) as u8 * 2 + 1;
+            byte_array.push(byte);
+            mantissa /= 100;
+        }
+        byte_array[0] -= 1;
+        byte_array.reverse();
+
+        (e100 as i8, byte_array)
     }
 
     #[inline]
@@ -1672,9 +1791,11 @@ impl From<Option<&NaiveTime>> for DataValue {
     }
 }
 
-impl From<&sqlparser::ast::Value> for DataValue {
-    fn from(v: &sqlparser::ast::Value) -> Self {
-        match v {
+impl TryFrom<&sqlparser::ast::Value> for DataValue {
+    type Error = DatabaseError;
+
+    fn try_from(value: &sqlparser::ast::Value) -> Result<Self, Self::Error> {
+        Ok(match value {
             sqlparser::ast::Value::Number(n, _) => {
                 // use i32 to handle most cases
                 if let Ok(v) = n.parse::<i32>() {
@@ -1686,15 +1807,15 @@ impl From<&sqlparser::ast::Value> for DataValue {
                 } else if let Ok(v) = n.parse::<f32>() {
                     v.into()
                 } else {
-                    panic!("unsupported number {:?}", n)
+                    return Err(DatabaseError::InvalidValue(n.to_string()));
                 }
             }
             sqlparser::ast::Value::SingleQuotedString(s)
             | sqlparser::ast::Value::DoubleQuotedString(s) => s.clone().into(),
             sqlparser::ast::Value::Boolean(b) => (*b).into(),
             sqlparser::ast::Value::Null => Self::Null,
-            _ => todo!("unsupported parsed scalar value {:?}", v),
-        }
+            v => return Err(DatabaseError::UnsupportedStmt(format!("{:?}", v))),
+        })
     }
 }
 
@@ -1801,6 +1922,7 @@ mod test {
     use crate::storage::table_codec::BumpBytes;
     use crate::types::value::DataValue;
     use bumpalo::Bump;
+    use rust_decimal::Decimal;
 
     #[test]
     fn test_mem_comparable_int() -> Result<(), DatabaseError> {
@@ -1888,6 +2010,25 @@ mod test {
         println!("{:?} < {:?}", key_f64_2, key_f64_3);
         assert!(key_f64_1 < key_f64_2);
         assert!(key_f64_2 < key_f64_3);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_mem_comparable_decimal() -> Result<(), DatabaseError> {
+        let arena = Bump::new();
+        let mut key_deciaml_1 = BumpBytes::new_in(&arena);
+        let mut key_deciaml_2 = BumpBytes::new_in(&arena);
+        let mut key_deciaml_3 = BumpBytes::new_in(&arena);
+
+        DataValue::Decimal(Some(Decimal::MIN)).memcomparable_encode(&mut key_deciaml_1)?;
+        DataValue::Decimal(Some(Decimal::new(-1, 0))).memcomparable_encode(&mut key_deciaml_2)?;
+        DataValue::Decimal(Some(Decimal::MAX)).memcomparable_encode(&mut key_deciaml_3)?;
+
+        println!("{:?} < {:?}", key_deciaml_1, key_deciaml_2);
+        println!("{:?} < {:?}", key_deciaml_2, key_deciaml_3);
+        assert!(key_deciaml_1 < key_deciaml_2);
+        assert!(key_deciaml_2 < key_deciaml_3);
 
         Ok(())
     }

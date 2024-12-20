@@ -235,7 +235,9 @@ fn encode_tuples<'a>(schema: &Schema, tuples: Vec<Tuple>) -> PgWireResult<QueryR
                 LogicalType::Date => encoder.encode_field(&value.date()),
                 LogicalType::DateTime => encoder.encode_field(&value.datetime()),
                 LogicalType::Time => encoder.encode_field(&value.time()),
-                LogicalType::Decimal(_, _) => todo!(),
+                LogicalType::Decimal(_, _) => {
+                    encoder.encode_field(&value.decimal().map(|decimal| decimal.to_string()))
+                }
                 _ => unreachable!(),
             }?;
         }
@@ -260,7 +262,7 @@ fn into_pg_type(data_type: &LogicalType) -> PgWireResult<Type> {
         LogicalType::Date | LogicalType::DateTime => Type::DATE,
         LogicalType::Char(..) => Type::CHAR,
         LogicalType::Time => Type::TIME,
-        LogicalType::Decimal(_, _) => todo!(),
+        LogicalType::Decimal(_, _) => Type::FLOAT8,
         _ => {
             return Err(PgWireError::UserError(Box::new(ErrorInfo::new(
                 "ERROR".to_owned(),

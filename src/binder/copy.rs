@@ -88,7 +88,12 @@ impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A>
             let ext_source = ExtSource {
                 path: match target {
                     CopyTarget::File { filename } => filename.into(),
-                    t => todo!("unsupported copy target: {:?}", t),
+                    t => {
+                        return Err(DatabaseError::UnsupportedStmt(format!(
+                            "copy target: {:?}",
+                            t
+                        )))
+                    }
                 },
                 format: FileFormat::from_options(options),
             };
