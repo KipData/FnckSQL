@@ -8,29 +8,17 @@ pub(crate) mod test {
     use crate::errors::DatabaseError;
     use crate::serdes::{ReferenceSerialization, ReferenceTables};
     use crate::storage::rocksdb::RocksTransaction;
-    use crate::types::value::{DataValue, Utf8Type};
-    use sqlparser::ast::CharLengthUnits;
+    use crate::types::value::DataValue;
     use std::io::{Cursor, Seek, SeekFrom};
 
     #[test]
     fn test_serialization() -> Result<(), DatabaseError> {
-        let source_0 = DataValue::Int32(None);
-        let source_1 = DataValue::Int32(Some(32));
-        let source_2 = DataValue::Utf8 {
-            value: None,
-            ty: Utf8Type::Variable(None),
-            unit: CharLengthUnits::Characters,
-        };
-        let source_3 = DataValue::Utf8 {
-            value: Some("hello".to_string()),
-            ty: Utf8Type::Variable(None),
-            unit: CharLengthUnits::Characters,
-        };
-        let source_4 = DataValue::Tuple(None);
-        let source_5 = DataValue::Tuple(Some((
-            vec![DataValue::Int32(None), DataValue::Int32(Some(42))],
-            false,
-        )));
+        let source_0 = DataValue::Null;
+        let source_1 = DataValue::Int32(32);
+        let source_2 = DataValue::Null;
+        let source_3 = DataValue::Null;
+        let source_4 = DataValue::Null;
+        let source_5 = DataValue::Tuple(vec![DataValue::Null, DataValue::Int32(42)], false);
 
         let mut reference_tables = ReferenceTables::new();
         let mut bytes = Vec::new();

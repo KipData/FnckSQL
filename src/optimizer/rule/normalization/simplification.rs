@@ -148,7 +148,7 @@ mod test {
             )
             .find_best::<RocksTransaction>(None)?;
         if let Operator::Project(project_op) = best_plan.clone().operator {
-            let constant_expr = ScalarExpression::Constant(DataValue::Int32(Some(3)));
+            let constant_expr = ScalarExpression::Constant(DataValue::Int32(3));
             if let ScalarExpression::Binary { right_expr, .. } = &project_op.exprs[0] {
                 assert_eq!(right_expr.as_ref(), &constant_expr);
             } else {
@@ -167,7 +167,7 @@ mod test {
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
-                    max: Bound::Excluded(DataValue::Int32(Some(-2))),
+                    max: Bound::Excluded(DataValue::Int32(-2)),
                 }
             );
         } else {
@@ -297,9 +297,7 @@ mod test {
                             left_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
                                 c1_col
                             ))),
-                            right_expr: Box::new(ScalarExpression::Constant(DataValue::Int32(
-                                Some(1)
-                            ))),
+                            right_expr: Box::new(ScalarExpression::Constant(DataValue::Int32(1))),
                             evaluator: None,
                             ty: LogicalType::Integer,
                         }),
@@ -366,20 +364,20 @@ mod test {
             range_1_c1,
             Range::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(DataValue::Int32(Some(-2)))
+                max: Bound::Excluded(DataValue::Int32(-2))
             }
         );
         assert_eq!(
             range_1_c2,
             Range::Scope {
-                min: Bound::Excluded(DataValue::Int32(Some(2))),
+                min: Bound::Excluded(DataValue::Int32(2)),
                 max: Bound::Unbounded
             }
         );
         assert_eq!(
             range_2_c1,
             Range::Scope {
-                min: Bound::Excluded(DataValue::Int32(Some(2))),
+                min: Bound::Excluded(DataValue::Int32(2)),
                 max: Bound::Unbounded
             }
         );
@@ -387,27 +385,27 @@ mod test {
             range_2_c2,
             Range::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(DataValue::Int32(Some(-2)))
+                max: Bound::Excluded(DataValue::Int32(-2))
             }
         );
         assert_eq!(
             range_3_c1,
             Range::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(DataValue::Int32(Some(-1)))
+                max: Bound::Excluded(DataValue::Int32(-1))
             }
         );
         assert_eq!(
             range_3_c2,
             Range::Scope {
-                min: Bound::Excluded(DataValue::Int32(Some(0))),
+                min: Bound::Excluded(DataValue::Int32(0)),
                 max: Bound::Unbounded
             }
         );
         assert_eq!(
             range_4_c1,
             Range::Scope {
-                min: Bound::Excluded(DataValue::Int32(Some(0))),
+                min: Bound::Excluded(DataValue::Int32(0)),
                 max: Bound::Unbounded
             }
         );
@@ -415,7 +413,7 @@ mod test {
             range_4_c2,
             Range::Scope {
                 min: Bound::Unbounded,
-                max: Bound::Excluded(DataValue::Int32(Some(-1)))
+                max: Bound::Excluded(DataValue::Int32(-1))
             }
         );
 
@@ -444,7 +442,7 @@ mod test {
         assert_eq!(
             plan_filter(&plan_1, table_state.column_id_by_name("c1"))?,
             Some(Range::Scope {
-                min: Bound::Excluded(DataValue::Int32(Some(1))),
+                min: Bound::Excluded(DataValue::Int32(1)),
                 max: Bound::Unbounded,
             })
         );
@@ -486,9 +484,9 @@ mod test {
         assert_eq!(
             plan_filter(&plan_1, table_state.column_id_by_name("c1"))?,
             Some(Range::SortedRanges(vec![
-                Range::Eq(DataValue::Int32(Some(1))),
-                Range::Eq(DataValue::Int32(Some(2))),
-                Range::Eq(DataValue::Int32(Some(3))),
+                Range::Eq(DataValue::Int32(1)),
+                Range::Eq(DataValue::Int32(2)),
+                Range::Eq(DataValue::Int32(3)),
             ]))
         );
 

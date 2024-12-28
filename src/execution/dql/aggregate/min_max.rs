@@ -3,27 +3,21 @@ use crate::execution::dql::aggregate::Accumulator;
 use crate::expression::BinaryOperator;
 use crate::types::evaluator::EvaluatorFactory;
 use crate::types::value::DataValue;
-use crate::types::LogicalType;
 
 pub struct MinMaxAccumulator {
     inner: Option<DataValue>,
     op: BinaryOperator,
-    ty: LogicalType,
 }
 
 impl MinMaxAccumulator {
-    pub fn new(ty: &LogicalType, is_max: bool) -> Self {
+    pub fn new(is_max: bool) -> Self {
         let op = if is_max {
             BinaryOperator::Lt
         } else {
             BinaryOperator::Gt
         };
 
-        Self {
-            inner: None,
-            op,
-            ty: ty.clone(),
-        }
+        Self { inner: None, op }
     }
 }
 
@@ -32,12 +26,10 @@ impl Accumulator for MinMaxAccumulator {
         if !value.is_null() {
             if let Some(inner_value) = &self.inner {
                 let evaluator = EvaluatorFactory::binary_create(value.logical_type(), self.op)?;
-                if let DataValue::Boolean(Some(result)) =
-                    evaluator.0.binary_eval(inner_value, value)
-                {
+                if let DataValue::Boolean(result) = evaluator.0.binary_eval(inner_value, value) {
                     result
                 } else {
-                    unreachable!()
+                    return Err(DatabaseError::InvalidType);
                 }
             } else {
                 true
@@ -49,9 +41,6 @@ impl Accumulator for MinMaxAccumulator {
     }
 
     fn evaluate(&self) -> Result<DataValue, DatabaseError> {
-        Ok(self
-            .inner
-            .clone()
-            .unwrap_or_else(|| DataValue::none(&self.ty)))
+        Ok(self.inner.clone().unwrap_or(DataValue::Null))
     }
 }

@@ -130,26 +130,26 @@ mod tests {
 
         let mut builder = HistogramBuilder::new(&index, Some(15));
 
-        builder.append(&Arc::new(DataValue::Int32(Some(14))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(13))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(12))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(11))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(10))))?;
+        builder.append(&Arc::new(DataValue::Int32(14)))?;
+        builder.append(&Arc::new(DataValue::Int32(13)))?;
+        builder.append(&Arc::new(DataValue::Int32(12)))?;
+        builder.append(&Arc::new(DataValue::Int32(11)))?;
+        builder.append(&Arc::new(DataValue::Int32(10)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(4))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(3))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(2))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(1))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(0))))?;
+        builder.append(&Arc::new(DataValue::Int32(4)))?;
+        builder.append(&Arc::new(DataValue::Int32(3)))?;
+        builder.append(&Arc::new(DataValue::Int32(2)))?;
+        builder.append(&Arc::new(DataValue::Int32(1)))?;
+        builder.append(&Arc::new(DataValue::Int32(0)))?;
 
-        builder.append(&Arc::new(DataValue::Int32(Some(9))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(8))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(7))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(6))))?;
-        builder.append(&Arc::new(DataValue::Int32(Some(5))))?;
+        builder.append(&Arc::new(DataValue::Int32(9)))?;
+        builder.append(&Arc::new(DataValue::Int32(8)))?;
+        builder.append(&Arc::new(DataValue::Int32(7)))?;
+        builder.append(&Arc::new(DataValue::Int32(6)))?;
+        builder.append(&Arc::new(DataValue::Int32(5)))?;
 
         builder.append(&Arc::new(DataValue::Null))?;
-        builder.append(&Arc::new(DataValue::Int32(None)))?;
+        builder.append(&Arc::new(DataValue::Null))?;
 
         let (histogram, sketch) = builder.build(4)?;
         let path = temp_dir.path().join("meta");

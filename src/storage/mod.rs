@@ -1233,25 +1233,25 @@ mod test {
             Tuple::new(
                 Some(Arc::new(vec![0])),
                 vec![
-                    DataValue::Int32(Some(0)),
-                    DataValue::Boolean(Some(true)),
-                    DataValue::Int32(Some(0)),
+                    DataValue::Int32(0),
+                    DataValue::Boolean(true),
+                    DataValue::Int32(0),
                 ],
             ),
             Tuple::new(
                 Some(Arc::new(vec![0])),
                 vec![
-                    DataValue::Int32(Some(1)),
-                    DataValue::Boolean(Some(true)),
-                    DataValue::Int32(Some(1)),
+                    DataValue::Int32(1),
+                    DataValue::Boolean(true),
+                    DataValue::Int32(1),
                 ],
             ),
             Tuple::new(
                 Some(Arc::new(vec![0])),
                 vec![
-                    DataValue::Int32(Some(2)),
-                    DataValue::Boolean(Some(false)),
-                    DataValue::Int32(Some(0)),
+                    DataValue::Int32(2),
+                    DataValue::Boolean(false),
+                    DataValue::Int32(0),
                 ],
             ),
         ]
@@ -1563,15 +1563,15 @@ mod test {
         let tuples = build_tuples();
         let indexes = vec![
             (
-                Arc::new(DataValue::Int32(Some(0))),
+                Arc::new(DataValue::Int32(0)),
                 Index::new(1, &tuples[0].values[2], IndexType::Normal),
             ),
             (
-                Arc::new(DataValue::Int32(Some(1))),
+                Arc::new(DataValue::Int32(1)),
                 Index::new(1, &tuples[1].values[2], IndexType::Normal),
             ),
             (
-                Arc::new(DataValue::Int32(Some(2))),
+                Arc::new(DataValue::Int32(2)),
                 Index::new(1, &tuples[2].values[2], IndexType::Normal),
             ),
         ];

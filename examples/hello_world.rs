@@ -12,13 +12,13 @@ struct MyStruct {
 implement_from_tuple!(
     MyStruct, (
         c1: i32 => |inner: &mut MyStruct, value| {
-            if let DataValue::Int32(Some(val)) = value {
+            if let DataValue::Int32(val) = value {
                 inner.c1 = val;
             }
         },
         c2: String => |inner: &mut MyStruct, value| {
-            if let DataValue::Utf8 { value: Some(val), .. } = value {
-                inner.c2 = val;
+            if let DataValue::Utf8 { value, .. } = value {
+                inner.c2 = value;
             }
         }
     )

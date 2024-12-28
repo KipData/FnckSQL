@@ -339,84 +339,75 @@ mod test {
 
         let arena = Bump::new();
         let mut inner = BumpVec::new_in(&arena);
-        inner.push(Some((
-            0_usize,
-            Tuple::new(None, vec![DataValue::Int32(None)]),
-        )));
-        inner.push(Some((
-            1_usize,
-            Tuple::new(None, vec![DataValue::Int32(Some(0))]),
-        )));
-        inner.push(Some((
-            2_usize,
-            Tuple::new(None, vec![DataValue::Int32(Some(1))]),
-        )));
+        inner.push(Some((0_usize, Tuple::new(None, vec![DataValue::Null]))));
+        inner.push(Some((1_usize, Tuple::new(None, vec![DataValue::Int32(0)]))));
+        inner.push(Some((2_usize, Tuple::new(None, vec![DataValue::Int32(1)]))));
         let tuples = NullableVec(inner);
 
         let fn_asc_and_nulls_last_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(Some(0))])
+                assert_eq!(tuple.values, vec![DataValue::Int32(0)])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(Some(1))])
+                assert_eq!(tuple.values, vec![DataValue::Int32(1)])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(None)])
+                assert_eq!(tuple.values, vec![DataValue::Null])
             } else {
                 unreachable!()
             }
         };
         let fn_desc_and_nulls_last_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(Some(1))])
+                assert_eq!(tuple.values, vec![DataValue::Int32(1)])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(Some(0))])
+                assert_eq!(tuple.values, vec![DataValue::Int32(0)])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(None)])
+                assert_eq!(tuple.values, vec![DataValue::Null])
             } else {
                 unreachable!()
             }
         };
         let fn_asc_and_nulls_first_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(None)])
+                assert_eq!(tuple.values, vec![DataValue::Null])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(Some(0))])
+                assert_eq!(tuple.values, vec![DataValue::Int32(0)])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(Some(1))])
+                assert_eq!(tuple.values, vec![DataValue::Int32(1)])
             } else {
                 unreachable!()
             }
         };
         let fn_desc_and_nulls_first_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(None)])
+                assert_eq!(tuple.values, vec![DataValue::Null])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(Some(1))])
+                assert_eq!(tuple.values, vec![DataValue::Int32(1)])
             } else {
                 unreachable!()
             }
             if let Some(tuple) = iter.next() {
-                assert_eq!(tuple.values, vec![DataValue::Int32(Some(0))])
+                assert_eq!(tuple.values, vec![DataValue::Int32(0)])
             } else {
                 unreachable!()
             }
@@ -516,91 +507,58 @@ mod test {
         let mut inner = BumpVec::new_in(&arena);
         inner.push(Some((
             0_usize,
-            Tuple::new(None, vec![DataValue::Int32(None), DataValue::Int32(None)]),
+            Tuple::new(None, vec![DataValue::Null, DataValue::Null]),
         )));
         inner.push(Some((
             1_usize,
-            Tuple::new(
-                None,
-                vec![DataValue::Int32(Some(0)), DataValue::Int32(None)],
-            ),
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Null]),
         )));
         inner.push(Some((
             2_usize,
-            Tuple::new(
-                None,
-                vec![DataValue::Int32(Some(1)), DataValue::Int32(None)],
-            ),
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Null]),
         )));
         inner.push(Some((
             3_usize,
-            Tuple::new(
-                None,
-                vec![DataValue::Int32(None), DataValue::Int32(Some(0))],
-            ),
+            Tuple::new(None, vec![DataValue::Null, DataValue::Int32(0)]),
         )));
         inner.push(Some((
             4_usize,
-            Tuple::new(
-                None,
-                vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))],
-            ),
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Int32(0)]),
         )));
         inner.push(Some((
             5_usize,
-            Tuple::new(
-                None,
-                vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))],
-            ),
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Int32(0)]),
         )));
         let tuples = NullableVec(inner);
         let fn_asc_1_and_nulls_first_1_and_asc_2_and_nulls_first_2_eq =
             |mut iter: Box<dyn Iterator<Item = Tuple>>| {
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(None), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(None), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(0)), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(1)), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
@@ -608,50 +566,32 @@ mod test {
         let fn_asc_1_and_nulls_last_1_and_asc_2_and_nulls_first_2_eq =
             |mut iter: Box<dyn Iterator<Item = Tuple>>| {
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(0)), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(1)), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(None), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(None), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
@@ -659,50 +599,32 @@ mod test {
         let fn_desc_1_and_nulls_first_1_and_asc_2_and_nulls_first_2_eq =
             |mut iter: Box<dyn Iterator<Item = Tuple>>| {
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(None), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(None), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(1)), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(0)), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
@@ -710,50 +632,32 @@ mod test {
         let fn_desc_1_and_nulls_last_1_and_asc_2_and_nulls_first_2_eq =
             |mut iter: Box<dyn Iterator<Item = Tuple>>| {
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(1)), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(0)), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(None), DataValue::Int32(None)]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Null])
                 } else {
                     unreachable!()
                 }
                 if let Some(tuple) = iter.next() {
-                    assert_eq!(
-                        tuple.values,
-                        vec![DataValue::Int32(None), DataValue::Int32(Some(0))]
-                    )
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Int32(0)])
                 } else {
                     unreachable!()
                 }

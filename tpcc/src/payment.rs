@@ -62,8 +62,8 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         tx.execute(
             &statements[0],
             &[
-                ("?1", DataValue::Decimal(Some(args.h_amount))),
-                ("?2", DataValue::Int16(Some(args.w_id as i16))),
+                ("?1", DataValue::Decimal(args.h_amount)),
+                ("?2", DataValue::Int16(args.w_id as i16)),
             ],
         )?
         .done()?;
@@ -71,7 +71,7 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         let tuple = tx
             .execute(
                 &statements[1],
-                &[("?1", DataValue::Int16(Some(args.w_id as i16)))],
+                &[("?1", DataValue::Int16(args.w_id as i16))],
             )?
             .next()
             .unwrap()?;
@@ -86,9 +86,9 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         tx.execute(
             &statements[2],
             &[
-                ("?1", DataValue::Decimal(Some(args.h_amount))),
-                ("?2", DataValue::Int16(Some(args.w_id as i16))),
-                ("?3", DataValue::Int8(Some(args.d_id as i8))),
+                ("?1", DataValue::Decimal(args.h_amount)),
+                ("?2", DataValue::Int16(args.w_id as i16)),
+                ("?3", DataValue::Int8(args.d_id as i8)),
             ],
         )?
         .done()?;
@@ -98,8 +98,8 @@ impl<S: Storage> TpccTransaction<S> for Payment {
             .execute(
                 &statements[3],
                 &[
-                    ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                    ("?2", DataValue::Int8(Some(args.d_id as i8))),
+                    ("?1", DataValue::Int16(args.w_id as i16)),
+                    ("?2", DataValue::Int8(args.d_id as i8)),
                 ],
             )?
             .next()
@@ -118,8 +118,8 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                 .execute(
                     &statements[4],
                     &[
-                        ("?1", DataValue::Int16(Some(args.c_w_id as i16))),
-                        ("?2", DataValue::Int8(Some(args.c_d_id as i8))),
+                        ("?1", DataValue::Int16(args.c_w_id as i16)),
+                        ("?2", DataValue::Int8(args.c_d_id as i8)),
                         ("?3", DataValue::from(args.c_last.clone())),
                     ],
                 )?
@@ -131,8 +131,8 @@ impl<S: Storage> TpccTransaction<S> for Payment {
             let mut tuple_iter = tx.execute(
                 &statements[5],
                 &[
-                    ("?1", DataValue::Int16(Some(args.c_w_id as i16))),
-                    ("?2", DataValue::Int8(Some(args.c_d_id as i8))),
+                    ("?1", DataValue::Int16(args.c_w_id as i16)),
+                    ("?2", DataValue::Int8(args.c_d_id as i8)),
                     ("?3", DataValue::from(args.c_last.clone())),
                 ],
             )?;
@@ -149,9 +149,9 @@ impl<S: Storage> TpccTransaction<S> for Payment {
             .execute(
                 &statements[6],
                 &[
-                    ("?1", DataValue::Int16(Some(args.c_w_id as i16))),
-                    ("?2", DataValue::Int8(Some(args.c_d_id as i8))),
-                    ("?3", DataValue::Int32(Some(c_id))),
+                    ("?1", DataValue::Int16(args.c_w_id as i16)),
+                    ("?2", DataValue::Int8(args.c_d_id as i8)),
+                    ("?3", DataValue::Int32(c_id)),
                 ],
             )?
             .next()
@@ -179,9 +179,9 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                     .execute(
                         &statements[7],
                         &[
-                            ("?1", DataValue::Int16(Some(args.c_w_id as i16))),
-                            ("?2", DataValue::Int8(Some(args.c_d_id as i8))),
-                            ("?3", DataValue::Int32(Some(c_id))),
+                            ("?1", DataValue::Int16(args.c_w_id as i16)),
+                            ("?2", DataValue::Int8(args.c_d_id as i8)),
+                            ("?3", DataValue::Int32(c_id)),
                         ],
                     )?
                     .next()
@@ -195,11 +195,11 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                 tx.execute(
                     &statements[8],
                     &[
-                        ("?1", DataValue::Decimal(Some(c_balance))),
-                        ("?2", DataValue::from(c_data)),
-                        ("?3", DataValue::Int16(Some(args.c_w_id as i16))),
-                        ("?4", DataValue::Int8(Some(args.c_d_id as i8))),
-                        ("?5", DataValue::Int32(Some(c_id))),
+                        ("?1", DataValue::Decimal(c_balance)),
+                        ("?2", DataValue::from(c_data.to_string())),
+                        ("?3", DataValue::Int16(args.c_w_id as i16)),
+                        ("?4", DataValue::Int8(args.c_d_id as i8)),
+                        ("?5", DataValue::Int32(c_id)),
                     ],
                 )?
                 .done()?;
@@ -208,10 +208,10 @@ impl<S: Storage> TpccTransaction<S> for Payment {
                 tx.execute(
                     &statements[9],
                     &[
-                        ("?1", DataValue::Decimal(Some(c_balance))),
-                        ("?2", DataValue::Int16(Some(args.c_w_id as i16))),
-                        ("?3", DataValue::Int8(Some(args.c_d_id as i8))),
-                        ("?4", DataValue::Int32(Some(c_id))),
+                        ("?1", DataValue::Decimal(c_balance)),
+                        ("?2", DataValue::Int16(args.c_w_id as i16)),
+                        ("?3", DataValue::Int8(args.c_d_id as i8)),
+                        ("?4", DataValue::Int32(c_id)),
                     ],
                 )?
                 .done()?;
@@ -221,10 +221,10 @@ impl<S: Storage> TpccTransaction<S> for Payment {
             tx.execute(
                 &statements[9],
                 &[
-                    ("?1", DataValue::Decimal(Some(c_balance))),
-                    ("?2", DataValue::Int16(Some(args.c_w_id as i16))),
-                    ("?3", DataValue::Int8(Some(args.c_d_id as i8))),
-                    ("?4", DataValue::Int32(Some(c_id))),
+                    ("?1", DataValue::Decimal(c_balance)),
+                    ("?2", DataValue::Int16(args.c_w_id as i16)),
+                    ("?3", DataValue::Int8(args.c_d_id as i8)),
+                    ("?4", DataValue::Int32(c_id)),
                 ],
             )?
             .done()?;
@@ -234,13 +234,13 @@ impl<S: Storage> TpccTransaction<S> for Payment {
         tx.execute(
             &statements[10],
             &[
-                ("?1", DataValue::Int8(Some(args.c_d_id as i8))),
-                ("?2", DataValue::Int16(Some(args.c_w_id as i16))),
-                ("?3", DataValue::Int32(Some(c_id))),
-                ("?4", DataValue::Int8(Some(args.d_id as i8))),
-                ("?5", DataValue::Int16(Some(args.w_id as i16))),
+                ("?1", DataValue::Int8(args.c_d_id as i8)),
+                ("?2", DataValue::Int16(args.c_w_id as i16)),
+                ("?3", DataValue::Int32(c_id)),
+                ("?4", DataValue::Int8(args.d_id as i8)),
+                ("?5", DataValue::Int16(args.w_id as i16)),
                 ("?6", DataValue::from(&now.naive_utc())),
-                ("?7", DataValue::Decimal(Some(args.h_amount))),
+                ("?7", DataValue::Decimal(args.h_amount)),
                 ("?8", DataValue::from(h_data)),
             ],
         )?

@@ -38,9 +38,9 @@ impl Accumulator for AvgAccumulator {
             return Ok(DataValue::init(&value_ty));
         }
         let quantity = if value_ty.is_signed_numeric() {
-            DataValue::Int64(Some(self.count as i64))
+            DataValue::Int64(self.count as i64)
         } else {
-            DataValue::UInt32(Some(self.count as u32))
+            DataValue::UInt32(self.count as u32)
         };
         let quantity_ty = quantity.logical_type();
 

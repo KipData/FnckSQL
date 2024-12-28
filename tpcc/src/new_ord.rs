@@ -72,17 +72,17 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
                 .execute(
                     &statements[0],
                     &[
-                        ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                        ("?2", DataValue::Int16(Some(args.w_id as i16))),
-                        ("?3", DataValue::Int8(Some(args.d_id as i8))),
-                        ("?4", DataValue::Int64(Some(args.c_id as i64))),
+                        ("?1", DataValue::Int16(args.w_id as i16)),
+                        ("?2", DataValue::Int16(args.w_id as i16)),
+                        ("?3", DataValue::Int8(args.d_id as i8)),
+                        ("?4", DataValue::Int64(args.c_id as i64)),
                     ],
                 )?
                 .next()
                 .unwrap()?;
             let c_discount = tuple.values[0].decimal().unwrap();
-            let c_last = tuple.values[1].utf8().unwrap();
-            let c_credit = tuple.values[2].utf8().unwrap();
+            let c_last = tuple.values[1].utf8().unwrap().to_string();
+            let c_credit = tuple.values[2].utf8().unwrap().to_string();
             let w_tax = tuple.values[3].decimal().unwrap();
 
             (c_discount, c_last, c_credit, w_tax)
@@ -92,21 +92,21 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
                 .execute(
                     &statements[1],
                     &[
-                        ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                        ("?2", DataValue::Int8(Some(args.d_id as i8))),
-                        ("?3", DataValue::Int32(Some(args.c_id as i32))),
+                        ("?1", DataValue::Int16(args.w_id as i16)),
+                        ("?2", DataValue::Int8(args.d_id as i8)),
+                        ("?3", DataValue::Int32(args.c_id as i32)),
                     ],
                 )?
                 .next()
                 .unwrap()?;
             let c_discount = tuple.values[0].decimal().unwrap();
-            let c_last = tuple.values[1].utf8().unwrap();
-            let c_credit = tuple.values[2].utf8().unwrap();
+            let c_last = tuple.values[1].utf8().unwrap().to_string();
+            let c_credit = tuple.values[2].utf8().unwrap().to_string();
             // "SELECT w_tax FROM warehouse WHERE w_id = ?"
             let tuple = tx
                 .execute(
                     &statements[2],
-                    &[("?1", DataValue::Int16(Some(args.w_id as i16)))],
+                    &[("?1", DataValue::Int16(args.w_id as i16))],
                 )?
                 .next()
                 .unwrap()?;
@@ -119,8 +119,8 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
             .execute(
                 &statements[3],
                 &[
-                    ("?1", DataValue::Int8(Some(args.d_id as i8))),
-                    ("?2", DataValue::Int16(Some(args.w_id as i16))),
+                    ("?1", DataValue::Int8(args.d_id as i8)),
+                    ("?2", DataValue::Int16(args.w_id as i16)),
                 ],
             )?
             .next()
@@ -131,9 +131,9 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
         tx.execute(
             &statements[4],
             &[
-                ("?1", DataValue::Int32(Some(d_next_o_id))),
-                ("?2", DataValue::Int8(Some(args.d_id as i8))),
-                ("?3", DataValue::Int16(Some(args.w_id as i16))),
+                ("?1", DataValue::Int32(d_next_o_id)),
+                ("?2", DataValue::Int8(args.d_id as i8)),
+                ("?3", DataValue::Int16(args.w_id as i16)),
             ],
         )?
         .done()?;
@@ -142,13 +142,13 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
         tx.execute(
             &statements[5],
             &[
-                ("?1", DataValue::Int32(Some(o_id))),
-                ("?2", DataValue::Int8(Some(args.d_id as i8))),
-                ("?3", DataValue::Int16(Some(args.w_id as i16))),
-                ("?4", DataValue::Int32(Some(args.c_id as i32))),
+                ("?1", DataValue::Int32(o_id)),
+                ("?2", DataValue::Int8(args.d_id as i8)),
+                ("?3", DataValue::Int16(args.w_id as i16)),
+                ("?4", DataValue::Int32(args.c_id as i32)),
                 ("?5", DataValue::from(&now)),
-                ("?6", DataValue::Int8(Some(args.o_ol_cnt as i8))),
-                ("?7", DataValue::Int8(Some(args.o_all_local as i8))),
+                ("?6", DataValue::Int8(args.o_ol_cnt as i8)),
+                ("?7", DataValue::Int8(args.o_all_local as i8)),
             ],
         )?
         .done()?;
@@ -156,9 +156,9 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
         tx.execute(
             &statements[6],
             &[
-                ("?1", DataValue::Int32(Some(o_id))),
-                ("?2", DataValue::Int8(Some(args.d_id as i8))),
-                ("?3", DataValue::Int16(Some(args.w_id as i16))),
+                ("?1", DataValue::Int32(o_id)),
+                ("?2", DataValue::Int8(args.d_id as i8)),
+                ("?3", DataValue::Int16(args.w_id as i16)),
             ],
         )?
         .done()?;
@@ -193,7 +193,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
             let tuple = tx
                 .execute(
                     &statements[7],
-                    vec![("?1", DataValue::Int32(Some(ol_i_id as i32)))],
+                    vec![("?1", DataValue::Int32(ol_i_id as i32))],
                 )?
                 .next();
             let Some(tuple) = tuple else {
@@ -205,15 +205,15 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
             let i_data = tuple.values[2].utf8().unwrap();
 
             price[ol_num_seq[ol_number - 1]] = i_price;
-            iname[ol_num_seq[ol_number - 1]] = i_name;
+            iname[ol_num_seq[ol_number - 1]] = i_name.to_string();
 
             // "SELECT s_quantity, s_data, s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05, s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10 FROM stock WHERE s_i_id = ? AND s_w_id = ? FOR UPDATE"
             let tuple = tx
                 .execute(
                     &statements[8],
                     vec![
-                        ("?1", DataValue::Int32(Some(ol_i_id as i32))),
-                        ("?2", DataValue::Int16(Some(ol_supply_w_id as i16))),
+                        ("?1", DataValue::Int32(ol_i_id as i32)),
+                        ("?2", DataValue::Int16(ol_supply_w_id as i16)),
                     ],
                 )?
                 .next()
@@ -252,9 +252,9 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
             tx.execute(
                 &statements[9],
                 vec![
-                    ("?1", DataValue::Int16(Some(s_quantity))),
-                    ("?2", DataValue::Int32(Some(ol_i_id as i32))),
-                    ("?3", DataValue::Int16(Some(ol_supply_w_id as i16))),
+                    ("?1", DataValue::Int16(s_quantity)),
+                    ("?2", DataValue::Int32(ol_i_id as i32)),
+                    ("?3", DataValue::Int16(ol_supply_w_id as i16)),
                 ],
             )?
             .done()?;
@@ -273,14 +273,14 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
             tx.execute(
                 &statements[10],
                 vec![
-                    ("?1", DataValue::Int32(Some(o_id))),
-                    ("?2", DataValue::Int8(Some(args.d_id as i8))),
-                    ("?3", DataValue::Int16(Some(args.w_id as i16))),
-                    ("?4", DataValue::Int8(Some(ol_number as i8))),
-                    ("?5", DataValue::Int32(Some(ol_i_id as i32))),
-                    ("?6", DataValue::Int16(Some(ol_supply_w_id as i16))),
-                    ("?7", DataValue::Int8(Some(ol_quantity as i8))),
-                    ("?8", DataValue::Decimal(Some(ol_amount.round_dp(2)))),
+                    ("?1", DataValue::Int32(o_id)),
+                    ("?2", DataValue::Int8(args.d_id as i8)),
+                    ("?3", DataValue::Int16(args.w_id as i16)),
+                    ("?4", DataValue::Int8(ol_number as i8)),
+                    ("?5", DataValue::Int32(ol_i_id as i32)),
+                    ("?6", DataValue::Int16(ol_supply_w_id as i16)),
+                    ("?7", DataValue::Int8(ol_quantity as i8)),
+                    ("?8", DataValue::Decimal(ol_amount.round_dp(2))),
                     ("?9", DataValue::from(ol_dist_info)),
                 ],
             )?
@@ -345,16 +345,16 @@ impl<S: Storage> TpccTest<S> for NewOrdTest {
 
 fn pick_dist_info(
     ol_supply_w_id: usize,
-    s_dist_01: String,
-    s_dist_02: String,
-    s_dist_03: String,
-    s_dist_04: String,
-    s_dist_05: String,
-    s_dist_06: String,
-    s_dist_07: String,
-    s_dist_08: String,
-    s_dist_09: String,
-    s_dist_10: String,
+    s_dist_01: &str,
+    s_dist_02: &str,
+    s_dist_03: &str,
+    s_dist_04: &str,
+    s_dist_05: &str,
+    s_dist_06: &str,
+    s_dist_07: &str,
+    s_dist_08: &str,
+    s_dist_09: &str,
+    s_dist_10: &str,
 ) -> String {
     match ol_supply_w_id {
         1 => s_dist_01,
@@ -369,4 +369,5 @@ fn pick_dist_info(
         10 => s_dist_10,
         _ => unreachable!(),
     }
+    .to_string()
 }

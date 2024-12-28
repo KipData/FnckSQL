@@ -82,7 +82,7 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
             Expr::TypedString { data_type, value } => {
                 let logical_type = LogicalType::try_from(data_type.clone())?;
                 let value = DataValue::Utf8 {
-                    value: Some(value.to_string()),
+                    value: value.to_string(),
                     ty: Utf8Type::Variable(None),
                     unit: CharLengthUnits::Characters,
                 }
@@ -429,7 +429,7 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
         };
 
         Ok(ScalarExpression::Binary {
-            op: (op.clone()).into(),
+            op: (op.clone()).try_into()?,
             left_expr,
             right_expr,
             evaluator: None,
@@ -450,7 +450,7 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
         };
 
         Ok(ScalarExpression::Unary {
-            op: (*op).into(),
+            op: (*op).try_into()?,
             expr,
             evaluator: None,
             ty,
@@ -690,7 +690,7 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
 
     fn wildcard_expr() -> ScalarExpression {
         ScalarExpression::Constant(DataValue::Utf8 {
-            value: Some("*".to_string()),
+            value: "*".to_string(),
             ty: Utf8Type::Variable(None),
             unit: CharLengthUnits::Characters,
         })

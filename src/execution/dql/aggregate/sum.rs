@@ -17,7 +17,7 @@ impl SumAccumulator {
         debug_assert!(ty.is_numeric());
 
         Ok(Self {
-            result: DataValue::none(ty),
+            result: DataValue::Null,
             evaluator: EvaluatorFactory::binary_create(ty.clone(), BinaryOperator::Plus)?,
         })
     }
@@ -27,7 +27,7 @@ impl Accumulator for SumAccumulator {
     fn update_value(&mut self, value: &DataValue) -> Result<(), DatabaseError> {
         if !value.is_null() {
             if self.result.is_null() {
-                self.result = DataValue::clone(value);
+                self.result = value.clone();
             } else {
                 self.result = self.evaluator.0.binary_eval(&self.result, value);
             }

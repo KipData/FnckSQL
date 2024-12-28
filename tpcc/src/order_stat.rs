@@ -51,8 +51,8 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
                 .execute(
                     &statements[0],
                     &[
-                        ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                        ("?2", DataValue::Int8(Some(args.d_id as i8))),
+                        ("?1", DataValue::Int16(args.w_id as i16)),
+                        ("?2", DataValue::Int8(args.d_id as i8)),
                         ("?3", DataValue::from(args.c_last.clone())),
                     ],
                 )?
@@ -63,8 +63,8 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
             let mut tuple_iter = tx.execute(
                 &statements[1],
                 &[
-                    ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                    ("?2", DataValue::Int8(Some(args.d_id as i8))),
+                    ("?1", DataValue::Int16(args.w_id as i16)),
+                    ("?2", DataValue::Int8(args.d_id as i8)),
                     ("?3", DataValue::from(args.c_last.clone())),
                 ],
             )?;
@@ -81,9 +81,9 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
                 let tuple = tuple_iter.next().unwrap()?;
 
                 c_balance = tuple.values[0].decimal().unwrap();
-                c_first = tuple.values[1].utf8().unwrap();
-                c_middle = tuple.values[2].utf8().unwrap();
-                c_last = tuple.values[3].utf8().unwrap();
+                c_first = tuple.values[1].utf8().unwrap().to_string();
+                c_middle = tuple.values[2].utf8().unwrap().to_string();
+                c_last = tuple.values[3].utf8().unwrap().to_string();
             }
             (c_balance, c_first, c_middle, c_last)
         } else {
@@ -92,17 +92,17 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
                 .execute(
                     &statements[2],
                     &[
-                        ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                        ("?2", DataValue::Int8(Some(args.d_id as i8))),
-                        ("?3", DataValue::Int32(Some(args.c_id as i32))),
+                        ("?1", DataValue::Int16(args.w_id as i16)),
+                        ("?2", DataValue::Int8(args.d_id as i8)),
+                        ("?3", DataValue::Int32(args.c_id as i32)),
                     ],
                 )?
                 .next()
                 .unwrap()?;
             let c_balance = tuple.values[0].decimal().unwrap();
-            let c_first = tuple.values[1].utf8().unwrap();
-            let c_middle = tuple.values[2].utf8().unwrap();
-            let c_last = tuple.values[3].utf8().unwrap();
+            let c_first = tuple.values[1].utf8().unwrap().to_string();
+            let c_middle = tuple.values[2].utf8().unwrap().to_string();
+            let c_last = tuple.values[3].utf8().unwrap().to_string();
             (c_balance, c_first, c_middle, c_last)
         };
         // TODO: Join Eq
@@ -111,12 +111,12 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
             .execute(
                 &statements[3],
                 &[
-                    ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                    ("?2", DataValue::Int8(Some(args.d_id as i8))),
-                    ("?3", DataValue::Int32(Some(args.c_id as i32))),
-                    ("?4", DataValue::Int16(Some(args.w_id as i16))),
-                    ("?5", DataValue::Int8(Some(args.d_id as i8))),
-                    ("?6", DataValue::Int32(Some(args.c_id as i32))),
+                    ("?1", DataValue::Int16(args.w_id as i16)),
+                    ("?2", DataValue::Int8(args.d_id as i8)),
+                    ("?3", DataValue::Int32(args.c_id as i32)),
+                    ("?4", DataValue::Int16(args.w_id as i16)),
+                    ("?5", DataValue::Int8(args.d_id as i8)),
+                    ("?6", DataValue::Int32(args.c_id as i32)),
                 ],
             )?
             .next();
@@ -132,9 +132,9 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
             .execute(
                 &statements[4],
                 &[
-                    ("?1", DataValue::Int16(Some(args.w_id as i16))),
-                    ("?2", DataValue::Int8(Some(args.d_id as i8))),
-                    ("?3", DataValue::Int32(Some(o_id))),
+                    ("?1", DataValue::Int16(args.w_id as i16)),
+                    ("?2", DataValue::Int8(args.d_id as i8)),
+                    ("?3", DataValue::Int32(o_id)),
                 ],
             )?
             .next()

@@ -530,7 +530,7 @@ pub(crate) mod test {
             iter.next().unwrap()?,
             Tuple::new(
                 None,
-                vec![DataValue::Date32(Some(Local::now().num_days_from_ce()))]
+                vec![DataValue::Date32(Local::now().num_days_from_ce())]
             )
         );
         assert!(iter.next().is_none());
@@ -558,11 +558,11 @@ pub(crate) mod test {
         assert_eq!(iter.schema(), &Arc::new(vec![ColumnRef::from(column)]));
         assert_eq!(
             iter.next().unwrap()?,
-            Tuple::new(None, vec![DataValue::Int32(Some(3))])
+            Tuple::new(None, vec![DataValue::Int32(3)])
         );
         assert_eq!(
             iter.next().unwrap()?,
-            Tuple::new(None, vec![DataValue::Int32(Some(4))])
+            Tuple::new(None, vec![DataValue::Int32(4)])
         );
         Ok(())
     }
@@ -583,7 +583,7 @@ pub(crate) mod test {
         {
             let statement = fnck_sql.prepare("explain select * from t1 where b > ?1")?;
 
-            let mut iter = fnck_sql.execute(&statement, &[("?1", DataValue::Int32(Some(0)))])?;
+            let mut iter = fnck_sql.execute(&statement, &[("?1", DataValue::Int32(0))])?;
 
             assert_eq!(
                 iter.next().unwrap()?.values[0].utf8().unwrap(),
@@ -601,10 +601,10 @@ pub(crate) mod test {
             let mut iter = fnck_sql.execute(
                 &statement,
                 &[
-                    ("?1", DataValue::Int32(Some(0))),
-                    ("?2", DataValue::Int32(Some(0))),
-                    ("?3", DataValue::Int32(Some(1))),
-                    ("?4", DataValue::Int32(Some(0))),
+                    ("?1", DataValue::Int32(0)),
+                    ("?2", DataValue::Int32(0)),
+                    ("?3", DataValue::Int32(1)),
+                    ("?4", DataValue::Int32(0)),
                 ],
             )?;
             assert_eq!(
@@ -621,10 +621,10 @@ pub(crate) mod test {
             let mut iter = fnck_sql.execute(
                 &statement,
                 &[
-                    ("?1", DataValue::Int32(Some(9))),
-                    ("?2", DataValue::Int32(Some(0))),
-                    ("?3", DataValue::Int32(Some(1))),
-                    ("?4", DataValue::Int32(Some(0))),
+                    ("?1", DataValue::Int32(9)),
+                    ("?2", DataValue::Int32(0)),
+                    ("?3", DataValue::Int32(1)),
+                    ("?4", DataValue::Int32(0)),
                 ],
             )?;
             assert_eq!(
@@ -666,20 +666,20 @@ pub(crate) mod test {
 
         assert_eq!(
             iter_1.next().unwrap()?.values,
-            vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
+            vec![DataValue::Int32(0), DataValue::Int32(0)]
         );
         assert_eq!(
             iter_1.next().unwrap()?.values,
-            vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1))]
+            vec![DataValue::Int32(1), DataValue::Int32(1)]
         );
 
         assert_eq!(
             iter_2.next().unwrap()?.values,
-            vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0))]
+            vec![DataValue::Int32(0), DataValue::Int32(0)]
         );
         assert_eq!(
             iter_2.next().unwrap()?.values,
-            vec![DataValue::Int32(Some(3)), DataValue::Int32(Some(3))]
+            vec![DataValue::Int32(3), DataValue::Int32(3)]
         );
         drop(iter_1);
         drop(iter_2);

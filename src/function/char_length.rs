@@ -42,15 +42,10 @@ impl ScalarFunctionImpl for CharLength {
             value = value.cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?;
         }
         let mut length: u64 = 0;
-        if let DataValue::Utf8 {
-            value: Some(value),
-            ty,
-            unit,
-        } = &mut value
-        {
+        if let DataValue::Utf8 { value, ty, unit } = &mut value {
             length = value.len() as u64;
         }
-        Ok(DataValue::UInt64(Some(length)))
+        Ok(DataValue::UInt64(length))
     }
 
     fn monotonicity(&self) -> Option<FuncMonotonicity> {

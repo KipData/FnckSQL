@@ -21,7 +21,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for ShowTables {
 
                 for TableMeta { table_name } in metas {
                     let values = vec![DataValue::Utf8 {
-                        value: Some(table_name.to_string()),
+                        value: table_name.to_string(),
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
                     }];

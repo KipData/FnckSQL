@@ -159,24 +159,24 @@ mod test {
             operator: Operator::Values(ValuesOperator {
                 rows: vec![
                     vec![
-                        DataValue::Int32(Some(0)),
-                        DataValue::Int32(Some(2)),
-                        DataValue::Int32(Some(4)),
+                        DataValue::Int32(0),
+                        DataValue::Int32(2),
+                        DataValue::Int32(4),
                     ],
                     vec![
-                        DataValue::Int32(Some(1)),
-                        DataValue::Int32(Some(3)),
-                        DataValue::Int32(Some(5)),
+                        DataValue::Int32(1),
+                        DataValue::Int32(3),
+                        DataValue::Int32(5),
                     ],
                     vec![
-                        DataValue::Int32(Some(0)),
-                        DataValue::Int32(Some(1)),
-                        DataValue::Int32(Some(2)),
+                        DataValue::Int32(0),
+                        DataValue::Int32(1),
+                        DataValue::Int32(2),
                     ],
                     vec![
-                        DataValue::Int32(Some(1)),
-                        DataValue::Int32(Some(2)),
-                        DataValue::Int32(Some(3)),
+                        DataValue::Int32(1),
+                        DataValue::Int32(2),
+                        DataValue::Int32(3),
                     ],
                 ],
                 schema_ref: t1_schema.clone(),

@@ -114,7 +114,7 @@ impl Range {
             }
             merge_tuple.push(value);
 
-            DataValue::Tuple(Some((merge_tuple, is_upper)))
+            DataValue::Tuple(merge_tuple, is_upper)
         }
         fn collect_tuple_range(result_ranges: &mut Vec<Range>, tuple: &[&DataValue], range: Range) {
             fn merge_value_on_bound(
@@ -130,7 +130,7 @@ impl Range {
                             return Bound::Unbounded;
                         }
                         let values = tuple.iter().map(|v| (*v).clone()).collect_vec();
-                        Bound::Excluded(DataValue::Tuple(Some((values, is_upper))))
+                        Bound::Excluded(DataValue::Tuple(values, is_upper))
                     }
                 }
             }
@@ -286,7 +286,6 @@ impl<'a> RangeDetacher<'a> {
             (Range::Dummy, binary) | (binary, Range::Dummy) => match op {
                 BinaryOperator::And => Some(Range::Dummy),
                 BinaryOperator::Or => Some(binary),
-                BinaryOperator::Xor => todo!(),
                 _ => None,
             },
             // e.g. c1 > 1 ? c1 < 2
@@ -306,7 +305,6 @@ impl<'a> RangeDetacher<'a> {
                 BinaryOperator::Or => Some(Self::or_scope_merge(
                     left_min, left_max, right_min, right_max,
                 )),
-                BinaryOperator::Xor => todo!(),
                 _ => None,
             },
             // e.g. c1 > 1 ? c1 = 1
@@ -380,7 +378,6 @@ impl<'a> RangeDetacher<'a> {
                         };
                         Some(range)
                     }
-                    BinaryOperator::Xor => todo!(),
                     _ => None,
                 }
             }
@@ -414,7 +411,6 @@ impl<'a> RangeDetacher<'a> {
                         ranges.push(Range::Eq(val_2));
                         Some(Range::SortedRanges(ranges))
                     }
-                    BinaryOperator::Xor => todo!(),
                     _ => None,
                 }
             }
@@ -550,7 +546,6 @@ impl<'a> RangeDetacher<'a> {
                     binary = match op {
                         BinaryOperator::And => return vec![],
                         BinaryOperator::Or => Some(ranges.remove(*idx)),
-                        BinaryOperator::Xor => todo!(),
                         _ => None,
                     };
                 }
@@ -814,7 +809,7 @@ mod test {
                 .detach(&op.predicate)
                 .unwrap();
             println!("c1 = 1 => {}", range);
-            assert_eq!(range, Range::Eq(DataValue::Int32(Some(1))))
+            assert_eq!(range, Range::Eq(DataValue::Int32(1)))
         }
         {
             let plan = table_state.plan("select * from t1 where c1 != 1")?;
@@ -834,7 +829,7 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Int32(Some(1))),
+                    min: Bound::Excluded(DataValue::Int32(1)),
                     max: Bound::Unbounded,
                 }
             )
@@ -849,7 +844,7 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Included(DataValue::Int32(Some(1))),
+                    min: Bound::Included(DataValue::Int32(1)),
                     max: Bound::Unbounded,
                 }
             )
@@ -865,7 +860,7 @@ mod test {
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
-                    max: Bound::Excluded(DataValue::Int32(Some(1))),
+                    max: Bound::Excluded(DataValue::Int32(1)),
                 }
             )
         }
@@ -880,7 +875,7 @@ mod test {
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
-                    max: Bound::Included(DataValue::Int32(Some(1))),
+                    max: Bound::Included(DataValue::Int32(1)),
                 }
             )
         }
@@ -894,8 +889,8 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Included(DataValue::Int32(Some(0))),
-                    max: Bound::Excluded(DataValue::Int32(Some(1))),
+                    min: Bound::Included(DataValue::Int32(0)),
+                    max: Bound::Excluded(DataValue::Int32(1)),
                 }
             )
         }
@@ -934,8 +929,8 @@ mod test {
             assert_eq!(
                 range,
                 Range::SortedRanges(vec![
-                    Range::Eq(DataValue::Int32(Some(0))),
-                    Range::Eq(DataValue::Int32(Some(1))),
+                    Range::Eq(DataValue::Int32(0)),
+                    Range::Eq(DataValue::Int32(1)),
                 ])
             )
         }
@@ -946,7 +941,7 @@ mod test {
                 .detach(&op.predicate)
                 .unwrap();
             println!("c1 = 1 and c1 = 1 => c1: {}", range);
-            assert_eq!(range, Range::Eq(DataValue::Int32(Some(1))))
+            assert_eq!(range, Range::Eq(DataValue::Int32(1)))
         }
         {
             let plan = table_state.plan("select * from t1 where c1 = 1 or c1 = 1")?;
@@ -955,7 +950,7 @@ mod test {
                 .detach(&op.predicate)
                 .unwrap();
             println!("c1 = 1 or c1 = 1 => c1: {}", range);
-            assert_eq!(range, Range::Eq(DataValue::Int32(Some(1))))
+            assert_eq!(range, Range::Eq(DataValue::Int32(1)))
         }
 
         {
@@ -974,7 +969,7 @@ mod test {
                 .detach(&op.predicate)
                 .unwrap();
             println!("c1 >= 1 and c1 = 1 => c1: {}", range);
-            assert_eq!(range, Range::Eq(DataValue::Int32(Some(1))))
+            assert_eq!(range, Range::Eq(DataValue::Int32(1)))
         }
         {
             let plan = table_state.plan("select * from t1 where c1 > 1 or c1 = 1")?;
@@ -986,7 +981,7 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Included(DataValue::Int32(Some(1))),
+                    min: Bound::Included(DataValue::Int32(1)),
                     max: Bound::Unbounded,
                 }
             )
@@ -1001,7 +996,7 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Included(DataValue::Int32(Some(1))),
+                    min: Bound::Included(DataValue::Int32(1)),
                     max: Bound::Unbounded,
                 }
             )
@@ -1021,8 +1016,8 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Int32(Some(1))),
-                    max: Bound::Excluded(DataValue::Int32(Some(3))),
+                    min: Bound::Excluded(DataValue::Int32(1)),
+                    max: Bound::Excluded(DataValue::Int32(3)),
                 }
             )
         }
@@ -1040,8 +1035,8 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Int32(Some(0))),
-                    max: Bound::Excluded(DataValue::Int32(Some(4))),
+                    min: Bound::Excluded(DataValue::Int32(0)),
+                    max: Bound::Excluded(DataValue::Int32(4)),
                 }
             )
         }
@@ -1089,10 +1084,10 @@ mod test {
             assert_eq!(
                 range,
                 Range::SortedRanges(vec![
-                    Range::Eq(DataValue::Int32(Some(0))),
+                    Range::Eq(DataValue::Int32(0)),
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(1))),
-                        max: Bound::Excluded(DataValue::Int32(Some(3))),
+                        min: Bound::Excluded(DataValue::Int32(1)),
+                        max: Bound::Excluded(DataValue::Int32(3)),
                     }
                 ])
             )
@@ -1112,8 +1107,8 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Included(DataValue::Int32(Some(0))),
-                    max: Bound::Excluded(DataValue::Int32(Some(4))),
+                    min: Bound::Included(DataValue::Int32(0)),
+                    max: Bound::Excluded(DataValue::Int32(4)),
                 }
             )
         }
@@ -1137,8 +1132,8 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Included(DataValue::Int32(Some(0))),
-                    max: Bound::Included(DataValue::Int32(Some(2))),
+                    min: Bound::Included(DataValue::Int32(0)),
+                    max: Bound::Included(DataValue::Int32(2)),
                 }
             )
         }
@@ -1154,12 +1149,12 @@ mod test {
                 range,
                 Range::SortedRanges(vec![
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(1))),
-                        max: Bound::Excluded(DataValue::Int32(Some(2))),
+                        min: Bound::Excluded(DataValue::Int32(1)),
+                        max: Bound::Excluded(DataValue::Int32(2)),
                     },
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(5))),
-                        max: Bound::Excluded(DataValue::Int32(Some(6))),
+                        min: Bound::Excluded(DataValue::Int32(5)),
+                        max: Bound::Excluded(DataValue::Int32(6)),
                     },
                 ])
             )
@@ -1175,12 +1170,12 @@ mod test {
                 range,
                 Range::SortedRanges(vec![
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(0))),
-                        max: Bound::Excluded(DataValue::Int32(Some(3))),
+                        min: Bound::Excluded(DataValue::Int32(0)),
+                        max: Bound::Excluded(DataValue::Int32(3)),
                     },
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(4))),
-                        max: Bound::Excluded(DataValue::Int32(Some(7))),
+                        min: Bound::Excluded(DataValue::Int32(4)),
+                        max: Bound::Excluded(DataValue::Int32(7)),
                     },
                 ])
             )
@@ -1235,8 +1230,8 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Included(DataValue::Int32(Some(5))),
-                    max: Bound::Excluded(DataValue::Int32(Some(12))),
+                    min: Bound::Included(DataValue::Int32(5)),
+                    max: Bound::Excluded(DataValue::Int32(12)),
                 }
             )
         }
@@ -1258,10 +1253,10 @@ mod test {
                 Range::SortedRanges(vec![
                     Range::Scope {
                         min: Bound::Unbounded,
-                        max: Bound::Included(DataValue::Int32(Some(-4))),
+                        max: Bound::Included(DataValue::Int32(-4)),
                     },
                     Range::Scope {
-                        min: Bound::Included(DataValue::Int32(Some(0))),
+                        min: Bound::Included(DataValue::Int32(0)),
                         max: Bound::Unbounded,
                     }
                 ])
@@ -1283,7 +1278,7 @@ mod test {
                 .detach(&op.predicate)
                 .unwrap();
             println!("c1 = null => c1: {}", range);
-            assert_eq!(range, Range::Eq(DataValue::Int32(None)))
+            assert_eq!(range, Range::Eq(DataValue::Null))
         }
         {
             let plan = table_state.plan("select * from t1 where c1 = null or c1 = 1")?;
@@ -1295,8 +1290,8 @@ mod test {
             assert_eq!(
                 range,
                 Range::SortedRanges(vec![
-                    Range::Eq(DataValue::Int32(None)),
-                    Range::Eq(DataValue::Int32(Some(1)))
+                    Range::Eq(DataValue::Null),
+                    Range::Eq(DataValue::Int32(1))
                 ])
             )
         }
@@ -1311,7 +1306,7 @@ mod test {
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
-                    max: Bound::Excluded(DataValue::Int32(Some(5))),
+                    max: Bound::Excluded(DataValue::Int32(5)),
                 }
             )
         }
@@ -1326,10 +1321,10 @@ mod test {
             assert_eq!(
                 range,
                 Range::SortedRanges(vec![
-                    Range::Eq(DataValue::Int32(None)),
+                    Range::Eq(DataValue::Null),
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(1))),
-                        max: Bound::Excluded(DataValue::Int32(Some(5))),
+                        min: Bound::Excluded(DataValue::Int32(1)),
+                        max: Bound::Excluded(DataValue::Int32(5)),
                     },
                 ])
             )
@@ -1341,7 +1336,7 @@ mod test {
                 .detach(&op.predicate)
                 .unwrap();
             println!("c1 = null and c1 < 5 => c1: {}", range);
-            assert_eq!(range, Range::Eq(DataValue::Int32(None)))
+            assert_eq!(range, Range::Eq(DataValue::Null))
         }
         {
             let plan =
@@ -1398,7 +1393,7 @@ mod test {
                 range,
                 Range::Scope {
                     min: Bound::Unbounded,
-                    max: Bound::Excluded(DataValue::Int32(Some(5))),
+                    max: Bound::Excluded(DataValue::Int32(5)),
                 }
             )
         }
@@ -1413,8 +1408,8 @@ mod test {
             assert_eq!(
                 range,
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Int32(Some(1))),
-                    max: Bound::Excluded(DataValue::Int32(Some(5))),
+                    min: Bound::Excluded(DataValue::Int32(1)),
+                    max: Bound::Excluded(DataValue::Int32(5)),
                 }
             )
         }
@@ -1428,14 +1423,14 @@ mod test {
             assert_eq!(
                 range,
                 Range::SortedRanges(vec![
-                    Range::Eq(DataValue::Int32(None)),
+                    Range::Eq(DataValue::Null),
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(0))),
-                        max: Bound::Excluded(DataValue::Int32(Some(3))),
+                        min: Bound::Excluded(DataValue::Int32(0)),
+                        max: Bound::Excluded(DataValue::Int32(3)),
                     },
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(4))),
-                        max: Bound::Excluded(DataValue::Int32(Some(7))),
+                        min: Bound::Excluded(DataValue::Int32(4)),
+                        max: Bound::Excluded(DataValue::Int32(7)),
                     }
                 ])
             )
@@ -1450,14 +1445,14 @@ mod test {
             assert_eq!(
                 range,
                 Range::SortedRanges(vec![
-                    Range::Eq(DataValue::Int32(None)),
+                    Range::Eq(DataValue::Null),
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(0))),
-                        max: Bound::Excluded(DataValue::Int32(Some(3))),
+                        min: Bound::Excluded(DataValue::Int32(0)),
+                        max: Bound::Excluded(DataValue::Int32(3)),
                     },
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(4))),
-                        max: Bound::Excluded(DataValue::Int32(Some(7))),
+                        min: Bound::Excluded(DataValue::Int32(4)),
+                        max: Bound::Excluded(DataValue::Int32(7)),
                     }
                 ])
             )
@@ -1473,12 +1468,12 @@ mod test {
                 range,
                 Range::SortedRanges(vec![
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(1))),
-                        max: Bound::Excluded(DataValue::Int32(Some(2))),
+                        min: Bound::Excluded(DataValue::Int32(1)),
+                        max: Bound::Excluded(DataValue::Int32(2)),
                     },
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(5))),
-                        max: Bound::Excluded(DataValue::Int32(Some(6))),
+                        min: Bound::Excluded(DataValue::Int32(5)),
+                        max: Bound::Excluded(DataValue::Int32(6)),
                     }
                 ])
             )
@@ -1494,12 +1489,12 @@ mod test {
                 range,
                 Range::SortedRanges(vec![
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(1))),
-                        max: Bound::Excluded(DataValue::Int32(Some(2))),
+                        min: Bound::Excluded(DataValue::Int32(1)),
+                        max: Bound::Excluded(DataValue::Int32(2)),
                     },
                     Range::Scope {
-                        min: Bound::Excluded(DataValue::Int32(Some(5))),
-                        max: Bound::Excluded(DataValue::Int32(Some(6))),
+                        min: Bound::Excluded(DataValue::Int32(5)),
+                        max: Bound::Excluded(DataValue::Int32(6)),
                     }
                 ])
             )
@@ -1511,20 +1506,20 @@ mod test {
     #[test]
     fn test_to_tuple_range_some() {
         let eqs_ranges = vec![
-            Range::Eq(DataValue::Int32(Some(1))),
+            Range::Eq(DataValue::Int32(1)),
             Range::SortedRanges(vec![
-                Range::Eq(DataValue::Int32(None)),
-                Range::Eq(DataValue::Int32(Some(1))),
-                Range::Eq(DataValue::Int32(Some(2))),
+                Range::Eq(DataValue::Null),
+                Range::Eq(DataValue::Int32(1)),
+                Range::Eq(DataValue::Int32(2)),
             ]),
             Range::SortedRanges(vec![
-                Range::Eq(DataValue::Int32(Some(1))),
-                Range::Eq(DataValue::Int32(Some(2))),
+                Range::Eq(DataValue::Int32(1)),
+                Range::Eq(DataValue::Int32(2)),
             ]),
         ];
 
         let range = Range::Scope {
-            min: Bound::Included(DataValue::Int32(Some(1))),
+            min: Bound::Included(DataValue::Int32(1)),
             max: Bound::Unbounded,
         }
         .combining_eqs(&eqs_ranges);
@@ -1533,125 +1528,117 @@ mod test {
             range,
             Some(Range::SortedRanges(vec![
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Null,
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Excluded(DataValue::Tuple(Some((
-                        vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(1)),
-                        ],
+                    )),
+                    max: Bound::Excluded(DataValue::Tuple(
+                        vec![DataValue::Int32(1), DataValue::Null, DataValue::Int32(1),],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Null,
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Excluded(DataValue::Tuple(Some((
-                        vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(2)),
-                        ],
+                    )),
+                    max: Bound::Excluded(DataValue::Tuple(
+                        vec![DataValue::Int32(1), DataValue::Null, DataValue::Int32(2),],
                         true
-                    )))),
+                    ))
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Excluded(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Excluded(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Excluded(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Excluded(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Excluded(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Excluded(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Excluded(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Excluded(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(2),
                         ],
                         true
-                    )))),
+                    )),
                 },
             ]))
         );
 
         let range = Range::Scope {
             min: Bound::Unbounded,
-            max: Bound::Included(DataValue::Int32(Some(1))),
+            max: Bound::Included(DataValue::Int32(1)),
         }
         .combining_eqs(&eqs_ranges);
 
@@ -1659,125 +1646,117 @@ mod test {
             range,
             Some(Range::SortedRanges(vec![
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Tuple(Some((
-                        vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(1)),
-                        ],
+                    min: Bound::Excluded(DataValue::Tuple(
+                        vec![DataValue::Int32(1), DataValue::Null, DataValue::Int32(1),],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Null,
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Tuple(Some((
-                        vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(2)),
-                        ],
+                    min: Bound::Excluded(DataValue::Tuple(
+                        vec![DataValue::Int32(1), DataValue::Null, DataValue::Int32(2),],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Null,
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Tuple(Some((
+                    min: Bound::Excluded(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Tuple(Some((
+                    min: Bound::Excluded(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Tuple(Some((
+                    min: Bound::Excluded(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Excluded(DataValue::Tuple(Some((
+                    min: Bound::Excluded(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(2),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         true
-                    )))),
+                    )),
                 },
             ]))
         );
 
         let range = Range::Scope {
-            min: Bound::Included(DataValue::Int32(Some(1))),
-            max: Bound::Included(DataValue::Int32(Some(2))),
+            min: Bound::Included(DataValue::Int32(1)),
+            max: Bound::Included(DataValue::Int32(2)),
         }
         .combining_eqs(&eqs_ranges);
 
@@ -1785,124 +1764,124 @@ mod test {
             range,
             Some(Range::SortedRanges(vec![
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Null,
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Null,
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Null,
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(None),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Null,
+                            DataValue::Int32(2),
+                            DataValue::Int32(2),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(2),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
                         ],
                         true
-                    )))),
+                    )),
                 },
                 Range::Scope {
-                    min: Bound::Included(DataValue::Tuple(Some((
+                    min: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(1)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(2),
+                            DataValue::Int32(1),
                         ],
                         false
-                    )))),
-                    max: Bound::Included(DataValue::Tuple(Some((
+                    )),
+                    max: Bound::Included(DataValue::Tuple(
                         vec![
-                            DataValue::Int32(Some(1)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(2)),
-                            DataValue::Int32(Some(2)),
+                            DataValue::Int32(1),
+                            DataValue::Int32(2),
+                            DataValue::Int32(2),
+                            DataValue::Int32(2),
                         ],
                         true
-                    )))),
+                    )),
                 },
             ]))
         )
@@ -1911,28 +1890,28 @@ mod test {
     #[test]
     fn test_to_tuple_range_none() {
         let range = Range::Scope {
-            min: Bound::Included(DataValue::Int32(Some(2))),
+            min: Bound::Included(DataValue::Int32(2)),
             max: Bound::Unbounded,
         }
         .combining_eqs(&[
-            Range::Eq(DataValue::Int32(Some(7))),
-            Range::Eq(DataValue::Int32(Some(10))),
+            Range::Eq(DataValue::Int32(7)),
+            Range::Eq(DataValue::Int32(10)),
         ]);
         assert_eq!(
             range,
             Some(Range::Scope {
-                min: Bound::Included(DataValue::Tuple(Some((
+                min: Bound::Included(DataValue::Tuple(
                     vec![
-                        DataValue::Int32(Some(7)),
-                        DataValue::Int32(Some(10)),
-                        DataValue::Int32(Some(2))
+                        DataValue::Int32(7),
+                        DataValue::Int32(10),
+                        DataValue::Int32(2)
                     ],
                     false
-                )))),
-                max: Bound::Excluded(DataValue::Tuple(Some((
-                    vec![DataValue::Int32(Some(7)), DataValue::Int32(Some(10))],
+                )),
+                max: Bound::Excluded(DataValue::Tuple(
+                    vec![DataValue::Int32(7), DataValue::Int32(10)],
                     true
-                )))),
+                )),
             })
         );
         let Range::Scope {
@@ -1944,7 +1923,7 @@ mod test {
         };
         assert_eq!(
             TupleLtBinaryEvaluator.binary_eval(&min, &max),
-            DataValue::Boolean(Some(true))
+            DataValue::Boolean(true)
         )
     }
 }

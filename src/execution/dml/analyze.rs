@@ -92,9 +92,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
                         if values.len() == 1 {
                             throw!(builder.append(&values[0]));
                         } else {
-                            throw!(
-                                builder.append(&Arc::new(DataValue::Tuple(Some((values, false)))))
-                            );
+                            throw!(builder.append(&Arc::new(DataValue::Tuple(values, false))));
                         }
                     }
                 }
@@ -121,7 +119,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Analyze {
 
                     throw!(meta.to_file(&temp_path));
                     values.push(DataValue::Utf8 {
-                        value: Some(path_str.clone()),
+                        value: path_str.clone(),
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
                     });

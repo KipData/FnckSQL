@@ -37,9 +37,9 @@ mod test {
             )),
         ]);
         let values = vec![
-            DataValue::Int32(Some(9)),
+            DataValue::Int32(9),
             DataValue::Utf8 {
-                value: Some("LOL".to_string()),
+                value: "LOL".to_string(),
                 ty: Utf8Type::Variable(None),
                 unit: CharLengthUnits::Characters,
             },
@@ -57,13 +57,13 @@ mod test {
     implement_from_tuple!(
         MyStruct, (
             c1: i32 => |inner: &mut MyStruct, value| {
-                if let DataValue::Int32(Some(val)) = value {
+                if let DataValue::Int32(val) = value {
                     inner.c1 = val;
                 }
             },
             c2: String => |inner: &mut MyStruct, value| {
-                if let DataValue::Utf8 { value: Some(val), .. } = value {
-                    inner.c2 = val;
+                if let DataValue::Utf8 { value, .. } = value {
+                    inner.c2 = value;
                 }
             }
         )
@@ -92,8 +92,8 @@ mod test {
         Ok(Box::new((0..num)
             .into_iter()
             .map(|i| Ok(Tuple::new(None, vec![
-                    DataValue::Int32(Some(i)),
-                    DataValue::Int32(Some(i)),
+                    DataValue::Int32(i),
+                    DataValue::Int32(i),
                 ])))) as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>)
     }));
 
@@ -102,9 +102,9 @@ mod test {
         let function = MyScalaFunction::new();
         let sum = function.eval(
             &[
-                ScalarExpression::Constant(DataValue::Int8(Some(1))),
+                ScalarExpression::Constant(DataValue::Int8(1)),
                 ScalarExpression::Constant(DataValue::Utf8 {
-                    value: Some("1".to_string()),
+                    value: "1".to_string(),
                     ty: Utf8Type::Variable(None),
                     unit: CharLengthUnits::Characters,
                 }),
@@ -121,14 +121,14 @@ mod test {
                 arg_types: vec![LogicalType::Integer, LogicalType::Integer],
             }
         );
-        assert_eq!(sum, DataValue::Int32(Some(2)));
+        assert_eq!(sum, DataValue::Int32(2));
         Ok(())
     }
 
     #[test]
     fn test_table_function() -> Result<(), DatabaseError> {
         let function = MyTableFunction::new();
-        let mut numbers = function.eval(&[ScalarExpression::Constant(DataValue::Int8(Some(2)))])?;
+        let mut numbers = function.eval(&[ScalarExpression::Constant(DataValue::Int8(2))])?;
 
         println!("{:?}", function);
 
@@ -141,17 +141,11 @@ mod test {
         );
         assert_eq!(
             numbers.next().unwrap().unwrap(),
-            Tuple::new(
-                None,
-                vec![DataValue::Int32(Some(0)), DataValue::Int32(Some(0)),]
-            )
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Int32(0),])
         );
         assert_eq!(
             numbers.next().unwrap().unwrap(),
-            Tuple::new(
-                None,
-                vec![DataValue::Int32(Some(1)), DataValue::Int32(Some(1)),]
-            )
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Int32(1),])
         );
         assert!(numbers.next().is_none());
 

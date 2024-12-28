@@ -227,7 +227,7 @@ pub(crate) mod test {
                     LogicalType::Integer,
                     None,
                     false,
-                    Some(ScalarExpression::Constant(DataValue::UInt64(Some(42)))),
+                    Some(ScalarExpression::Constant(DataValue::UInt64(42))),
                 )?,
                 false,
             )));
@@ -315,7 +315,7 @@ pub(crate) mod test {
             LogicalType::Integer,
             None,
             false,
-            Some(ScalarExpression::Constant(DataValue::UInt64(Some(42)))),
+            Some(ScalarExpression::Constant(DataValue::UInt64(42))),
         )?;
         desc.encode(&mut cursor, false, &mut reference_tables)?;
         cursor.seek(SeekFrom::Start(0))?;

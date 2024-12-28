@@ -2,7 +2,7 @@
 
 [package]
 name          = "fnck_sql"
-version       = "0.0.9"
+version       = "0.0.10"
 edition       = "2021"
 authors       = ["Kould <kould2333@gmail.com>", "Xwg <loloxwg@gmail.com>"]
 description   = "SQL as a Function for Rust"
@@ -43,7 +43,7 @@ csv                   = { version = "1" }
 dirs                  = { version = "5" }
 fixedbitset           = { version = "0.4" }
 itertools             = { version = "0.12" }
-ordered-float         = { version = "4" }
+ordered-float         = { version = "4", features = ["serde"] }
 paste                 = { version = "1" }
 parking_lot           = { version = "0.12", features = ["arc_lock"] }
 petgraph              = { version = "0.6" }

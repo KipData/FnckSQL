@@ -17,96 +17,65 @@ pub struct BooleanNotEqBinaryEvaluator;
 #[typetag::serde]
 impl UnaryEvaluator for BooleanNotUnaryEvaluator {
     fn unary_eval(&self, value: &DataValue) -> DataValue {
-        let value = match value {
-            DataValue::Boolean(value) => value,
-            DataValue::Null => &None,
+        match value {
+            DataValue::Boolean(value) => DataValue::Boolean(!value),
+            DataValue::Null => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        DataValue::Boolean(value.map(|v| !v))
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for BooleanAndBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Boolean(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Boolean(v1), DataValue::Boolean(v2)) => DataValue::Boolean(*v1 && *v2),
+            (DataValue::Boolean(false), DataValue::Null)
+            | (DataValue::Null, DataValue::Boolean(false)) => DataValue::Boolean(false),
+            (DataValue::Null, DataValue::Null)
+            | (DataValue::Boolean(true), DataValue::Null)
+            | (DataValue::Null, DataValue::Boolean(true)) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Boolean(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => Some(*v1 && *v2),
-            (Some(false), _) | (_, Some(false)) => Some(false),
-            _ => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 
 #[typetag::serde]
 impl BinaryEvaluator for BooleanOrBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Boolean(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Boolean(v1), DataValue::Boolean(v2)) => DataValue::Boolean(*v1 || *v2),
+            (DataValue::Boolean(true), DataValue::Null)
+            | (DataValue::Null, DataValue::Boolean(true)) => DataValue::Boolean(true),
+            (DataValue::Null, DataValue::Null)
+            | (DataValue::Boolean(false), DataValue::Null)
+            | (DataValue::Null, DataValue::Boolean(false)) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Boolean(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => Some(*v1 || *v2),
-            (Some(true), _) | (_, Some(true)) => Some(true),
-            _ => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 
 #[typetag::serde]
 impl BinaryEvaluator for BooleanEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Boolean(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Boolean(v1), DataValue::Boolean(v2)) => DataValue::Boolean(*v1 == *v2),
+            (DataValue::Null, DataValue::Boolean(_))
+            | (DataValue::Boolean(_), DataValue::Null)
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Boolean(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => Some(v1 == v2),
-            (_, _) => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 
 #[typetag::serde]
 impl BinaryEvaluator for BooleanNotEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Boolean(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Boolean(v1), DataValue::Boolean(v2)) => DataValue::Boolean(*v1 != *v2),
+            (DataValue::Null, DataValue::Boolean(_))
+            | (DataValue::Boolean(_), DataValue::Null)
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Boolean(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => Some(v1 != v2),
-            (_, _) => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }

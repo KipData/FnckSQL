@@ -695,8 +695,8 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             let expr = self.bind_expr(expr)?;
             match expr {
                 ScalarExpression::Constant(dv) => match &dv {
-                    DataValue::Int32(Some(v)) if *v >= 0 => limit = Some(*v as usize),
-                    DataValue::Int64(Some(v)) if *v >= 0 => limit = Some(*v as usize),
+                    DataValue::Int32(v) if *v >= 0 => limit = Some(*v as usize),
+                    DataValue::Int64(v) if *v >= 0 => limit = Some(*v as usize),
                     _ => return Err(DatabaseError::InvalidType),
                 },
                 _ => {
@@ -711,8 +711,8 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             let expr = self.bind_expr(&expr.value)?;
             match expr {
                 ScalarExpression::Constant(dv) => match &dv {
-                    DataValue::Int32(Some(v)) if *v > 0 => offset = Some(*v as usize),
-                    DataValue::Int64(Some(v)) if *v > 0 => offset = Some(*v as usize),
+                    DataValue::Int32(v) if *v > 0 => offset = Some(*v as usize),
+                    DataValue::Int64(v) if *v > 0 => offset = Some(*v as usize),
                     _ => return Err(DatabaseError::InvalidType),
                 },
                 _ => {

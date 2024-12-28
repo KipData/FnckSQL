@@ -270,10 +270,9 @@ impl PushPredicateIntoScan {
             if range.only_eq() && apply_column_count != meta.column_ids.len() {
                 fn eq_to_scope(range: Range) -> Range {
                     match range {
-                        Range::Eq(DataValue::Tuple(Some((values, _)))) => {
-                            let min =
-                                Bound::Excluded(DataValue::Tuple(Some((values.clone(), false))));
-                            let max = Bound::Excluded(DataValue::Tuple(Some((values, true))));
+                        Range::Eq(DataValue::Tuple(values, _)) => {
+                            let min = Bound::Excluded(DataValue::Tuple(values.clone(), false));
+                            let max = Bound::Excluded(DataValue::Tuple(values, true));
 
                             Range::Scope { min, max }
                         }
@@ -331,7 +330,7 @@ mod tests {
         let scan_op = best_plan.childrens.pop_only().childrens.pop_only();
         if let Operator::TableScan(op) = &scan_op.operator {
             let mock_range = Range::Scope {
-                min: Bound::Excluded(DataValue::Int32(Some(1))),
+                min: Bound::Excluded(DataValue::Int32(1)),
                 max: Bound::Unbounded,
             };
 
