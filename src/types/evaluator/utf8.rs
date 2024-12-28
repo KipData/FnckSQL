@@ -32,195 +32,131 @@ pub struct Utf8NotLikeBinaryEvaluator {
 #[typetag::serde]
 impl BinaryEvaluator for Utf8GtBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Utf8 { value: v1, .. }, DataValue::Utf8 { value: v2, .. }) => {
+                DataValue::Boolean(v1 > v2)
+            }
+            (DataValue::Utf8 { .. }, DataValue::Null)
+            | (DataValue::Null, DataValue::Utf8 { .. })
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 > v2)
-        } else {
-            None
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for Utf8GtEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Utf8 { value: v1, .. }, DataValue::Utf8 { value: v2, .. }) => {
+                DataValue::Boolean(v1 >= v2)
+            }
+            (DataValue::Utf8 { .. }, DataValue::Null)
+            | (DataValue::Null, DataValue::Utf8 { .. })
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 >= v2)
-        } else {
-            None
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for Utf8LtBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Utf8 { value: v1, .. }, DataValue::Utf8 { value: v2, .. }) => {
+                DataValue::Boolean(v1 < v2)
+            }
+            (DataValue::Utf8 { .. }, DataValue::Null)
+            | (DataValue::Null, DataValue::Utf8 { .. })
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 < v2)
-        } else {
-            None
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for Utf8LtEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Utf8 { value: v1, .. }, DataValue::Utf8 { value: v2, .. }) => {
+                DataValue::Boolean(v1 <= v2)
+            }
+            (DataValue::Utf8 { .. }, DataValue::Null)
+            | (DataValue::Null, DataValue::Utf8 { .. })
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 <= v2)
-        } else {
-            None
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for Utf8EqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Utf8 { value: v1, .. }, DataValue::Utf8 { value: v2, .. }) => {
+                DataValue::Boolean(v1 == v2)
+            }
+            (DataValue::Utf8 { .. }, DataValue::Null)
+            | (DataValue::Null, DataValue::Utf8 { .. })
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 == v2)
-        } else {
-            None
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for Utf8NotEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Utf8 { value: v1, .. }, DataValue::Utf8 { value: v2, .. }) => {
+                DataValue::Boolean(v1 != v2)
+            }
+            (DataValue::Utf8 { .. }, DataValue::Null)
+            | (DataValue::Null, DataValue::Utf8 { .. })
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = if let (Some(v1), Some(v2)) = (left, right) {
-            Some(v1 != v2)
-        } else {
-            None
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for Utf8StringConcatBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Utf8 { value: v1, .. }, DataValue::Utf8 { value: v2, .. }) => {
+                DataValue::Utf8 {
+                    value: v1.clone() + v2,
+                    ty: Utf8Type::Variable(None),
+                    unit: CharLengthUnits::Characters,
+                }
+            }
+            (DataValue::Utf8 { .. }, DataValue::Null)
+            | (DataValue::Null, DataValue::Utf8 { .. })
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => Some(v1.clone() + v2),
-            _ => None,
-        };
-        DataValue::Utf8 {
-            value,
-            ty: Utf8Type::Variable(None),
-            unit: CharLengthUnits::Characters,
         }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for Utf8LikeBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let value = match left {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Utf8 { value, .. }, DataValue::Utf8 { value: pattern, .. }) => {
+                DataValue::Boolean(string_like(value, pattern, self.escape_char))
+            }
+            (DataValue::Utf8 { .. }, DataValue::Null)
+            | (DataValue::Null, DataValue::Utf8 { .. })
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let pattern = match right {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let is_match = if let (Some(value), Some(pattern)) = (value, pattern) {
-            string_like(value, pattern, self.escape_char)
-        } else {
-            return DataValue::Boolean(None);
-        };
-
-        DataValue::Boolean(Some(is_match))
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for Utf8NotLikeBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let value = match left {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Utf8 { value, .. }, DataValue::Utf8 { value: pattern, .. }) => {
+                DataValue::Boolean(!string_like(value, pattern, self.escape_char))
+            }
+            (DataValue::Utf8 { .. }, DataValue::Null)
+            | (DataValue::Null, DataValue::Utf8 { .. })
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let pattern = match right {
-            DataValue::Utf8 { value, .. } => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let is_match = if let (Some(value), Some(pattern)) = (value, pattern) {
-            string_like(value, pattern, self.escape_char)
-        } else {
-            return DataValue::Boolean(None);
-        };
-
-        DataValue::Boolean(Some(!is_match))
+        }
     }
 }
 

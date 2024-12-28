@@ -43,12 +43,7 @@ impl ScalarFunctionImpl for Upper {
         if !matches!(value.logical_type(), LogicalType::Varchar(_, _)) {
             value = value.cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?;
         }
-        if let DataValue::Utf8 {
-            value: Some(value),
-            ty,
-            unit,
-        } = &mut value
-        {
+        if let DataValue::Utf8 { value, ty, unit } = &mut value {
             *value = value.to_uppercase();
         }
         Ok(value)

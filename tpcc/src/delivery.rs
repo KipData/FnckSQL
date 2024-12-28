@@ -38,8 +38,8 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
                 .execute(
                     &statements[0],
                     &[
-                        ("?1", DataValue::Int8(Some(d_id as i8))),
-                        ("?2", DataValue::Int16(Some(args.w_id as i16))),
+                        ("?1", DataValue::Int8(d_id as i8)),
+                        ("?2", DataValue::Int16(args.w_id as i16)),
                     ],
                 )?
                 .next()
@@ -53,9 +53,9 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             tx.execute(
                 &statements[1],
                 &[
-                    ("?1", DataValue::Int32(Some(no_o_id))),
-                    ("?2", DataValue::Int8(Some(d_id as i8))),
-                    ("?3", DataValue::Int16(Some(args.w_id as i16))),
+                    ("?1", DataValue::Int32(no_o_id)),
+                    ("?2", DataValue::Int8(d_id as i8)),
+                    ("?3", DataValue::Int16(args.w_id as i16)),
                 ],
             )?
             .done()?;
@@ -64,9 +64,9 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
                 .execute(
                     &statements[2],
                     &[
-                        ("?1", DataValue::Int32(Some(no_o_id))),
-                        ("?2", DataValue::Int8(Some(d_id as i8))),
-                        ("?3", DataValue::Int16(Some(args.w_id as i16))),
+                        ("?1", DataValue::Int32(no_o_id)),
+                        ("?2", DataValue::Int8(d_id as i8)),
+                        ("?3", DataValue::Int16(args.w_id as i16)),
                     ],
                 )?
                 .next()
@@ -76,10 +76,10 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             tx.execute(
                 &statements[3],
                 &[
-                    ("?1", DataValue::Int8(Some(args.o_carrier_id as i8))),
-                    ("?2", DataValue::Int32(Some(no_o_id))),
-                    ("?3", DataValue::Int8(Some(d_id as i8))),
-                    ("?4", DataValue::Int16(Some(args.w_id as i16))),
+                    ("?1", DataValue::Int8(args.o_carrier_id as i8)),
+                    ("?2", DataValue::Int32(no_o_id)),
+                    ("?3", DataValue::Int8(d_id as i8)),
+                    ("?4", DataValue::Int16(args.w_id as i16)),
                 ],
             )?
             .done()?;
@@ -88,9 +88,9 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
                 &statements[4],
                 &[
                     ("?1", DataValue::from(&now)),
-                    ("?2", DataValue::Int32(Some(no_o_id))),
-                    ("?3", DataValue::Int8(Some(d_id as i8))),
-                    ("?4", DataValue::Int16(Some(args.w_id as i16))),
+                    ("?2", DataValue::Int32(no_o_id)),
+                    ("?3", DataValue::Int8(d_id as i8)),
+                    ("?4", DataValue::Int16(args.w_id as i16)),
                 ],
             )?
             .done()?;
@@ -99,9 +99,9 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
                 .execute(
                     &statements[5],
                     &[
-                        ("?1", DataValue::Int32(Some(no_o_id))),
-                        ("?2", DataValue::Int8(Some(d_id as i8))),
-                        ("?3", DataValue::Int16(Some(args.w_id as i16))),
+                        ("?1", DataValue::Int32(no_o_id)),
+                        ("?2", DataValue::Int8(d_id as i8)),
+                        ("?3", DataValue::Int16(args.w_id as i16)),
                     ],
                 )?
                 .next()
@@ -111,10 +111,10 @@ impl<S: Storage> TpccTransaction<S> for Delivery {
             tx.execute(
                 &statements[6],
                 &[
-                    ("?1", DataValue::Decimal(Some(ol_total))),
-                    ("?2", DataValue::Int32(Some(c_id))),
-                    ("?3", DataValue::Int8(Some(d_id as i8))),
-                    ("?4", DataValue::Int16(Some(args.w_id as i16))),
+                    ("?1", DataValue::Decimal(ol_total)),
+                    ("?2", DataValue::Int32(c_id)),
+                    ("?3", DataValue::Int8(d_id as i8)),
+                    ("?4", DataValue::Int16(args.w_id as i16)),
                 ],
             )?
             .done()?;

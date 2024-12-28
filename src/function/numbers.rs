@@ -60,7 +60,7 @@ impl TableFunctionImpl for Numbers {
         let num = value.i32().ok_or(DatabaseError::NotNull)?;
 
         Ok(
-            Box::new((0..num).map(|i| Ok(Tuple::new(None, vec![DataValue::Int32(Some(i))]))))
+            Box::new((0..num).map(|i| Ok(Tuple::new(None, vec![DataValue::Int32(i)]))))
                 as Box<dyn Iterator<Item = Result<Tuple, DatabaseError>>>,
         )
     }

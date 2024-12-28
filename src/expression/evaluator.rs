@@ -17,11 +17,7 @@ macro_rules! eval_to_num {
         if let Some(num_i32) = $num_expr.eval($tuple)?.cast(&LogicalType::Integer)?.i32() {
             num_i32
         } else {
-            return Ok(DataValue::Utf8 {
-                value: None,
-                ty: Utf8Type::Variable(None),
-                unit: CharLengthUnits::Characters,
-            });
+            return Ok(DataValue::Null);
         }
     };
 }
@@ -91,7 +87,7 @@ impl ScalarExpression {
                 if *negated {
                     is_null = !is_null;
                 }
-                Ok(DataValue::Boolean(Some(is_null)))
+                Ok(DataValue::Boolean(is_null))
             }
             ScalarExpression::In {
                 expr,
@@ -100,14 +96,14 @@ impl ScalarExpression {
             } => {
                 let value = expr.eval(tuple)?;
                 if value.is_null() {
-                    return Ok(DataValue::Boolean(None));
+                    return Ok(DataValue::Null);
                 }
                 let mut is_in = false;
                 for arg in args {
                     let arg_value = arg.eval(tuple)?;
 
                     if arg_value.is_null() {
-                        return Ok(DataValue::Boolean(None));
+                        return Ok(DataValue::Null);
                     }
                     if arg_value == value {
                         is_in = true;
@@ -117,7 +113,7 @@ impl ScalarExpression {
                 if *negated {
                     is_in = !is_in;
                 }
-                Ok(DataValue::Boolean(Some(is_in)))
+                Ok(DataValue::Boolean(is_in))
             }
             ScalarExpression::Unary {
                 expr, evaluator, ..
@@ -148,13 +144,13 @@ impl ScalarExpression {
                     value.partial_cmp(&right).map(Ordering::is_le),
                 ) {
                     (Some(true), Some(true)) => true,
-                    (None, _) | (_, None) => return Ok(DataValue::Boolean(None)),
+                    (None, _) | (_, None) => return Ok(DataValue::Null),
                     _ => false,
                 };
                 if *negated {
                     is_between = !is_between;
                 }
-                Ok(DataValue::Boolean(Some(is_between)))
+                Ok(DataValue::Boolean(is_between))
             }
             ScalarExpression::SubString {
                 expr,
@@ -165,6 +161,7 @@ impl ScalarExpression {
                     .eval(tuple)?
                     .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                     .utf8()
+                    .map(String::from)
                 {
                     if let Some(from_expr) = from_expr {
                         let mut from = eval_to_num!(from_expr, tuple).saturating_sub(1);
@@ -174,11 +171,7 @@ impl ScalarExpression {
                             from += len_i + 1;
                         }
                         if from > len_i {
-                            return Ok(DataValue::Utf8 {
-                                value: None,
-                                ty: Utf8Type::Variable(None),
-                                unit: CharLengthUnits::Characters,
-                            });
+                            return Ok(DataValue::Null);
                         }
                         string = string.split_off(from as usize);
                     }
@@ -188,16 +181,12 @@ impl ScalarExpression {
                     }
 
                     Ok(DataValue::Utf8 {
-                        value: Some(string),
+                        value: string,
                         ty: Utf8Type::Variable(None),
                         unit: CharLengthUnits::Characters,
                     })
                 } else {
-                    Ok(DataValue::Utf8 {
-                        value: None,
-                        ty: Utf8Type::Variable(None),
-                        unit: CharLengthUnits::Characters,
-                    })
+                    Ok(DataValue::Null)
                 }
             }
             ScalarExpression::Position { expr, in_expr } => {
@@ -206,20 +195,20 @@ impl ScalarExpression {
                         .eval(tuple)?
                         .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                         .utf8()
+                        .map(String::from)
                         .unwrap_or("".to_owned()))
                 };
                 let pattern = unpack(expr)?;
                 let str = unpack(in_expr)?;
-                Ok(DataValue::Int32(Some(
+                Ok(DataValue::Int32(
                     str.find(&pattern).map(|pos| pos as i32 + 1).unwrap_or(0),
-                )))
+                ))
             }
             ScalarExpression::Trim {
                 expr,
                 trim_what_expr,
                 trim_where,
             } => {
-                let mut value = None;
                 if let Some(string) = expr
                     .eval(tuple)?
                     .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
@@ -231,6 +220,7 @@ impl ScalarExpression {
                             .eval(tuple)?
                             .cast(&LogicalType::Varchar(None, CharLengthUnits::Characters))?
                             .utf8()
+                            .map(String::from)
                             .unwrap_or_default();
                     }
                     let trim_regex = match trim_where {
@@ -248,15 +238,16 @@ impl ScalarExpression {
                                 .unwrap()
                         }
                     };
-                    let string_trimmed = trim_regex.replace_all(&string, "$1").to_string();
+                    let string_trimmed = trim_regex.replace_all(string, "$1").to_string();
 
-                    value = Some(string_trimmed)
+                    Ok(DataValue::Utf8 {
+                        value: string_trimmed,
+                        ty: Utf8Type::Variable(None),
+                        unit: CharLengthUnits::Characters,
+                    })
+                } else {
+                    Ok(DataValue::Null)
                 }
-                Ok(DataValue::Utf8 {
-                    value,
-                    ty: Utf8Type::Variable(None),
-                    unit: CharLengthUnits::Characters,
-                })
             }
             ScalarExpression::Reference { pos, .. } => {
                 let Some((tuple, _)) = tuple else {
@@ -270,9 +261,7 @@ impl ScalarExpression {
                 for expr in exprs {
                     values.push(expr.eval(tuple)?);
                 }
-                Ok(DataValue::Tuple(
-                    (!values.is_empty()).then_some((values, false)),
-                ))
+                Ok(DataValue::Tuple(values, false))
             }
             ScalarExpression::ScalaFunction(ScalarFunction { inner, args, .. }) => {
                 inner.eval(args, tuple)?.cast(inner.return_type())

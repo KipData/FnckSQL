@@ -20,6 +20,8 @@ pub(crate) mod test {
     use itertools::Itertools;
 
     pub(crate) fn build_integers(ints: Vec<Option<i32>>) -> Vec<DataValue> {
-        ints.into_iter().map(|i| DataValue::Int32(i)).collect_vec()
+        ints.into_iter()
+            .map(|i| i.map(DataValue::Int32).unwrap_or(DataValue::Null))
+            .collect_vec()
     }
 }

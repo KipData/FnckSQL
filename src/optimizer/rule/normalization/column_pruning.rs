@@ -58,7 +58,7 @@ impl ColumnPruning {
 
                     if op.agg_calls.is_empty() && op.groupby_exprs.is_empty() {
                         let value = DataValue::Utf8 {
-                            value: Some("*".to_string()),
+                            value: "*".to_string(),
                             ty: Utf8Type::Variable(None),
                             unit: CharLengthUnits::Characters,
                         };

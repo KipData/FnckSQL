@@ -16,7 +16,7 @@ impl<'a> TupleBuilder<'a> {
 
     pub fn build_result(message: String) -> Tuple {
         let values = vec![DataValue::Utf8 {
-            value: Some(message),
+            value: message,
             ty: Utf8Type::Variable(None),
             unit: CharLengthUnits::Characters,
         }];
@@ -33,7 +33,7 @@ impl<'a> TupleBuilder<'a> {
         for (i, value) in row.into_iter().enumerate() {
             values.push(
                 DataValue::Utf8 {
-                    value: Some(value.to_string()),
+                    value: value.to_string(),
                     ty: Utf8Type::Variable(None),
                     unit: CharLengthUnits::Characters,
                 }

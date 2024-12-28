@@ -25,7 +25,7 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Explain {
             #[coroutine]
             move || {
                 let values = vec![DataValue::Utf8 {
-                    value: Some(self.plan.explain(0)),
+                    value: self.plan.explain(0),
                     ty: Utf8Type::Variable(None),
                     unit: CharLengthUnits::Characters,
                 }];

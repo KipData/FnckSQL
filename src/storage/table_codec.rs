@@ -56,7 +56,7 @@ impl TableCodec {
             return Err(DatabaseError::NotNull);
         }
 
-        if let DataValue::Tuple(Some((values, _))) = &value {
+        if let DataValue::Tuple(values, _) = &value {
             for value in values {
                 Self::check_primary_key(value, indentation + 1)?
             }
@@ -569,10 +569,7 @@ mod tests {
 
         let mut tuple = Tuple::new(
             Some(Arc::new(vec![0])),
-            vec![
-                DataValue::Int32(Some(0)),
-                DataValue::Decimal(Some(Decimal::new(1, 0))),
-            ],
+            vec![DataValue::Int32(0), DataValue::Decimal(Decimal::new(1, 0))],
         );
         let (_, bytes) = table_codec.encode_tuple(
             &table_catalog.name,
@@ -650,9 +647,9 @@ mod tests {
             arena: Default::default(),
         };
         let table_catalog = build_table_codec();
-        let value = Arc::new(DataValue::Int32(Some(0)));
+        let value = Arc::new(DataValue::Int32(0));
         let index = Index::new(0, &value, IndexType::PrimaryKey { is_multiple: false });
-        let tuple_id = DataValue::Int32(Some(0));
+        let tuple_id = DataValue::Int32(0);
         let (_, bytes) = table_codec.encode_index(&table_catalog.name, &index, &tuple_id)?;
 
         assert_eq!(TableCodec::decode_index(&bytes)?, tuple_id);
@@ -881,17 +878,17 @@ mod tests {
                 .unwrap()
         };
 
-        set.insert(op(DataValue::Int32(Some(0)), 0, &table_catalog.name));
-        set.insert(op(DataValue::Int32(Some(1)), 0, &table_catalog.name));
-        set.insert(op(DataValue::Int32(Some(2)), 0, &table_catalog.name));
+        set.insert(op(DataValue::Int32(0), 0, &table_catalog.name));
+        set.insert(op(DataValue::Int32(1), 0, &table_catalog.name));
+        set.insert(op(DataValue::Int32(2), 0, &table_catalog.name));
 
-        set.insert(op(DataValue::Int32(Some(0)), 1, &table_catalog.name));
-        set.insert(op(DataValue::Int32(Some(1)), 1, &table_catalog.name));
-        set.insert(op(DataValue::Int32(Some(2)), 1, &table_catalog.name));
+        set.insert(op(DataValue::Int32(0), 1, &table_catalog.name));
+        set.insert(op(DataValue::Int32(1), 1, &table_catalog.name));
+        set.insert(op(DataValue::Int32(2), 1, &table_catalog.name));
 
-        set.insert(op(DataValue::Int32(Some(0)), 2, &table_catalog.name));
-        set.insert(op(DataValue::Int32(Some(1)), 2, &table_catalog.name));
-        set.insert(op(DataValue::Int32(Some(2)), 2, &table_catalog.name));
+        set.insert(op(DataValue::Int32(0), 2, &table_catalog.name));
+        set.insert(op(DataValue::Int32(1), 2, &table_catalog.name));
+        set.insert(op(DataValue::Int32(2), 2, &table_catalog.name));
 
         println!("{:#?}", set);
 
@@ -909,18 +906,9 @@ mod tests {
 
         assert_eq!(vec.len(), 3);
 
-        assert_eq!(
-            vec[0],
-            &op(DataValue::Int32(Some(0)), 1, &table_catalog.name)
-        );
-        assert_eq!(
-            vec[1],
-            &op(DataValue::Int32(Some(1)), 1, &table_catalog.name)
-        );
-        assert_eq!(
-            vec[2],
-            &op(DataValue::Int32(Some(2)), 1, &table_catalog.name)
-        );
+        assert_eq!(vec[0], &op(DataValue::Int32(0), 1, &table_catalog.name));
+        assert_eq!(vec[1], &op(DataValue::Int32(1), 1, &table_catalog.name));
+        assert_eq!(vec[2], &op(DataValue::Int32(2), 1, &table_catalog.name));
     }
 
     #[test]
@@ -942,17 +930,17 @@ mod tests {
                 .unwrap()
         };
 
-        set.insert(op(DataValue::Int32(Some(0)), 0, "T0"));
-        set.insert(op(DataValue::Int32(Some(1)), 0, "T0"));
-        set.insert(op(DataValue::Int32(Some(2)), 0, "T0"));
+        set.insert(op(DataValue::Int32(0), 0, "T0"));
+        set.insert(op(DataValue::Int32(1), 0, "T0"));
+        set.insert(op(DataValue::Int32(2), 0, "T0"));
 
-        set.insert(op(DataValue::Int32(Some(0)), 0, "T1"));
-        set.insert(op(DataValue::Int32(Some(1)), 0, "T1"));
-        set.insert(op(DataValue::Int32(Some(2)), 0, "T1"));
+        set.insert(op(DataValue::Int32(0), 0, "T1"));
+        set.insert(op(DataValue::Int32(1), 0, "T1"));
+        set.insert(op(DataValue::Int32(2), 0, "T1"));
 
-        set.insert(op(DataValue::Int32(Some(0)), 0, "T2"));
-        set.insert(op(DataValue::Int32(Some(1)), 0, "T2"));
-        set.insert(op(DataValue::Int32(Some(2)), 0, "T2"));
+        set.insert(op(DataValue::Int32(0), 0, "T2"));
+        set.insert(op(DataValue::Int32(1), 0, "T2"));
+        set.insert(op(DataValue::Int32(2), 0, "T2"));
 
         let (min, max) = table_codec.all_index_bound(&"T1".to_string());
 
@@ -965,9 +953,9 @@ mod tests {
 
         assert_eq!(vec.len(), 3);
 
-        assert_eq!(vec[0], &op(DataValue::Int32(Some(0)), 0, "T1"));
-        assert_eq!(vec[1], &op(DataValue::Int32(Some(1)), 0, "T1"));
-        assert_eq!(vec[2], &op(DataValue::Int32(Some(2)), 0, "T1"));
+        assert_eq!(vec[0], &op(DataValue::Int32(0), 0, "T1"));
+        assert_eq!(vec[1], &op(DataValue::Int32(1), 0, "T1"));
+        assert_eq!(vec[2], &op(DataValue::Int32(2), 0, "T1"));
     }
 
     #[test]
@@ -982,17 +970,17 @@ mod tests {
                 .unwrap()
         };
 
-        set.insert(op(DataValue::Int32(Some(0)), "T0"));
-        set.insert(op(DataValue::Int32(Some(1)), "T0"));
-        set.insert(op(DataValue::Int32(Some(2)), "T0"));
+        set.insert(op(DataValue::Int32(0), "T0"));
+        set.insert(op(DataValue::Int32(1), "T0"));
+        set.insert(op(DataValue::Int32(2), "T0"));
 
-        set.insert(op(DataValue::Int32(Some(0)), "T1"));
-        set.insert(op(DataValue::Int32(Some(1)), "T1"));
-        set.insert(op(DataValue::Int32(Some(2)), "T1"));
+        set.insert(op(DataValue::Int32(0), "T1"));
+        set.insert(op(DataValue::Int32(1), "T1"));
+        set.insert(op(DataValue::Int32(2), "T1"));
 
-        set.insert(op(DataValue::Int32(Some(0)), "T2"));
-        set.insert(op(DataValue::Int32(Some(1)), "T2"));
-        set.insert(op(DataValue::Int32(Some(2)), "T2"));
+        set.insert(op(DataValue::Int32(0), "T2"));
+        set.insert(op(DataValue::Int32(1), "T2"));
+        set.insert(op(DataValue::Int32(2), "T2"));
 
         let (min, max) = table_codec.tuple_bound(&"T1".to_string());
 
@@ -1005,9 +993,9 @@ mod tests {
 
         assert_eq!(vec.len(), 3);
 
-        assert_eq!(vec[0], &op(DataValue::Int32(Some(0)), "T1"));
-        assert_eq!(vec[1], &op(DataValue::Int32(Some(1)), "T1"));
-        assert_eq!(vec[2], &op(DataValue::Int32(Some(2)), "T1"));
+        assert_eq!(vec[0], &op(DataValue::Int32(0), "T1"));
+        assert_eq!(vec[1], &op(DataValue::Int32(1), "T1"));
+        assert_eq!(vec[2], &op(DataValue::Int32(2), "T1"));
     }
 
     #[test]

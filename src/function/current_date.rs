@@ -39,7 +39,7 @@ impl ScalarFunctionImpl for CurrentDate {
         _: &[ScalarExpression],
         _: Option<(&Tuple, &[ColumnRef])>,
     ) -> Result<DataValue, DatabaseError> {
-        Ok(DataValue::Date32(Some(Local::now().num_days_from_ce())))
+        Ok(DataValue::Date32(Local::now().num_days_from_ce()))
     }
 
     fn monotonicity(&self) -> Option<FuncMonotonicity> {

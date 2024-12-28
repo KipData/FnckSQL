@@ -1182,13 +1182,15 @@ pub enum UnaryOperator {
     Not,
 }
 
-impl From<SqlUnaryOperator> for UnaryOperator {
-    fn from(value: SqlUnaryOperator) -> Self {
+impl TryFrom<SqlUnaryOperator> for UnaryOperator {
+    type Error = DatabaseError;
+
+    fn try_from(value: SqlUnaryOperator) -> Result<Self, Self::Error> {
         match value {
-            SqlUnaryOperator::Plus => UnaryOperator::Plus,
-            SqlUnaryOperator::Minus => UnaryOperator::Minus,
-            SqlUnaryOperator::Not => UnaryOperator::Not,
-            _ => unimplemented!("not support!"),
+            SqlUnaryOperator::Plus => Ok(UnaryOperator::Plus),
+            SqlUnaryOperator::Minus => Ok(UnaryOperator::Minus),
+            SqlUnaryOperator::Not => Ok(UnaryOperator::Not),
+            op => Err(DatabaseError::UnsupportedStmt(format!("{}", op))),
         }
     }
 }
@@ -1215,7 +1217,6 @@ pub enum BinaryOperator {
 
     And,
     Or,
-    Xor,
 }
 
 impl fmt::Display for ScalarExpression {
@@ -1249,7 +1250,6 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::NotEq => write!(f, "!="),
             BinaryOperator::And => write!(f, "&&"),
             BinaryOperator::Or => write!(f, "||"),
-            BinaryOperator::Xor => write!(f, "^"),
             BinaryOperator::Like(escape_char) => {
                 write!(f, "like")?;
                 like_op(f, escape_char)
@@ -1272,26 +1272,27 @@ impl fmt::Display for UnaryOperator {
     }
 }
 
-impl From<SqlBinaryOperator> for BinaryOperator {
-    fn from(value: SqlBinaryOperator) -> Self {
+impl TryFrom<SqlBinaryOperator> for BinaryOperator {
+    type Error = DatabaseError;
+
+    fn try_from(value: SqlBinaryOperator) -> Result<Self, Self::Error> {
         match value {
-            SqlBinaryOperator::Plus => BinaryOperator::Plus,
-            SqlBinaryOperator::Minus => BinaryOperator::Minus,
-            SqlBinaryOperator::Multiply => BinaryOperator::Multiply,
-            SqlBinaryOperator::Divide => BinaryOperator::Divide,
-            SqlBinaryOperator::Modulo => BinaryOperator::Modulo,
-            SqlBinaryOperator::StringConcat => BinaryOperator::StringConcat,
-            SqlBinaryOperator::Gt => BinaryOperator::Gt,
-            SqlBinaryOperator::Lt => BinaryOperator::Lt,
-            SqlBinaryOperator::GtEq => BinaryOperator::GtEq,
-            SqlBinaryOperator::LtEq => BinaryOperator::LtEq,
-            SqlBinaryOperator::Spaceship => BinaryOperator::Spaceship,
-            SqlBinaryOperator::Eq => BinaryOperator::Eq,
-            SqlBinaryOperator::NotEq => BinaryOperator::NotEq,
-            SqlBinaryOperator::And => BinaryOperator::And,
-            SqlBinaryOperator::Or => BinaryOperator::Or,
-            SqlBinaryOperator::Xor => BinaryOperator::Xor,
-            _ => unimplemented!("not support!"),
+            SqlBinaryOperator::Plus => Ok(BinaryOperator::Plus),
+            SqlBinaryOperator::Minus => Ok(BinaryOperator::Minus),
+            SqlBinaryOperator::Multiply => Ok(BinaryOperator::Multiply),
+            SqlBinaryOperator::Divide => Ok(BinaryOperator::Divide),
+            SqlBinaryOperator::Modulo => Ok(BinaryOperator::Modulo),
+            SqlBinaryOperator::StringConcat => Ok(BinaryOperator::StringConcat),
+            SqlBinaryOperator::Gt => Ok(BinaryOperator::Gt),
+            SqlBinaryOperator::Lt => Ok(BinaryOperator::Lt),
+            SqlBinaryOperator::GtEq => Ok(BinaryOperator::GtEq),
+            SqlBinaryOperator::LtEq => Ok(BinaryOperator::LtEq),
+            SqlBinaryOperator::Spaceship => Ok(BinaryOperator::Spaceship),
+            SqlBinaryOperator::Eq => Ok(BinaryOperator::Eq),
+            SqlBinaryOperator::NotEq => Ok(BinaryOperator::NotEq),
+            SqlBinaryOperator::And => Ok(BinaryOperator::And),
+            SqlBinaryOperator::Or => Ok(BinaryOperator::Or),
+            op => Err(DatabaseError::UnsupportedStmt(format!("{}", op))),
         }
     }
 }
@@ -1360,20 +1361,20 @@ mod test {
 
         fn_assert(
             &mut cursor,
-            ScalarExpression::Constant(DataValue::Int32(None)),
+            ScalarExpression::Constant(DataValue::Null),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::Constant(DataValue::Int32(Some(42))),
+            ScalarExpression::Constant(DataValue::Int32(42)),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
         fn_assert(
             &mut cursor,
             ScalarExpression::Constant(DataValue::Utf8 {
-                value: Some("hello".to_string()),
+                value: "hello".to_string(),
                 ty: Utf8Type::Variable(None),
                 unit: CharLengthUnits::Characters,
             }),

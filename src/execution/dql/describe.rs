@@ -10,19 +10,19 @@ use sqlparser::ast::CharLengthUnits;
 use std::sync::LazyLock;
 
 static PRIMARY_KEY_TYPE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Utf8 {
-    value: Some(String::from("PRIMARY")),
+    value: String::from("PRIMARY"),
     ty: Utf8Type::Variable(None),
     unit: CharLengthUnits::Characters,
 });
 
 static UNIQUE_KEY_TYPE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Utf8 {
-    value: Some(String::from("UNIQUE")),
+    value: String::from("UNIQUE"),
     ty: Utf8Type::Variable(None),
     unit: CharLengthUnits::Characters,
 });
 
 static EMPTY_KEY_TYPE: LazyLock<DataValue> = LazyLock::new(|| DataValue::Utf8 {
-    value: Some(String::from("EMPTY")),
+    value: String::from("EMPTY"),
     ty: Utf8Type::Variable(None),
     unit: CharLengthUnits::Characters,
 });
@@ -72,28 +72,31 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Describe {
                         .unwrap_or_else(|| "null".to_string());
                     let values = vec![
                         DataValue::Utf8 {
-                            value: Some(column.name().to_string()),
+                            value: column.name().to_string(),
                             ty: Utf8Type::Variable(None),
                             unit: CharLengthUnits::Characters,
                         },
                         DataValue::Utf8 {
-                            value: Some(datatype.to_string()),
+                            value: datatype.to_string(),
                             ty: Utf8Type::Variable(None),
                             unit: CharLengthUnits::Characters,
                         },
                         DataValue::Utf8 {
-                            value: datatype.raw_len().map(|len| len.to_string()),
+                            value: datatype
+                                .raw_len()
+                                .map(|len| len.to_string())
+                                .unwrap_or_else(|| "variable".to_string()),
                             ty: Utf8Type::Variable(None),
                             unit: CharLengthUnits::Characters,
                         },
                         DataValue::Utf8 {
-                            value: Some(column.nullable().to_string()),
+                            value: column.nullable().to_string(),
                             ty: Utf8Type::Variable(None),
                             unit: CharLengthUnits::Characters,
                         },
                         key_fn(column),
                         DataValue::Utf8 {
-                            value: Some(default),
+                            value: default,
                             ty: Utf8Type::Variable(None),
                             unit: CharLengthUnits::Characters,
                         },

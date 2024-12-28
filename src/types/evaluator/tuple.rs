@@ -18,8 +18,8 @@ pub struct TupleLtBinaryEvaluator;
 pub struct TupleLtEqBinaryEvaluator;
 
 fn tuple_cmp(
-    (v1, v1_is_upper): &(Vec<DataValue>, bool),
-    (v2, v2_is_upper): &(Vec<DataValue>, bool),
+    (v1, v1_is_upper): (&Vec<DataValue>, &bool),
+    (v2, v2_is_upper): (&Vec<DataValue>, &bool),
 ) -> Option<Ordering> {
     let mut order = Ordering::Equal;
     let mut v1_iter = v1.iter();
@@ -51,120 +51,88 @@ fn tuple_cmp(
 #[typetag::serde]
 impl BinaryEvaluator for TupleEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Tuple(v1, ..), DataValue::Tuple(v2, ..)) => DataValue::Boolean(*v1 == *v2),
+            (DataValue::Null, DataValue::Boolean(_))
+            | (DataValue::Boolean(_), DataValue::Null)
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => Some(v1 == v2),
-            (_, _) => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for TupleNotEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Tuple(v1, ..), DataValue::Tuple(v2, ..)) => DataValue::Boolean(*v1 != *v2),
+            (DataValue::Null, DataValue::Boolean(_))
+            | (DataValue::Boolean(_), DataValue::Null)
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => Some(v1 != v2),
-            (_, _) => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for TupleGtBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Tuple(v1, is_upper1), DataValue::Tuple(v2, is_upper2)) => {
+                tuple_cmp((v1, is_upper1), (v2, is_upper2))
+                    .map(|order| DataValue::Boolean(order.is_gt()))
+                    .unwrap_or(DataValue::Null)
+            }
+            (DataValue::Null, DataValue::Boolean(_))
+            | (DataValue::Boolean(_), DataValue::Null)
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => tuple_cmp(v1, v2).map(|order| order.is_gt()),
-            (_, _) => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for TupleGtEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Tuple(v1, is_upper1), DataValue::Tuple(v2, is_upper2)) => {
+                tuple_cmp((v1, is_upper1), (v2, is_upper2))
+                    .map(|order| DataValue::Boolean(order.is_ge()))
+                    .unwrap_or(DataValue::Null)
+            }
+            (DataValue::Null, DataValue::Boolean(_))
+            | (DataValue::Boolean(_), DataValue::Null)
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => tuple_cmp(v1, v2).map(|order| order.is_ge()),
-            (_, _) => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for TupleLtBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Tuple(v1, is_upper1), DataValue::Tuple(v2, is_upper2)) => {
+                tuple_cmp((v1, is_upper1), (v2, is_upper2))
+                    .map(|order| DataValue::Boolean(order.is_lt()))
+                    .unwrap_or(DataValue::Null)
+            }
+            (DataValue::Null, DataValue::Boolean(_))
+            | (DataValue::Boolean(_), DataValue::Null)
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => tuple_cmp(v1, v2).map(|order| order.is_lt()),
-            (_, _) => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }
 #[typetag::serde]
 impl BinaryEvaluator for TupleLtEqBinaryEvaluator {
     fn binary_eval(&self, left: &DataValue, right: &DataValue) -> DataValue {
-        let left = match left {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
+        match (left, right) {
+            (DataValue::Tuple(v1, is_upper1), DataValue::Tuple(v2, is_upper2)) => {
+                tuple_cmp((v1, is_upper1), (v2, is_upper2))
+                    .map(|order| DataValue::Boolean(order.is_le()))
+                    .unwrap_or(DataValue::Null)
+            }
+            (DataValue::Null, DataValue::Boolean(_))
+            | (DataValue::Boolean(_), DataValue::Null)
+            | (DataValue::Null, DataValue::Null) => DataValue::Null,
             _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let right = match right {
-            DataValue::Tuple(value) => value,
-            DataValue::Null => &None,
-            _ => unsafe { hint::unreachable_unchecked() },
-        };
-        let value = match (left, right) {
-            (Some(v1), Some(v2)) => tuple_cmp(v1, v2).map(|order| order.is_le()),
-            (_, _) => None,
-        };
-        DataValue::Boolean(value)
+        }
     }
 }

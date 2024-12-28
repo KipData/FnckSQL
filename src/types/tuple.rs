@@ -51,7 +51,7 @@ impl Tuple {
                         for i in pk_indices.iter() {
                             values.push(self.values[*i].clone());
                         }
-                        DataValue::Tuple(Some((values, false)))
+                        DataValue::Tuple(values, false)
                     }
                 })
             })
@@ -174,6 +174,7 @@ mod tests {
     use crate::types::LogicalType;
     use bumpalo::Bump;
     use itertools::Itertools;
+    use ordered_float::OrderedFloat;
     use rust_decimal::Decimal;
     use sqlparser::ast::CharLengthUnits;
     use std::sync::Arc;
@@ -291,35 +292,35 @@ mod tests {
             Tuple::new(
                 Some(Arc::new(vec![0])),
                 vec![
-                    DataValue::Int32(Some(0)),
-                    DataValue::UInt32(Some(1)),
+                    DataValue::Int32(0),
+                    DataValue::UInt32(1),
                     DataValue::Utf8 {
-                        value: Some("LOL".to_string()),
+                        value: "LOL".to_string(),
                         ty: Utf8Type::Variable(Some(2)),
                         unit: CharLengthUnits::Characters,
                     },
-                    DataValue::Int16(Some(1)),
-                    DataValue::UInt16(Some(1)),
-                    DataValue::Float32(Some(0.1)),
-                    DataValue::Float64(Some(0.1)),
-                    DataValue::Int8(Some(1)),
-                    DataValue::UInt8(Some(1)),
-                    DataValue::Boolean(Some(true)),
-                    DataValue::Date64(Some(0)),
-                    DataValue::Date32(Some(0)),
-                    DataValue::Decimal(Some(Decimal::new(0, 3))),
+                    DataValue::Int16(1),
+                    DataValue::UInt16(1),
+                    DataValue::Float32(OrderedFloat(0.1)),
+                    DataValue::Float64(OrderedFloat(0.1)),
+                    DataValue::Int8(1),
+                    DataValue::UInt8(1),
+                    DataValue::Boolean(true),
+                    DataValue::Date64(0),
+                    DataValue::Date32(0),
+                    DataValue::Decimal(Decimal::new(0, 3)),
                     DataValue::Utf8 {
-                        value: Some("K".to_string()),
+                        value: "K".to_string(),
                         ty: Utf8Type::Fixed(1),
                         unit: CharLengthUnits::Characters,
                     },
                     DataValue::Utf8 {
-                        value: Some("LOL".to_string()),
+                        value: "LOL".to_string(),
                         ty: Utf8Type::Variable(Some(2)),
                         unit: CharLengthUnits::Octets,
                     },
                     DataValue::Utf8 {
-                        value: Some("K".to_string()),
+                        value: "K".to_string(),
                         ty: Utf8Type::Fixed(10),
                         unit: CharLengthUnits::Octets,
                     },
@@ -328,38 +329,22 @@ mod tests {
             Tuple::new(
                 Some(Arc::new(vec![0])),
                 vec![
-                    DataValue::Int32(Some(1)),
-                    DataValue::UInt32(None),
-                    DataValue::Utf8 {
-                        value: None,
-                        ty: Utf8Type::Variable(Some(2)),
-                        unit: CharLengthUnits::Characters,
-                    },
-                    DataValue::Int16(None),
-                    DataValue::UInt16(None),
-                    DataValue::Float32(None),
-                    DataValue::Float64(None),
-                    DataValue::Int8(None),
-                    DataValue::UInt8(None),
-                    DataValue::Boolean(None),
-                    DataValue::Date64(None),
-                    DataValue::Date32(None),
-                    DataValue::Decimal(None),
-                    DataValue::Utf8 {
-                        value: None,
-                        ty: Utf8Type::Fixed(1),
-                        unit: CharLengthUnits::Characters,
-                    },
-                    DataValue::Utf8 {
-                        value: None,
-                        ty: Utf8Type::Variable(Some(2)),
-                        unit: CharLengthUnits::Octets,
-                    },
-                    DataValue::Utf8 {
-                        value: None,
-                        ty: Utf8Type::Fixed(10),
-                        unit: CharLengthUnits::Octets,
-                    },
+                    DataValue::Int32(1),
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
+                    DataValue::Null,
                 ],
             ),
         ];

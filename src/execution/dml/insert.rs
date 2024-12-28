@@ -118,7 +118,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                                 if value.is_none() {
                                     value = throw!(col.default_value());
                                 }
-                                value.unwrap_or_else(|| DataValue::none(col.datatype()))
+                                value.unwrap_or(DataValue::Null)
                             };
                             if value.is_null() && !col.nullable() {
                                 yield Err(DatabaseError::NotNull);

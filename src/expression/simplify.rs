@@ -156,11 +156,9 @@ impl ScalarExpression {
             ScalarExpression::TypeCast { expr, ty, .. } => {
                 expr.unpack_val().and_then(|val| val.cast(ty).ok())
             }
-            ScalarExpression::IsNull { expr, .. } => {
-                let is_null = expr.unpack_val().map(|val| val.is_null());
-
-                Some(DataValue::Boolean(is_null))
-            }
+            ScalarExpression::IsNull { expr, .. } => expr
+                .unpack_val()
+                .map(|val| DataValue::Boolean(val.is_null())),
             ScalarExpression::Unary {
                 expr,
                 op,
@@ -474,7 +472,7 @@ impl ScalarExpression {
                 if let Some(val) = expr.unpack_val() {
                     let _ = mem::replace(
                         self,
-                        ScalarExpression::Constant(DataValue::Boolean(Some(val.is_null()))),
+                        ScalarExpression::Constant(DataValue::Boolean(val.is_null())),
                     );
                 }
             }

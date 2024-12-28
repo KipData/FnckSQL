@@ -230,11 +230,11 @@ mod tests {
     fn test_collect_count() {
         let mut cms = CountMinSketch::<DataValue>::new(100, 0.95, 10.0);
         for _ in 0..300 {
-            cms.increment(&DataValue::Int32(Some(300)));
+            cms.increment(&DataValue::Int32(300));
         }
         assert_eq!(
             cms.collect_count(&vec![
-                Range::Eq(DataValue::Int32(Some(300))),
+                Range::Eq(DataValue::Int32(300)),
                 Range::Scope {
                     min: Bound::Unbounded,
                     max: Bound::Unbounded,
